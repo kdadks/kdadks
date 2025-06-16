@@ -1,57 +1,152 @@
 import React from 'react'
-import { Code, Palette, Search, Smartphone, Cloud, Headphones } from 'lucide-react'
+import { Users, Car, Code, Award, LucideIcon } from 'lucide-react'
+
+interface Service {
+  icon?: LucideIcon;
+  logo?: string;
+  title: string;
+  description: string;
+  features: string[];
+  url: string;
+  theme: string;
+}
 
 const Services = () => {
   const services = [
     {
-      icon: Code,
-      title: 'Web Development',
-      description: 'Custom web applications built with modern frameworks and best practices for optimal performance.',
-      features: ['React & Next.js', 'Node.js Backend', 'Database Design', 'API Integration'],
-      price: 'Starting at $2,999',
-      popular: false,
+      logo: '/IT - WALA_logo (1).png',
+      title: 'ITwala Product & Consulting',
+      description: 'Professional consulting services for product management, software development, and digital transformation solutions.',
+      features: ['Product Strategy', 'Technical Consulting', 'Digital Transformation','IT Staffing partner','Product Development','AI Solutions', 'Training & development'],
+      url: '#contact',
+      theme: 'tech',
     },
     {
-      icon: Palette,
-      title: 'UI/UX Design',
-      description: 'Beautiful, intuitive designs that enhance user experience and drive engagement.',
-      features: ['User Research', 'Wireframing', 'Prototyping', 'Design Systems'],
-      price: 'Starting at $1,999',
-      popular: true,
+      logo: '/IT - WALA_logo (1).png',
+      title: 'ITwala Academy',
+      description: 'Comprehensive education in AI Product management, AI Program management, AI Software testing, AI/ML DevOps, Prompt Engineering, Agentic AI, AI development, and personality development.',
+      features: ['AI Product Management Training', 'AI Program Management Training', 'AI Software Testing Courses', 'Prompt Engineering','Agentic AI Training', 'AI/ML DevOps Training', 'Development Bootcamps', 'Personality Development'],
+      url: 'https://it-wala.com/',
+      theme: 'education',
     },
     {
-      icon: Search,
-      title: 'SEO Optimization',
-      description: 'Comprehensive SEO strategies to improve your search rankings and organic traffic.',
-      features: ['Keyword Research', 'On-page SEO', 'Technical SEO', 'Content Strategy'],
-      price: 'Starting at $999',
-      popular: false,
+      logo: '/Nirchal_Logo.png',
+      title: 'Nirchal',
+      description: 'High-quality, fashionable garments that cater to diverse clothing needs, whether readymade or custom tailored.',
+      features: ['Custom Tailoring', 'Readymade Fashion', 'Quality Fabrics', 'Style Consultation'],
+      url: 'https://nirchal.com/',
+      theme: 'fashion',
     },
     {
-      icon: Smartphone,
-      title: 'Mobile Apps',
-      description: 'Native and cross-platform mobile applications for iOS and Android devices.',
-      features: ['React Native', 'Flutter', 'App Store Optimization', 'Push Notifications'],
-      price: 'Starting at $4,999',
-      popular: false,
+      icon: Car,
+      title: 'RaahiRides',
+      description: 'Seamless travel services including point-to-point journeys, package solutions, and corporate travel arrangements.',
+      features: ['Point-to-Point Travel', 'Package Tours', 'Corporate Travel', 'Business Retreats', 'Eastern UP Travel Solutions', 'Spiritual Tours'],
+      url: 'https://raahirides.com/',
+      theme: 'travel',
     },
     {
-      icon: Cloud,
-      title: 'Cloud Solutions',
-      description: 'Scalable cloud infrastructure and deployment solutions for modern applications.',
-      features: ['AWS/Azure Setup', 'DevOps Pipeline', 'Auto Scaling', 'Monitoring'],
-      price: 'Starting at $1,499',
-      popular: false,
-    },
-    {
-      icon: Headphones,
-      title: 'Support & Maintenance',
-      description: '24/7 support and ongoing maintenance to keep your applications running smoothly.',
-      features: ['24/7 Monitoring', 'Regular Updates', 'Bug Fixes', 'Performance Optimization'],
-      price: 'Starting at $499/mo',
-      popular: false,
+      logo: '/AYUH_Logo_2.png',
+      title: 'Ayuh Clinic',
+      description: 'Comprehensive healthcare services with experienced medical professionals providing quality care.',
+      features: ['Homeopathic Treatments', 'Specialized Treatments', 'Health Checkups', 'Homecare Services', 'Wellness Programs', 'Telemedicine'],
+      url: 'https://www.ayuhclinic.com/',
+      theme: 'healthcare',
     },
   ]
+
+  const getCardStyles = (theme: string) => {
+    const baseStyles = "card p-8 relative group transition-all duration-300 h-full flex flex-col";
+    
+    switch (theme) {
+      case 'tech':
+        return `${baseStyles} bg-gradient-to-br from-blue-50 to-indigo-50 border-2 border-blue-100 hover:border-blue-300`;
+      case 'education':
+        return `${baseStyles} bg-gradient-to-br from-emerald-50 to-green-50 border-2 border-emerald-100 hover:border-emerald-300`;
+      case 'fashion':
+        return `${baseStyles} bg-gradient-to-br from-pink-50 to-rose-50 border-2 border-pink-100 hover:border-pink-300`;
+      case 'travel':
+        return `${baseStyles} bg-gradient-to-br from-orange-50 to-amber-50 border-2 border-orange-100 hover:border-orange-300`;
+      case 'healthcare':
+        return `${baseStyles} bg-gradient-to-br from-red-50 to-rose-50 border-2 border-red-100 hover:border-red-300`;
+      default:
+        return baseStyles;
+    }
+  };
+
+  const getIconStyles = (theme: string) => {
+    const baseStyles = "w-16 h-16 rounded-xl flex items-center justify-center mb-6 group-hover:scale-110 transition-all duration-300";
+    
+    switch (theme) {
+      case 'tech':
+        return `${baseStyles} bg-blue-100 group-hover:bg-blue-600`;
+      case 'education':
+        return `${baseStyles} bg-emerald-100 group-hover:bg-emerald-600`;
+      case 'fashion':
+        return `${baseStyles} bg-pink-100 group-hover:bg-pink-600`;
+      case 'travel':
+        return `${baseStyles} bg-orange-100 group-hover:bg-orange-600`;
+      case 'healthcare':
+        return `${baseStyles} bg-red-100 group-hover:bg-red-600`;
+      default:
+        return `${baseStyles} bg-primary-100 group-hover:bg-primary-600`;
+    }
+  };
+
+  const getIconColorStyles = (theme: string) => {
+    const baseStyles = "w-8 h-8 group-hover:text-white transition-colors duration-300";
+    
+    switch (theme) {
+      case 'tech':
+        return `${baseStyles} text-blue-600`;
+      case 'education':
+        return `${baseStyles} text-emerald-600`;
+      case 'fashion':
+        return `${baseStyles} text-pink-600`;
+      case 'travel':
+        return `${baseStyles} text-orange-600`;
+      case 'healthcare':
+        return `${baseStyles} text-red-600`;
+      default:
+        return `${baseStyles} text-primary-600`;
+    }
+  };
+
+  const getButtonStyles = (theme: string) => {
+    const baseStyles = "w-full font-medium py-3 px-6 rounded-lg transition-all duration-200 transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-offset-2 inline-block text-center";
+    
+    switch (theme) {
+      case 'tech':
+        return `${baseStyles} bg-blue-600 hover:bg-blue-700 text-white focus:ring-blue-500`;
+      case 'education':
+        return `${baseStyles} bg-emerald-600 hover:bg-emerald-700 text-white focus:ring-emerald-500`;
+      case 'fashion':
+        return `${baseStyles} bg-pink-600 hover:bg-pink-700 text-white focus:ring-pink-500`;
+      case 'travel':
+        return `${baseStyles} bg-orange-600 hover:bg-orange-700 text-white focus:ring-orange-500`;
+      case 'healthcare':
+        return `${baseStyles} bg-red-600 hover:bg-red-700 text-white focus:ring-red-500`;
+      default:
+        return `${baseStyles} btn-primary`;
+    }
+  };
+
+  const getDotColor = (theme: string) => {
+    switch (theme) {
+      case 'tech':
+        return "w-1.5 h-1.5 bg-blue-500 rounded-full mr-3";
+      case 'education':
+        return "w-1.5 h-1.5 bg-emerald-500 rounded-full mr-3";
+      case 'fashion':
+        return "w-1.5 h-1.5 bg-pink-500 rounded-full mr-3";
+      case 'travel':
+        return "w-1.5 h-1.5 bg-orange-500 rounded-full mr-3";
+      case 'healthcare':
+        return "w-1.5 h-1.5 bg-red-500 rounded-full mr-3";
+      default:
+        return "w-1.5 h-1.5 bg-primary-500 rounded-full mr-3";
+    }
+  };
 
   return (
     <section id="services" className="section-padding bg-gradient-secondary">
@@ -63,8 +158,8 @@ const Services = () => {
             <span className="block text-gradient">Services</span>
           </h2>
           <p className="text-xl text-secondary-600 max-w-3xl mx-auto leading-relaxed">
-            Comprehensive digital solutions tailored to your business needs. 
-            From concept to deployment, we've got you covered.
+            Diverse solutions across IT consulting & education, fashion, and travel.
+            Excellence and innovation in every service we provide.
           </p>
         </div>
 
@@ -75,52 +170,51 @@ const Services = () => {
             return (
               <div
                 key={service.title}
-                className={`card p-8 relative group ${
-                  service.popular ? 'ring-2 ring-primary-500 scale-105' : ''
-                }`}
+                className={getCardStyles(service.theme)}
               >
-                {/* Popular Badge */}
-                {service.popular && (
-                  <div className="absolute -top-4 left-1/2 transform -translate-x-1/2">
-                    <span className="bg-primary-600 text-white px-4 py-1 rounded-full text-sm font-medium">
-                      Most Popular
-                    </span>
-                  </div>
-                )}
-
-                {/* Icon */}
-                <div className="w-16 h-16 bg-primary-100 rounded-xl flex items-center justify-center mb-6 group-hover:bg-primary-600 group-hover:scale-110 transition-all duration-300">
-                  <Icon className="w-8 h-8 text-primary-600 group-hover:text-white transition-colors duration-300" />
+                {/* Icon or Logo */}
+                <div className={getIconStyles(service.theme)}>
+                  {service.logo ? (
+                    <img
+                      src={service.logo}
+                      alt={`${service.title} logo`}
+                      className="w-12 h-12 object-contain group-hover:scale-110 transition-all duration-300"
+                    />
+                  ) : Icon ? (
+                    <Icon className={getIconColorStyles(service.theme)} />
+                  ) : null}
                 </div>
 
                 {/* Content */}
-                <h3 className="text-xl font-semibold text-secondary-900 mb-4">
-                  {service.title}
-                </h3>
-                <p className="text-secondary-600 mb-6 leading-relaxed">
-                  {service.description}
-                </p>
+                <div className="flex-grow">
+                  <h3 className="text-xl font-semibold text-secondary-900 mb-4">
+                    {service.title}
+                  </h3>
+                  <p className="text-secondary-600 mb-6 leading-relaxed">
+                    {service.description}
+                  </p>
 
-                {/* Features */}
-                <ul className="space-y-2 mb-6">
-                  {service.features.map((feature, featureIndex) => (
-                    <li key={featureIndex} className="flex items-center text-sm text-secondary-600">
-                      <div className="w-1.5 h-1.5 bg-primary-500 rounded-full mr-3"></div>
-                      {feature}
-                    </li>
-                  ))}
-                </ul>
+                  {/* Features */}
+                  <ul className="space-y-2 mb-8">
+                    {service.features.map((feature, featureIndex) => (
+                      <li key={featureIndex} className="flex items-center text-sm text-secondary-600">
+                        <div className={getDotColor(service.theme)}></div>
+                        {feature}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
 
-                {/* Price */}
-                <div className="border-t border-gray-200 pt-6">
-                  <div className="flex items-center justify-between mb-4">
-                    <span className="text-2xl font-bold text-secondary-900">
-                      {service.price}
-                    </span>
-                  </div>
-                  <button className="w-full btn-primary group-hover:bg-primary-700">
+                {/* Action Button - Positioned at bottom */}
+                <div className="mt-auto border-t border-gray-200 pt-6">
+                  <a
+                    href={service.url}
+                    target={service.url.startsWith('http') ? '_blank' : '_self'}
+                    rel={service.url.startsWith('http') ? 'noopener noreferrer' : ''}
+                    className={getButtonStyles(service.theme)}
+                  >
                     Get Started
-                  </button>
+                  </a>
                 </div>
               </div>
             )
@@ -130,10 +224,10 @@ const Services = () => {
         {/* Bottom CTA */}
         <div className="text-center mt-16 p-8 bg-white rounded-2xl shadow-lg">
           <h3 className="text-2xl font-bold text-secondary-900 mb-4">
-            Need a Custom Solution?
+            Looking for Specialized Services?
           </h3>
           <p className="text-secondary-600 mb-6 max-w-2xl mx-auto">
-            Every business is unique. Let's discuss your specific requirements and create a tailored solution that fits your needs perfectly.
+            Whether you need IT consulting, professional training, custom fashion, or travel solutions - we have the expertise to deliver exceptional results tailored to your needs.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <a href="#contact" className="btn-primary">

@@ -17,6 +17,7 @@ const Header = () => {
     { name: 'Home', href: '#home' },
     { name: 'About', href: '#about' },
     { name: 'Services', href: '#services' },
+    { name: 'Team', href: '#team' },
     { name: 'Contact', href: '#contact' },
   ]
 
@@ -32,12 +33,19 @@ const Header = () => {
         <div className="flex items-center justify-between h-16 md:h-20">
           {/* Logo */}
           <div className="flex-shrink-0">
-            <a 
-              href="#home" 
-              className="text-2xl font-bold text-gradient hover:scale-105 transition-transform duration-200"
-              aria-label="Home"
+            <a
+              href="#home"
+              className="flex items-center space-x-2 hover:scale-105 transition-transform duration-200"
+              aria-label="Kdadks Home"
             >
-              ModernSite
+              <img
+                src="/Logo.png"
+                alt="Kdadks Logo"
+                className="h-8 w-auto"
+              />
+              <span className="text-2xl font-bold text-gradient">
+                Kdadks Service Private Limited
+              </span>
             </a>
           </div>
 

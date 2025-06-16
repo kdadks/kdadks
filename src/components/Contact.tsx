@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { Mail, Phone, MapPin, Send, Clock, CheckCircle } from 'lucide-react'
+import { Mail, Phone, MapPin, Send, Clock, CheckCircle, Car } from 'lucide-react'
 
 const Contact = () => {
   const [formData, setFormData] = useState({
@@ -28,20 +28,20 @@ const Contact = () => {
     {
       icon: Mail,
       title: 'Email Us',
-      details: 'hello@modernsite.com',
+      details: 'kdadks@outlook.com',
       description: 'Send us an email anytime',
     },
     {
       icon: Phone,
-      title: 'Call Us',
-      details: '+1 (555) 123-4567',
+      title: 'Call Us', 
+      details: '+91 7982303199',
       description: 'Mon-Fri from 8am to 5pm',
     },
     {
       icon: MapPin,
       title: 'Visit Us',
-      details: '123 Business Ave, Suite 100',
-      description: 'San Francisco, CA 94105',
+      details: 'Lucknow, India',
+      description: 'Lucknow, Uttar Pradesh, India',
     },
     {
       icon: Clock,
@@ -60,10 +60,44 @@ const Contact = () => {
             Get In Touch
             <span className="block text-gradient">With Our Team</span>
           </h2>
-          <p className="text-xl text-secondary-600 max-w-3xl mx-auto leading-relaxed">
-            Ready to start your next project? We'd love to hear from you. 
+          <p className="text-xl text-secondary-600 max-w-3xl mx-auto leading-relaxed mb-8">
+            Ready to start your next project? We'd love to hear from you.
             Send us a message and we'll respond as soon as possible.
           </p>
+          
+          {/* Brand Logos */}
+          <div className="flex justify-center items-center space-x-8 mb-8">
+            <div className="text-center">
+              <img
+                src="/IT - WALA_logo (1).png"
+                alt="IT Wala logo"
+                className="h-12 w-auto mx-auto mb-2 object-contain"
+              />
+              <p className="text-sm text-secondary-500">IT Training & Consulting</p>
+            </div>
+            <div className="text-center">
+              <img
+                src="/AYUH_Logo_2.png"
+                alt="Ayuh Clinic logo"
+                className="h-12 w-auto mx-auto mb-2 object-contain"
+              />
+              <p className="text-sm text-secondary-500">Healthcare Services</p>
+            </div>
+            <div className="text-center">
+              <img
+                src="/Nirchal_Logo.png"
+                alt="Nirchal logo"
+                className="h-12 w-auto mx-auto mb-2 object-contain"
+              />
+              <p className="text-sm text-secondary-500">Fashion & Tailoring</p>
+            </div>
+            <div className="text-center">
+              <div className="h-12 w-12 bg-orange-100 rounded-lg flex items-center justify-center mx-auto mb-2">
+                <Car className="w-6 h-6 text-orange-600" />
+              </div>
+              <p className="text-sm text-secondary-500">Travel Solutions</p>
+            </div>
+          </div>
         </div>
 
         <div className="grid lg:grid-cols-2 gap-16">

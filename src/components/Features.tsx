@@ -1,50 +1,66 @@
 import React from 'react'
-import { Zap, Shield, Smartphone, Globe, Users, BarChart3 } from 'lucide-react'
+import { Code, Heart, Users, Car, Award, Shield, Lightbulb, CheckCircle, Target, Compass } from 'lucide-react'
 
 const Features = () => {
   const features = [
     {
-      icon: Zap,
-      title: 'Lightning Fast',
-      description: 'Optimized performance with sub-second loading times and seamless user experience.',
-      color: 'text-yellow-500',
-      bgColor: 'bg-yellow-50',
-    },
-    {
-      icon: Shield,
-      title: 'Secure & Reliable',
-      description: 'Enterprise-grade security with 99.9% uptime guarantee and data protection.',
-      color: 'text-green-500',
-      bgColor: 'bg-green-50',
-    },
-    {
-      icon: Smartphone,
-      title: 'Mobile First',
-      description: 'Responsive design that works perfectly on all devices and screen sizes.',
+      icon: Code,
+      logo: '/IT - WALA_logo (1).png',
+      title: 'IT Solutions & Education',
+      description: 'Comprehensive AI/ML training, product management consulting, and cutting-edge software development services.',
       color: 'text-blue-500',
       bgColor: 'bg-blue-50',
+      brand: 'IT Wala'
     },
     {
-      icon: Globe,
-      title: 'Global Reach',
-      description: 'CDN-powered delivery ensuring fast access from anywhere in the world.',
-      color: 'text-purple-500',
-      bgColor: 'bg-purple-50',
+      icon: Heart,
+      logo: '/AYUH_Logo_2.png',
+      title: 'Quality Healthcare',
+      description: 'Personalized medical care with homeopathic treatments, specialized care, and telemedicine services.',
+      color: 'text-red-500',
+      bgColor: 'bg-red-50',
+      brand: 'Ayuh Clinic'
     },
     {
       icon: Users,
-      title: 'Team Collaboration',
-      description: 'Built-in tools for seamless team collaboration and project management.',
-      color: 'text-pink-500',
-      bgColor: 'bg-pink-50',
+      logo: '/Nirchal_Logo.png',
+      title: 'Fashion & Style',
+      description: 'High-quality, fashionable garments with custom tailoring and readymade options for every occasion.',
+      color: 'text-purple-500',
+      bgColor: 'bg-purple-50',
+      brand: 'Nirchal'
     },
     {
-      icon: BarChart3,
-      title: 'Analytics & Insights',
-      description: 'Comprehensive analytics to track performance and user engagement.',
-      color: 'text-indigo-500',
-      bgColor: 'bg-indigo-50',
+      icon: Car,
+      title: 'Travel Excellence',
+      description: 'Seamless travel experiences from point-to-point journeys to comprehensive corporate travel solutions.',
+      color: 'text-orange-500',
+      bgColor: 'bg-orange-50',
+      brand: 'Raahirides'
     },
+    {
+      icon: Award,
+      title: 'Proven Excellence',
+      description: 'Over 5 years of industry experience with 99% client satisfaction across all service verticals.',
+      color: 'text-yellow-500',
+      bgColor: 'bg-yellow-50',
+      brand: 'Company-wide'
+    },
+    {
+      icon: Shield,
+      title: 'Reliable & Secure',
+      description: 'Enterprise-grade security, reliability, and data protection across all our service offerings.',
+      color: 'text-green-500',
+      bgColor: 'bg-green-50',
+      brand: 'Company-wide'
+    },
+  ]
+
+  const coreValues = [
+    { icon: Lightbulb, title: 'Innovation', description: 'Continuously improving and staying ahead' },
+    { icon: CheckCircle, title: 'Integrity', description: 'Highest standards of ethics and transparency' },
+    { icon: Target, title: 'Excellence', description: 'Delivering quality in every service' },
+    { icon: Compass, title: 'Guidance', description: 'Expert consultation across all industries' }
   ]
 
   return (
@@ -53,17 +69,17 @@ const Features = () => {
         {/* Header */}
         <div className="text-center mb-16">
           <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold text-secondary-900 mb-6">
-            Powerful Features for
-            <span className="block text-gradient">Modern Businesses</span>
+            Why Choose
+            <span className="block text-gradient">Kdadks Service</span>
           </h2>
           <p className="text-xl text-secondary-600 max-w-3xl mx-auto leading-relaxed">
-            Everything you need to build, scale, and succeed in today's digital landscape. 
-            Our comprehensive suite of tools empowers your business growth.
+            Multi-industry expertise delivering exceptional results across IT, healthcare, fashion, and travel.
+            Experience the difference of working with true professionals.
           </p>
         </div>
 
-        {/* Features Grid */}
-        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
+        {/* Main Features Grid */}
+        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8 mb-20">
           {features.map((feature, index) => {
             const Icon = feature.icon
             return (
@@ -72,15 +88,37 @@ const Features = () => {
                 className={`card p-8 group hover:scale-105 animate-fade-in`}
                 style={{ animationDelay: `${index * 100}ms` }}
               >
-                {/* Icon */}
+                {/* Icon or Logo */}
                 <div className={`w-16 h-16 ${feature.bgColor} rounded-xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-300`}>
-                  <Icon className={`w-8 h-8 ${feature.color}`} />
+                  {feature.logo ? (
+                    <img
+                      src={feature.logo}
+                      alt={`${feature.brand} logo`}
+                      className="w-10 h-10 object-contain"
+                    />
+                  ) : (
+                    <Icon className={`w-8 h-8 ${feature.color}`} />
+                  )}
                 </div>
 
                 {/* Content */}
-                <h3 className="text-xl font-semibold text-secondary-900 mb-4 group-hover:text-primary-600 transition-colors duration-300">
-                  {feature.title}
-                </h3>
+                <div className="mb-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-xl font-semibold text-secondary-900 group-hover:text-primary-600 transition-colors duration-300">
+                      {feature.title}
+                    </h3>
+                    <span className={`text-xs px-2 py-1 rounded-full font-medium ${
+                      feature.brand === 'IT Wala' ? 'bg-blue-100 text-blue-600' :
+                      feature.brand === 'Ayuh Clinic' ? 'bg-red-100 text-red-600' :
+                      feature.brand === 'Nirchal' ? 'bg-purple-100 text-purple-600' :
+                      feature.brand === 'Raahirides' ? 'bg-orange-100 text-orange-600' :
+                      'bg-gray-100 text-gray-600'
+                    }`}>
+                      {feature.brand}
+                    </span>
+                  </div>
+                </div>
+                
                 <p className="text-secondary-600 leading-relaxed">
                   {feature.description}
                 </p>
@@ -94,18 +132,61 @@ const Features = () => {
           })}
         </div>
 
+        {/* Core Values Section */}
+        <div className="bg-white rounded-2xl p-8 md:p-12 shadow-lg">
+          <div className="text-center mb-12">
+            <h3 className="text-2xl md:text-3xl font-bold text-secondary-900 mb-4">
+              Our Core Values
+            </h3>
+            <p className="text-secondary-600 max-w-2xl mx-auto">
+              The principles that guide our work across all industries and define our commitment to excellence
+            </p>
+          </div>
+
+          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+            {coreValues.map((value, index) => {
+              const Icon = value.icon
+              return (
+                <div
+                  key={value.title}
+                  className="text-center p-6 rounded-xl hover:bg-gray-50 transition-colors duration-300"
+                >
+                  <div className="w-12 h-12 bg-primary-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <Icon className="w-6 h-6 text-primary-600" />
+                  </div>
+                  <h4 className="text-lg font-semibold text-secondary-900 mb-2">
+                    {value.title}
+                  </h4>
+                  <p className="text-secondary-600 text-sm">
+                    {value.description}
+                  </p>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+
         {/* Bottom CTA */}
         <div className="text-center mt-16">
           <p className="text-secondary-600 mb-6">
-            Ready to experience these features yourself?
+            Ready to experience excellence across multiple industries?
           </p>
-          <a
-            href="#contact"
-            className="btn-primary inline-flex items-center"
-          >
-            Start Your Free Trial
-            <Zap className="ml-2 w-5 h-5" />
-          </a>
+          <div className="flex flex-col sm:flex-row gap-4 justify-center">
+            <a
+              href="#services"
+              className="btn-primary inline-flex items-center"
+            >
+              Explore Our Services
+              <Award className="ml-2 w-5 h-5" />
+            </a>
+            <a
+              href="#contact"
+              className="btn-outline inline-flex items-center"
+            >
+              Get Started Today
+              <Target className="ml-2 w-5 h-5" />
+            </a>
+          </div>
         </div>
       </div>
     </section>
