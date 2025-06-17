@@ -49,6 +49,10 @@
     @apply bg-gradient-to-r from-primary-600 to-accent-600 bg-clip-text text-transparent;
   }
   
+  .bg-gradient-primary {
+    @apply bg-gradient-to-br from-primary-500 via-primary-600 to-primary-700;
+  }
+  
   .bg-gradient-secondary {
     @apply bg-gradient-to-br from-slate-50 to-blue-50;
   }

@@ -168,7 +168,7 @@ const Testimonials = () => {
                 <img
                   src="/IT - WALA_logo (1).png"
                   alt="IT Wala logo"
-                  className="w-5 h-5 object-contain brightness-0 invert opacity-70"
+                  className="w-5 h-5 object-contain"
                 />
                 <span className="text-sm">IT Solutions</span>
               </div>
@@ -176,7 +176,7 @@ const Testimonials = () => {
                 <img
                   src="/AYUH_Logo_2.png"
                   alt="Ayuh Clinic logo"
-                  className="w-5 h-5 object-contain brightness-0 invert opacity-70"
+                  className="w-5 h-5 object-contain"
                 />
                 <span className="text-sm">Healthcare</span>
               </div>
@@ -184,7 +184,7 @@ const Testimonials = () => {
                 <img
                   src="/Nirchal_Logo.png"
                   alt="Nirchal logo"
-                  className="w-5 h-5 object-contain brightness-0 invert opacity-70"
+                  className="w-5 h-5 object-contain"
                 />
                 <span className="text-sm">Fashion</span>
               </div>

@@ -235,8 +235,13 @@ const Services = () => {
             <a href="#contact" className="btn-primary">
               Schedule Consultation
             </a>
-            <a href="tel:+1234567890" className="btn-outline">
-              Call Us Now
+            <a
+              href="https://wa.me/917982303199?text=Hi%2C%20I%20would%20like%20to%20know%20more%20about%20your%20services."
+              target="_blank"
+              rel="noopener noreferrer"
+              className="btn-outline"
+            >
+              Chat with Us
             </a>
           </div>
         </div>
