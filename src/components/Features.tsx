@@ -1,5 +1,5 @@
 import React from 'react'
-import { Code, Heart, Users, Car, Award, Shield, Lightbulb, CheckCircle, Target, Compass } from 'lucide-react'
+import { Code, Heart, Users, Car, Award, Shield, Target } from 'lucide-react'
 
 const Features = () => {
   const features = [
@@ -56,12 +56,6 @@ const Features = () => {
     },
   ]
 
-  const coreValues = [
-    { icon: Lightbulb, title: 'Innovation', description: 'Continuously improving and staying ahead' },
-    { icon: CheckCircle, title: 'Integrity', description: 'Highest standards of ethics and transparency' },
-    { icon: Target, title: 'Excellence', description: 'Delivering quality in every service' },
-    { icon: Compass, title: 'Guidance', description: 'Expert consultation across all industries' }
-  ]
 
   return (
     <section className="section-padding bg-gradient-secondary">
@@ -70,7 +64,7 @@ const Features = () => {
         <div className="text-center mb-16">
           <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold text-secondary-900 mb-6">
             Why Choose
-            <span className="block text-gradient">Kdadks Service</span>
+            <span className="block text-gradient">Kdadks Service Private Limited</span>
           </h2>
           <p className="text-xl text-secondary-600 max-w-3xl mx-auto leading-relaxed">
             Multi-industry expertise delivering exceptional results across IT, healthcare, fashion, and travel.
@@ -132,39 +126,6 @@ const Features = () => {
           })}
         </div>
 
-        {/* Core Values Section */}
-        <div className="bg-white rounded-2xl p-8 md:p-12 shadow-lg">
-          <div className="text-center mb-12">
-            <h3 className="text-2xl md:text-3xl font-bold text-secondary-900 mb-4">
-              Our Core Values
-            </h3>
-            <p className="text-secondary-600 max-w-2xl mx-auto">
-              The principles that guide our work across all industries and define our commitment to excellence
-            </p>
-          </div>
-
-          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {coreValues.map((value, index) => {
-              const Icon = value.icon
-              return (
-                <div
-                  key={value.title}
-                  className="text-center p-6 rounded-xl hover:bg-gray-50 transition-colors duration-300"
-                >
-                  <div className="w-12 h-12 bg-primary-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <Icon className="w-6 h-6 text-primary-600" />
-                  </div>
-                  <h4 className="text-lg font-semibold text-secondary-900 mb-2">
-                    {value.title}
-                  </h4>
-                  <p className="text-secondary-600 text-sm">
-                    {value.description}
-                  </p>
-                </div>
-              )
-            })}
-          </div>
-        </div>
 
         {/* Bottom CTA */}
         <div className="text-center mt-16">

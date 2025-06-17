@@ -12,6 +12,8 @@ import PrivacyPolicy from './PrivacyPolicy'
 import TermsConditions from './TermsConditions'
 import ShippingPolicy from './ShippingPolicy'
 import CancellationRefund from './CancellationRefund'
+import SEO from './SEO'
+import SEOContent from './SEOContent'
 
 const Router = () => {
   const [currentPage, setCurrentPage] = useState('home')
@@ -56,6 +58,7 @@ const Router = () => {
       case 'privacy':
         return (
           <div className="min-h-screen bg-white">
+            <SEO page="privacy" />
             <Header />
             <PrivacyPolicy />
             <Footer />
@@ -64,6 +67,7 @@ const Router = () => {
       case 'terms':
         return (
           <div className="min-h-screen bg-white">
+            <SEO page="terms" />
             <Header />
             <TermsConditions />
             <Footer />
@@ -72,6 +76,7 @@ const Router = () => {
       case 'shipping':
         return (
           <div className="min-h-screen bg-white">
+            <SEO customData={{ title: "Shipping Policy - Kdadks Service Private Limited", description: "Shipping and delivery policy for Kdadks services including fashion products from Nirchal and other physical goods." }} />
             <Header />
             <ShippingPolicy />
             <Footer />
@@ -80,6 +85,7 @@ const Router = () => {
       case 'refund':
         return (
           <div className="min-h-screen bg-white">
+            <SEO customData={{ title: "Cancellation & Refund Policy - Kdadks Service Private Limited", description: "Cancellation and refund policy for Kdadks services across IT consulting, healthcare, fashion, and travel sectors." }} />
             <Header />
             <CancellationRefund />
             <Footer />
@@ -88,6 +94,7 @@ const Router = () => {
       case 'team':
         return (
           <div className="min-h-screen bg-white">
+            <SEO customData={{ title: "Our Team - Kdadks Service Private Limited", description: "Meet the expert team behind Kdadks' success across IT consulting, healthcare, fashion, and travel industries." }} />
             <Header />
             <Team />
             <Footer />
@@ -96,6 +103,8 @@ const Router = () => {
       default:
         return (
           <div className="min-h-screen bg-white">
+            <SEO page="home" />
+            <SEOContent />
             <Header />
             <main>
               <Hero />

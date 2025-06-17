@@ -1,5 +1,7 @@
 import React, { useState } from 'react'
 import { Mail, Phone, MapPin, Send, Clock, CheckCircle, Car } from 'lucide-react'
+import emailjs from '@emailjs/browser'
+import { EMAILJS_CONFIG, EmailTemplateParams } from '../config/emailjs'
 
 const Contact = () => {
   const [formData, setFormData] = useState({
@@ -9,12 +11,63 @@ const Contact = () => {
     message: '',
   })
   const [isSubmitted, setIsSubmitted] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [submitError, setSubmitError] = useState('')
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    // Handle form submission here
-    setIsSubmitted(true)
-    setTimeout(() => setIsSubmitted(false), 3000)
+    setIsSubmitting(true)
+    setSubmitError('')
+
+    try {
+      // Check if EmailJS is properly configured
+      if (
+        EMAILJS_CONFIG.PUBLIC_KEY === 'YOUR_PUBLIC_KEY' ||
+        EMAILJS_CONFIG.SERVICE_ID === 'YOUR_SERVICE_ID' ||
+        EMAILJS_CONFIG.TEMPLATE_ID === 'YOUR_TEMPLATE_ID'
+      ) {
+        throw new Error('EmailJS not configured. Please set up your EmailJS credentials.')
+      }
+
+      // Initialize EmailJS with your public key
+      emailjs.init(EMAILJS_CONFIG.PUBLIC_KEY)
+
+      // Prepare template parameters
+      const templateParams: EmailTemplateParams = {
+        to_email: 'kdadks@outlook.com',
+        from_name: formData.name,
+        from_email: formData.email,
+        company: formData.company || 'Not specified',
+        message: formData.message,
+        reply_to: formData.email,
+      }
+
+      // Send email using EmailJS
+      await emailjs.send(
+        EMAILJS_CONFIG.SERVICE_ID,
+        EMAILJS_CONFIG.TEMPLATE_ID,
+        templateParams
+      )
+
+      // Reset form and show success message
+      setFormData({
+        name: '',
+        email: '',
+        company: '',
+        message: '',
+      })
+      setIsSubmitted(true)
+      setTimeout(() => setIsSubmitted(false), 5000)
+    } catch (error) {
+      console.error('Email sending failed:', error)
+      setSubmitError(
+        error instanceof Error
+          ? error.message
+          : 'Failed to send message. Please try again or contact us directly at kdadks@outlook.com'
+      )
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -52,15 +105,15 @@ const Contact = () => {
   ]
 
   return (
-    <section id="contact" className="section-padding bg-gradient-secondary">
+    <section id="contact" className="section-padding bg-gradient-secondary" itemScope itemType="https://schema.org/ContactPage" role="main" aria-labelledby="contact-heading">
       <div className="container-custom">
         {/* Header */}
         <div className="text-center mb-16">
-          <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold text-secondary-900 mb-6">
+          <h2 id="contact-heading" className="text-3xl md:text-4xl lg:text-5xl font-bold text-secondary-900 mb-6" itemProp="name">
             Get In Touch
             <span className="block text-gradient">With Our Team</span>
           </h2>
-          <p className="text-xl text-secondary-600 max-w-3xl mx-auto leading-relaxed mb-8">
+          <p className="text-xl text-secondary-600 max-w-3xl mx-auto leading-relaxed mb-8" itemProp="description">
             Ready to start your next project? We'd love to hear from you.
             Send us a message and we'll respond as soon as possible.
           </p>
@@ -100,7 +153,7 @@ const Contact = () => {
           </div>
         </div>
 
-        <div className="grid lg:grid-cols-2 gap-16">
+        <div className="grid lg:grid-cols-2 gap-16" itemScope itemType="https://schema.org/LocalBusiness">
           {/* Contact Form */}
           <div className="card p-8">
             <h3 className="text-2xl font-bold text-secondary-900 mb-6">
@@ -118,7 +171,7 @@ const Contact = () => {
                 </p>
               </div>
             ) : (
-              <form onSubmit={handleSubmit} className="space-y-6">
+              <form onSubmit={handleSubmit} className="space-y-6" role="form" aria-label="Contact form">
                 <div className="grid md:grid-cols-2 gap-6">
                   <div>
                     <label htmlFor="name" className="block text-sm font-medium text-secondary-700 mb-2">
@@ -183,27 +236,52 @@ const Contact = () => {
                   />
                 </div>
 
+                {submitError && (
+                  <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
+                    <p className="text-red-600 text-sm">{submitError}</p>
+                  </div>
+                )}
+
                 <button
                   type="submit"
-                  className="w-full btn-primary flex items-center justify-center"
+                  disabled={isSubmitting}
+                  className="w-full btn-primary flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Send Message
-                  <Send className="ml-2 w-5 h-5" />
+                  {isSubmitting ? (
+                    <>
+                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
+                      Sending...
+                    </>
+                  ) : (
+                    <>
+                      Send Message
+                      <Send className="ml-2 w-5 h-5" />
+                    </>
+                  )}
                 </button>
               </form>
             )}
           </div>
 
           {/* Contact Information */}
-          <div className="space-y-8">
+          <div className="space-y-8" itemScope itemType="https://schema.org/Organization">
             <div>
               <h3 className="text-2xl font-bold text-secondary-900 mb-6">
                 Contact Information
               </h3>
               <p className="text-secondary-600 mb-8 leading-relaxed">
-                We're here to help and answer any question you might have. 
+                We're here to help and answer any question you might have.
                 We look forward to hearing from you.
               </p>
+              <meta itemProp="name" content="Kdadks Service Private Limited" />
+              <meta itemProp="url" content="https://kdadks.com" />
+              <meta itemProp="email" content="kdadks@outlook.com" />
+              <meta itemProp="telephone" content="+91-7982303199" />
+              <div itemProp="address" itemScope itemType="https://schema.org/PostalAddress">
+                <meta itemProp="addressLocality" content="Lucknow" />
+                <meta itemProp="addressRegion" content="Uttar Pradesh" />
+                <meta itemProp="addressCountry" content="India" />
+              </div>
             </div>
 
             <div className="space-y-6">
@@ -230,12 +308,44 @@ const Contact = () => {
               })}
             </div>
 
-            {/* Map Placeholder */}
-            <div className="bg-gray-200 rounded-lg h-64 flex items-center justify-center">
-              <div className="text-center">
-                <MapPin className="w-12 h-12 text-gray-400 mx-auto mb-2" />
-                <p className="text-gray-600">Interactive Map</p>
-                <p className="text-sm text-gray-500">Location visualization</p>
+            {/* Interactive Google Map */}
+            <div className="rounded-lg overflow-hidden shadow-lg border border-gray-200" itemScope itemType="https://schema.org/Place">
+              <iframe
+                src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d227749.21470693277!2d80.77769745!3d26.8466777!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x399bfd991f32b16b%3A0x93ccba8909978be7!2sLucknow%2C%20Uttar%20Pradesh!5e0!3m2!1sen!2sin!4v1697808000000!5m2!1sen!2sin"
+                width="100%"
+                height="300"
+                style={{ border: 0 }}
+                allowFullScreen
+                loading="lazy"
+                referrerPolicy="no-referrer-when-downgrade"
+                title="KDADKS Location - Lucknow, Uttar Pradesh"
+                className="w-full h-64 md:h-80"
+                aria-label="Interactive map showing Kdadks location in Lucknow, Uttar Pradesh"
+              />
+              <meta itemProp="name" content="Kdadks Service Private Limited Office" />
+              <div itemProp="address" itemScope itemType="https://schema.org/PostalAddress">
+                <meta itemProp="addressLocality" content="Lucknow" />
+                <meta itemProp="addressRegion" content="Uttar Pradesh" />
+                <meta itemProp="addressCountry" content="India" />
+              </div>
+              <div className="bg-white p-4 border-t border-gray-200">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-2">
+                    <MapPin className="w-5 h-5 text-primary-600" />
+                    <span className="font-medium text-secondary-900">Lucknow, Uttar Pradesh, India</span>
+                  </div>
+                  <a
+                    href="https://www.google.com/maps/dir/?api=1&destination=Lucknow,Uttar+Pradesh,India"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="btn-secondary text-sm"
+                  >
+                    Get Directions
+                  </a>
+                </div>
+                <p className="text-sm text-secondary-600 mt-2">
+                  Contact us at +91 7982303199 for specific location details and directions
+                </p>
               </div>
             </div>
           </div>

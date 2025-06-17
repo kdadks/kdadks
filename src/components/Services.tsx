@@ -149,28 +149,30 @@ const Services = () => {
   };
 
   return (
-    <section id="services" className="section-padding bg-gradient-secondary">
+    <section id="services" className="section-padding bg-gradient-secondary" itemScope itemType="https://schema.org/Service" role="main" aria-labelledby="services-heading">
       <div className="container-custom">
         {/* Header */}
         <div className="text-center mb-16">
-          <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold text-secondary-900 mb-6">
-            Our Professional
-            <span className="block text-gradient">Services</span>
+          <h2 id="services-heading" className="text-3xl md:text-4xl lg:text-5xl font-bold text-secondary-900 mb-6" itemProp="name">
+            <span className="block text-gradient">Our Services</span>
           </h2>
-          <p className="text-xl text-secondary-600 max-w-3xl mx-auto leading-relaxed">
-            Diverse solutions across IT consulting & education, fashion, and travel.
+          <p className="text-xl text-secondary-600 max-w-3xl mx-auto leading-relaxed" itemProp="description">
+            Diverse solutions across <strong>IT consulting & education</strong>, <strong>healthcare</strong>, <strong>fashion</strong>, and <strong>travel</strong>.
             Excellence and innovation in every service we provide.
           </p>
         </div>
 
         {/* Services Grid */}
-        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
+        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8" role="list" aria-label="Our services">
           {services.map((service, index) => {
             const Icon = service.icon
             return (
-              <div
+              <article
                 key={service.title}
                 className={getCardStyles(service.theme)}
+                itemScope
+                itemType="https://schema.org/Service"
+                role="listitem"
               >
                 {/* Icon or Logo */}
                 <div className={getIconStyles(service.theme)}>
@@ -187,10 +189,10 @@ const Services = () => {
 
                 {/* Content */}
                 <div className="flex-grow">
-                  <h3 className="text-xl font-semibold text-secondary-900 mb-4">
+                  <h3 className="text-xl font-semibold text-secondary-900 mb-4" itemProp="name">
                     {service.title}
                   </h3>
-                  <p className="text-secondary-600 mb-6 leading-relaxed">
+                  <p className="text-secondary-600 mb-6 leading-relaxed" itemProp="description">
                     {service.description}
                   </p>
 
@@ -216,7 +218,7 @@ const Services = () => {
                     Get Started
                   </a>
                 </div>
-              </div>
+              </article>
             )
           })}
         </div>

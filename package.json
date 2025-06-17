@@ -14,10 +14,11 @@
     "deploy:preview": "npm run build && npx netlify deploy --dir=dist"
   },
   "dependencies": {
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
+    "@emailjs/browser": "^4.4.1",
+    "framer-motion": "^10.16.4",
     "lucide-react": "^0.263.1",
-    "framer-motion": "^10.16.4"
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
   },
   "devDependencies": {
     "@types/react": "^18.2.15",

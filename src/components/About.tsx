@@ -80,17 +80,17 @@ const About = () => {
   ]
 
   return (
-    <section id="about" className="section-padding bg-white">
+    <section id="about" className="section-padding bg-white" itemScope itemType="https://schema.org/AboutPage" role="main" aria-labelledby="about-heading">
       <div className="container-custom">
         {/* Header Section */}
         <div className="text-center mb-16">
-          <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold text-secondary-900 mb-6">
+          <h2 id="about-heading" className="text-3xl md:text-4xl lg:text-5xl font-bold text-secondary-900 mb-6" itemProp="name">
             About
             <span className="block text-gradient">Kdadks Service Pvt. Ltd</span>
           </h2>
           
-          <p className="text-xl text-secondary-600 mb-8 leading-relaxed max-w-4xl mx-auto">
-            At Kdadks Service Pvt. Ltd, our objective is to lead with innovation, compassion, and excellence across our diverse range of services. Through our brands IT Wala, Ayuh Clinic, Nirchal, and Raahirides, we are committed to transforming lives and creating lasting impact.
+          <p className="text-xl text-secondary-600 mb-8 leading-relaxed max-w-4xl mx-auto" itemProp="description">
+            At <strong>Kdadks Service Pvt. Ltd</strong>, our objective is to lead with innovation, compassion, and excellence across our diverse range of services. Through our brands <em>IT Wala</em>, <em>Ayuh Clinic</em>, <em>Nirchal</em>, and <em>Raahirides</em>, we are committed to transforming lives and creating lasting impact.
           </p>
 
           {/* Brand Pills */}
@@ -105,7 +105,7 @@ const About = () => {
         </div>
 
         {/* Brand Showcase Section */}
-        <div className="mb-24">
+        <div className="mb-24" itemScope itemType="https://schema.org/Organization">
           <div className="text-center mb-12">
             <h3 className="text-2xl md:text-3xl font-bold text-secondary-900 mb-4">
               Our Brands
@@ -268,16 +268,16 @@ const About = () => {
         </div>
 
         {/* Vision Statement Section */}
-        <div className="mb-24">
+        <div className="mb-24" itemScope itemType="https://schema.org/Mission">
           <div className="bg-gradient-to-r from-primary-50 to-accent-50 rounded-2xl p-12 text-center">
             <div className="w-16 h-16 bg-primary-100 rounded-full flex items-center justify-center mx-auto mb-6">
-              <Eye className="w-8 h-8 text-primary-600" />
+              <Eye className="w-8 h-8 text-primary-600" aria-hidden="true" />
             </div>
             <h3 className="text-2xl md:text-3xl font-bold text-secondary-900 mb-6">
               Our Vision
             </h3>
-            <p className="text-lg text-secondary-700 leading-relaxed max-w-4xl mx-auto mb-8">
-              At Kdadks Service Pvt. Ltd, through our brands IT Wala, Ayuh Clinic, Nirchal, and Raahirides, we envision a future where we lead with innovation, compassion, and excellence in our respective fields. Our unified vision is to empower individuals through tailored education, deliver comprehensive and compassionate healthcare, inspire confidence and style with high-quality garments, and offer seamless and memorable travel experiences.
+            <p className="text-lg text-secondary-700 leading-relaxed max-w-4xl mx-auto mb-8" itemProp="description">
+              At <strong>Kdadks Service Pvt. Ltd</strong>, through our brands <em>IT Wala</em>, <em>Ayuh Clinic</em>, <em>Nirchal</em>, and <em>Raahirides</em>, we envision a future where we lead with innovation, compassion, and excellence in our respective fields. Our unified vision is to empower individuals through tailored education, deliver comprehensive and compassionate healthcare, inspire confidence and style with high-quality garments, and offer seamless and memorable travel experiences.
             </p>
             <p className="text-secondary-600 leading-relaxed max-w-3xl mx-auto">
               We are committed to continuously innovating and adapting to the latest trends and technologies, striving to exceed customer expectations and create a lasting impact. Our goal is to transform lives, uplift communities, and set new standards of excellence across the IT, healthcare, fashion, and travel industries.

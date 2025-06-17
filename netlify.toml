@@ -15,6 +15,17 @@
   # npm version
   NPM_VERSION = "9"
 
+# SEO-friendly redirects
+[[redirects]]
+  from = "/home"
+  to = "/"
+  status = 301
+
+[[redirects]]
+  from = "/index.html"
+  to = "/"
+  status = 301
+
 # Redirect rules for SPA (Single Page Application)
 [[redirects]]
   from = "/*"
@@ -29,6 +40,8 @@
     X-XSS-Protection = "1; mode=block"
     X-Content-Type-Options = "nosniff"
     Referrer-Policy = "strict-origin-when-cross-origin"
+    Permissions-Policy = "camera=(), microphone=(), geolocation=()"
+    Strict-Transport-Security = "max-age=31536000; includeSubDomains"
 
 [[headers]]
   for = "/static/*"
