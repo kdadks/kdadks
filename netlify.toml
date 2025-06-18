@@ -15,6 +15,10 @@
   # npm version
   NPM_VERSION = "9"
 
+[functions]
+  # Directory for serverless functions
+  directory = "netlify/functions"
+
 # SEO-friendly redirects
 [[redirects]]
   from = "/home"

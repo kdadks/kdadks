@@ -3,7 +3,7 @@ import { ContactFormData } from '../config/brevo'
 export class EmailService {
   private static readonly API_ENDPOINT = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
     ? 'http://localhost:3001/api/send-email'
-    : '/api/send-email'
+    : '/.netlify/functions/send-email'
 
   static async sendContactEmail(formData: ContactFormData): Promise<void> {
     try {
