@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import { Mail, Phone, MapPin, Send, Clock, CheckCircle, Car } from 'lucide-react'
-import emailjs from '@emailjs/browser'
-import { EMAILJS_CONFIG, EmailTemplateParams } from '../config/emailjs'
+import { EmailService } from '../services/emailService'
+import { ContactFormData } from '../config/brevo'
 
 const Contact = () => {
   const [formData, setFormData] = useState({
@@ -20,34 +20,27 @@ const Contact = () => {
     setSubmitError('')
 
     try {
-      // Check if EmailJS is properly configured
-      if (
-        EMAILJS_CONFIG.PUBLIC_KEY === 'YOUR_PUBLIC_KEY' ||
-        EMAILJS_CONFIG.SERVICE_ID === 'YOUR_SERVICE_ID' ||
-        EMAILJS_CONFIG.TEMPLATE_ID === 'YOUR_TEMPLATE_ID'
-      ) {
-        throw new Error('EmailJS not configured. Please set up your EmailJS credentials.')
+      // Validate form data
+      if (!formData.name.trim() || !formData.email.trim() || !formData.message.trim()) {
+        throw new Error('Please fill in all required fields.')
       }
 
-      // Initialize EmailJS with your public key
-      emailjs.init(EMAILJS_CONFIG.PUBLIC_KEY)
-
-      // Prepare template parameters
-      const templateParams: EmailTemplateParams = {
-        to_email: 'kdadks@outlook.com',
-        from_name: formData.name,
-        from_email: formData.email,
-        company: formData.company || 'Not specified',
-        message: formData.message,
-        reply_to: formData.email,
+      // Validate email format
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+      if (!emailRegex.test(formData.email)) {
+        throw new Error('Please enter a valid email address.')
       }
 
-      // Send email using EmailJS
-      await emailjs.send(
-        EMAILJS_CONFIG.SERVICE_ID,
-        EMAILJS_CONFIG.TEMPLATE_ID,
-        templateParams
-      )
+      // Prepare contact data
+      const contactData: ContactFormData = {
+        name: formData.name.trim(),
+        email: formData.email.trim(),
+        company: formData.company?.trim(),
+        message: formData.message.trim(),
+      }
+
+      // Send email using Brevo service
+      await EmailService.sendContactEmail(contactData)
 
       // Reset form and show success message
       setFormData({
