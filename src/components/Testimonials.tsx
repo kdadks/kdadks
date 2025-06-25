@@ -164,34 +164,71 @@ const Testimonials = () => {
           <div className="mt-8 pt-8 border-t border-white/20">
             <p className="text-blue-100 mb-4">Trusted services across multiple industries</p>
             <div className="flex justify-center items-center space-x-8 flex-wrap gap-4">
-              <div className="flex items-center space-x-2 text-blue-200">
+              {/* ITwala clickable logo */}
+              <button
+                type="button"
+                onClick={() => {
+                  const el = document.getElementById('itwala-service');
+                  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }}
+                className="flex items-center space-x-2 text-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-400 bg-transparent border-0 p-0 m-0"
+                aria-label="Scroll to ITwala Service section"
+              >
                 <img
                   src="/IT - WALA_logo (1).png"
                   alt="IT Wala logo"
                   className="w-5 h-5 object-contain"
                 />
                 <span className="text-sm">IT Solutions</span>
-              </div>
-              <div className="flex items-center space-x-2 text-blue-200">
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const el = document.getElementById('ayuh-clinic-service');
+                  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }}
+                className="flex items-center space-x-2 text-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-400 bg-transparent border-0 p-0 m-0"
+                aria-label="Scroll to Ayuh Clinic Service section"
+              >
                 <img
                   src="/AYUH_Logo_2.png"
                   alt="Ayuh Clinic logo"
                   className="w-5 h-5 object-contain"
                 />
                 <span className="text-sm">Healthcare</span>
-              </div>
-              <div className="flex items-center space-x-2 text-blue-200">
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const el = document.getElementById('nirchal-service');
+                  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }}
+                className="flex items-center space-x-2 text-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-400 bg-transparent border-0 p-0 m-0"
+                aria-label="Scroll to Nirchal Service section"
+              >
                 <img
                   src="/Nirchal_Logo.png"
                   alt="Nirchal logo"
                   className="w-5 h-5 object-contain"
                 />
                 <span className="text-sm">Fashion</span>
-              </div>
-              <div className="flex items-center space-x-2 text-blue-200">
-                <Car className="w-5 h-5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const el = document.getElementById('raahirides-service');
+                  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }}
+                className="flex items-center space-x-2 text-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-400 bg-transparent border-0 p-0 m-0"
+                aria-label="Scroll to Raahi Rides Service section"
+              >
+                <img
+                  src="/raahi_rides_logo.png"
+                  alt="Raahi Rides logo"
+                  className="w-5 h-5 object-contain"
+                />
                 <span className="text-sm">Travel</span>
-              </div>
+              </button>
             </div>
           </div>
         </div>

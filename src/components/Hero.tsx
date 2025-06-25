@@ -6,7 +6,7 @@ const Hero = () => {
     { name: 'IT Wala', icon: Code, logo: '/IT - WALA_logo (1).png', color: 'text-blue-400' },
     { name: 'Ayuh Clinic', icon: Heart, logo: '/AYUH_Logo_2.png', color: 'text-red-400' },
     { name: 'Nirchal', icon: Users, logo: '/Nirchal_Logo.png', color: 'text-purple-400' },
-    { name: 'Raahirides', icon: Car, color: 'text-orange-400' },
+    { name: 'Raahirides', icon: Car, logo: '/raahi_rides_logo.png', color: 'text-orange-400' },
   ]
 
   return (
@@ -55,8 +55,29 @@ const Hero = () => {
                   'Nirchal': 'from-purple-500/20 to-indigo-500/20 border-purple-400/40',
                   'Raahirides': 'from-orange-500/20 to-yellow-500/20 border-orange-400/40'
                 }
+                
+                // Map brand names to service section IDs
+                const getServiceId = (brandName: string) => {
+                  switch(brandName) {
+                    case 'IT Wala': return 'itwala-service';
+                    case 'Ayuh Clinic': return 'ayuh-clinic-service';
+                    case 'Nirchal': return 'nirchal-service';
+                    case 'Raahirides': return 'raahirides-service';
+                    default: return '';
+                  }
+                };
+                
                 return (
-                  <div key={brand.name} className={`flex items-center space-x-2 px-4 py-2 bg-gradient-to-r ${brandColors[brand.name as keyof typeof brandColors]} backdrop-blur-sm rounded-full text-sm font-medium border hover:scale-105 transition-transform duration-200`}>
+                  <button
+                    key={brand.name}
+                    onClick={() => {
+                      const serviceId = getServiceId(brand.name);
+                      const el = document.getElementById(serviceId);
+                      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    }}
+                    className={`flex items-center space-x-2 px-4 py-2 bg-gradient-to-r ${brandColors[brand.name as keyof typeof brandColors]} backdrop-blur-sm rounded-full text-sm font-medium border hover:scale-105 transition-transform duration-200 cursor-pointer focus:outline-none focus:ring-2 focus:ring-white/50`}
+                    aria-label={`View ${brand.name} services`}
+                  >
                     {brand.logo ? (
                       <img
                         src={brand.logo}
@@ -67,7 +88,7 @@ const Hero = () => {
                       <Icon className={`w-4 h-4 ${brand.color}`} />
                     )}
                     <span className="text-white">{brand.name}</span>
-                  </div>
+                  </button>
                 )
               })}
             </div>
@@ -137,34 +158,74 @@ const Hero = () => {
                   
                   {/* Brand icons grid */}
                   <div className="grid grid-cols-2 gap-4 mb-6">
-                    <div className="flex items-center space-x-2 p-4 bg-gradient-to-br from-blue-50 to-cyan-50 rounded-xl border border-blue-100 hover:shadow-md transition-all duration-200">
+                    {/* ITwala clickable logo */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const el = document.getElementById('itwala-service');
+                        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                      }}
+                      className="flex items-center space-x-2 p-4 bg-gradient-to-br from-blue-50 to-cyan-50 rounded-xl border border-blue-100 hover:shadow-md transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-400"
+                      aria-label="Scroll to ITwala Service section"
+                    >
                       <img
                         src="/IT - WALA_logo (1).png"
                         alt="IT Wala logo"
                         className="w-6 h-6 object-contain"
                       />
                       <div className="text-sm font-semibold text-blue-700">IT Wala</div>
-                    </div>
-                    <div className="flex items-center space-x-2 p-4 bg-gradient-to-br from-red-50 to-pink-50 rounded-xl border border-red-100 hover:shadow-md transition-all duration-200">
+                    </button>
+                    {/* Ayuh Clinic clickable logo */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const el = document.getElementById('ayuh-clinic-service');
+                        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                      }}
+                      className="flex items-center space-x-2 p-4 bg-gradient-to-br from-red-50 to-pink-50 rounded-xl border border-red-100 hover:shadow-md transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-red-400"
+                      aria-label="Scroll to Ayuh Clinic Service section"
+                    >
                       <img
                         src="/AYUH_Logo_2.png"
                         alt="Ayuh Clinic logo"
                         className="w-6 h-6 object-contain"
                       />
                       <div className="text-sm font-semibold text-red-700">Ayuh Clinic</div>
-                    </div>
-                    <div className="flex items-center space-x-2 p-4 bg-gradient-to-br from-purple-50 to-indigo-50 rounded-xl border border-purple-100 hover:shadow-md transition-all duration-200">
+                    </button>
+                    {/* Nirchal clickable logo */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const el = document.getElementById('nirchal-service');
+                        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                      }}
+                      className="flex items-center space-x-2 p-4 bg-gradient-to-br from-purple-50 to-indigo-50 rounded-xl border border-purple-100 hover:shadow-md transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-purple-400"
+                      aria-label="Scroll to Nirchal Service section"
+                    >
                       <img
                         src="/Nirchal_Logo.png"
                         alt="Nirchal logo"
                         className="w-6 h-6 object-contain"
                       />
                       <div className="text-sm font-semibold text-purple-700">Nirchal</div>
-                    </div>
-                    <div className="flex items-center space-x-2 p-4 bg-gradient-to-br from-orange-50 to-yellow-50 rounded-xl border border-orange-100 hover:shadow-md transition-all duration-200">
-                      <Car className="w-6 h-6 text-orange-600" />
+                    </button>
+                    {/* Raahirides clickable logo */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const el = document.getElementById('raahirides-service');
+                        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                      }}
+                      className="flex items-center space-x-2 p-4 bg-gradient-to-br from-orange-50 to-yellow-50 rounded-xl border border-orange-100 hover:shadow-md transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-orange-400"
+                      aria-label="Scroll to Raahirides Service section"
+                    >
+                      <img
+                        src="/raahi_rides_logo.png"
+                        alt="Raahirides logo"
+                        className="w-6 h-6 object-contain"
+                      />
                       <div className="text-sm font-semibold text-orange-700">Raahirides</div>
-                    </div>
+                    </button>
                   </div>
                   
                   {/* Action button */}

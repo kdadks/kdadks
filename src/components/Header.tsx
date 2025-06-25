@@ -13,6 +13,13 @@ const Header = () => {
     return () => window.removeEventListener('scroll', handleScroll)
   }, [])
 
+  const handleNavLinkClick = (e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
+    if (href === '#team') {
+      window.scrollTo(0, 0); // Scroll to top for the Team page
+    }
+    setIsMenuOpen(false); // Close mobile menu on click
+  };
+
   const navigation = [
     { name: 'Home', href: '#home' },
     { name: 'About', href: '#about' },
@@ -63,6 +70,7 @@ const Header = () => {
                   }`}
                   role="menuitem"
                   aria-label={`Navigate to ${item.name} section`}
+                  onClick={(e) => handleNavLinkClick(e, item.href)}
                 >
                   {item.name}
                 </a>
@@ -112,7 +120,7 @@ const Header = () => {
                   key={item.name}
                   href={item.href}
                   className="block px-3 py-2 text-base font-medium text-secondary-700 hover:text-primary-600 hover:bg-secondary-50 rounded-md transition-colors duration-200"
-                  onClick={() => setIsMenuOpen(false)}
+                  onClick={(e) => handleNavLinkClick(e, item.href)}
                   role="menuitem"
                   aria-label={`Navigate to ${item.name} section`}
                 >

@@ -2,8 +2,7 @@ import React from 'react'
 import { CheckCircle, Award, Target, TrendingUp, Heart, Users, Shield, Lightbulb, Eye, Compass, LucideIcon } from 'lucide-react'
 
 interface Objective {
-  icon?: LucideIcon;
-  logo?: string;
+  logo: string;
   title: string;
   description: string;
   brand: string;
@@ -37,7 +36,7 @@ const About = () => {
       brand: 'Nirchal'
     },
     {
-      icon: Compass,
+      logo: '/raahi_rides_logo.png',
       title: 'Creating Memorable Travel Experiences',
       description: 'Providing seamless and exceptional travel services, including point-to-point journeys, package travel solutions, and travel arrangements for companies and business retreats.',
       brand: 'Raahirides'
@@ -116,7 +115,16 @@ const About = () => {
           </div>
           
           <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
-            <div className="text-center p-6 bg-blue-50 rounded-xl hover:shadow-lg transition-all duration-300">
+            {/* ITwala clickable logo */}
+            <button
+              type="button"
+              onClick={() => {
+                const el = document.getElementById('itwala-service');
+                if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              }}
+              className="text-center p-6 bg-blue-50 rounded-xl hover:shadow-lg transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-blue-400"
+              aria-label="Scroll to ITwala Service section"
+            >
               <img
                 src="/IT - WALA_logo (1).png"
                 alt="IT Wala logo"
@@ -124,9 +132,17 @@ const About = () => {
               />
               <h4 className="font-semibold text-secondary-900 mb-2">IT Wala</h4>
               <p className="text-sm text-secondary-600">Technology Education & Consulting</p>
-            </div>
-            
-            <div className="text-center p-6 bg-red-50 rounded-xl hover:shadow-lg transition-all duration-300">
+            </button>
+            {/* Ayuh Clinic clickable logo */}
+            <button
+              type="button"
+              onClick={() => {
+                const el = document.getElementById('ayuh-clinic-service');
+                if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              }}
+              className="text-center p-6 bg-red-50 rounded-xl hover:shadow-lg transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-red-400"
+              aria-label="Scroll to Ayuh Clinic Service section"
+            >
               <img
                 src="/AYUH_Logo_2.png"
                 alt="Ayuh Clinic logo"
@@ -134,9 +150,17 @@ const About = () => {
               />
               <h4 className="font-semibold text-secondary-900 mb-2">Ayuh Clinic</h4>
               <p className="text-sm text-secondary-600">Comprehensive Healthcare Services</p>
-            </div>
-            
-            <div className="text-center p-6 bg-purple-50 rounded-xl hover:shadow-lg transition-all duration-300">
+            </button>
+            {/* Nirchal clickable logo */}
+            <button
+              type="button"
+              onClick={() => {
+                const el = document.getElementById('nirchal-service');
+                if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              }}
+              className="text-center p-6 bg-purple-50 rounded-xl hover:shadow-lg transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-purple-400"
+              aria-label="Scroll to Nirchal Service section"
+            >
               <img
                 src="/Nirchal_Logo.png"
                 alt="Nirchal logo"
@@ -144,15 +168,25 @@ const About = () => {
               />
               <h4 className="font-semibold text-secondary-900 mb-2">Nirchal</h4>
               <p className="text-sm text-secondary-600">Fashion & Custom Tailoring</p>
-            </div>
-            
-            <div className="text-center p-6 bg-orange-50 rounded-xl hover:shadow-lg transition-all duration-300">
-              <div className="h-16 w-16 bg-orange-100 rounded-lg flex items-center justify-center mx-auto mb-4">
-                <Compass className="w-8 h-8 text-orange-600" />
-              </div>
+            </button>
+            {/* Raahirides clickable logo */}
+            <button
+              type="button"
+              onClick={() => {
+                const el = document.getElementById('raahirides-service');
+                if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              }}
+              className="text-center p-6 bg-orange-50 rounded-xl hover:shadow-lg transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-orange-400"
+              aria-label="Scroll to Raahirides Service section"
+            >
+              <img
+                src="/raahi_rides_logo.png"
+                alt="Raahirides logo"
+                className="h-16 w-auto mx-auto mb-4 object-contain"
+              />
               <h4 className="font-semibold text-secondary-900 mb-2">Raahirides</h4>
               <p className="text-sm text-secondary-600">Travel & Transportation</p>
-            </div>
+            </button>
           </div>
         </div>
 
@@ -229,7 +263,14 @@ const About = () => {
 
           <div className="grid md:grid-cols-2 gap-8">
             {objectives.map((objective, index) => {
-              const Icon = objective.icon
+              // Map brand to service section id
+              const brandToId: Record<string, string> = {
+                'IT Wala': 'itwala-service',
+                'Ayuh Clinic': 'ayuh-clinic-service',
+                'Nirchal': 'nirchal-service',
+                'Raahirides': 'raahirides-service',
+              };
+              const sectionId = brandToId[objective.brand] || 'services';
               return (
                 <div
                   key={objective.title}
@@ -237,15 +278,13 @@ const About = () => {
                 >
                   <div className="flex items-start space-x-4">
                     <div className="w-12 h-12 bg-primary-100 rounded-full flex items-center justify-center flex-shrink-0">
-                      {objective.logo ? (
+                      <a href={`#${sectionId}`} aria-label={`Go to ${objective.brand} service`}>
                         <img
                           src={objective.logo}
                           alt={`${objective.brand} logo`}
                           className="w-8 h-8 object-contain"
                         />
-                      ) : Icon ? (
-                        <Icon className="w-6 h-6 text-primary-600" />
-                      ) : null}
+                      </a>
                     </div>
                     <div className="flex-1">
                       <div className="flex items-center justify-between mb-3">
@@ -262,7 +301,7 @@ const About = () => {
                     </div>
                   </div>
                 </div>
-              )
+              );
             })}
           </div>
         </div>

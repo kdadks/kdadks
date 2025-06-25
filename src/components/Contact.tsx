@@ -112,37 +112,79 @@ const Contact = () => {
           </p>
           
           {/* Brand Logos */}
-          <div className="flex justify-center items-center space-x-8 mb-8">
-            <div className="text-center">
+          <div className="flex flex-wrap justify-center items-center space-x-12 mb-8">
+            {/* ITwala clickable logo */}
+            <button
+              type="button"
+              onClick={() => {
+                const el = document.getElementById('itwala-service');
+                if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              }}
+              className="text-center focus:outline-none focus:ring-2 focus:ring-blue-400"
+              aria-label="Scroll to ITwala Service section"
+              style={{ background: 'none', border: 'none', padding: '8px', margin: '4px' }}
+            >
               <img
                 src="/IT - WALA_logo (1).png"
                 alt="IT Wala logo"
-                className="h-12 w-auto mx-auto mb-2 object-contain"
+                className="h-12 w-auto mx-auto mb-4 object-contain"
               />
-              <p className="text-sm text-secondary-500">IT Training & Consulting</p>
-            </div>
-            <div className="text-center">
+              <p className="text-sm text-secondary-500 mt-3">IT Training & Consulting</p>
+            </button>
+            {/* Ayuh Clinic clickable logo */}
+            <button
+              type="button"
+              onClick={() => {
+                const el = document.getElementById('ayuh-clinic-service');
+                if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              }}
+              className="text-center focus:outline-none focus:ring-2 focus:ring-red-400"
+              aria-label="Scroll to Ayuh Clinic Service section"
+              style={{ background: 'none', border: 'none', padding: '8px', margin: '4px' }}
+            >
               <img
                 src="/AYUH_Logo_2.png"
                 alt="Ayuh Clinic logo"
-                className="h-12 w-auto mx-auto mb-2 object-contain"
+                className="h-12 w-auto mx-auto mb-4 object-contain"
               />
-              <p className="text-sm text-secondary-500">Healthcare Services</p>
-            </div>
-            <div className="text-center">
+              <p className="text-sm text-secondary-500 mt-3">Healthcare Services</p>
+            </button>
+            {/* Nirchal clickable logo */}
+            <button
+              type="button"
+              onClick={() => {
+                const el = document.getElementById('nirchal-service');
+                if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              }}
+              className="text-center focus:outline-none focus:ring-2 focus:ring-purple-400"
+              aria-label="Scroll to Nirchal Service section"
+              style={{ background: 'none', border: 'none', padding: '8px', margin: '4px' }}
+            >
               <img
                 src="/Nirchal_Logo.png"
                 alt="Nirchal logo"
-                className="h-12 w-auto mx-auto mb-2 object-contain"
+                className="h-12 w-auto mx-auto mb-4 object-contain"
               />
-              <p className="text-sm text-secondary-500">Fashion & Tailoring</p>
-            </div>
-            <div className="text-center">
-              <div className="h-12 w-12 bg-orange-100 rounded-lg flex items-center justify-center mx-auto mb-2">
-                <Car className="w-6 h-6 text-orange-600" />
-              </div>
-              <p className="text-sm text-secondary-500">Travel Solutions</p>
-            </div>
+              <p className="text-sm text-secondary-500 mt-3">Fashion & Tailoring</p>
+            </button>
+            {/* Raahirides clickable logo */}
+            <button
+              type="button"
+              onClick={() => {
+                const el = document.getElementById('raahirides-service');
+                if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              }}
+              className="text-center focus:outline-none focus:ring-2 focus:ring-orange-400"
+              aria-label="Scroll to Raahirides Service section"
+              style={{ background: 'none', border: 'none', padding: '8px', margin: '4px' }}
+            >
+              <img
+                src="/raahi_rides_logo.png"
+                alt="Raahirides logo"
+                className="h-12 w-auto mx-auto mb-4 object-contain"
+              />
+              <p className="text-sm text-secondary-500 mt-3">Travel Solutions</p>
+            </button>
           </div>
         </div>
 

@@ -76,6 +76,188 @@ const Features = () => {
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8 mb-20">
           {features.map((feature, index) => {
             const Icon = feature.icon
+            // Make ITwala and Ayuh Clinic logos clickable
+            const isITwala = feature.brand === 'IT Wala';
+            const isAyuhClinic = feature.brand === 'Ayuh Clinic';
+            const isNirchal = feature.brand === 'Nirchal';
+            const isRaahirides = feature.brand === 'Raahirides';
+            if (isITwala) {
+              return (
+                <button
+                  key={feature.title}
+                  type="button"
+                  onClick={() => {
+                    const el = document.getElementById('itwala-service');
+                    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                  }}
+                  className={`card p-8 group hover:scale-105 animate-fade-in focus:outline-none focus:ring-2 focus:ring-blue-400`}
+                  style={{ animationDelay: `${index * 100}ms` }}
+                  aria-label="Scroll to ITwala Service section"
+                >
+                  {/* Icon or Logo */}
+                  <div className={`w-16 h-16 ${feature.bgColor} rounded-xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-300`}>
+                    <img
+                      src={feature.logo}
+                      alt={`${feature.brand} logo`}
+                      className="w-10 h-10 object-contain"
+                    />
+                  </div>
+
+                  {/* Content */}
+                  <div className="mb-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="text-xl font-semibold text-secondary-900 group-hover:text-primary-600 transition-colors duration-300">
+                        {feature.title}
+                      </h3>
+                      <span className={`text-xs px-2 py-1 rounded-full font-medium bg-blue-100 text-blue-600`}>
+                        {feature.brand}
+                      </span>
+                    </div>
+                  </div>
+                  
+                  <p className="text-secondary-600 leading-relaxed">
+                    {feature.description}
+                  </p>
+
+                  {/* Hover Effect */}
+                  <div className="mt-6 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                    <div className="w-12 h-1 bg-gradient-to-r from-primary-500 to-accent-500 rounded-full"></div>
+                  </div>
+                </button>
+              )
+            }
+            if (isAyuhClinic) {
+              return (
+                <button
+                  key={feature.title}
+                  type="button"
+                  onClick={() => {
+                    const el = document.getElementById('ayuh-clinic-service');
+                    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                  }}
+                  className={`card p-8 group hover:scale-105 animate-fade-in focus:outline-none focus:ring-2 focus:ring-red-400`}
+                  style={{ animationDelay: `${index * 100}ms` }}
+                  aria-label="Scroll to Ayuh Clinic Service section"
+                >
+                  {/* Icon or Logo */}
+                  <div className={`w-16 h-16 ${feature.bgColor} rounded-xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-300`}>
+                    <img
+                      src={feature.logo}
+                      alt={`${feature.brand} logo`}
+                      className="w-10 h-10 object-contain"
+                    />
+                  </div>
+
+                  {/* Content */}
+                  <div className="mb-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="text-xl font-semibold text-secondary-900 group-hover:text-primary-600 transition-colors duration-300">
+                        {feature.title}
+                      </h3>
+                      <span className={`text-xs px-2 py-1 rounded-full font-medium bg-red-100 text-red-600`}>
+                        {feature.brand}
+                      </span>
+                    </div>
+                  </div>
+                  
+                  <p className="text-secondary-600 leading-relaxed">
+                    {feature.description}
+                  </p>
+
+                  {/* Hover Effect */}
+                  <div className="mt-6 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                    <div className="w-12 h-1 bg-gradient-to-r from-primary-500 to-accent-500 rounded-full"></div>
+                  </div>
+                </button>
+              )
+            }
+            if (isNirchal) {
+              return (
+                <button
+                  key={feature.title}
+                  type="button"
+                  onClick={() => {
+                    const el = document.getElementById('nirchal-service');
+                    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                  }}
+                  className={`card p-8 group hover:scale-105 animate-fade-in focus:outline-none focus:ring-2 focus:ring-purple-400`}
+                  style={{ animationDelay: `${index * 100}ms` }}
+                  aria-label="Scroll to Nirchal Service section"
+                >
+                  {/* Icon or Logo */}
+                  <div className={`w-16 h-16 ${feature.bgColor} rounded-xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-300`}>
+                    <img
+                      src={feature.logo}
+                      alt={`${feature.brand} logo`}
+                      className="w-10 h-10 object-contain"
+                    />
+                  </div>
+
+                  {/* Content */}
+                  <div className="mb-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="text-xl font-semibold text-secondary-900 group-hover:text-primary-600 transition-colors duration-300">
+                        {feature.title}
+                      </h3>
+                      <span className={`text-xs px-2 py-1 rounded-full font-medium bg-purple-100 text-purple-600`}>
+                        {feature.brand}
+                      </span>
+                    </div>
+                  </div>
+                  
+                  <p className="text-secondary-600 leading-relaxed">
+                    {feature.description}
+                  </p>
+
+                  {/* Hover Effect */}
+                  <div className="mt-6 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                    <div className="w-12 h-1 bg-gradient-to-r from-primary-500 to-accent-500 rounded-full"></div>
+                  </div>
+                </button>
+              )
+            }
+            if (isRaahirides) {
+              return (
+                <button
+                  key={feature.title}
+                  type="button"
+                  onClick={() => {
+                    const el = document.getElementById('raahirides-service');
+                    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                  }}
+                  className={`card p-8 group hover:scale-105 animate-fade-in focus:outline-none focus:ring-2 focus:ring-orange-400`}
+                  style={{ animationDelay: `${index * 100}ms` }}
+                  aria-label="Scroll to Raahirides Service section"
+                >
+                  {/* Icon or Logo */}
+                  <div className={`w-16 h-16 ${feature.bgColor} rounded-xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-300`}>
+                    <img
+                      src="/raahi_rides_logo.png"
+                      alt="Raahirides logo"
+                      className="w-10 h-10 object-contain"
+                    />
+                  </div>
+                  {/* Content */}
+                  <div className="mb-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="text-xl font-semibold text-secondary-900 group-hover:text-primary-600 transition-colors duration-300">
+                        {feature.title}
+                      </h3>
+                      <span className={`text-xs px-2 py-1 rounded-full font-medium bg-orange-100 text-orange-600`}>
+                        {feature.brand}
+                      </span>
+                    </div>
+                  </div>
+                  <p className="text-secondary-600 leading-relaxed">
+                    {feature.description}
+                  </p>
+                  {/* Hover Effect */}
+                  <div className="mt-6 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                    <div className="w-12 h-1 bg-gradient-to-r from-primary-500 to-accent-500 rounded-full"></div>
+                  </div>
+                </button>
+              )
+            }
             return (
               <div
                 key={feature.title}

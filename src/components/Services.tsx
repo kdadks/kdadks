@@ -38,7 +38,7 @@ const Services = () => {
       theme: 'fashion',
     },
     {
-      icon: Car,
+      logo: '/raahi_rides_logo.png',
       title: 'RaahiRides',
       description: 'Seamless travel services including point-to-point journeys, package solutions, and corporate travel arrangements.',
       features: ['Point-to-Point Travel', 'Package Tours', 'Corporate Travel', 'Business Retreats', 'Eastern UP Travel Solutions', 'Spiritual Tours'],
@@ -165,7 +165,11 @@ const Services = () => {
         {/* Services Grid */}
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8" role="list" aria-label="Our services">
           {services.map((service, index) => {
-            const Icon = service.icon
+            // Add id to ITwala, Ayuh Clinic, Nirchal, and Raahirides service cards for scroll target
+            const isITwala = service.title.toLowerCase().includes('itwala');
+            const isAyuhClinic = service.title.toLowerCase().includes('ayuh clinic');
+            const isNirchal = service.title.toLowerCase().includes('nirchal');
+            const isRaahirides = service.title.toLowerCase().includes('raahi') || service.title.toLowerCase().includes('raahirides');
             return (
               <article
                 key={service.title}
@@ -173,17 +177,31 @@ const Services = () => {
                 itemScope
                 itemType="https://schema.org/Service"
                 role="listitem"
+                id={isITwala && index === 0 ? 'itwala-service' : isAyuhClinic ? 'ayuh-clinic-service' : isNirchal ? 'nirchal-service' : isRaahirides ? 'raahirides-service' : undefined}
               >
                 {/* Icon or Logo */}
                 <div className={getIconStyles(service.theme)}>
                   {service.logo ? (
-                    <img
-                      src={service.logo}
-                      alt={`${service.title} logo`}
-                      className="w-12 h-12 object-contain group-hover:scale-110 transition-all duration-300"
-                    />
-                  ) : Icon ? (
-                    <Icon className={getIconColorStyles(service.theme)} />
+                    <a
+                      href={
+                        isITwala && index === 0
+                          ? '#itwala-service'
+                          : isAyuhClinic
+                          ? '#ayuh-clinic-service'
+                          : isNirchal
+                          ? '#nirchal-service'
+                          : isRaahirides
+                          ? '#raahirides-service'
+                          : undefined
+                      }
+                      aria-label={`Go to ${service.title} card`}
+                    >
+                      <img
+                        src={service.logo}
+                        alt={`${service.title} logo`}
+                        className="w-12 h-12 object-contain group-hover:scale-110 transition-all duration-300"
+                      />
+                    </a>
                   ) : null}
                 </div>
 
@@ -236,7 +254,7 @@ const Services = () => {
               Schedule Consultation
             </a>
             <a
-              href="https://wa.me/917982303199?text=Hi%2C%20I%20would%20like%20to%20know%20more%20about%20your%20services."
+              href="https://wa.me/917982303199?text=Hi%2C%20I%would%20like%20to%20know%20more%20about%20your%20services."
               target="_blank"
               rel="noopener noreferrer"
               className="btn-outline"
