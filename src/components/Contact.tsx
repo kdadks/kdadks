@@ -74,7 +74,7 @@ const Contact = () => {
     {
       icon: Mail,
       title: 'Email Us',
-      details: 'kdadks@outlook.com',
+      details: 'support@kdadks.com',
       description: 'Send us an email anytime',
     },
     {
@@ -310,7 +310,7 @@ const Contact = () => {
               </p>
               <meta itemProp="name" content="Kdadks Service Private Limited" />
               <meta itemProp="url" content="https://kdadks.com" />
-              <meta itemProp="email" content="kdadks@outlook.com" />
+              <meta itemProp="email" content="support@kdadks.com" />
               <meta itemProp="telephone" content="+91-7982303199" />
               <div itemProp="address" itemScope itemType="https://schema.org/PostalAddress">
                 <meta itemProp="addressLocality" content="Lucknow" />

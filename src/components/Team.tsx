@@ -17,7 +17,7 @@ const Team = () => {
     {
       name: 'Deepti Sharma',
       role: 'Founder',
-      description: 'With 21 years of distinguished experience in the healthcare and clinical research industry, Deepti is a highly skilled Lead Nurse specializing in patient care management and multispecialty clinical trials. Their expertise spans ICU, respiratory, nephrology, neurology, diabetic, and oncology research, where they have successfully managed complex trial protocols while ensuring compassionate, patient-centered care.',
+      description: 'Deepti Sharma is a seasoned Healthcare professional and visionary founder. Her career reflects a rare blend of clinical expertise, research leadership, and unwavering dedication to patient-centered care. Specializing in multispecialty clinical trials, Deepti has led complex studies across critical care disciplines including ICU, respiratory, nephrology, neurology, diabetes, and oncology.Her ability to balance scientific precision with compassionate care sets her apart as a visionary leader.',
       experience: '21 years',
       specialties: ['Clinical Research', 'Patient Care Management', 'ICU', 'Respiratory Care', 'Nephrology', 'Neurology', 'Diabetic Care', 'Oncology Research'],
       background: 'As a dual-registered nurse (India & Ireland), Deepti combines deep clinical knowledge with a strong commitment to patient safety, ethical research, and holistic care. Their background as a Retired Army Officer further reinforces their discipline, adaptability, and crisis management skills—key strengths in fast-paced medical environments.'
@@ -25,10 +25,10 @@ const Team = () => {
     {
       name: 'Amit Ranjan',
       role: 'Chief Technology Officer',
-      description: 'An IT powerhouse with 25 years of experience, he excels in product management and enterprise development, skilled in React and AI. Having worked with Fortune 500 companies like Dell, his inclusive leadership fosters team collaboration and innovation.',
+      description: 'Amit Ranjan is a seasoned technology executive with over 25 years of experience leading transformative digital initiatives. A dynamic leader and strategic thinker, he brings a powerful blend of technical expertise and visionary leadership to our organization. Known for delivering scalable enterprise solutions, Amit has a strong track record in product management, enterprise development, and emerging technologies such as React and Artificial Intelligence.',
       experience: '25 years',
       specialties: ['Product Management', 'Enterprise Development', 'React', 'Artificial Intelligence', 'Team Leadership', 'Innovation Strategy'],
-      background: 'With expertise in AI, Salesforce, and banking, Amit brings strategic vision to our organization. His experience with Fortune 500 companies has shaped his approach to inclusive leadership and collaborative innovation.'
+      background: 'Amit’s deep industry experience spans artificial intelligence, Salesforce ecosystems, and digital banking platforms. He possesses a keen ability to align technology with business strategy, driving measurable outcomes across sectors. His time with global enterprises has equipped him with the insights and adaptability to navigate complex environments and implement forward-thinking technology strategies..'
     },
     {
       name: 'Kumar Prateek Srivastav',

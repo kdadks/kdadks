@@ -18,7 +18,7 @@ const Services = () => {
       title: 'ITwala Product & Consulting',
       description: 'Professional consulting services for product management, software development, and digital transformation solutions.',
       features: ['Product Strategy', 'Technical Consulting', 'Digital Transformation','IT Staffing partner','Product Development','AI Solutions', 'Training & development'],
-      url: '#contact',
+      url: 'https://it-wala.com/consulting', // updated URL for ITwala Product & Consulting
       theme: 'tech',
     },
     {
@@ -26,7 +26,7 @@ const Services = () => {
       title: 'ITwala Academy',
       description: 'Comprehensive education in AI Product management, AI Program management, AI Software testing, AI/ML DevOps, Prompt Engineering, Agentic AI, AI development, and personality development.',
       features: ['AI Product Management Training', 'AI Program Management Training', 'AI Software Testing Courses', 'Prompt Engineering','Agentic AI Training', 'AI/ML DevOps Training', 'Development Bootcamps', 'Personality Development'],
-      url: 'https://it-wala.com/',
+      url: 'https://it-wala.com/academy', // updated URL for ITwala Academy
       theme: 'education',
     },
     {
