@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { supabase } from '../../config/supabase';
+import { supabase, isSupabaseConfigured } from '../../config/supabase';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '../ui/ToastProvider';
 
@@ -12,6 +12,12 @@ const AdminLogin: React.FC = () => {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Check if Supabase is configured
+    if (!isSupabaseConfigured) {
+      showError('Configuration Error', 'Authentication service is not configured. Please contact the administrator.');
+      return;
+    }
     
     // Basic validation
     if (!email || !password) {

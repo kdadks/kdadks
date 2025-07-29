@@ -1,4 +1,4 @@
-import { supabase } from '../config/supabase'
+import { supabase, isSupabaseConfigured } from '../config/supabase'
 import type { User, Session } from '@supabase/supabase-js'
 
 export interface SimpleUser {
@@ -17,6 +17,7 @@ const debugSupabase = () => {
   console.log('Supabase Debug Info:')
   console.log('- URL:', url || 'MISSING')
   console.log('- Key:', key ? 'Present' : 'MISSING')
+  console.log('- Configured:', isSupabaseConfigured)
   console.log('- Client:', supabase ? 'Initialized' : 'Not initialized')
   
   if (!url || !key) {

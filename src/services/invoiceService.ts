@@ -1,4 +1,4 @@
-import { supabase } from '../config/supabase';
+import { supabase, isSupabaseConfigured } from '../config/supabase';
 import type {
   Country,
   CompanySettings,
@@ -25,6 +25,10 @@ import type {
 class InvoiceService {
   // Countries
   async getCountries(): Promise<Country[]> {
+    if (!isSupabaseConfigured) {
+      throw new Error('Database is not configured. Please contact the administrator.');
+    }
+    
     const { data, error } = await supabase
       .from('countries')
       .select('*')
