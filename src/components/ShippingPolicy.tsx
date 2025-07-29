@@ -1,5 +1,5 @@
 import React from 'react'
-import { Truck, Package, Clock, MapPin, ArrowLeft } from 'lucide-react'
+import { Truck, Package, MapPin, ArrowLeft } from 'lucide-react'
 
 const ShippingPolicy = () => {
   return (

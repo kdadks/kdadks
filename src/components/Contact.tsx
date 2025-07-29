@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { Mail, Phone, MapPin, Send, Clock, CheckCircle, Car } from 'lucide-react'
+import { Mail, Phone, MapPin, Send, Clock, CheckCircle } from 'lucide-react'
 import { EmailService } from '../services/emailService'
 import { ContactFormData } from '../config/brevo'
 
@@ -320,7 +320,7 @@ const Contact = () => {
             </div>
 
             <div className="space-y-6">
-              {contactInfo.map((info, index) => {
+              {contactInfo.map((info) => {
                 const Icon = info.icon
                 return (
                   <div key={info.title} className="flex items-start space-x-4">

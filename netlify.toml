@@ -30,6 +30,13 @@
   to = "/"
   status = 301
 
+# Admin panel SPA routing
+[[redirects]]
+  from = "/admin/*"
+  to = "/index.html"
+  status = 200
+  status = 301
+
 # Redirect rules for SPA (Single Page Application)
 [[redirects]]
   from = "/*"

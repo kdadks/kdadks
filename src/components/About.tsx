@@ -1,14 +1,7 @@
 import React from 'react'
-import { CheckCircle, Award, Target, TrendingUp, Heart, Users, Shield, Lightbulb, Eye, Compass, LucideIcon } from 'lucide-react'
+import { CheckCircle, Heart, Users, Shield, Lightbulb, Eye } from 'lucide-react'
 
-interface Objective {
-  logo: string;
-  title: string;
-  description: string;
-  brand: string;
-}
-
-const About = () => {
+const About: React.FC = () => {
   const achievements = [
     { number: '4', label: 'Diverse Brands' },
     { number: '100+', label: 'Success Stories' },
@@ -262,7 +255,7 @@ const About = () => {
           </div>
 
           <div className="grid md:grid-cols-2 gap-8">
-            {objectives.map((objective, index) => {
+            {objectives.map((objective) => {
               // Map brand to service section id
               const brandToId: Record<string, string> = {
                 'IT Wala': 'itwala-service',
@@ -336,7 +329,7 @@ const About = () => {
           </div>
 
           <div className="grid md:grid-cols-3 lg:grid-cols-5 gap-6">
-            {coreValues.map((value, index) => {
+            {coreValues.map((value) => {
               const Icon = value.icon
               return (
                 <div

@@ -1,15 +1,4 @@
 import React from 'react'
-import { Users, Car, Code, Award, LucideIcon } from 'lucide-react'
-
-interface Service {
-  icon?: LucideIcon;
-  logo?: string;
-  title: string;
-  description: string;
-  features: string[];
-  url: string;
-  theme: string;
-}
 
 const Services = () => {
   const services = [
@@ -90,25 +79,6 @@ const Services = () => {
         return `${baseStyles} bg-red-100 group-hover:bg-red-600`;
       default:
         return `${baseStyles} bg-primary-100 group-hover:bg-primary-600`;
-    }
-  };
-
-  const getIconColorStyles = (theme: string) => {
-    const baseStyles = "w-8 h-8 group-hover:text-white transition-colors duration-300";
-    
-    switch (theme) {
-      case 'tech':
-        return `${baseStyles} text-blue-600`;
-      case 'education':
-        return `${baseStyles} text-emerald-600`;
-      case 'fashion':
-        return `${baseStyles} text-pink-600`;
-      case 'travel':
-        return `${baseStyles} text-orange-600`;
-      case 'healthcare':
-        return `${baseStyles} text-red-600`;
-      default:
-        return `${baseStyles} text-primary-600`;
     }
   };
 

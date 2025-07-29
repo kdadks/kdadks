@@ -5,7 +5,8 @@ export const BREVO_CONFIG = {
   USERNAME: '900018001@smtp-brevo.com',
   // Note: Password should be set via environment variable for security
   // For development, you can set it directly, but use env vars in production
-  PASSWORD: process.env.BREVO_PASSWORD || '', // Set this in your environment
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  PASSWORD: (import.meta as any).env?.VITE_BREVO_PASSWORD || '', // Set this in your environment
 }
 
 export interface EmailData {

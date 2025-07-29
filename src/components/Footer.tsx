@@ -1,5 +1,5 @@
 import React from 'react'
-import { Facebook, Twitter, Instagram, Linkedin, Mail, Phone, MapPin, Code, Heart, Users, Car } from 'lucide-react'
+import { Facebook, Twitter, Instagram, Linkedin, Mail, Phone, MapPin } from 'lucide-react'
 
 const Footer = () => {
   const footerLinks = {
@@ -40,13 +40,6 @@ const Footer = () => {
     { name: 'Twitter', icon: Twitter, href: '#' },
     { name: 'Instagram', icon: Instagram, href: '#' },
     { name: 'LinkedIn', icon: Linkedin, href: '#' },
-  ]
-
-  const brandIcons = [
-    { name: 'IT Wala', icon: Code, logo: '/IT - WALA_logo (1).png', color: 'text-blue-400' },
-    { name: 'Ayuh Clinic', icon: Heart, logo: '/AYUH_Logo_2.png', color: 'text-red-400' },
-    { name: 'Nirchal', icon: Users, logo: '/Nirchal_Logo.png', color: 'text-purple-400' },
-    { name: 'Raahirides', icon: Car, color: 'text-orange-400' },
   ]
 
   return (
@@ -178,7 +171,17 @@ const Footer = () => {
               © 2025 Kdadks Service Private Limited. All rights reserved.
             </p>
             <div className="flex items-center space-x-4 text-gray-500">
-
+              <span 
+                onClick={(e) => {
+                  if (e.detail === 5) { // Quintuple click
+                    window.location.href = '/admin/login'
+                  }
+                }}
+                className="cursor-default select-none"
+                title="Admin access"
+              >
+                Made with ❤️ in India
+              </span>
             </div>
           </div>
         </div>

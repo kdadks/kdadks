@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import Header from './Header'
 import Hero from './Hero'
 import Features from './Features'
@@ -14,6 +15,9 @@ import ShippingPolicy from './ShippingPolicy'
 import CancellationRefund from './CancellationRefund'
 import SEO from './SEO'
 import SEOContent from './SEOContent'
+import AdminLogin from './admin/AdminLogin'
+import SimpleAdminDashboard from './admin/SimpleAdminDashboard'
+import { ToastProvider } from './ui/ToastProvider'
 
 const Router = () => {
   const [currentPage, setCurrentPage] = useState('home')
@@ -21,6 +25,14 @@ const Router = () => {
   useEffect(() => {
     const handleHashChange = () => {
       const hash = window.location.hash.replace('#', '')
+      const path = window.location.pathname
+
+      // Handle admin routes - these will be handled by react-router-dom
+      if (path.startsWith('/admin')) {
+        return
+      }
+
+      // Handle regular routes
       switch (hash) {
         case 'privacy':
           setCurrentPage('privacy')
@@ -42,14 +54,17 @@ const Router = () => {
       }
     }
 
-    // Set initial page based on current hash
+    // Set initial page based on current hash/path
     handleHashChange()
 
     // Listen for hash changes
     window.addEventListener('hashchange', handleHashChange)
+    // Listen for popstate (back/forward button)
+    window.addEventListener('popstate', handleHashChange)
 
     return () => {
       window.removeEventListener('hashchange', handleHashChange)
+      window.removeEventListener('popstate', handleHashChange)
     }
   }, [])
 
@@ -120,7 +135,20 @@ const Router = () => {
     }
   }
 
-  return renderPage()
+  return (
+    <BrowserRouter>
+      <ToastProvider>
+        <Routes>
+          {/* Admin routes */}
+          <Route path="/admin/login" element={<AdminLogin />} />
+          <Route path="/admin" element={<SimpleAdminDashboard />} />
+          
+          {/* Main site routes - render the existing hash-based routing */}
+          <Route path="/*" element={renderPage()} />
+        </Routes>
+      </ToastProvider>
+    </BrowserRouter>
+  )
 }
 
 export default Router

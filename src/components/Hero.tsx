@@ -47,7 +47,7 @@ const Hero = () => {
 
             {/* Brand Pills */}
             <div className="flex flex-wrap gap-3 mb-8 animate-slide-up animate-delay-250">
-              {brands.map((brand, index) => {
+              {brands.map((brand) => {
                 const Icon = brand.icon
                 const brandColors = {
                   'IT Wala': 'from-blue-500/20 to-cyan-500/20 border-blue-400/40',

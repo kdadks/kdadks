@@ -37,7 +37,10 @@ export default defineConfig({
   server: {
     port: 3000,
     open: true,
-    host: true
+    host: true,
+    // For SPA routing, consider using the 'base' option or configure a custom middleware if needed.
+    // Example: base: '/admin/', (uncomment and adjust if your app is served from /admin/)
+    // base: '/admin/',
   },
   preview: {
     port: 4173,

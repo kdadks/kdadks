@@ -6,7 +6,7 @@ export interface SEOData {
   ogImage?: string;
   ogType?: string;
   twitterCard?: string;
-  structuredData?: any;
+  structuredData?: Record<string, unknown>;
   noindex?: boolean;
 }
 
@@ -161,11 +161,17 @@ export const pageSEO = {
   }
 };
 
-export const generateStructuredData = (type: string, data?: any) => {
+export const generateStructuredData = (type: string, data?: Record<string, unknown>) => {
   const page = pageSEO[type as keyof typeof pageSEO];
   if (page && 'structuredData' in page) {
     return JSON.stringify(page.structuredData);
   }
+  
+  // Use data parameter for additional context if needed
+  if (data) {
+    // Could be used for dynamic structured data generation
+  }
+  
   return null;
 };
 

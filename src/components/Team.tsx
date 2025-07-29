@@ -1,5 +1,5 @@
 import React from 'react'
-import { Users, Award, Globe, Heart, Briefcase, GraduationCap } from 'lucide-react'
+import { Users, Award, Heart, Briefcase, GraduationCap } from 'lucide-react'
 
 interface TeamMember {
   name: string

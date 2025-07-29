@@ -36,14 +36,12 @@ export class EmailService {
 
   private static generateTextEmail(formData: ContactFormData): string {
     return `
-New Contact Form Submission
+Contact Form Submission
 
 Name: ${formData.name}
 Email: ${formData.email}
 Company: ${formData.company || 'Not specified'}
-
-Message:
-${formData.message}
+Message: ${formData.message}
 
 ---
 Sent from KDADKS Contact Form

@@ -1,6 +1,25 @@
 # KDADKS Website
 
-A modern, responsive website for KDADKS Service Private Limited showcasing our diverse portfolio across IT consulting, healthcare, fashion, and travel services.
+A modern website for KDADKS Service Private Limited showcasing our diverse portfolio across IT consulting, healthcare, fashion, and travel services.
+
+## 🔐 Admin Access
+
+The website includes a secure admin console for authorized personnel:
+
+- **Admin URL**: `/admin/login`
+- **Hidden Access**: Quintuple-click "Made with ❤️ in India" in the footer
+- **Authentication**: Supabase Auth with email/password login
+
+**Admin Features:**
+- Invoice management and generation
+- Business settings configuration
+- Supabase database integration
+- Secure authentication system
+
+**Authentication Method:**
+- **Email/Password**: Sign in with email and password
+
+**Note**: Admin users need to be created in Supabase. Contact the administrator for access.e website for KDADKS Service Private Limited showcasing our diverse portfolio across IT consulting, healthcare, fashion, and travel services.
 
 ## 🌟 Features
 
@@ -10,6 +29,9 @@ A modern, responsive website for KDADKS Service Private Limited showcasing our d
 - **SEO Optimized**: Meta tags and structured content for better search visibility
 - **Fast Performance**: Optimized build with code splitting and lazy loading
 - **Accessibility**: WCAG compliant with keyboard navigation support
+- **🔐 Admin Console**: Secure admin panel for managing contact submissions and site content
+- **📧 Email Integration**: Professional email system with Brevo SMTP
+- **📊 Analytics Dashboard**: Real-time contact and email statistics
 
 ## 🏢 Our Brands
 
@@ -18,7 +40,24 @@ A modern, responsive website for KDADKS Service Private Limited showcasing our d
 - **Nirchal**: Fashion design and custom tailoring
 - **Raahirides**: Travel solutions and transportation services
 
-## 🚀 Quick Start
+## � Admin Access
+
+The website includes a secure admin console for authorized personnel:
+
+- **Admin URL**: `/admin/login`
+- **Hidden Access**: Quintuple-click "Made with ❤️ in India" in the footer
+- **Default Credentials**: `admin` / `admin123` (⚠️ Change in production!)
+
+**Admin Features:**
+- Contact form submissions management
+- Email response system
+- Dashboard analytics
+- User authentication with JWT
+- Secure API endpoints
+
+For detailed admin documentation, see [ADMIN_CONSOLE_GUIDE.md](./ADMIN_CONSOLE_GUIDE.md)
+
+## �🚀 Quick Start
 
 ### Prerequisites
 
@@ -39,12 +78,18 @@ A modern, responsive website for KDADKS Service Private Limited showcasing our d
    npm install
    ```
 
-3. **Start development server**
+3. **Configure environment**
+   ```bash
+   cp .env.example .env
+   # Edit .env with your actual Brevo credentials and JWT secret
+   ```
+
+4. **Start development server**
    ```bash
    npm run dev
    ```
 
-4. **Open in browser**
+5. **Open in browser**
    Navigate to `http://localhost:3000`
 
 ## 🛠️ Development Scripts
