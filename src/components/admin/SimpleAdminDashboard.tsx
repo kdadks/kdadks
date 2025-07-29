@@ -10,6 +10,7 @@ import {
   Receipt
 } from 'lucide-react'
 import { simpleAuth, SimpleUser } from '../../utils/simpleAuth'
+import { isSupabaseConfigured } from '../../config/supabase'
 import InvoiceManagement from '../invoice/InvoiceManagement'
 
 type ActiveView = 'dashboard' | 'invoices';
@@ -20,6 +21,37 @@ const SimpleAdminDashboard: React.FC = () => {
   const [showSuccessMessage, setShowSuccessMessage] = useState(true)
   const [activeView, setActiveView] = useState<ActiveView>('dashboard')
   const navigate = useNavigate()
+
+  // If Supabase is not configured, redirect to login with message
+  if (!isSupabaseConfigured) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
+        <div className="sm:mx-auto sm:w-full sm:max-w-md">
+          <div className="bg-white py-8 px-4 shadow sm:rounded-lg sm:px-10">
+            <div className="text-center">
+              <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-yellow-100">
+                <Database className="h-6 w-6 text-yellow-600" />
+              </div>
+              <h3 className="mt-4 text-lg font-medium text-gray-900">
+                Database Not Configured
+              </h3>
+              <p className="mt-2 text-sm text-gray-600">
+                The admin portal requires database configuration to function properly.
+              </p>
+              <div className="mt-6">
+                <button
+                  onClick={() => navigate('/')}
+                  className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                >
+                  Return to Home
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   useEffect(() => {
     const checkAuth = async () => {
