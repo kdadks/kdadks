@@ -15,10 +15,6 @@
   # npm version
   NPM_VERSION = "9"
 
-[functions]
-  # Directory for serverless functions
-  directory = "netlify/functions"
-
 # SEO-friendly redirects
 [[redirects]]
   from = "/home"
@@ -35,7 +31,6 @@
   from = "/admin/*"
   to = "/index.html"
   status = 200
-  status = 301
 
 # Redirect rules for SPA (Single Page Application)
 [[redirects]]
