@@ -26,13 +26,19 @@
   to = "/"
   status = 301
 
+# Handle hash fragments for backward compatibility
+[[redirects]]
+  from = "/#/*"
+  to = "/"
+  status = 301
+
 # Admin panel SPA routing
 [[redirects]]
   from = "/admin/*"
   to = "/index.html"
   status = 200
 
-# Redirect rules for SPA (Single Page Application)
+# Redirect rules for SPA (Single Page Application) - must be last
 [[redirects]]
   from = "/*"
   to = "/index.html"
