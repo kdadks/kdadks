@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Plus, 
   Search, 
@@ -16,7 +16,10 @@ import {
   RefreshCw,
   Trash2,
   X,
-  Save
+  Save,
+  EyeOff,
+  Trash,
+  CreditCard
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { invoiceService } from '../../services/invoiceService';
@@ -24,7 +27,7 @@ import { simpleAuth } from '../../utils/simpleAuth';
 import { useToast } from '../ui/ToastProvider';
 import ConfirmDialog from '../ui/ConfirmDialog';
 import { useConfirmDialog } from '../../hooks/useConfirmDialog';
-import type { Invoice, InvoiceFilters, InvoiceStats, Customer, Product, CompanySettings, InvoiceSettings, Country, CreateProductData, CreateCompanySettingsData, CreateInvoiceSettingsData } from '../../types/invoice';
+import type { Invoice, InvoiceFilters, InvoiceStats, Customer, Product, CompanySettings, InvoiceSettings, Country, CreateProductData, CreateCompanySettingsData, CreateInvoiceSettingsData, CreateCustomerData, CreateInvoiceData, CreateInvoiceItemData, TermsTemplate } from '../../types/invoice';
 
 interface InvoiceManagementProps {
   onBackToDashboard?: () => void;
@@ -44,7 +47,7 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
   const [totalPages, setTotalPages] = useState(1);
   const [searchTerm, setSearchTerm] = useState('');
   const [filters, setFilters] = useState<InvoiceFilters>({});
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'invoices' | 'customers' | 'products' | 'settings'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'invoices' | 'customers' | 'products' | 'settings' | 'create-invoice'>('dashboard');
   
   // Product modal states
   const [showProductModal, setShowProductModal] = useState(false);
@@ -58,7 +61,8 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
     unit_price: 0,
     unit: '',
     tax_rate: 18,
-    hsn_code: ''
+    hsn_code: '',
+    is_active: true
   });
   const [modalLoading, setModalLoading] = useState(false);
 
@@ -89,6 +93,73 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
     signature_url: '',
     is_default: false
   });
+
+  // Customer modal states
+  const [showCustomerModal, setShowCustomerModal] = useState(false);
+  const [customerModalMode, setCustomerModalMode] = useState<'view' | 'edit' | 'add'>('view');
+  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+  const [customerFormData, setCustomerFormData] = useState<CreateCustomerData>({
+    company_name: '',
+    contact_person: '',
+    email: '',
+    phone: '',
+    address_line1: '',
+    address_line2: '',
+    city: '',
+    state: '',
+    postal_code: '',
+    country_id: 'IN',
+    gstin: '',
+    pan: '',
+    credit_limit: 0,
+    payment_terms: 30
+  });
+
+  // Invoice modal states
+  const [showInvoiceModal, setShowInvoiceModal] = useState(false);
+  const [invoiceModalMode, setInvoiceModalMode] = useState<'view' | 'edit' | 'add'>('view');
+  const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
+  const [selectedDefaultProduct, setSelectedDefaultProduct] = useState<string>('');
+  const [globalHsnCode, setGlobalHsnCode] = useState<string>(''); // Global HSN code for all line items
+  const [showInvoicePreview, setShowInvoicePreview] = useState(false);
+  const [generatedInvoiceNumber, setGeneratedInvoiceNumber] = useState<string>('');
+  const [invoiceFormData, setInvoiceFormData] = useState<CreateInvoiceData>({
+    customer_id: '',
+    invoice_date: new Date().toISOString().split('T')[0],
+    due_date: '',
+    notes: '',
+    terms_conditions: '',
+    items: [{
+      product_id: undefined,
+      item_name: '',
+      description: '',
+      quantity: 1,
+      unit: 'pcs',
+      unit_price: 0,
+      tax_rate: 18,
+      hsn_code: undefined
+    }]
+  });
+  const [termsTemplates, setTermsTemplates] = useState<TermsTemplate[]>([]);
+  const [selectedTermsTemplateId, setSelectedTermsTemplateId] = useState<string>('');
+
+  // Debug customer currency changes
+  useEffect(() => {
+    if (invoiceFormData.customer_id) {
+      const selectedCustomer = customers.find(c => c.id === invoiceFormData.customer_id);
+      const currencyInfo = getCurrencyInfo(selectedCustomer);
+      console.log('💰 Customer changed - Currency update:', {
+        customerId: invoiceFormData.customer_id,
+        customer: selectedCustomer ? {
+          id: selectedCustomer.id,
+          name: selectedCustomer.company_name || selectedCustomer.contact_person,
+          country_id: selectedCustomer.country_id,
+          country: selectedCustomer.country
+        } : null,
+        currencyInfo
+      });
+    }
+  }, [invoiceFormData.customer_id, customers]);
 
   // Invoice settings modal states
   const [showInvoiceSettingsModal, setShowInvoiceSettingsModal] = useState(false);
@@ -147,7 +218,8 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
         unit_price: 0,
         unit: '',
         tax_rate: 18,
-        hsn_code: ''
+        hsn_code: '',
+        is_active: true
       });
     } else if (product) {
       setProductFormData({
@@ -158,7 +230,8 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
         unit_price: product.unit_price,
         unit: product.unit,
         tax_rate: product.tax_rate,
-        hsn_code: product.hsn_code || ''
+        hsn_code: product.hsn_code || '',
+        is_active: product.is_active
       });
     }
     
@@ -171,7 +244,7 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
     setModalLoading(false);
   };
 
-  const handleProductFormChange = (field: keyof CreateProductData, value: string | number) => {
+  const handleProductFormChange = (field: keyof CreateProductData, value: string | number | boolean) => {
     setProductFormData(prev => ({
       ...prev,
       [field]: value
@@ -382,7 +455,1194 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
     }
   };
 
+  // Customer Modal Functions
+  const openCustomerModal = (mode: 'view' | 'edit' | 'add', customer?: Customer) => {
+    console.log('🏢 Opening customer modal:', { mode, customer: customer?.id });
+    setCustomerModalMode(mode);
+    setSelectedCustomer(customer || null);
+    
+    if (mode === 'add') {
+      setCustomerFormData({
+        company_name: '',
+        contact_person: '',
+        email: '',
+        phone: '',
+        address_line1: '',
+        address_line2: '',
+        city: '',
+        state: '',
+        postal_code: '',
+        country_id: 'IN',
+        gstin: '',
+        pan: '',
+        credit_limit: 0,
+        payment_terms: 30
+      });
+    } else if (customer) {
+      setCustomerFormData({
+        company_name: customer.company_name || '',
+        contact_person: customer.contact_person || '',
+        email: customer.email || '',
+        phone: customer.phone || '',
+        address_line1: customer.address_line1 || '',
+        address_line2: customer.address_line2 || '',
+        city: customer.city || '',
+        state: customer.state || '',
+        postal_code: customer.postal_code || '',
+        country_id: customer.country_id || 'IN',
+        gstin: customer.gstin || '',
+        pan: customer.pan || '',
+        credit_limit: customer.credit_limit || 0,
+        payment_terms: customer.payment_terms || 30
+      });
+    }
+    
+    setShowCustomerModal(true);
+  };
+
+  const closeCustomerModal = () => {
+    setShowCustomerModal(false);
+    setSelectedCustomer(null);
+    setModalLoading(false);
+  };
+
+  const handleCustomerFormChange = (field: keyof CreateCustomerData, value: string | number) => {
+    setCustomerFormData(prev => ({
+      ...prev,
+      [field]: value
+    }));
+  };
+
+  // Customer form validation
+  const validateCustomerForm = () => {
+    const errors: string[] = [];
+    
+    // At least one identifier should be provided
+    if (!(customerFormData.company_name || '').trim() && !(customerFormData.contact_person || '').trim()) {
+      errors.push('Either Company Name or Contact Person is required');
+    }
+    
+    // Email validation
+    if ((customerFormData.email || '').trim()) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(customerFormData.email || '')) {
+        errors.push('Please enter a valid email address');
+      }
+    }
+    
+    // Phone validation (basic)
+    if ((customerFormData.phone || '').trim()) {
+      const phoneRegex = /^[\+]?[1-9][\d]{3,14}$/;
+      if (!phoneRegex.test((customerFormData.phone || '').replace(/[\s\-\(\)]/g, ''))) {
+        errors.push('Please enter a valid phone number');
+      }
+    }
+    
+    // GSTIN validation
+    if ((customerFormData.gstin || '').trim()) {
+      const gstinRegex = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
+      if (!gstinRegex.test(customerFormData.gstin || '')) {
+        errors.push('Please enter a valid GSTIN (15 characters: 22AAAAA0000A1Z5)');
+      }
+    }
+    
+    // PAN validation
+    if ((customerFormData.pan || '').trim()) {
+      const panRegex = /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/;
+      if (!panRegex.test(customerFormData.pan || '')) {
+        errors.push('Please enter a valid PAN (10 characters: ABCDE1234F)');
+      }
+    }
+    
+    // Postal code validation (basic)
+    if ((customerFormData.postal_code || '').trim()) {
+      const postalRegex = /^[A-Z0-9\s\-]{3,10}$/i;
+      if (!postalRegex.test(customerFormData.postal_code || '')) {
+        errors.push('Please enter a valid postal code');
+      }
+    }
+    
+    return errors;
+  };
+
+  const handleSaveCustomer = async () => {
+    try {
+      setModalLoading(true);
+      
+      // Validate form
+      const validationErrors = validateCustomerForm();
+      if (validationErrors.length > 0) {
+        showError(`Please fix the following errors:\n• ${validationErrors.join('\n• ')}`);
+        return;
+      }
+      
+      console.log('💾 Saving customer:', { mode: customerModalMode, data: customerFormData });
+      
+      if (customerModalMode === 'add') {
+        const result = await invoiceService.createCustomer(customerFormData);
+        console.log('✅ Customer created:', result);
+        showSuccess('Customer created successfully!');
+      } else if (customerModalMode === 'edit' && selectedCustomer) {
+        const result = await invoiceService.updateCustomer(selectedCustomer.id, customerFormData);
+        console.log('✅ Customer updated:', result);
+        showSuccess('Customer updated successfully!');
+      }
+      
+      closeCustomerModal();
+      await loadData();
+    } catch (error) {
+      console.error('Failed to save customer:', error);
+      showError(`Failed to save customer: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setModalLoading(false);
+    }
+  };
+
+  const handleDeleteCustomer = async (customer: Customer) => {
+    console.log('🗑️ Delete customer requested:', customer);
+    const confirmed = await confirm({
+      title: 'Delete Customer',
+      message: `Are you sure you want to delete "${customer.company_name || customer.contact_person}"?\n\nThis action cannot be undone.`,
+      confirmText: 'Delete',
+      type: 'danger'
+    });
+    
+    if (confirmed) {
+      try {
+        console.log('🗑️ Deleting customer:', customer.id);
+        await invoiceService.deleteCustomer(customer.id);
+        console.log('✅ Customer deleted successfully');
+        showSuccess('Customer deleted successfully!');
+        await loadData();
+      } catch (error) {
+        console.error('❌ Failed to delete customer:', error);
+        showError(`Failed to delete customer: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      }
+    }
+  };
+
+  // Invoice Modal Functions
+  const openCreateInvoiceTab = async () => {
+    setActiveTab('create-invoice');
+    
+    // Ensure all required data is loaded
+    await loadData();
+    
+    // Force reload terms templates for create invoice tab
+    let defaultTermsContent = '';
+    let defaultTemplateId = '';
+    try {
+      const templates = await invoiceService.getTermsTemplates();
+      setTermsTemplates(templates);
+      
+      // Set default terms from template
+      const generalTemplate = templates.find(t => t.category === 'general' && t.is_default);
+      if (generalTemplate) {
+        defaultTermsContent = generalTemplate.content;
+        defaultTemplateId = generalTemplate.id;
+      }
+    } catch (error) {
+      console.error('Failed to load terms templates:', error);
+    }
+    
+    const today = new Date().toISOString().split('T')[0];
+    const dueDate = new Date();
+    dueDate.setDate(dueDate.getDate() + 30); // Default 30 days from today
+    
+    setSelectedDefaultProduct('');
+    setGlobalHsnCode(''); // Reset global HSN code
+    setSelectedTermsTemplateId(defaultTemplateId); // Set default selected template
+    
+    // Preview invoice number using the service (doesn't increment counter)
+    try {
+      const previewNumber = await invoiceService.previewInvoiceNumber();
+      setGeneratedInvoiceNumber(previewNumber);
+    } catch (error) {
+      console.error('Failed to preview invoice number:', error);
+      setGeneratedInvoiceNumber('INV-PREVIEW');
+    }
+    
+    setInvoiceFormData({
+      customer_id: '',
+      invoice_date: today,
+      due_date: dueDate.toISOString().split('T')[0],
+      notes: '',
+      terms_conditions: defaultTermsContent,
+      items: [{
+        product_id: undefined,
+        item_name: '',
+        description: '',
+        quantity: 1,
+        unit: 'pcs',
+        unit_price: 0,
+        tax_rate: 18,
+        hsn_code: undefined
+      }]
+    });
+    
+    console.log('✅ Create invoice tab initialized with:', {
+      invoiceNumber: generatedInvoiceNumber,
+      defaultTerms: defaultTermsContent,
+      invoiceDate: today,
+      dueDate: dueDate.toISOString().split('T')[0]
+    });
+  };
+
+  const openInvoiceModal = async (mode: 'view' | 'edit' | 'add', invoice?: Invoice) => {
+    // For 'add' mode, redirect to create invoice tab
+    if (mode === 'add') {
+      await openCreateInvoiceTab();
+      return;
+    }
+    
+    setInvoiceModalMode(mode);
+    setSelectedInvoice(invoice || null);
+    
+    if (invoice) {
+      setInvoiceFormData({
+        customer_id: invoice.customer_id,
+        invoice_date: invoice.invoice_date,
+        due_date: invoice.due_date || '',
+        notes: invoice.notes || '',
+        terms_conditions: invoice.terms_conditions || '',
+        items: [] // Initialize with empty array since invoice details are loaded separately
+      });
+      setGeneratedInvoiceNumber(invoice.invoice_number);
+    }
+    
+    setShowInvoiceModal(true);
+  };
+
+  const closeInvoiceModal = () => {
+    setShowInvoiceModal(false);
+    setSelectedInvoice(null);
+    setSelectedDefaultProduct('');
+    setSelectedTermsTemplateId('');
+    setGeneratedInvoiceNumber('');
+    setShowInvoicePreview(false);
+    setModalLoading(false);
+  };
+
+  const handleInvoiceFormChange = (field: keyof CreateInvoiceData, value: string | CreateInvoiceItemData[]) => {
+    if (field === 'customer_id') {
+      console.log('👤 Customer selection changed:', {
+        oldCustomerId: invoiceFormData.customer_id,
+        newCustomerId: value,
+        timestamp: new Date().toISOString()
+      });
+    }
+    
+    setInvoiceFormData(prev => ({
+      ...prev,
+      [field]: value
+    }));
+  };
+
+  const handleInvoiceItemChange = (index: number, field: keyof CreateInvoiceItemData, value: string | number | undefined) => {
+    // Debug product_id changes specifically
+    if (field === 'product_id') {
+      console.log(`🔄 Setting product_id for item ${index + 1}:`, {
+        field,
+        value,
+        type: typeof value,
+        isUndefined: value === undefined,
+        isNull: value === null,
+        isEmpty: value === ''
+      });
+    }
+    
+    setInvoiceFormData(prev => ({
+      ...prev,
+      items: prev.items.map((item, i) => {
+        if (i === index) {
+          const updatedItem = { ...item, [field]: value };
+          
+          // Debug the complete updated item for product_id changes
+          if (field === 'product_id') {
+            console.log(`📝 Updated item ${index + 1} after product_id change:`, {
+              product_id: updatedItem.product_id,
+              item_name: updatedItem.item_name,
+              description: updatedItem.description
+            });
+          }
+          
+          return updatedItem;
+        }
+        return item;
+      })
+    }));
+  };
+
+  const addInvoiceItem = () => {
+    // Get the currently selected global product
+    const selectedProduct = products.find(p => p.id === selectedDefaultProduct);
+    
+    setInvoiceFormData(prev => ({
+      ...prev,
+      items: [...prev.items, {
+        product_id: selectedDefaultProduct || undefined, // Apply global product_id to new items
+        item_name: '',
+        description: '',
+        quantity: 1,
+        unit: 'pcs',
+        unit_price: 0,
+        tax_rate: 18,
+        hsn_code: globalHsnCode || undefined // Apply global HSN code to new items
+      }]
+    }));
+    
+    console.log('➕ Added new line item with global product_id:', {
+      productId: selectedDefaultProduct || 'None',
+      hsnCode: globalHsnCode || 'None',
+      totalItems: invoiceFormData.items.length + 1
+    });
+  };
+
+  const removeInvoiceItem = (index: number) => {
+    if (invoiceFormData.items.length > 1) {
+      setInvoiceFormData(prev => ({
+        ...prev,
+        items: prev.items.filter((_, i) => i !== index)
+      }));
+    }
+  };
+
+  const calculateInvoiceTotals = () => {
+    let subtotal = 0;
+    let totalTax = 0;
+
+    invoiceFormData.items.forEach(item => {
+      const lineTotal = item.quantity * item.unit_price;
+      const taxAmount = (lineTotal * item.tax_rate) / 100;
+      subtotal += lineTotal;
+      totalTax += taxAmount;
+    });
+
+    return {
+      subtotal,
+      taxAmount: totalTax,
+      total: subtotal + totalTax
+    };
+  };
+
+  // Convert number to words (Indian system)
+  const numberToWords = (num: number): string => {
+    if (num === 0) return 'Zero';
+    
+    const ones = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine'];
+    const teens = ['Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
+    const tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
+    
+    const convertHundreds = (n: number): string => {
+      let result = '';
+      
+      if (n >= 100) {
+        result += ones[Math.floor(n / 100)] + ' Hundred ';
+        n %= 100;
+      }
+      
+      if (n >= 20) {
+        result += tens[Math.floor(n / 10)] + ' ';
+        n %= 10;
+      } else if (n >= 10) {
+        result += teens[n - 10] + ' ';
+        return result;
+      }
+      
+      if (n > 0) {
+        result += ones[n] + ' ';
+      }
+      
+      return result;
+    };
+
+    let crores = Math.floor(num / 10000000);
+    num %= 10000000;
+    let lakhs = Math.floor(num / 100000);
+    num %= 100000;
+    let thousands = Math.floor(num / 1000);
+    num %= 1000;
+    let hundreds = num;
+
+    let result = '';
+    if (crores > 0) result += convertHundreds(crores) + ' Crore ';
+    if (lakhs > 0) result += convertHundreds(lakhs) + ' Lakh ';
+    if (thousands > 0) result += convertHundreds(thousands) + ' Thousand ';
+    if (hundreds > 0) result += convertHundreds(hundreds);
+
+    return result.trim();
+  };
+
+  const formatAmountInWords = (amount: number, currencyName: string = 'Rupees'): string => {
+    const integerPart = Math.floor(amount);
+    const decimalPart = Math.round((amount - integerPart) * 100);
+    
+    let result = numberToWords(integerPart) + ` ${currencyName}`;
+    if (decimalPart > 0) {
+      result += ` and ${numberToWords(decimalPart)} Paise`;
+    }
+    result += ' Only';
+    return result;
+  };
+
+  const getCurrencyInfo = (customer: Customer | undefined) => {
+    console.log('🔍 getCurrencyInfo called with customer:', {
+      customer: customer ? {
+        id: customer.id,
+        name: customer.company_name || customer.contact_person,
+        country_id: customer.country_id,
+        country: customer.country
+      } : null
+    });
+
+    const customerCountry = customer?.country;
+    if (customerCountry && customerCountry.currency_symbol && customerCountry.currency_code) {
+      // Use the currency information from the customer's country
+      console.log('✅ Using country currency data:', customerCountry);
+      return {
+        symbol: customerCountry.currency_symbol,
+        name: customerCountry.currency_name || 'Currency',
+        code: customerCountry.currency_code
+      };
+    }
+    
+    // Fallback to hardcoded currencies based on country code if country data doesn't have currency info
+    if (customerCountry) {
+      console.log('⚠️ Using fallback currency for country code:', customerCountry.code);
+      switch (customerCountry.code) {
+        case 'US':
+          return { symbol: '$', name: 'Dollars', code: 'USD' };
+        case 'UK':
+        case 'GB':
+          return { symbol: '£', name: 'Pounds', code: 'GBP' };
+        case 'EU':
+          return { symbol: '€', name: 'Euros', code: 'EUR' };
+        default:
+          break;
+      }
+    }
+    
+    // Default to Indian Rupee
+    console.log('🔄 Using default currency (INR)');
+    return {
+      symbol: '₹',
+      name: 'Rupees',
+      code: 'INR'
+    };
+  };
+
+  const formatCurrencyAmount = (amount: number, currencyInfo: { symbol: string; code: string }) => {
+    const formattedAmount = new Intl.NumberFormat('en-IN', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    }).format(amount);
+    
+    return `${currencyInfo.symbol}${formattedAmount}`;
+  };
+
+  const handleSaveInvoice = async () => {
+    try {
+      setModalLoading(true);
+      
+      // Validate required fields
+      if (!invoiceFormData.customer_id) {
+        showError('Please select a customer');
+        return;
+      }
+      
+      if (invoiceFormData.items.length === 0 || !invoiceFormData.items[0].item_name || !invoiceFormData.items[0].description) {
+        showError('Please add at least one item with both name and description');
+        return;
+      }
+      
+      // Validate all items have required fields
+      for (let i = 0; i < invoiceFormData.items.length; i++) {
+        const item = invoiceFormData.items[i];
+        if (!item.item_name || !item.description) {
+          showError(`Item ${i + 1}: Both name and description are required`);
+          return;
+        }
+        if (item.quantity <= 0) {
+          showError(`Item ${i + 1}: Quantity must be greater than 0`);
+          return;
+        }
+        if (item.unit_price < 0) {
+          showError(`Item ${i + 1}: Unit price cannot be negative`);
+          return;
+        }
+      }
+      
+      console.log('💾 Saving invoice with validated data:', {
+        totalItems: invoiceFormData.items.length,
+        items: invoiceFormData.items.map((item, index) => ({
+          index: index + 1,
+          product_id: item.product_id || 'No product selected',
+          item_name: item.item_name,
+          description: item.description,
+          quantity: item.quantity,
+          unit: item.unit,
+          unit_price: item.unit_price,
+          tax_rate: item.tax_rate,
+          hsn_code: item.hsn_code || 'No HSN'
+        }))
+      });
+      
+      // Filter out any empty line items before saving, but preserve product_id even if undefined
+      const validItems = invoiceFormData.items.filter(item => 
+        item.item_name && item.description && item.quantity > 0 && item.unit_price >= 0
+      ).map(item => ({
+        // Ensure all fields are properly preserved including optional product_id
+        product_id: item.product_id || undefined, // Explicitly handle undefined
+        item_name: item.item_name,
+        description: item.description,
+        quantity: item.quantity,
+        unit: item.unit,
+        unit_price: item.unit_price,
+        tax_rate: item.tax_rate,
+        hsn_code: item.hsn_code || undefined // Explicitly handle undefined
+      }));
+      
+      if (validItems.length === 0) {
+        showError('No valid line items found. Please add at least one complete item.');
+        return;
+      }
+      
+      console.log('📋 Valid items after filtering and mapping:', {
+        count: validItems.length,
+        totalOriginal: invoiceFormData.items.length,
+        items: validItems.map((item, index) => ({
+          index: index + 1,
+          product_id: item.product_id || 'UNDEFINED/NULL',
+          item_name: item.item_name,
+          description: item.description,
+          quantity: item.quantity,
+          unit: item.unit,
+          unit_price: item.unit_price,
+          tax_rate: item.tax_rate,
+          hsn_code: item.hsn_code || 'UNDEFINED/NULL'
+        }))
+      });
+      
+      console.log('💾 Saving invoice:', invoiceFormData);
+      
+      if (invoiceModalMode === 'add' || activeTab === 'create-invoice') {
+        // For new invoices, generate and reserve the final invoice number when ready to save
+        let finalInvoiceNumber: string;
+        let attempts = 0;
+        const maxAttempts = 10; // Prevent infinite loops
+        
+        while (attempts < maxAttempts) {
+          try {
+            // Generate and reserve the invoice number in the database
+            finalInvoiceNumber = await invoiceService.generateInvoiceNumber();
+            console.log(`🔢 Generated and reserved invoice number attempt ${attempts + 1}:`, finalInvoiceNumber);
+            
+            // Check if this invoice number already exists in the database
+            const existingInvoices = await invoiceService.getInvoices({ search: finalInvoiceNumber }, 1, 1);
+            const exactMatch = existingInvoices.data.find(invoice => 
+              invoice.invoice_number === finalInvoiceNumber
+            );
+            
+            if (!exactMatch) {
+              // Invoice number is unique, we can proceed
+              console.log('✅ Invoice number is unique and reserved:', finalInvoiceNumber);
+              break;
+            } else {
+              console.log('⚠️ Invoice number already exists (rare collision), generating new one:', finalInvoiceNumber);
+              attempts++;
+              
+              if (attempts >= maxAttempts) {
+                throw new Error(`Unable to generate unique invoice number after ${maxAttempts} attempts`);
+              }
+              
+              // Continue loop to generate another number
+            }
+          } catch (numberError) {
+            console.error('❌ Error during invoice number generation/validation:', numberError);
+            if (attempts >= maxAttempts - 1) {
+              throw numberError;
+            }
+            attempts++;
+            // Continue loop to try again
+          }
+        }
+        
+        // Update the displayed invoice number for user feedback
+        setGeneratedInvoiceNumber(finalInvoiceNumber!);
+        
+        // Create invoice with the reserved invoice number
+        const finalInvoiceData = {
+          ...invoiceFormData,
+          items: validItems // Use only valid items
+        };
+        
+        console.log('💾 Saving invoice with data:', {
+          invoiceNumber: finalInvoiceNumber!,
+          customerId: finalInvoiceData.customer_id,
+          itemsCount: finalInvoiceData.items.length,
+          items: finalInvoiceData.items.map(item => ({
+            product_id: item.product_id,
+            item_name: item.item_name,
+            description: item.description,
+            quantity: item.quantity,
+            unit: item.unit,
+            unit_price: item.unit_price,
+            tax_rate: item.tax_rate,
+            hsn_code: item.hsn_code
+          }))
+        });
+        
+        // Pass the invoice data and reserved invoice number to the service
+        await invoiceService.createInvoice(finalInvoiceData, finalInvoiceNumber!);
+        console.log('💾 Invoice saved successfully with final number:', finalInvoiceNumber!);
+        showSuccess(`Invoice ${finalInvoiceNumber!} created successfully!`);
+        setActiveTab('invoices'); // Switch to invoices tab after creation
+      } else if (invoiceModalMode === 'edit' && selectedInvoice) {
+        // await invoiceService.updateInvoice(selectedInvoice.id, invoiceFormData);
+        console.log('Update invoice functionality needs to be implemented');
+        showSuccess('Invoice update functionality needs to be implemented!');
+      }
+      
+      closeInvoiceModal();
+      await loadData(); // Refresh the data
+    } catch (error) {
+      console.error('❌ Failed to save invoice:', error);
+      showError(`Failed to save invoice: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setModalLoading(false);
+    }
+  };
+
   // Invoice Settings Modal Functions
+  
+  // Product Selection Functions
+  const handleDefaultProductChange = (productId: string) => {
+    console.log('🛒 Global product selection changed:', { productId, availableProducts: products.length });
+    setSelectedDefaultProduct(productId);
+    
+    if (productId) {
+      const product = products.find(p => p.id === productId);
+      console.log('📦 Selected global product:', product);
+      if (product) {
+        // Set global HSN code for all line items
+        const hsnCode = product.hsn_code || '';
+        setGlobalHsnCode(hsnCode);
+        
+        // Apply product_id and HSN code to ALL line items (like a global setting)
+        const updatedItems = invoiceFormData.items.map(item => ({
+          ...item,
+          product_id: product.id, // Apply same product_id to all line items
+          hsn_code: hsnCode       // Apply same HSN code to all line items
+        }));
+        
+        console.log('✅ Applied global product_id and HSN code to all line items:', {
+          productId: product.id,
+          hsnCode,
+          totalItems: updatedItems.length
+        });
+        
+        setInvoiceFormData(prev => ({
+          ...prev,
+          items: updatedItems
+        }));
+      }
+    } else {
+      // Clear global HSN code and product_id when no product is selected
+      setGlobalHsnCode('');
+      
+      // Remove product_id from all line items
+      const updatedItems = invoiceFormData.items.map(item => ({
+        ...item,
+        product_id: undefined,
+        hsn_code: undefined
+      }));
+      
+      console.log('🧹 Cleared global product_id and HSN code from all line items');
+      
+      setInvoiceFormData(prev => ({
+        ...prev,
+        items: updatedItems
+      }));
+    }
+  };
+
+  // Terms Template Functions
+  const handleTermsChange = (termsContent: string) => {
+    setInvoiceFormData(prev => ({
+      ...prev,
+      terms_conditions: termsContent
+    }));
+  };
+
+  const handleTermsTemplateSelect = (templateId: string) => {
+    setSelectedTermsTemplateId(templateId);
+    const template = termsTemplates.find(t => t.id === templateId);
+    if (template) {
+      handleTermsChange(template.content);
+    }
+  };
+
+  // Delete functions
+  const handleDeleteInvoice = async (invoice: Invoice) => {
+    const confirmed = await confirm({
+      title: 'Delete Invoice',
+      message: `Are you sure you want to delete invoice "${invoice.invoice_number}"?\n\nThis action cannot be undone.`,
+      confirmText: 'Delete',
+      type: 'danger'
+    });
+    
+    if (confirmed) {
+      try {
+        // await invoiceService.deleteInvoice(invoice.id);
+        console.log('Delete invoice functionality needs to be implemented');
+        showSuccess('Delete invoice functionality needs to be implemented!');
+        // await loadData();
+      } catch (error) {
+        console.error('Failed to delete invoice:', error);
+        showError(`Failed to delete invoice: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      }
+    }
+  };
+
+  // Render Functions
+  const renderCreateInvoice = () => {
+    console.log('🎯 Rendering Create Invoice - Current data:', {
+      customers: customers.length,
+      products: products.length,
+      companySettings: companySettings.length,
+      termsTemplates: termsTemplates.length,
+      generatedInvoiceNumber,
+      invoiceFormData
+    });
+    
+    const { subtotal, taxAmount, total } = calculateInvoiceTotals();
+    const selectedCustomer = customers.find(c => c.id === invoiceFormData.customer_id);
+    const currencyInfo = getCurrencyInfo(selectedCustomer);
+    
+    console.log('🔄 renderCreateInvoice - Currency check:', {
+      customerId: invoiceFormData.customer_id,
+      selectedCustomer: selectedCustomer ? {
+        id: selectedCustomer.id,
+        name: selectedCustomer.company_name || selectedCustomer.contact_person,
+        country: selectedCustomer.country
+      } : null,
+      currencyInfo
+    });
+    
+    const activeProducts = products.filter(p => p.is_active);
+
+    // Debug currency info
+    console.log('💰 Currency Debug:', {
+      selectedCustomerId: invoiceFormData.customer_id,
+      selectedCustomer: selectedCustomer ? {
+        id: selectedCustomer.id,
+        name: selectedCustomer.company_name || selectedCustomer.contact_person,
+        country: selectedCustomer.country
+      } : null,
+      currencyInfo
+    });
+
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50" key={`invoice-${invoiceFormData.customer_id}-${currencyInfo.code}`}>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          {/* Modern Header */}
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-8">
+            <div className="flex items-center justify-between">
+              <div>
+                <h1 className="text-3xl font-bold text-slate-900">Create New Invoice</h1>
+                <p className="text-slate-600 mt-1">Generate professional invoices for your customers</p>
+              </div>
+              <div className="flex items-center space-x-3">
+                <button
+                  onClick={() => setActiveTab('invoices')}
+                  className="inline-flex items-center px-4 py-2 border border-slate-300 rounded-lg shadow-sm text-sm font-medium text-slate-700 bg-white hover:bg-slate-50 transition-colors"
+                >
+                  <X className="w-4 h-4 mr-2" />
+                  Cancel
+                </button>
+                <button
+                  onClick={() => setShowInvoicePreview(true)}
+                  className="inline-flex items-center px-4 py-2 border border-slate-300 rounded-lg shadow-sm text-sm font-medium text-slate-700 bg-white hover:bg-slate-50 transition-colors"
+                >
+                  <Eye className="w-4 h-4 mr-2" />
+                  Show Preview
+                </button>
+                <button
+                  onClick={handleSaveInvoice}
+                  disabled={loading || !invoiceFormData.customer_id || !invoiceFormData.items[0]?.item_name || !invoiceFormData.items[0]?.description}
+                  className="inline-flex items-center px-6 py-2 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  {loading ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-4 h-4 mr-2" />
+                      Save Invoice
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            {/* Main Form Column */}
+            <div className="lg:col-span-2 space-y-6">
+              {/* Invoice Details Card */}
+              <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+                <div className="flex items-center mb-6">
+                  <FileText className="w-5 h-5 text-blue-600 mr-2" />
+                  <h3 className="text-lg font-semibold text-slate-900">Invoice Details</h3>
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      Invoice Number
+                    </label>
+                    <input
+                      type="text"
+                      value={generatedInvoiceNumber}
+                      disabled
+                      className="w-full px-4 py-3 border border-slate-300 rounded-lg bg-slate-50 text-slate-500 font-mono"
+                    />
+                    <p className="text-xs text-slate-500 mt-1">Auto-generated on save</p>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      Customer *
+                    </label>
+                    <select
+                      value={invoiceFormData.customer_id}
+                      onChange={(e) => handleInvoiceFormChange('customer_id', e.target.value)}
+                      className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                      required
+                    >
+                      <option value="">Select Customer</option>
+                      {customers.filter(customer => customer.is_active !== false).map(customer => (
+                        <option key={customer.id} value={customer.id}>
+                          {customer.company_name || customer.contact_person}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      Invoice Date *
+                    </label>
+                    <input
+                      type="date"
+                      value={invoiceFormData.invoice_date}
+                      onChange={(e) => handleInvoiceFormChange('invoice_date', e.target.value)}
+                      className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                      required
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      Due Date
+                    </label>
+                    <input
+                      type="date"
+                      value={invoiceFormData.due_date}
+                      onChange={(e) => handleInvoiceFormChange('due_date', e.target.value)}
+                      className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                    />
+                  </div>
+                </div>
+
+                {/* Product Selection in Invoice Details */}
+                {activeProducts.length > 0 && (
+                  <div className="mt-6 pt-6 border-t border-slate-200">
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      Select Product/Service
+                    </label>
+                    <select
+                      value={selectedDefaultProduct}
+                      onChange={(e) => handleDefaultProductChange(e.target.value)}
+                      className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                    >
+                      <option value="">Choose a product to add quickly</option>
+                      {activeProducts.map(product => (
+                        <option key={product.id} value={product.id}>
+                          {product.name}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-xs text-slate-500 mt-1">Select to auto-fill item details</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Line Items Card */}
+              <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+                <div className="flex items-center justify-between mb-6">
+                  <div className="flex items-center">
+                    <Package className="w-5 h-5 text-blue-600 mr-2" />
+                    <h3 className="text-lg font-semibold text-slate-900">Line Items</h3>
+                  </div>
+                  <button
+                    onClick={addInvoiceItem}
+                    className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-lg text-blue-700 bg-blue-100 hover:bg-blue-200 transition-colors"
+                  >
+                    <Plus className="w-4 h-4 mr-2" />
+                    Add Item
+                  </button>
+                </div>
+
+                <div className="space-y-4">
+                  {invoiceFormData.items.map((item, index) => {
+                    const lineSubtotal = item.quantity * item.unit_price;
+                    const lineTaxAmount = (lineSubtotal * item.tax_rate) / 100;
+                    const lineTotal = lineSubtotal + lineTaxAmount;
+                    
+                    return (
+                      <div key={index} className="p-4 border border-slate-200 rounded-lg bg-slate-50">
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                          {/* Item Name */}
+                          <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-1">
+                              Item Name *
+                            </label>
+                            <input
+                              type="text"
+                              placeholder="Enter item name"
+                              value={item.item_name}
+                              onChange={(e) => handleInvoiceItemChange(index, 'item_name', e.target.value)}
+                              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
+                              required
+                            />
+                          </div>
+                          
+                          {/* Quantity */}
+                          <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-1">
+                              Quantity
+                            </label>
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={item.quantity}
+                              onChange={(e) => handleInvoiceItemChange(index, 'quantity', parseFloat(e.target.value) || 0)}
+                              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
+                            />
+                          </div>
+                          
+                          {/* Unit */}
+                          <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-1">
+                              Unit
+                            </label>
+                            <input
+                              type="text"
+                              placeholder="pcs"
+                              value={item.unit}
+                              onChange={(e) => handleInvoiceItemChange(index, 'unit', e.target.value)}
+                              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
+                            />
+                          </div>
+                          
+                          {/* Unit Price */}
+                          <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-1">
+                              Rate ({currencyInfo.symbol})
+                            </label>
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={item.unit_price}
+                              onChange={(e) => handleInvoiceItemChange(index, 'unit_price', parseFloat(e.target.value) || 0)}
+                              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
+                            />
+                          </div>
+                        </div>
+                        
+                        {/* Description and HSN Code */}
+                        <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+                          <div className="md:col-span-2">
+                            <label className="block text-sm font-medium text-slate-700 mb-1">
+                              Description *
+                            </label>
+                            <textarea
+                              placeholder="Enter item description"
+                              value={item.description}
+                              onChange={(e) => handleInvoiceItemChange(index, 'description', e.target.value)}
+                              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
+                              rows={2}
+                              required
+                            />
+                          </div>
+                          
+                          {/* HSN Code - Read Only */}
+                          <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-1">
+                              HSN Code
+                            </label>
+                            <input
+                              type="text"
+                              value={globalHsnCode || item.hsn_code || ''}
+                              className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-gray-50 text-gray-600 text-sm"
+                              placeholder="HSN Code"
+                              readOnly
+                            />
+                            {!globalHsnCode && !item.hsn_code && (
+                              <p className="text-xs text-slate-500 mt-1">Select a product above to set HSN code</p>
+                            )}
+                          </div>
+                        </div>
+                        
+                        {/* GST and Total */}
+                        <div className="mt-4 flex items-center justify-between">
+                          <div className="flex items-center space-x-4">
+                            <div>
+                              <label className="block text-sm font-medium text-slate-700 mb-1">
+                                GST (%)
+                              </label>
+                              <input
+                                type="number"
+                                min="0"
+                                max="100"
+                                step="0.01"
+                                value={item.tax_rate}
+                                onChange={(e) => handleInvoiceItemChange(index, 'tax_rate', parseFloat(e.target.value) || 0)}
+                                className="w-20 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
+                              />
+                            </div>
+                            {invoiceFormData.items.length > 1 && (
+                              <button
+                                onClick={() => removeInvoiceItem(index)}
+                                className="mt-6 p-2 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg transition-colors"
+                                title="Remove item"
+                              >
+                                <Trash className="w-4 h-4" />
+                              </button>
+                            )}
+                          </div>
+                          <div className="text-right">
+                            <div className="space-y-1">
+                              <div className="text-xs text-slate-600">
+                                {item.quantity} × {formatCurrencyAmount(item.unit_price, currencyInfo)} = {formatCurrencyAmount(lineSubtotal, currencyInfo)}
+                              </div>
+                              <div className="text-xs text-slate-600">
+                                GST ({item.tax_rate}%): {formatCurrencyAmount(lineTaxAmount, currencyInfo)}
+                              </div>
+                              <div className="text-sm font-medium text-slate-700 border-t border-slate-300 pt-1">
+                                Total: <span className="text-lg font-semibold text-slate-900">{formatCurrencyAmount(lineTotal, currencyInfo)}</span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Notes and Terms */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    Notes
+                  </label>
+                  <textarea
+                    value={invoiceFormData.notes}
+                    onChange={(e) => handleInvoiceFormChange('notes', e.target.value)}
+                    rows={4}
+                    className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
+                    placeholder="Any additional notes for the customer..."
+                  />
+                </div>
+
+                <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    Terms & Conditions
+                  </label>
+                  {termsTemplates.length > 0 && (
+                    <div className="mb-3">
+                      <select
+                        value={selectedTermsTemplateId}
+                        onChange={(e) => handleTermsTemplateSelect(e.target.value)}
+                        className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                      >
+                        {termsTemplates
+                          .filter(template => template.category === 'general' || template.category === 'payment')
+                          .map(template => (
+                            <option key={template.id} value={template.id}>
+                              {template.name}
+                            </option>
+                          ))}
+                      </select>
+                    </div>
+                  )}
+                  <textarea
+                    value={invoiceFormData.terms_conditions}
+                    onChange={(e) => handleTermsChange(e.target.value)}
+                    rows={4}
+                    className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
+                    placeholder="Enter terms and conditions..."
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Summary Sidebar */}
+            <div className="lg:col-span-1 space-y-6">
+              <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 sticky top-6">
+                <h3 className="text-lg font-semibold text-slate-900 mb-4">Invoice Summary</h3>
+                
+                {selectedCustomer && (
+                  <div className="mb-6 p-4 bg-slate-50 rounded-lg">
+                    <h4 className="font-medium text-slate-900 mb-2">Bill To:</h4>
+                    <p className="text-sm text-slate-600">
+                      {selectedCustomer.company_name || selectedCustomer.contact_person}
+                    </p>
+                    {selectedCustomer.email && (
+                      <p className="text-sm text-slate-600">{selectedCustomer.email}</p>
+                    )}
+                    {selectedCustomer.city && selectedCustomer.state && (
+                      <p className="text-sm text-slate-600">
+                        {selectedCustomer.city}, {selectedCustomer.state}
+                      </p>
+                    )}
+                  </div>
+                )}
+                
+                <div className="space-y-3">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-slate-600">Subtotal:</span>
+                    <span className="font-medium">{formatCurrencyAmount(subtotal, currencyInfo)}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-slate-600">GST:</span>
+                    <span className="font-medium">{formatCurrencyAmount(taxAmount, currencyInfo)}</span>
+                  </div>
+                  <div className="border-t border-slate-200 pt-3">
+                    <div className="flex justify-between text-lg font-bold">
+                      <span className="text-slate-900">Total:</span>
+                      <span className="text-blue-600">{formatCurrencyAmount(total, currencyInfo)}</span>
+                    </div>
+                    <p className="text-xs text-slate-500 mt-2 italic">
+                      {formatAmountInWords(total, currencyInfo.name)}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // Main tab render function
   const openInvoiceSettingsModal = (mode: 'view' | 'edit' | 'add', settings?: InvoiceSettings) => {
     setInvoiceSettingsModalMode(mode);
     
@@ -551,9 +1811,11 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
         setInvoices(invoicesData.data);
         setTotalPages(invoicesData.total_pages);
       } else if (activeTab === 'customers') {
-        const customersData = await invoiceService.getCustomers({}, currentPage, 20);
-        setCustomers(customersData.data);
-        setTotalPages(customersData.total_pages);
+        console.log('👥 Loading customers with filters:', filters);
+        const customersData = await invoiceService.getCustomers(filters, currentPage, 20);
+        console.log('👥 Customers loaded:', customersData.data?.length || 0);
+        setCustomers(customersData.data || []);
+        setTotalPages(customersData.total_pages || 1);
       } else if (activeTab === 'products') {
         console.log('🔍 Loading products from database...');
         try {
@@ -574,6 +1836,25 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
         ]);
         setCompanySettings(companyData);
         setInvoiceSettings(invoiceSettingsData);
+      } else if (activeTab === 'create-invoice') {
+        // Load all necessary data for creating invoices
+        console.log('🔍 Loading data for create invoice tab...');
+        const [customersData, productsData, companyData, termsData] = await Promise.all([
+          invoiceService.getCustomers({}, 1, 1000), // Load all customers
+          invoiceService.getProducts({}, 1, 1000),  // Load all products
+          invoiceService.getCompanySettings(),
+          invoiceService.getTermsTemplates()
+        ]);
+        
+        console.log('👥 Customers loaded:', customersData.data?.length || 0);
+        console.log('📦 Products loaded:', productsData.data?.length || 0);
+        console.log('🏢 Company settings loaded:', companyData?.length || 0);
+        console.log('📋 Terms templates loaded:', termsData?.length || 0);
+        
+        setCustomers(customersData.data || []);
+        setProducts(productsData.data || []);
+        setCompanySettings(companyData || []);
+        setTermsTemplates(termsData || []);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load data');
@@ -593,6 +1874,28 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
       style: 'currency',
       currency: 'INR'
     }).format(amount);
+  };
+
+  // Format currency with specific currency code from invoice
+  const formatInvoiceCurrency = (amount: number, currencyCode: string = 'INR') => {
+    // Get currency symbol based on code
+    const getCurrencySymbol = (code: string) => {
+      switch (code) {
+        case 'USD': return '$';
+        case 'GBP': return '£';
+        case 'EUR': return '€';
+        case 'INR': return '₹';
+        default: return '₹'; // Default to INR
+      }
+    };
+
+    const symbol = getCurrencySymbol(currencyCode);
+    const formattedAmount = new Intl.NumberFormat('en-IN', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    }).format(amount);
+    
+    return `${symbol}${formattedAmount}`;
   };
 
   const getStatusColor = (status: string) => {
@@ -766,7 +2069,7 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
             </td>
             <td className="px-6 py-4 whitespace-nowrap">
               <div className="text-sm font-medium text-gray-900">
-                {formatCurrency(invoice.total_amount)}
+                {formatInvoiceCurrency(invoice.total_amount, invoice.currency_code)}
               </div>
             </td>
             <td className="px-6 py-4 whitespace-nowrap">
@@ -807,7 +2110,10 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
         <h2 className="text-2xl font-bold text-gray-900">Invoices</h2>
         <div className="mt-4 sm:mt-0">
-          <button className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700">
+          <button 
+            onClick={() => openCreateInvoiceTab()}
+            className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
+          >
             <Plus className="w-4 h-4 mr-2" />
             Create Invoice
           </button>
@@ -904,7 +2210,10 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
         <h2 className="text-2xl font-bold text-gray-900">Customers</h2>
         <div className="mt-4 sm:mt-0">
-          <button className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700">
+          <button 
+            onClick={() => openCustomerModal('add')}
+            className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
+          >
             <Plus className="w-4 h-4 mr-2" />
             Add Customer
           </button>
@@ -913,7 +2222,7 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
 
       {/* Search */}
       <div className="bg-white rounded-lg shadow p-6">
-        <div className="relative">
+        <form onSubmit={handleSearch} className="relative">
           <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
             <Search className="h-5 w-5 text-gray-400" />
           </div>
@@ -922,13 +2231,41 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-            placeholder="Search customers..."
+            placeholder="Search customers by name, email, or company..."
           />
-        </div>
+        </form>
       </div>
 
       {/* Customers Table */}
       <div className="bg-white rounded-lg shadow overflow-hidden">
+        {loading && (
+          <div className="text-center py-12">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+            <p className="mt-4 text-gray-600">Loading customers...</p>
+          </div>
+        )}
+        
+        {!loading && customers.length === 0 && (
+          <div className="text-center py-12">
+            <Users className="h-16 w-16 text-gray-400 mx-auto mb-4" />
+            <h3 className="text-lg font-medium text-gray-900 mb-2">No Customers Found</h3>
+            <p className="text-gray-500 mb-4">
+              {searchTerm ? 'No customers match your search criteria.' : 'No customers are available. Create your first customer to get started.'}
+            </p>
+            {!searchTerm && (
+              <button 
+                onClick={() => openCustomerModal('add')}
+                className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Add Customer
+              </button>
+            )}
+          </div>
+        )}
+
+        {!loading && customers.length > 0 && (
+          <>
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
@@ -988,11 +2325,26 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                     <div className="flex items-center justify-end space-x-2">
-                      <button className="text-blue-600 hover:text-blue-900">
+                      <button 
+                        onClick={() => openCustomerModal('view', customer)}
+                        className="text-blue-600 hover:text-blue-900"
+                        title="View Customer"
+                      >
                         <Eye className="w-4 h-4" />
                       </button>
-                      <button className="text-gray-600 hover:text-gray-900">
+                      <button 
+                        onClick={() => openCustomerModal('edit', customer)}
+                        className="text-gray-600 hover:text-gray-900"
+                        title="Edit Customer"
+                      >
                         <Edit className="w-4 h-4" />
+                      </button>
+                      <button 
+                        onClick={() => handleDeleteCustomer(customer)}
+                        className="text-red-600 hover:text-red-900"
+                        title="Delete Customer"
+                      >
+                        <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
                   </td>
@@ -1001,6 +2353,33 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
             </tbody>
           </table>
         </div>
+        </>
+        )}
+        
+        {/* Pagination */}
+        {!loading && customers.length > 0 && totalPages > 1 && (
+          <div className="px-6 py-3 border-t border-gray-200 flex items-center justify-between">
+            <div className="text-sm text-gray-700">
+              Page {currentPage} of {totalPages}
+            </div>
+            <div className="flex space-x-2">
+              <button
+                onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+                disabled={currentPage === 1}
+                className="px-3 py-1 border border-gray-300 rounded-md text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Previous
+              </button>
+              <button
+                onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
+                disabled={currentPage === totalPages}
+                className="px-3 py-1 border border-gray-300 rounded-md text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -1285,6 +2664,36 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
                     <div>
                       <label className="block text-sm font-medium text-gray-700">PAN</label>
                       <div className="mt-1 text-sm text-gray-900">{company.pan || 'N/A'}</div>
+                    </div>
+                  </div>
+
+                  {/* Banking Details Section */}
+                  <div className="mt-6 pt-6 border-t border-gray-200">
+                    <h4 className="text-md font-medium text-gray-900 mb-4 flex items-center">
+                      <CreditCard className="w-4 h-4 mr-2" />
+                      Banking Information
+                    </h4>
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">Bank Name</label>
+                          <div className="mt-1 text-sm text-gray-900">{company.bank_name || 'N/A'}</div>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">Branch Name</label>
+                          <div className="mt-1 text-sm text-gray-900">{company.branch_name || 'N/A'}</div>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">Account Number</label>
+                          <div className="mt-1 text-sm text-gray-900 font-mono">
+                            {company.account_number || 'N/A'}
+                          </div>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">IFSC Code</label>
+                          <div className="mt-1 text-sm text-gray-900 font-mono">{company.ifsc_code || 'N/A'}</div>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -1619,6 +3028,32 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
                   placeholder="Enter product description"
                 />
               </div>
+
+              {/* Active Status */}
+              <div className="md:col-span-2">
+                <div className="flex items-center">
+                  <input
+                    type="checkbox"
+                    id="productActive"
+                    checked={productFormData.is_active ?? true}
+                    onChange={(e) => handleProductFormChange('is_active', e.target.checked)}
+                    disabled={isReadOnly}
+                    className={`h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 ${
+                      isReadOnly ? 'opacity-50 cursor-not-allowed' : ''
+                    }`}
+                  />
+                  <label htmlFor="productActive" className={`ml-2 text-sm font-medium ${
+                    isReadOnly ? 'text-gray-500' : 'text-gray-700'
+                  }`}>
+                    Active Product
+                  </label>
+                </div>
+                <p className="mt-1 text-sm text-gray-500">
+                  {productFormData.is_active ?? true 
+                    ? 'This product is available for selection in invoices' 
+                    : 'This product is hidden from invoice creation'}
+                </p>
+              </div>
             </div>
           </div>
 
@@ -1902,7 +3337,86 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
                   placeholder="Enter PAN"
                 />
               </div>
+            </div>
 
+            {/* Banking Details Section */}
+            <div className="pt-6 border-t border-gray-200">
+              <h4 className="text-md font-medium text-gray-900 mb-4 flex items-center">
+                <CreditCard className="w-4 h-4 mr-2" />
+                Banking Information
+              </h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Bank Name */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Bank Name
+                  </label>
+                  <input
+                    type="text"
+                    value={companyFormData.bank_name}
+                    onChange={(e) => handleCompanyFormChange('bank_name', e.target.value)}
+                    disabled={isReadOnly}
+                    className={`w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 ${
+                      isReadOnly ? 'bg-gray-50 text-gray-500' : ''
+                    }`}
+                    placeholder="Enter bank name"
+                  />
+                </div>
+
+                {/* Branch Name */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Branch Name
+                  </label>
+                  <input
+                    type="text"
+                    value={companyFormData.branch_name}
+                    onChange={(e) => handleCompanyFormChange('branch_name', e.target.value)}
+                    disabled={isReadOnly}
+                    className={`w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 ${
+                      isReadOnly ? 'bg-gray-50 text-gray-500' : ''
+                    }`}
+                    placeholder="Enter branch name"
+                  />
+                </div>
+
+                {/* Account Number */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Account Number
+                  </label>
+                  <input
+                    type="text"
+                    value={companyFormData.account_number}
+                    onChange={(e) => handleCompanyFormChange('account_number', e.target.value)}
+                    disabled={isReadOnly}
+                    className={`w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 ${
+                      isReadOnly ? 'bg-gray-50 text-gray-500' : ''
+                    }`}
+                    placeholder="Enter account number"
+                  />
+                </div>
+
+                {/* IFSC Code */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    IFSC Code
+                  </label>
+                  <input
+                    type="text"
+                    value={companyFormData.ifsc_code}
+                    onChange={(e) => handleCompanyFormChange('ifsc_code', e.target.value)}
+                    disabled={isReadOnly}
+                    className={`w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 ${
+                      isReadOnly ? 'bg-gray-50 text-gray-500' : ''
+                    }`}
+                    placeholder="Enter IFSC code"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="pt-4">
               {/* Default Company */}
               <div className="md:col-span-2">
                 <label className="flex items-center">
@@ -2203,9 +3717,14 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
                     className="mr-2 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                   />
                   <span className="text-sm font-medium text-gray-700">
-                    Reset invoice numbers annually
+                    Reset invoice numbers at start of financial year
                   </span>
                 </label>
+                <div className="ml-6 mt-1">
+                  <span className="text-xs text-gray-500">
+                    Numbers will reset to 1 on April 1st (or your configured financial year start)
+                  </span>
+                </div>
               </div>
             </div>
           </div>
@@ -2238,6 +3757,197 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
               </button>
             )}
           </div>
+        </div>
+      </div>
+    );
+  };
+
+  // Invoice Preview Content Function
+  const renderInvoicePreviewContent = () => {
+    const { subtotal, taxAmount, total } = calculateInvoiceTotals();
+    const selectedCustomer = customers.find(c => c.id === invoiceFormData.customer_id);
+    const currencyInfo = getCurrencyInfo(selectedCustomer);
+    const company = companySettings[0];
+
+    console.log('🖨️ Preview Currency Info:', {
+      customer: selectedCustomer?.company_name || selectedCustomer?.contact_person,
+      country: selectedCustomer?.country,
+      currencyInfo
+    });
+
+    return (
+      <div className="bg-white p-6 shadow-lg max-w-4xl mx-auto" style={{fontSize: '14px', lineHeight: '1.4'}}>
+        {/* Company Header - More Compact */}
+        <div className="flex justify-between items-start mb-6">
+          <div className="flex-1">
+            {company?.logo_url && (
+              <img 
+                src={company.logo_url} 
+                alt="Company Logo" 
+                className="h-12 w-auto mb-3"
+              />
+            )}
+            <div className="text-xl font-bold text-gray-900 mb-1">{company?.company_name || 'Your Company'}</div>
+            <div className="text-xs text-gray-600 leading-tight">
+              {company?.address_line1 && <div>{company.address_line1}</div>}
+              {company?.address_line2 && <div>{company.address_line2}</div>}
+              <div>{company?.city && `${company.city}, `}{company?.state} {company?.postal_code}</div>
+              <div className="flex gap-4 mt-1">
+                {company?.email && <span>📧 {company.email}</span>}
+                {company?.phone && <span>📞 {company.phone}</span>}
+              </div>
+              {company?.gstin && <div className="mt-1"><strong>GSTIN:</strong> {company.gstin}</div>}
+            </div>
+          </div>
+          <div className="text-right ml-6">
+            <div className="text-2xl font-bold text-blue-600 mb-2">INVOICE</div>
+            <div className="text-xs text-gray-600">
+              <div><strong>Invoice #:</strong> {generatedInvoiceNumber}</div>
+              <div><strong>Date:</strong> {new Date(invoiceFormData.invoice_date).toLocaleDateString()}</div>
+              {invoiceFormData.due_date && (
+                <div><strong>Due Date:</strong> {new Date(invoiceFormData.due_date).toLocaleDateString()}</div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Bill To - Compact Layout */}
+        {selectedCustomer && (
+          <div className="mb-6">
+            <div className="bg-gray-50 p-4 rounded">
+              <div className="font-semibold text-gray-900 mb-2">Bill To:</div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs text-gray-700">
+                <div>
+                  <div className="font-medium text-sm">{selectedCustomer.company_name || selectedCustomer.contact_person}</div>
+                  {selectedCustomer.contact_person && selectedCustomer.company_name && (
+                    <div className="text-gray-600">Attn: {selectedCustomer.contact_person}</div>
+                  )}
+                  <div className="mt-1">
+                    {selectedCustomer.address_line1 && <div>{selectedCustomer.address_line1}</div>}
+                    {selectedCustomer.address_line2 && <div>{selectedCustomer.address_line2}</div>}
+                    <div>{selectedCustomer.city && `${selectedCustomer.city}, `}{selectedCustomer.state} {selectedCustomer.postal_code}</div>
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  {selectedCustomer.email && <div>📧 {selectedCustomer.email}</div>}
+                  {selectedCustomer.phone && <div>📞 {selectedCustomer.phone}</div>}
+                  {selectedCustomer.gstin && <div><strong>GSTIN:</strong> {selectedCustomer.gstin}</div>}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Items Table - More Compact */}
+        <div className="mb-6">
+          <table className="w-full border-collapse border border-gray-300 text-xs">
+            <thead>
+              <tr className="bg-gray-100">
+                <th className="border border-gray-300 px-2 py-2 text-left font-medium text-gray-900">Item</th>
+                <th className="border border-gray-300 px-2 py-2 text-left font-medium text-gray-900">Description</th>
+                <th className="border border-gray-300 px-2 py-2 text-center font-medium text-gray-900 w-20">HSN Code</th>
+                <th className="border border-gray-300 px-2 py-2 text-center font-medium text-gray-900 w-16">Qty</th>
+                <th className="border border-gray-300 px-2 py-2 text-center font-medium text-gray-900 w-16">Unit</th>
+                <th className="border border-gray-300 px-2 py-2 text-right font-medium text-gray-900 w-20">Rate</th>
+                <th className="border border-gray-300 px-2 py-2 text-right font-medium text-gray-900 w-16">GST%</th>
+                <th className="border border-gray-300 px-2 py-2 text-right font-medium text-gray-900 w-24">Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              {invoiceFormData.items.map((item, index) => (
+                <tr key={index}>
+                  <td className="border border-gray-300 px-2 py-2 font-medium">{item.item_name}</td>
+                  <td className="border border-gray-300 px-2 py-2">{item.description}</td>
+                  <td className="border border-gray-300 px-2 py-2 text-center text-gray-600">
+                    {item.hsn_code || 'N/A'}
+                  </td>
+                  <td className="border border-gray-300 px-2 py-2 text-center">{item.quantity}</td>
+                  <td className="border border-gray-300 px-2 py-2 text-center">{item.unit}</td>
+                  <td className="border border-gray-300 px-2 py-2 text-right">{formatCurrencyAmount(item.unit_price, currencyInfo)}</td>
+                  <td className="border border-gray-300 px-2 py-2 text-right">{item.tax_rate}%</td>
+                  <td className="border border-gray-300 px-2 py-2 text-right font-medium">
+                    {formatCurrencyAmount((item.quantity * item.unit_price) * (1 + item.tax_rate / 100), currencyInfo)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Totals and Notes Section - Side by Side */}
+        <div className="flex justify-between items-start mb-6">
+          {/* Notes Section - Left Side */}
+          <div className="flex-1 mr-8">
+            {invoiceFormData.notes && (
+              <div>
+                <div className="font-semibold text-gray-900 mb-2 text-sm">Notes:</div>
+                <div className="text-xs text-gray-600 whitespace-pre-wrap leading-relaxed">{invoiceFormData.notes}</div>
+              </div>
+            )}
+          </div>
+          
+          {/* Totals Section - Right Side */}
+          <div className="w-48">
+            <div className="border border-gray-300 text-xs">
+              <div className="flex justify-between px-3 py-2 border-b border-gray-300">
+                <span className="font-medium">Subtotal:</span>
+                <span>{formatCurrencyAmount(subtotal, currencyInfo)}</span>
+              </div>
+              <div className="flex justify-between px-3 py-2 border-b border-gray-300">
+                <span className="font-medium">GST:</span>
+                <span>{formatCurrencyAmount(taxAmount, currencyInfo)}</span>
+              </div>
+              <div className="flex justify-between px-3 py-2 bg-gray-50 font-bold">
+                <span>Total:</span>
+                <span>{formatCurrencyAmount(total, currencyInfo)}</span>
+              </div>
+            </div>
+            <div className="mt-2 text-xs text-gray-600 italic leading-tight">
+              {formatAmountInWords(total, currencyInfo.name)}
+            </div>
+          </div>
+        </div>
+
+        {/* Terms and Banking Information Section - Compact */}
+        <div className="space-y-4">
+          {/* Banking Information Logic */}
+          {company?.bank_name && (
+            <>
+              {/* Show banking info side by side with terms (or standalone if no terms) */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {invoiceFormData.terms_conditions && (
+                  <div>
+                    <div className="font-semibold text-gray-900 mb-2 text-sm">Terms & Conditions:</div>
+                    <div className="text-xs text-gray-600 whitespace-pre-wrap leading-relaxed">{invoiceFormData.terms_conditions}</div>
+                  </div>
+                )}
+                <div>
+                  <div className="font-semibold text-gray-900 mb-2 text-sm">Banking Details:</div>
+                  <div className="text-xs text-gray-600 bg-gray-50 p-3 rounded leading-relaxed">
+                    <div><strong>Bank:</strong> {company.bank_name}</div>
+                    {company.account_number && <div><strong>A/C:</strong> {company.account_number}</div>}
+                    {company.ifsc_code && <div><strong>IFSC:</strong> {company.ifsc_code}</div>}
+                    {company.branch_name && <div><strong>Branch:</strong> {company.branch_name}</div>}
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+          
+          {/* If no banking info but have terms */}
+          {!company?.bank_name && invoiceFormData.terms_conditions && (
+            <div>
+              <div className="font-semibold text-gray-900 mb-2 text-sm">Terms & Conditions:</div>
+              <div className="text-xs text-gray-600 whitespace-pre-wrap leading-relaxed">{invoiceFormData.terms_conditions}</div>
+            </div>
+          )}
+        </div>
+
+        {/* Disclaimer - Compact and Italic */}
+        <div className="mt-6 pt-3 border-t border-gray-200 text-center">
+          <p className="text-xs text-gray-500 italic">
+            This is a computer generated invoice and does not require a signature.
+          </p>
         </div>
       </div>
     );
@@ -2281,13 +3991,14 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
             {[
               { key: 'dashboard', label: 'Dashboard', icon: FileText },
               { key: 'invoices', label: 'Invoices', icon: FileText },
+              { key: 'create-invoice', label: 'Create Invoice', icon: Plus },
               { key: 'customers', label: 'Customers', icon: Users },
               { key: 'products', label: 'Products', icon: Package },
               { key: 'settings', label: 'Settings', icon: Settings }
             ].map(({ key, label, icon: Icon }) => (
               <button
                 key={key}
-                onClick={() => setActiveTab(key as typeof activeTab)}
+                onClick={() => key === 'create-invoice' ? openCreateInvoiceTab() : setActiveTab(key as typeof activeTab)}
                 className={`flex items-center py-4 px-1 border-b-2 font-medium text-sm ${
                   activeTab === key
                     ? 'border-blue-500 text-blue-600'
@@ -2306,6 +4017,7 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
       <main className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
         {activeTab === 'dashboard' && renderDashboard()}
         {activeTab === 'invoices' && renderInvoicesList()}
+        {activeTab === 'create-invoice' && renderCreateInvoice()}
         {activeTab === 'customers' && renderCustomers()}
         {activeTab === 'products' && renderProducts()}
         {activeTab === 'settings' && renderSettings()}
@@ -2314,11 +4026,364 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
       {/* Product Modal */}
       {renderProductModal()}
       
+      {/* Customer Modal */}
+      {showCustomerModal && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+          <div className="relative top-20 mx-auto p-5 border w-11/12 max-w-2xl shadow-lg rounded-md bg-white">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-medium text-gray-900">
+                {customerModalMode === 'view' ? 'Customer Details' : 
+                 customerModalMode === 'edit' ? 'Edit Customer' : 'Add Customer'}
+              </h3>
+              <button
+                onClick={closeCustomerModal}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Company Name
+                  </label>
+                  <input
+                    type="text"
+                    value={customerFormData.company_name}
+                    onChange={(e) => handleCustomerFormChange('company_name', e.target.value)}
+                    disabled={customerModalMode === 'view'}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50"
+                    placeholder="Enter company name"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Contact Person
+                  </label>
+                  <input
+                    type="text"
+                    value={customerFormData.contact_person}
+                    onChange={(e) => handleCustomerFormChange('contact_person', e.target.value)}
+                    disabled={customerModalMode === 'view'}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50"
+                    placeholder="Enter contact person name"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Email
+                  </label>
+                  <input
+                    type="email"
+                    value={customerFormData.email}
+                    onChange={(e) => handleCustomerFormChange('email', e.target.value)}
+                    disabled={customerModalMode === 'view'}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50"
+                    placeholder="Enter email address"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Phone
+                  </label>
+                  <input
+                    type="tel"
+                    value={customerFormData.phone}
+                    onChange={(e) => handleCustomerFormChange('phone', e.target.value)}
+                    disabled={customerModalMode === 'view'}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50"
+                    placeholder="Enter phone number"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Address Line 1
+                </label>
+                <input
+                  type="text"
+                  value={customerFormData.address_line1}
+                  onChange={(e) => handleCustomerFormChange('address_line1', e.target.value)}
+                  disabled={customerModalMode === 'view'}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50"
+                  placeholder="Enter street address"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Address Line 2
+                </label>
+                <input
+                  type="text"
+                  value={customerFormData.address_line2}
+                  onChange={(e) => handleCustomerFormChange('address_line2', e.target.value)}
+                  disabled={customerModalMode === 'view'}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50"
+                  placeholder="Apartment, suite, etc. (optional)"
+                />
+              </div>
+
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    City
+                  </label>
+                  <input
+                    type="text"
+                    value={customerFormData.city}
+                    onChange={(e) => handleCustomerFormChange('city', e.target.value)}
+                    disabled={customerModalMode === 'view'}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50"
+                    placeholder="Enter city"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    State
+                  </label>
+                  <input
+                    type="text"
+                    value={customerFormData.state}
+                    onChange={(e) => handleCustomerFormChange('state', e.target.value)}
+                    disabled={customerModalMode === 'view'}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50"
+                    placeholder="Enter state/province"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Postal Code
+                  </label>
+                  <input
+                    type="text"
+                    value={customerFormData.postal_code}
+                    onChange={(e) => handleCustomerFormChange('postal_code', e.target.value)}
+                    disabled={customerModalMode === 'view'}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50"
+                    placeholder="Enter postal code"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Country
+                </label>
+                <select
+                  value={customerFormData.country_id}
+                  onChange={(e) => handleCustomerFormChange('country_id', e.target.value)}
+                  disabled={customerModalMode === 'view'}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50"
+                >
+                  <option value="">Select Country</option>
+                  {countries.map(country => (
+                    <option key={country.id} value={country.id}>
+                      {country.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    GSTIN
+                  </label>
+                  <input
+                    type="text"
+                    value={customerFormData.gstin}
+                    onChange={(e) => handleCustomerFormChange('gstin', e.target.value.toUpperCase())}
+                    disabled={customerModalMode === 'view'}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50"
+                    placeholder="e.g., 22AAAAA0000A1Z5"
+                    pattern="[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}"
+                    maxLength={15}
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    PAN
+                  </label>
+                  <input
+                    type="text"
+                    value={customerFormData.pan}
+                    onChange={(e) => handleCustomerFormChange('pan', e.target.value.toUpperCase())}
+                    disabled={customerModalMode === 'view'}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50"
+                    placeholder="e.g., ABCDE1234F"
+                    pattern="[A-Z]{5}[0-9]{4}[A-Z]{1}"
+                    maxLength={10}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Credit Limit (₹)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={customerFormData.credit_limit}
+                    onChange={(e) => handleCustomerFormChange('credit_limit', parseFloat(e.target.value) || 0)}
+                    disabled={customerModalMode === 'view'}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50"
+                    placeholder="Enter credit limit"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Payment Terms (Days)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="365"
+                    value={customerFormData.payment_terms}
+                    onChange={(e) => handleCustomerFormChange('payment_terms', parseInt(e.target.value) || 30)}
+                    disabled={customerModalMode === 'view'}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50"
+                    placeholder="e.g., 30"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {customerModalMode !== 'view' && (
+              <>
+                {/* Validation Guidelines */}
+                <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-md">
+                  <h4 className="text-sm font-medium text-blue-900 mb-2">📋 Form Guidelines:</h4>
+                  <ul className="text-xs text-blue-800 space-y-1">
+                    <li>• Either Company Name or Contact Person is required</li>
+                    <li>• Email format will be validated if provided</li>
+                    <li>• GSTIN should be 15 characters (e.g., 22AAAAA0000A1Z5)</li>
+                    <li>• PAN should be 10 characters (e.g., ABCDE1234F)</li>
+                    <li>• All other fields are optional</li>
+                  </ul>
+                </div>
+
+              <div className="flex justify-end space-x-3 mt-6">
+                <button
+                  onClick={closeCustomerModal}
+                  className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSaveCustomer}
+                  disabled={modalLoading}
+                  className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50"
+                >
+                  {modalLoading ? 'Saving...' : 'Save Customer'}
+                </button>
+              </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+      
+      {/* Invoice Modal */}
+      {showInvoiceModal && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+          <div className="relative top-20 mx-auto p-5 border w-11/12 max-w-4xl shadow-lg rounded-md bg-white">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-medium text-gray-900">
+                {invoiceModalMode === 'view' ? 'Invoice Details' : 
+                 invoiceModalMode === 'edit' ? 'Edit Invoice' : 'Create Invoice'}
+              </h3>
+              <button
+                onClick={closeInvoiceModal}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            <div className="max-h-96 overflow-y-auto">
+              {renderCreateInvoice()}
+            </div>
+
+            {invoiceModalMode !== 'view' && (
+              <div className="flex justify-end space-x-3 mt-6">
+                <button
+                  onClick={closeInvoiceModal}
+                  className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSaveInvoice}
+                  disabled={modalLoading || !invoiceFormData.customer_id}
+                  className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50"
+                >
+                  {modalLoading ? 'Saving...' : 'Save'}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+      
       {/* Company Settings Modal */}
       {renderCompanyModal()}
       
       {/* Invoice Settings Modal */}
       {renderInvoiceSettingsModal()}
+      
+      {/* Invoice Preview Modal */}
+      {showInvoicePreview && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 overflow-y-auto h-full w-full z-50">
+          <div className="relative top-4 mx-auto p-5 border w-11/12 max-w-5xl shadow-lg rounded-lg bg-white">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-semibold text-slate-900">Invoice Preview</h3>
+              <button
+                onClick={() => setShowInvoicePreview(false)}
+                className="text-slate-400 hover:text-slate-600 transition-colors"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            {/* Preview Content */}
+            <div className="max-h-[80vh] overflow-y-auto">
+              {renderInvoicePreviewContent()}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="flex justify-end space-x-3 mt-6 pt-4 border-t">
+              <button
+                onClick={() => setShowInvoicePreview(false)}
+                className="px-4 py-2 border border-slate-300 rounded-lg text-sm font-medium text-slate-700 bg-white hover:bg-slate-50 transition-colors"
+              >
+                Close
+              </button>
+              <button
+                onClick={() => window.print()}
+                className="inline-flex items-center px-4 py-2 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 transition-colors"
+              >
+                <FileText className="w-4 h-4 mr-2" />
+                Print
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       
       {/* Confirmation Dialog */}
       <ConfirmDialog {...dialogProps} />

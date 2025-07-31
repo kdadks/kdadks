@@ -1,4 +1,5 @@
 import { supabase, isSupabaseConfigured } from '../config/supabase';
+import { simpleAuth } from '../utils/simpleAuth';
 import type {
   Country,
   CompanySettings,
@@ -23,6 +24,34 @@ import type {
 } from '../types/invoice';
 
 class InvoiceService {
+  /**
+   * Calculate the current financial year based on the financial year start month
+   * @param fyStartMonth - The month when financial year starts (1-12, default: 4 for April)
+   * @param currentDate - The current date (default: new Date())
+   * @returns Financial year string in format "YYYY-YY" (e.g., "2024-25")
+   */
+  private calculateFinancialYear(fyStartMonth: number = 4, currentDate: Date = new Date()): string {
+    const currentYear = currentDate.getFullYear();
+    const currentMonth = currentDate.getMonth() + 1;
+    
+    if (currentMonth >= fyStartMonth) {
+      // We're in the second half of the financial year
+      return `${currentYear}-${(currentYear + 1).toString().slice(-2)}`;
+    } else {
+      // We're in the first half of the financial year
+      return `${currentYear - 1}-${currentYear.toString().slice(-2)}`;
+    }
+  }
+
+  /**
+   * Check if we're at the start of a new financial year
+   * @param currentFY - Current financial year from settings
+   * @param calculatedFY - Calculated financial year based on current date
+   * @returns true if it's a new financial year, false otherwise
+   */
+  private isNewFinancialYear(currentFY: string | null, calculatedFY: string): boolean {
+    return currentFY !== calculatedFY;
+  }
   // Countries
   async getCountries(): Promise<Country[]> {
     if (!isSupabaseConfigured) {
@@ -386,44 +415,239 @@ class InvoiceService {
   }
 
   // Invoice Number Generation
+  async previewInvoiceNumber(): Promise<string> {
+    const settings = await this.getInvoiceSettings();
+    if (!settings) throw new Error('Invoice settings not found');
+
+    const currentDate = new Date();
+    const currentYear = currentDate.getFullYear();
+    const currentMonth = currentDate.getMonth() + 1;
+    
+    // Calculate current financial year
+    const fyStartMonth = settings.financial_year_start_month || 4; // Default to April
+    const currentFinancialYear = this.calculateFinancialYear(fyStartMonth, currentDate);
+    
+    let nextSequentialNumber = settings.current_number;
+    
+    // Check if there are any invoices in the database
+    const { count: invoiceCount } = await supabase
+      .from('invoices')
+      .select('*', { count: 'exact', head: true });
+    
+    const actualInvoiceCount = invoiceCount || 0; // Handle null case
+    
+    console.log(`🔍 Preview - Database state:`, {
+      invoiceCount: actualInvoiceCount,
+      settingsCurrentNumber: settings.current_number,
+      currentFinancialYear,
+      settingsFinancialYear: settings.current_financial_year
+    });
+    
+    // If no invoices exist, reset to 1
+    if (actualInvoiceCount === 0) {
+      nextSequentialNumber = 1;
+      console.log(`🔄 Preview: No invoices found in database - would reset sequential number to 1`);
+    }
+    // Check if we need to reset the counter for new financial year (only if reset_annually is enabled)
+    else if (settings.reset_annually && this.isNewFinancialYear(settings.current_financial_year, currentFinancialYear)) {
+      // New financial year detected - would reset the sequential number
+      nextSequentialNumber = 1;
+      console.log(`🔄 Preview: New financial year detected: ${settings.current_financial_year} → ${currentFinancialYear}`);
+      console.log(`📊 Preview: Would reset sequential number from ${settings.current_number} to 1`);
+    }
+    // Check if settings counter is ahead of actual invoice count (possible data inconsistency)
+    else if (actualInvoiceCount > 0 && settings.current_number > actualInvoiceCount + 1) {
+      // Settings counter is ahead, sync it to actual count + 1
+      nextSequentialNumber = actualInvoiceCount + 1;
+      console.log(`⚠️ Preview: Settings counter (${settings.current_number}) ahead of invoice count (${actualInvoiceCount}), syncing to ${nextSequentialNumber}`);
+    }
+
+    // Generate preview number based on format (without saving to database)
+    let previewNumber = settings.number_format;
+    
+    // Handle different format patterns
+    previewNumber = previewNumber.replace(/PREFIX/g, settings.invoice_prefix);
+    previewNumber = previewNumber.replace(/YYYY/g, currentYear.toString());
+    previewNumber = previewNumber.replace(/MM/g, currentMonth.toString().padStart(2, '0'));
+    
+    // Handle dynamic number padding: 3 digits until reaching 1000, then 4+ digits
+    const numberStr = nextSequentialNumber < 1000 
+      ? nextSequentialNumber.toString().padStart(3, '0')
+      : nextSequentialNumber.toString();
+    
+    // Handle different number padding patterns with dynamic logic
+    previewNumber = previewNumber.replace(/####/g, numberStr);
+    previewNumber = previewNumber.replace(/###/g, numberStr);
+    previewNumber = previewNumber.replace(/NNNN/g, numberStr);
+    previewNumber = previewNumber.replace(/NNN/g, numberStr);
+    
+    if (settings.invoice_suffix) {
+      previewNumber = previewNumber.replace(/SUFFIX/g, settings.invoice_suffix);
+    }
+
+    console.log(`👀 Preview invoice number: ${previewNumber} (FY: ${currentFinancialYear}, Number: ${nextSequentialNumber}, Reset: ${settings.reset_annually}, InvoiceCount: ${invoiceCount})`);
+    
+    return previewNumber;
+  }
+
+  /**
+   * Generate next invoice number without updating database settings
+   * Used for uniqueness checking before final save
+   */
+  async generateNextInvoiceNumber(): Promise<string> {
+    const settings = await this.getInvoiceSettings();
+    if (!settings) throw new Error('Invoice settings not found');
+
+    const currentDate = new Date();
+    const currentYear = currentDate.getFullYear();
+    const currentMonth = currentDate.getMonth() + 1;
+    
+    // Calculate current financial year
+    const fyStartMonth = settings.financial_year_start_month || 4; // Default to April
+    const currentFinancialYear = this.calculateFinancialYear(fyStartMonth, currentDate);
+    
+    let nextSequentialNumber = settings.current_number;
+    
+    // Check if there are any invoices in the database
+    const { count: invoiceCount } = await supabase
+      .from('invoices')
+      .select('*', { count: 'exact', head: true });
+    
+    const actualInvoiceCount = invoiceCount || 0; // Handle null case
+    
+    // If no invoices exist, reset to 1
+    if (actualInvoiceCount === 0) {
+      nextSequentialNumber = 1;
+      console.log(`🔄 Generate: No invoices found in database - would use sequential number 1`);
+    }
+    // Check if we need to reset the counter for new financial year (only if reset_annually is enabled)
+    else if (settings.reset_annually && this.isNewFinancialYear(settings.current_financial_year, currentFinancialYear)) {
+      // New financial year detected - would reset the sequential number
+      nextSequentialNumber = 1;
+      console.log(`🔄 Generate: New financial year detected: ${settings.current_financial_year} → ${currentFinancialYear}`);
+      console.log(`📊 Generate: Would reset sequential number from ${settings.current_number} to 1`);
+    }
+    // Check if settings counter is ahead of actual invoice count (possible data inconsistency)
+    else if (actualInvoiceCount > 0 && settings.current_number > actualInvoiceCount + 1) {
+      // Settings counter is ahead, sync it to actual count + 1
+      nextSequentialNumber = actualInvoiceCount + 1;
+      console.log(`⚠️ Generate: Settings counter (${settings.current_number}) ahead of invoice count (${actualInvoiceCount}), syncing to ${nextSequentialNumber}`);
+    }
+
+    // Generate invoice number based on format (without updating database)
+    let invoiceNumber = settings.number_format;
+    
+    // Handle different format patterns
+    invoiceNumber = invoiceNumber.replace(/PREFIX/g, settings.invoice_prefix);
+    invoiceNumber = invoiceNumber.replace(/YYYY/g, currentYear.toString());
+    invoiceNumber = invoiceNumber.replace(/MM/g, currentMonth.toString().padStart(2, '0'));
+    
+    // Handle dynamic number padding: 3 digits until reaching 1000, then 4 digits
+    const numberStr = nextSequentialNumber < 1000 
+      ? nextSequentialNumber.toString().padStart(3, '0')
+      : nextSequentialNumber.toString();
+    
+    // Handle different number padding patterns with dynamic logic
+    invoiceNumber = invoiceNumber.replace(/####/g, numberStr);
+    invoiceNumber = invoiceNumber.replace(/###/g, numberStr);
+    invoiceNumber = invoiceNumber.replace(/NNNN/g, numberStr);
+    invoiceNumber = invoiceNumber.replace(/NNN/g, numberStr);
+    
+    if (settings.invoice_suffix) {
+      invoiceNumber = invoiceNumber.replace(/SUFFIX/g, settings.invoice_suffix);
+    }
+
+    console.log(`🔢 Generated next invoice number (no DB update): ${invoiceNumber} (FY: ${currentFinancialYear}, Number: ${nextSequentialNumber}, InvoiceCount: ${actualInvoiceCount})`);
+    
+    return invoiceNumber;
+  }
+
   async generateInvoiceNumber(): Promise<string> {
     const settings = await this.getInvoiceSettings();
     if (!settings) throw new Error('Invoice settings not found');
 
-    const currentYear = new Date().getFullYear();
-    const currentMonth = new Date().getMonth() + 1;
+    const currentDate = new Date();
+    const currentYear = currentDate.getFullYear();
+    const currentMonth = currentDate.getMonth() + 1;
     
-    // Determine financial year
-    let financialYear = settings.current_financial_year;
-    if (settings.reset_annually) {
-      const fyStart = settings.financial_year_start_month;
-      if (currentMonth >= fyStart) {
-        financialYear = `${currentYear}-${(currentYear + 1).toString().slice(-2)}`;
-      } else {
-        financialYear = `${currentYear - 1}-${currentYear.toString().slice(-2)}`;
-      }
+    // Calculate current financial year
+    const fyStartMonth = settings.financial_year_start_month || 4; // Default to April
+    const currentFinancialYear = this.calculateFinancialYear(fyStartMonth, currentDate);
+    
+    let nextSequentialNumber = settings.current_number;
+    let shouldUpdateSettings = false;
+    
+    // Check if there are any invoices in the database
+    const { count: invoiceCount } = await supabase
+      .from('invoices')
+      .select('*', { count: 'exact', head: true });
+    
+    const actualInvoiceCount = invoiceCount || 0; // Handle null case
+    
+    console.log(`🔍 Generate - Database state:`, {
+      invoiceCount: actualInvoiceCount,
+      settingsCurrentNumber: settings.current_number,
+      currentFinancialYear,
+      settingsFinancialYear: settings.current_financial_year
+    });
+    
+    // If no invoices exist, reset to 1
+    if (actualInvoiceCount === 0) {
+      nextSequentialNumber = 1;
+      shouldUpdateSettings = true;
+      console.log(`🔄 No invoices found in database - resetting sequential number to 1`);
+    }
+    // Check if we need to reset the counter for new financial year (only if reset_annually is enabled)
+    else if (settings.reset_annually && this.isNewFinancialYear(settings.current_financial_year, currentFinancialYear)) {
+      // New financial year detected - reset the sequential number
+      nextSequentialNumber = 1;
+      shouldUpdateSettings = true;
+      console.log(`🔄 New financial year detected: ${settings.current_financial_year} → ${currentFinancialYear}`);
+      console.log(`📊 Resetting sequential number from ${settings.current_number} to 1 (Financial Year Start: ${fyStartMonth === 4 ? 'April' : `Month ${fyStartMonth}`})`);
+    }
+    // Check if settings counter is ahead of actual invoice count (possible data inconsistency)
+    else if (actualInvoiceCount > 0 && settings.current_number > actualInvoiceCount + 1) {
+      // Settings counter is ahead, sync it to actual count + 1
+      nextSequentialNumber = actualInvoiceCount + 1;
+      shouldUpdateSettings = true;
+      console.log(`⚠️ Generate: Settings counter (${settings.current_number}) ahead of invoice count (${actualInvoiceCount}), syncing to ${nextSequentialNumber}`);
     }
 
     // Generate invoice number based on format
     let invoiceNumber = settings.number_format;
-    invoiceNumber = invoiceNumber.replace('PREFIX', settings.invoice_prefix);
-    invoiceNumber = invoiceNumber.replace('FY', financialYear);
-    invoiceNumber = invoiceNumber.replace('YYYY', currentYear.toString());
-    invoiceNumber = invoiceNumber.replace('NNNN', settings.current_number.toString().padStart(4, '0'));
+    
+    // Handle different format patterns
+    invoiceNumber = invoiceNumber.replace(/PREFIX/g, settings.invoice_prefix);
+    invoiceNumber = invoiceNumber.replace(/YYYY/g, currentYear.toString());
+    invoiceNumber = invoiceNumber.replace(/MM/g, currentMonth.toString().padStart(2, '0'));
+    
+    // Handle dynamic number padding: 3 digits until reaching 1000, then 4 digits
+    const numberStr = nextSequentialNumber < 1000 
+      ? nextSequentialNumber.toString().padStart(3, '0')
+      : nextSequentialNumber.toString();
+    
+    // Handle different number padding patterns with dynamic logic
+    invoiceNumber = invoiceNumber.replace(/####/g, numberStr);
+    invoiceNumber = invoiceNumber.replace(/###/g, numberStr);
+    invoiceNumber = invoiceNumber.replace(/NNNN/g, numberStr);
+    invoiceNumber = invoiceNumber.replace(/NNN/g, numberStr);
     
     if (settings.invoice_suffix) {
-      invoiceNumber = invoiceNumber.replace('SUFFIX', settings.invoice_suffix);
+      invoiceNumber = invoiceNumber.replace(/SUFFIX/g, settings.invoice_suffix);
     }
 
-    // Update current number
+    // Update current number and current financial year in database
+    // This ensures the next invoice gets the correct incremented number
     await supabase
       .from('invoice_settings')
       .update({ 
-        current_number: settings.current_number + 1,
-        current_financial_year: financialYear
+        current_number: nextSequentialNumber + 1, // Set to next number for the next invoice
+        current_financial_year: currentFinancialYear // Store current financial year for future comparison
       })
       .eq('id', settings.id);
 
+    console.log(`📋 Generated and reserved invoice number: ${invoiceNumber} (FY: ${currentFinancialYear}, Next#: ${nextSequentialNumber + 1}, Reset: ${settings.reset_annually}, InvoiceCount: ${invoiceCount})`);
+    
     return invoiceNumber;
   }
 
@@ -507,12 +731,54 @@ class InvoiceService {
     return data;
   }
 
-  async createInvoice(invoiceData: CreateInvoiceData): Promise<Invoice> {
-    const invoiceNumber = await this.generateInvoiceNumber();
+  async createInvoice(invoiceData: CreateInvoiceData, invoiceNumber?: string): Promise<Invoice> {
+    let finalInvoiceNumber: string;
+    
+    if (invoiceNumber) {
+      // If invoice number is provided, use it (this means the caller has already reserved it)
+      finalInvoiceNumber = invoiceNumber;
+      console.log('📝 Using provided invoice number:', finalInvoiceNumber);
+    } else {
+      // If no invoice number provided, generate and reserve one
+      finalInvoiceNumber = await this.generateInvoiceNumber();
+      console.log('🔢 Generated new invoice number:', finalInvoiceNumber);
+    }
+    
     const companySettings = await this.getDefaultCompanySettings();
     
     if (!companySettings) {
       throw new Error('Default company settings not found');
+    }
+
+    // Get current user for created_by field
+    const currentUser = await simpleAuth.getCurrentUser();
+    if (!currentUser) {
+      throw new Error('User not authenticated');
+    }
+
+    // Get customer to determine currency
+    const customer = await this.getCustomerById(invoiceData.customer_id);
+    let currencyCode = 'INR'; // Default fallback
+    
+    console.log('💱 Invoice currency determination:', {
+      customerId: invoiceData.customer_id,
+      customer: customer ? {
+        id: customer.id,
+        name: customer.company_name || customer.contact_person,
+        country_id: customer.country_id,
+        country: customer.country
+      } : null
+    });
+    
+    if (customer && customer.country) {
+      currencyCode = customer.country.currency_code;
+      console.log('✅ Using customer country currency:', {
+        countryCode: customer.country.code,
+        currencyCode: customer.country.currency_code,
+        currencySymbol: customer.country.currency_symbol
+      });
+    } else {
+      console.log('⚠️ No customer country found, using default INR');
     }
 
     // Calculate totals
@@ -528,11 +794,19 @@ class InvoiceService {
 
     const totalAmount = subtotal + taxAmount;
 
+    console.log('💾 Creating invoice with currency:', {
+      invoiceNumber: finalInvoiceNumber,
+      customerId: invoiceData.customer_id,
+      currencyCode,
+      totalAmount,
+      createdBy: currentUser.id // Use user ID instead of email
+    });
+
     // Create invoice
     const { data: invoice, error: invoiceError } = await supabase
       .from('invoices')
       .insert({
-        invoice_number: invoiceNumber,
+        invoice_number: finalInvoiceNumber,
         customer_id: invoiceData.customer_id,
         company_settings_id: companySettings.id,
         invoice_date: invoiceData.invoice_date,
@@ -540,23 +814,46 @@ class InvoiceService {
         subtotal,
         tax_amount: taxAmount,
         total_amount: totalAmount,
-        currency_code: 'INR', // Default to INR
+        currency_code: currencyCode, // Use customer's currency
         notes: invoiceData.notes,
-        terms_conditions: invoiceData.terms_conditions
+        terms_conditions: invoiceData.terms_conditions,
+        created_by: currentUser.id // Use current user's UUID
       })
       .select('*')
       .single();
 
     if (invoiceError) throw invoiceError;
 
+    console.log('✅ Invoice created successfully:', {
+      id: invoice.id,
+      invoiceNumber: invoice.invoice_number,
+      currencyCode: invoice.currency_code,
+      totalAmount: invoice.total_amount
+    });
+
     // Create invoice items
-    const itemsWithCalculations = invoiceData.items.map(item => {
+    const itemsWithCalculations = invoiceData.items.map((item, index) => {
       const lineTotal = item.quantity * item.unit_price;
       const itemTaxAmount = (lineTotal * item.tax_rate) / 100;
       
-      return {
+      console.log(`📦 Processing item ${index + 1}:`, {
+        product_id: item.product_id || 'NULL/UNDEFINED',
+        item_name: item.item_name,
+        description: item.description,
+        quantity: item.quantity,
+        unit: item.unit,
+        unit_price: item.unit_price,
+        tax_rate: item.tax_rate,
+        hsn_code: item.hsn_code || 'NULL/UNDEFINED',
+        lineTotal,
+        itemTaxAmount
+      });
+      
+      // Ensure product_id is handled correctly (null for undefined)
+      const processedItem = {
         invoice_id: invoice.id,
-        product_id: item.product_id,
+        product_id: item.product_id || null, // Convert undefined to null for database
+        item_name: item.item_name,
         description: item.description,
         quantity: item.quantity,
         unit: item.unit,
@@ -564,15 +861,39 @@ class InvoiceService {
         line_total: lineTotal,
         tax_rate: item.tax_rate,
         tax_amount: itemTaxAmount,
-        hsn_code: item.hsn_code
+        hsn_code: item.hsn_code || null // Convert undefined to null for database
       };
+      
+      console.log(`📝 Processed item ${index + 1} for database:`, {
+        product_id: processedItem.product_id,
+        item_name: processedItem.item_name,
+        hsn_code: processedItem.hsn_code
+      });
+      
+      return processedItem;
+    });
+
+    console.log('💾 Inserting invoice items:', {
+      invoiceId: invoice.id,
+      itemCount: itemsWithCalculations.length,
+      items: itemsWithCalculations.map((item, index) => ({
+        index: index + 1,
+        product_id: item.product_id,
+        item_name: item.item_name,
+        line_total: item.line_total
+      }))
     });
 
     const { error: itemsError } = await supabase
       .from('invoice_items')
       .insert(itemsWithCalculations);
 
-    if (itemsError) throw itemsError;
+    if (itemsError) {
+      console.error('❌ Error inserting invoice items:', itemsError);
+      throw itemsError;
+    }
+
+    console.log('✅ Invoice items inserted successfully');
 
     // Return complete invoice with relations
     return this.getInvoiceById(invoice.id) as Promise<Invoice>;

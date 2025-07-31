@@ -157,6 +157,7 @@ export interface InvoiceItem {
   product_id?: string;
   
   // Item Details
+  item_name: string;
   description: string;
   quantity: number;
   unit: string;
@@ -245,6 +246,7 @@ export interface CreateInvoiceData {
 
 export interface CreateInvoiceItemData {
   product_id?: string;
+  item_name: string;
   description: string;
   quantity: number;
   unit: string;
@@ -279,6 +281,7 @@ export interface CreateProductData {
   unit: string;
   tax_rate: number;
   hsn_code?: string;
+  is_active?: boolean;
 }
 
 export interface UpdateCompanySettingsData {

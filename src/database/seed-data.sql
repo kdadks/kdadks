@@ -116,13 +116,13 @@ INSERT INTO invoice_settings (
     currency_position,
     is_active
 ) VALUES (
-    'KDKS',
+    'INV',
     '',
-    'PREFIX-FY-NNNN',
+    'PREFIX/YYYY/MM/###',
     1,
-    true,
+    true, -- Reset annually at start of financial year (April 1)
     4, -- April start for Indian Financial Year
-    '2024-25',
+    '2024-25', -- Current financial year: 2024-25
     'Payment is due within 30 days of invoice date. Late payments may incur additional charges.',
     'Thank you for your business!',
     'This is a computer-generated invoice.',

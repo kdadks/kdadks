@@ -83,6 +83,7 @@ export async function createSampleInvoice(customerId: string, productId: string)
       items: [
         {
           product_id: productId,
+          item_name: 'Website Development Service',
           description: 'Website Development Service - Complete e-commerce website',
           quantity: 1,
           unit: 'project',
@@ -91,6 +92,7 @@ export async function createSampleInvoice(customerId: string, productId: string)
           hsn_code: '998314'
         },
         {
+          item_name: 'Domain Registration',
           description: 'Domain Registration and Setup',
           quantity: 1,
           unit: 'year',
