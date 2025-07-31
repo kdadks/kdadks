@@ -2128,333 +2128,456 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
         return;
       }
 
-      // Generate high-quality PDF with native jsPDF (no canvas/HTML conversion needed)
+      // Generate high-quality PDF using the SAME format as download PDF
       const subtotal = fullInvoice.invoice_items?.reduce((sum: number, item: any) => sum + (item.quantity * item.unit_price), 0) || 0;
       const totalTax = fullInvoice.invoice_items?.reduce((sum: number, item: any) => sum + (item.quantity * item.unit_price * item.tax_rate / 100), 0) || 0;
       const total = subtotal + totalTax;
 
-      // Create PDF directly with jsPDF for crisp text and small file size
+      // Create PDF using EXACT same format as download function
       const emailPdf = new jsPDF('p', 'mm', 'a4');
       const pageWidth = emailPdf.internal.pageSize.getWidth();
       const pageHeight = emailPdf.internal.pageSize.getHeight();
-      let yPosition = 20;
+      const leftMargin = 10;
+      const rightMargin = pageWidth - 10;
+      let yPos = 10;
+      
+      // Get currency info for the customer
+      const selectedCustomer = customer;
+      const currencyInfo = getCurrencyInfo(selectedCustomer);
 
-      // Helper function to add text with auto-wrap
-      const addText = (text: string, x: number, y: number, maxWidth?: number, options?: any) => {
-        emailPdf.setFont(options?.font || 'helvetica', options?.style || 'normal');
-        emailPdf.setFontSize(options?.fontSize || 10);
-        emailPdf.setTextColor(options?.color || '#000000');
-        
-        if (maxWidth) {
-          const lines = emailPdf.splitTextToSize(text, maxWidth);
-          emailPdf.text(lines, x, y);
-          return y + (lines.length * (options?.fontSize || 10) * 0.5);
-        } else {
-          emailPdf.text(text, x, y);
-          return y + ((options?.fontSize || 10) * 0.5);
-        }
-      };
-
-      // Header Section with blue background
+      // Professional Header with Company Branding - SAME AS DOWNLOAD
       emailPdf.setFillColor(37, 99, 235);
-      emailPdf.rect(0, 0, pageWidth, 50, 'F');
+      emailPdf.rect(0, 0, pageWidth, 25, 'F');
       
-      // Company Name (White text on blue)
-      emailPdf.setFont('helvetica', 'bold');
-      emailPdf.setFontSize(24);
+      // Invoice title - smaller and more elegant
+      emailPdf.setFontSize(16);
       emailPdf.setTextColor(255, 255, 255);
-      emailPdf.text(company.company_name, 20, 25);
-      
-      // Invoice Title
       emailPdf.setFont('helvetica', 'bold');
-      emailPdf.setFontSize(32);
-      emailPdf.setTextColor(255, 255, 255);
-      emailPdf.text('INVOICE', pageWidth - 80, 25);
+      emailPdf.text('Invoice', leftMargin, 12);
       
-      // Invoice Number
-      emailPdf.setFont('helvetica', 'normal');
-      emailPdf.setFontSize(14);
-      emailPdf.text(`#${fullInvoice.invoice_number}`, pageWidth - 80, 35);
-      
-      // Reset text color
-      emailPdf.setTextColor(0, 0, 0);
-      yPosition = 60;
-
-      // Company Details (Left side)
-      emailPdf.setFont('helvetica', 'bold');
-      emailPdf.setFontSize(12);
-      emailPdf.text('From:', 20, yPosition);
-      
-      yPosition += 8;
-      emailPdf.setFont('helvetica', 'normal');
+      // Invoice number - right aligned
       emailPdf.setFontSize(10);
+      emailPdf.setFont('helvetica', 'normal');
+      emailPdf.text('Invoice #' + String(fullInvoice.invoice_number), rightMargin, 12, { align: 'right' });
+      
+      // Date information in header
+      emailPdf.setFontSize(8);
+      emailPdf.text('Date: ' + String(new Date(fullInvoice.invoice_date).toLocaleDateString()), rightMargin, 18, { align: 'right' });
+      emailPdf.text('Due: ' + String(fullInvoice.due_date ? new Date(fullInvoice.due_date).toLocaleDateString() : 'N/A'), rightMargin, 22, { align: 'right' });
+      
+      yPos = 35;
+      
+      // Company and Customer Information Section - Two columns
+      emailPdf.setTextColor(0, 0, 0);
+      
+      // FROM Section (Left Column)
+      emailPdf.setFontSize(9);
+      emailPdf.setFont('helvetica', 'bold');
+      emailPdf.text('From:', leftMargin, yPos);
+      
+      yPos += 5;
+      emailPdf.setFontSize(11);
+      emailPdf.setFont('helvetica', 'bold');
+      emailPdf.text(company.company_name, leftMargin, yPos);
+      
+      yPos += 4;
+      emailPdf.setFontSize(8);
+      emailPdf.setFont('helvetica', 'normal');
+      emailPdf.setTextColor(60, 60, 60);
       
       if (company.legal_name && company.legal_name !== company.company_name) {
-        yPosition = addText(company.legal_name, 20, yPosition, 80, { fontSize: 9, color: '#666666' });
+        emailPdf.text(company.legal_name, leftMargin, yPos);
+        yPos += 4;
       }
       
       if (company.address_line1) {
-        yPosition = addText(company.address_line1, 20, yPosition, 80);
+        emailPdf.text(company.address_line1, leftMargin, yPos);
+        yPos += 4;
       }
+      
       if (company.address_line2) {
-        yPosition = addText(company.address_line2, 20, yPosition, 80);
+        emailPdf.text(company.address_line2, leftMargin, yPos);
+        yPos += 4;
       }
       
       const companyLocation = [company.city, company.state, company.postal_code].filter(Boolean).join(', ');
       if (companyLocation) {
-        yPosition = addText(companyLocation, 20, yPosition, 80);
+        emailPdf.text(companyLocation, leftMargin, yPos);
+        yPos += 4;
       }
       
       if (company.email) {
-        yPosition = addText(`Email: ${company.email}`, 20, yPosition, 80);
+        emailPdf.text('Email: ' + company.email, leftMargin, yPos);
+        yPos += 4;
       }
+      
       if (company.phone) {
-        yPosition = addText(`Phone: ${company.phone}`, 20, yPosition, 80);
+        emailPdf.text('Phone: ' + company.phone, leftMargin, yPos);
+        yPos += 4;
       }
       
-      // Invoice Details (Right side)
-      let rightYPosition = 60;
+      if (company.gstin) {
+        emailPdf.text('GSTIN: ' + company.gstin, leftMargin, yPos);
+        yPos += 4;
+      }
       
-      // Date Information
-      emailPdf.setFont('helvetica', 'bold');
-      emailPdf.setFontSize(10);
-      emailPdf.text('Invoice Date:', pageWidth - 80, rightYPosition);
-      emailPdf.setFont('helvetica', 'normal');
-      emailPdf.text(new Date(fullInvoice.invoice_date).toLocaleDateString(), pageWidth - 40, rightYPosition);
+      if (company.pan) {
+        emailPdf.text('PAN: ' + company.pan, leftMargin, yPos);
+        yPos += 4;
+      }
       
-      rightYPosition += 8;
-      emailPdf.setFont('helvetica', 'bold');
-      emailPdf.text('Due Date:', pageWidth - 80, rightYPosition);
-      emailPdf.setFont('helvetica', 'normal');
-      emailPdf.text(fullInvoice.due_date ? new Date(fullInvoice.due_date).toLocaleDateString() : 'N/A', pageWidth - 40, rightYPosition);
+      // BILL TO Section (Right Column)
+      let billToYPos = 35;
+      const billToX = 110;
       
-      // Payment Status Badge (ONLY payment status shown as requested)
-      rightYPosition += 15;
-      const paymentStatus = fullInvoice.payment_status?.toLowerCase() || 'unpaid';
-      const statusColor = paymentStatus === 'paid' ? [34, 197, 94] : [239, 68, 68]; // Green for paid, red for unpaid
-      const statusText = paymentStatus.toUpperCase();
-      
-      // Status background
-      emailPdf.setFillColor(statusColor[0], statusColor[1], statusColor[2]);
-      emailPdf.roundedRect(pageWidth - 80, rightYPosition - 5, 35, 10, 2, 2, 'F');
-      
-      // Status text (white)
-      emailPdf.setFont('helvetica', 'bold');
-      emailPdf.setFontSize(9);
-      emailPdf.setTextColor(255, 255, 255);
-      emailPdf.text(statusText, pageWidth - 72, rightYPosition + 1);
-      
-      // Reset text color
       emailPdf.setTextColor(0, 0, 0);
-
-      // Bill To Section
-      yPosition = Math.max(yPosition, rightYPosition) + 20;
-      
+      emailPdf.setFontSize(9);
       emailPdf.setFont('helvetica', 'bold');
-      emailPdf.setFontSize(12);
-      emailPdf.text('Bill To:', 20, yPosition);
+      emailPdf.text('Bill To:', billToX, billToYPos);
       
-      yPosition += 8;
-      
-      // Customer details
-      emailPdf.setFont('helvetica', 'bold');
+      billToYPos += 5;
       emailPdf.setFontSize(11);
-      yPosition = addText(customer.company_name || customer.contact_person || 'N/A', 20, yPosition, 80, { fontSize: 11, style: 'bold' });
+      emailPdf.setFont('helvetica', 'bold');
+      emailPdf.setTextColor(37, 99, 235);
+      emailPdf.text(customer.company_name || customer.contact_person || 'N/A', billToX, billToYPos);
+      
+      billToYPos += 4;
+      emailPdf.setFontSize(8);
+      emailPdf.setFont('helvetica', 'normal');
+      emailPdf.setTextColor(60, 60, 60);
       
       if (customer.contact_person && customer.company_name) {
-        yPosition = addText(`Attn: ${customer.contact_person}`, 20, yPosition, 80, { fontSize: 10, color: '#666666' });
+        emailPdf.text('Attn: ' + customer.contact_person, billToX, billToYPos);
+        billToYPos += 4;
       }
-      
-      emailPdf.setFont('helvetica', 'normal');
-      emailPdf.setFontSize(10);
       
       if (customer.address_line1) {
-        yPosition = addText(customer.address_line1, 20, yPosition, 80);
+        emailPdf.text(customer.address_line1, billToX, billToYPos);
+        billToYPos += 4;
       }
+      
       if (customer.address_line2) {
-        yPosition = addText(customer.address_line2, 20, yPosition, 80);
+        emailPdf.text(customer.address_line2, billToX, billToYPos);
+        billToYPos += 4;
       }
       
       const customerLocation = [customer.city, customer.state, customer.postal_code].filter(Boolean).join(', ');
       if (customerLocation) {
-        yPosition = addText(customerLocation, 20, yPosition, 80);
+        emailPdf.text(customerLocation, billToX, billToYPos);
+        billToYPos += 4;
       }
       
       if (customer.email) {
-        yPosition = addText(`Email: ${customer.email}`, 20, yPosition, 80);
+        emailPdf.text('Email: ' + customer.email, billToX, billToYPos);
+        billToYPos += 4;
       }
+      
       if (customer.phone) {
-        yPosition = addText(`Phone: ${customer.phone}`, 20, yPosition, 80);
+        emailPdf.text('Phone: ' + customer.phone, billToX, billToYPos);
+        billToYPos += 4;
       }
+      
       if (customer.gstin) {
-        yPosition = addText(`GSTIN: ${customer.gstin}`, 20, yPosition, 80, { fontSize: 9, font: 'courier' });
+        emailPdf.text('GSTIN: ' + customer.gstin, billToX, billToYPos);
+        billToYPos += 4;
       }
-
-      // Items Table Header
-      yPosition += 15;
-      const tableStartY = yPosition;
       
-      // Table header background
-      emailPdf.setFillColor(37, 99, 235);
-      emailPdf.rect(20, yPosition - 5, pageWidth - 40, 12, 'F');
-      
-      // Header text (white)
-      emailPdf.setFont('helvetica', 'bold');
-      emailPdf.setFontSize(10);
+      // Payment Status Badge - compact and professional
+      const statusX = billToX;
+      billToYPos += 5;
+      const paymentStatusColor = fullInvoice.payment_status === 'paid' ? [34, 197, 94] : [239, 68, 68];
+      emailPdf.setFillColor(paymentStatusColor[0], paymentStatusColor[1], paymentStatusColor[2]);
+      emailPdf.roundedRect(statusX, billToYPos - 3, 25, 6, 1, 1, 'F');
       emailPdf.setTextColor(255, 255, 255);
-      
-      const colPositions = [25, 105, 125, 150, 170];
-      const headers = ['Description', 'Qty', 'Rate', 'GST%', 'Amount'];
-      
-      headers.forEach((header, index) => {
-        emailPdf.text(header, colPositions[index], yPosition + 2);
-      });
-      
-      // Reset text color for table content
-      emailPdf.setTextColor(0, 0, 0);
-      yPosition += 12;
-
-      // Table rows
-      fullInvoice.invoice_items?.forEach((item: any, index: number) => {
-        const itemSubtotal = item.quantity * item.unit_price;
-        const itemTax = itemSubtotal * item.tax_rate / 100;
-        const itemTotal = itemSubtotal + itemTax;
-        
-        // Alternate row background
-        if (index % 2 === 0) {
-          emailPdf.setFillColor(248, 249, 250);
-          emailPdf.rect(20, yPosition - 3, pageWidth - 40, 10, 'F');
-        }
-        
-        emailPdf.setFont('helvetica', 'normal');
-        emailPdf.setFontSize(9);
-        
-        // Item name (bold)
-        emailPdf.setFont('helvetica', 'bold');
-        emailPdf.text(item.item_name, colPositions[0], yPosition + 2);
-        
-        // Description and HSN (smaller, gray)
-        let descriptionY = yPosition + 2;
-        if (item.description) {
-          descriptionY += 4;
-          emailPdf.setFont('helvetica', 'normal');
-          emailPdf.setFontSize(8);
-          emailPdf.setTextColor(107, 114, 128);
-          const descLines = emailPdf.splitTextToSize(item.description, 75);
-          emailPdf.text(descLines, colPositions[0], descriptionY);
-          descriptionY += descLines.length * 3;
-        }
-        
-        if (item.hsn_code) {
-          emailPdf.setFont('helvetica', 'normal');
-          emailPdf.setFontSize(7);
-          emailPdf.setTextColor(156, 163, 175);
-          emailPdf.text(`HSN: ${item.hsn_code}`, colPositions[0], descriptionY + 3);
-        }
-        
-        // Reset color for numbers
-        emailPdf.setTextColor(0, 0, 0);
-        emailPdf.setFont('helvetica', 'normal');
-        emailPdf.setFontSize(9);
-        
-        // Quantity
-        emailPdf.text(`${item.quantity} ${item.unit || ''}`, colPositions[1], yPosition + 2);
-        
-        // Rate
-        emailPdf.text(`₹${item.unit_price.toFixed(2)}`, colPositions[2], yPosition + 2);
-        
-        // Tax Rate
-        emailPdf.text(`${item.tax_rate.toFixed(1)}%`, colPositions[3], yPosition + 2);
-        
-        // Amount (bold)
-        emailPdf.setFont('helvetica', 'bold');
-        emailPdf.text(`₹${itemTotal.toFixed(2)}`, colPositions[4], yPosition + 2);
-        
-        yPosition += Math.max(10, (item.description ? 15 : 10));
-      });
-
-      // Table border
-      emailPdf.setDrawColor(229, 231, 235);
-      emailPdf.rect(20, tableStartY - 5, pageWidth - 40, yPosition - tableStartY + 5);
-
-      // Totals section
-      yPosition += 10;
-      const totalsStartX = pageWidth - 70;
-      
-      // Totals background
-      emailPdf.setFillColor(248, 249, 250);
-      emailPdf.rect(totalsStartX - 10, yPosition - 5, 60, 30, 'F');
-      
-      emailPdf.setFont('helvetica', 'normal');
-      emailPdf.setFontSize(10);
-      
-      // Subtotal
-      emailPdf.text('Subtotal:', totalsStartX, yPosition);
-      emailPdf.text(`₹${subtotal.toFixed(2)}`, totalsStartX + 35, yPosition);
-      
-      yPosition += 7;
-      
-      // GST
-      emailPdf.text('GST Amount:', totalsStartX, yPosition);
-      emailPdf.text(`₹${totalTax.toFixed(2)}`, totalsStartX + 35, yPosition);
-      
-      yPosition += 10;
-      
-      // Total (bold and larger)
+      emailPdf.setFontSize(7);
       emailPdf.setFont('helvetica', 'bold');
-      emailPdf.setFontSize(12);
+      emailPdf.text(fullInvoice.payment_status.toUpperCase(), statusX + 12.5, billToYPos + 1, { align: 'center' });
+      
+      // Set yPos to the maximum of both columns
+      yPos = Math.max(yPos, billToYPos) + 10;
+      
+      // Professional Items Table
+      emailPdf.setFillColor(245, 247, 250);
+      emailPdf.rect(leftMargin, yPos, 180, 8, 'F');
+      
       emailPdf.setTextColor(37, 99, 235);
-      emailPdf.text('TOTAL:', totalsStartX, yPosition);
-      emailPdf.text(`₹${total.toFixed(2)}`, totalsStartX + 35, yPosition);
-      
-      // Reset color
-      emailPdf.setTextColor(0, 0, 0);
-
-      // Notes and Terms
-      yPosition += 20;
-      
-      if (fullInvoice.notes) {
-        emailPdf.setFont('helvetica', 'bold');
-        emailPdf.setFontSize(10);
-        emailPdf.text('Notes:', 20, yPosition);
-        yPosition += 6;
-        
-        emailPdf.setFont('helvetica', 'normal');
-        emailPdf.setFontSize(9);
-        const noteLines = emailPdf.splitTextToSize(fullInvoice.notes, pageWidth - 40);
-        emailPdf.text(noteLines, 20, yPosition);
-        yPosition += noteLines.length * 4 + 5;
-      }
-      
-      if (fullInvoice.terms_conditions) {
-        emailPdf.setFont('helvetica', 'bold');
-        emailPdf.setFontSize(10);
-        emailPdf.text('Terms & Conditions:', 20, yPosition);
-        yPosition += 6;
-        
-        emailPdf.setFont('helvetica', 'normal');
-        emailPdf.setFontSize(9);
-        const termLines = emailPdf.splitTextToSize(fullInvoice.terms_conditions, pageWidth - 40);
-        emailPdf.text(termLines, 20, yPosition);
-        yPosition += termLines.length * 4;
-      }
-
-      // Footer
-      yPosition = pageHeight - 30;
-      emailPdf.setDrawColor(229, 231, 235);
-      emailPdf.line(20, yPosition, pageWidth - 20, yPosition);
-      
-      yPosition += 8;
-      emailPdf.setFont('helvetica', 'bold');
-      emailPdf.setFontSize(10);
-      emailPdf.setTextColor(37, 99, 235);
-      emailPdf.text('Thank you for your business!', 20, yPosition);
-      
-      yPosition += 6;
-      emailPdf.setFont('helvetica', 'normal');
       emailPdf.setFontSize(8);
-      emailPdf.setTextColor(107, 114, 128);
-      emailPdf.text('This is a computer-generated invoice and does not require a signature.', 20, yPosition);
+      emailPdf.setFont('helvetica', 'bold');
+      emailPdf.text('Description', leftMargin + 2, yPos + 5);
+      emailPdf.text('Qty', leftMargin + 95, yPos + 5, { align: 'center' });
+      emailPdf.text('Rate', leftMargin + 120, yPos + 5, { align: 'center' });
+      emailPdf.text('GST%', leftMargin + 145, yPos + 5, { align: 'center' });
+      emailPdf.text('Amount', leftMargin + 175, yPos + 5, { align: 'right' });
+      
+      yPos += 8;
+      
+      // Table border
+      emailPdf.setDrawColor(220, 220, 220);
+      emailPdf.setLineWidth(0.1);
+      
+      // Items with better spacing and typography
+      emailPdf.setTextColor(0, 0, 0);
+      emailPdf.setFont('helvetica', 'normal');
+      
+      // Get currency symbol dynamically from customer's country - with safety checks
+      let safeCurrencySymbol = 'Rs.'; // Default safe ASCII fallback
+      
+      // Safely extract currency symbol and convert to ASCII-safe version
+      if (currencyInfo && currencyInfo.code) {
+        switch (currencyInfo.code) {
+          case 'INR':
+            safeCurrencySymbol = 'Rs.';
+            break;
+          case 'USD':
+            safeCurrencySymbol = '$';
+            break;
+          case 'GBP':
+            safeCurrencySymbol = 'GBP';
+            break;
+          case 'EUR':
+            safeCurrencySymbol = 'EUR';
+            break;
+          default:
+            safeCurrencySymbol = currencyInfo.code || 'Rs.';
+        }
+      }
+      
+      if (fullInvoice.invoice_items && fullInvoice.invoice_items.length > 0) {
+        fullInvoice.invoice_items.forEach((item: any, index: number) => {
+          const itemSubtotal = item.quantity * item.unit_price;
+          const itemTax = itemSubtotal * item.tax_rate / 100;
+          const itemTotal = itemSubtotal + itemTax;
+          
+          // Alternating row background
+          if (index % 2 === 0) {
+            emailPdf.setFillColor(252, 253, 254);
+            emailPdf.rect(leftMargin, yPos - 2, 180, 8, 'F');
+          }
+          
+          emailPdf.setFontSize(8);
+          emailPdf.setFont('helvetica', 'bold');
+          emailPdf.setTextColor(0, 0, 0);
+          
+          // Item name with description
+          const itemText = item.item_name + (item.description ? ` - ${item.description}` : '');
+          const itemLines = emailPdf.splitTextToSize(itemText, 85);
+          emailPdf.text(itemLines, leftMargin + 2, yPos + 3);
+          
+          // HSN Code
+          if (item.hsn_code) {
+            emailPdf.setFontSize(7);
+            emailPdf.setFont('helvetica', 'normal');
+            emailPdf.setTextColor(100, 100, 100);
+            emailPdf.text(`HSN: ${item.hsn_code}`, leftMargin + 2, yPos + 7);
+          }
+          
+          // Reset for numbers
+          emailPdf.setFontSize(8);
+          emailPdf.setFont('helvetica', 'normal');
+          emailPdf.setTextColor(0, 0, 0);
+          
+          // Quantity with unit
+          emailPdf.text(`${item.quantity} ${item.unit || 'pcs'}`, leftMargin + 95, yPos + 3, { align: 'center' });
+          
+          // Unit price with currency
+          emailPdf.text(`${safeCurrencySymbol} ${item.unit_price.toFixed(2)}`, leftMargin + 120, yPos + 3, { align: 'center' });
+          
+          // Tax rate
+          emailPdf.text(`${item.tax_rate.toFixed(1)}%`, leftMargin + 145, yPos + 3, { align: 'center' });
+          
+          // Total amount with currency
+          emailPdf.setFont('helvetica', 'bold');
+          emailPdf.text(`${safeCurrencySymbol} ${itemTotal.toFixed(2)}`, leftMargin + 175, yPos + 3, { align: 'right' });
+          
+          yPos += Math.max(itemLines.length * 3 + 3, 10);
+        });
+      } else {
+        emailPdf.setFontSize(8);
+        emailPdf.setTextColor(150, 150, 150);
+        emailPdf.text('No items found', leftMargin + 2, yPos + 3);
+        yPos += 8;
+      }
+      
+      // Table bottom border
+      emailPdf.setDrawColor(200, 200, 200);
+      emailPdf.setLineWidth(0.3);
+      emailPdf.line(leftMargin, yPos, leftMargin + 180, yPos);
+      
+      yPos += 10;
+      
+      // Professional Totals Section - compact and right-aligned
+      const totalsStartX = 140;
+      const totalsWidth = 55;
+      
+      // Clean totals box
+      emailPdf.setFillColor(250, 251, 252);
+      emailPdf.rect(totalsStartX, yPos - 3, totalsWidth, 25, 'F');
+      emailPdf.setDrawColor(225, 229, 235);
+      emailPdf.setLineWidth(0.2);
+      emailPdf.rect(totalsStartX, yPos - 3, totalsWidth, 25);
+      
+      emailPdf.setTextColor(60, 60, 60);
+      emailPdf.setFontSize(8);
+      emailPdf.setFont('helvetica', 'normal');
+      
+      // SAFE INDIAN NUMBER FORMATTING - No currency symbol concatenation
+      const formatIndianNumber = (amount: number): string => {
+        // Convert number to string with 2 decimal places
+        const numStr = amount.toFixed(2);
+        const parts = numStr.split('.');
+        let integerPart = parts[0];
+        const decimalPart = parts[1];
+        
+        // Add commas in Indian format (last 3 digits, then groups of 2)
+        if (integerPart.length > 3) {
+          const lastThree = integerPart.slice(-3);
+          const remaining = integerPart.slice(0, -3);
+          
+          // Add commas every 2 digits for the remaining part
+          const formattedRemaining = remaining.replace(/\B(?=(\d{2})+(?!\d))/g, ',');
+          integerPart = formattedRemaining + ',' + lastThree;
+        }
+        
+        return integerPart + '.' + decimalPart;
+      };
+      
+      // Format the totals with Indian number formatting (no currency concatenation)
+      const subtotalText = formatIndianNumber(subtotal);
+      const taxAmountText = formatIndianNumber(totalTax);  
+      const finalTotalText = formatIndianNumber(total);
+      
+      // Subtotal - safe currency concatenation
+      emailPdf.text('Subtotal:', totalsStartX + 3, yPos + 2);
+      emailPdf.setFont('helvetica', 'bold');
+      const subtotalWithCurrency = safeCurrencySymbol + ' ' + subtotalText;
+      emailPdf.text(subtotalWithCurrency, totalsStartX + totalsWidth - 3, yPos + 2, { align: 'right' });
+      
+      yPos += 6;
+      emailPdf.setFont('helvetica', 'normal');
+      emailPdf.text('GST Amount:', totalsStartX + 3, yPos + 2);
+      emailPdf.setFont('helvetica', 'bold');
+      const taxWithCurrency = safeCurrencySymbol + ' ' + taxAmountText;
+      emailPdf.text(taxWithCurrency, totalsStartX + totalsWidth - 3, yPos + 2, { align: 'right' });
+      
+      // Total line - elegant
+      yPos += 6;
+      emailPdf.setDrawColor(37, 99, 235);
+      emailPdf.setLineWidth(0.3);
+      emailPdf.line(totalsStartX + 3, yPos, totalsStartX + totalsWidth - 3, yPos);
+      
+      yPos += 6;
+      emailPdf.setFontSize(9);
+      emailPdf.setFont('helvetica', 'bold');
+      emailPdf.setTextColor(37, 99, 235);
+      emailPdf.text('Total:', totalsStartX + 3, yPos + 2);
+      const finalTotalWithCurrency = safeCurrencySymbol + ' ' + finalTotalText;
+      emailPdf.text(finalTotalWithCurrency, totalsStartX + totalsWidth - 3, yPos + 2, { align: 'right' });
+      
+      yPos += 8;
+      
+      // Amount in Words - positioned directly below totals
+      const amountInWords = formatAmountInWords(total, currencyInfo.name);
+      
+      emailPdf.setTextColor(37, 99, 235);
+      emailPdf.setFontSize(9);
+      emailPdf.setFont('helvetica', 'bold');
+      emailPdf.text('Amount in Words', totalsStartX, yPos);
+      
+      yPos += 5;
+      emailPdf.setFontSize(7);
+      emailPdf.setFont('helvetica', 'italic');
+      emailPdf.setTextColor(60, 60, 60);
+      const amountLines = emailPdf.splitTextToSize(amountInWords, totalsWidth);
+      emailPdf.text(amountLines, totalsStartX, yPos);
+      
+      yPos += amountLines.length * 3 + 8;
+      
+      // Banking Information - left side
+      const leftSectionStart = leftMargin;
+      
+      if (company.bank_name || company.account_number || company.ifsc_code) {
+        emailPdf.setTextColor(37, 99, 235);
+        emailPdf.setFontSize(9);
+        emailPdf.setFont('helvetica', 'bold');
+        emailPdf.text('Payment Details', leftSectionStart, yPos);
+        
+        yPos += 5;
+        emailPdf.setFontSize(7);
+        emailPdf.setFont('helvetica', 'normal');
+        emailPdf.setTextColor(60, 60, 60);
+        
+        if (company.bank_name) {
+          emailPdf.text('Bank: ' + company.bank_name, leftSectionStart, yPos);
+          yPos += 3;
+        }
+        if (company.account_number) {
+          emailPdf.text('Account: ' + company.account_number, leftSectionStart, yPos);
+          yPos += 3;
+        }
+        if (company.ifsc_code) {
+          emailPdf.text('IFSC: ' + company.ifsc_code, leftSectionStart, yPos);
+          yPos += 3;
+        }
+        if (company.branch_name) {
+          emailPdf.text('Branch: ' + company.branch_name, leftSectionStart, yPos);
+          yPos += 3;
+        }
+        yPos += 5;
+      }
+      
+      // Notes Section - compact and clean
+      if (fullInvoice.notes) {
+        emailPdf.setTextColor(37, 99, 235);
+        emailPdf.setFontSize(9);
+        emailPdf.setFont('helvetica', 'bold');
+        emailPdf.text('Notes', leftSectionStart, yPos);
+        
+        yPos += 5;
+        emailPdf.setFontSize(7);
+        emailPdf.setFont('helvetica', 'normal');
+        emailPdf.setTextColor(60, 60, 60);
+        const notesLines = emailPdf.splitTextToSize(fullInvoice.notes, 90);
+        emailPdf.text(notesLines, leftSectionStart, yPos);
+        yPos += notesLines.length * 3 + 5;
+      }
+      
+      // Terms & Conditions - compact and clean
+      if (fullInvoice.terms_conditions) {
+        emailPdf.setTextColor(37, 99, 235);
+        emailPdf.setFontSize(9);
+        emailPdf.setFont('helvetica', 'bold');
+        emailPdf.text('Terms & Conditions', leftSectionStart, yPos);
+        
+        yPos += 5;
+        emailPdf.setFontSize(7);
+        emailPdf.setFont('helvetica', 'normal');
+        emailPdf.setTextColor(60, 60, 60);
+        const termsLines = emailPdf.splitTextToSize(fullInvoice.terms_conditions, 90);
+        emailPdf.text(termsLines, leftSectionStart, yPos);
+        yPos += termsLines.length * 3;
+      }
+      
+      // Professional Footer
+      if (yPos > 270) {
+        yPos = 270; // Ensure footer fits on page
+      }
+      
+      yPos = Math.max(yPos, 275);
+      emailPdf.setDrawColor(240, 240, 240);
+      emailPdf.setLineWidth(0.2);
+      emailPdf.line(leftMargin, yPos, rightMargin, yPos);
+      
+      yPos += 5;
+      emailPdf.setTextColor(37, 99, 235);
+      emailPdf.setFontSize(9);
+      emailPdf.setFont('helvetica', 'bold');
+      emailPdf.text('Thank you for your business!', 105, yPos, { align: 'center' });
+      
+      yPos += 4;
+      emailPdf.setTextColor(120, 120, 120);
+      emailPdf.setFontSize(7);
+      emailPdf.setFont('helvetica', 'normal');
+      emailPdf.text('This is a computer-generated invoice and does not require a signature.', 105, yPos, { align: 'center' });
 
       // Get PDF as base64 string for email attachment
       const emailPdfBase64 = emailPdf.output('datauristring').split(',')[1]; // Remove data:application/pdf;base64, prefix
