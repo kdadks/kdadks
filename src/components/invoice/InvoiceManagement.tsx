@@ -1700,39 +1700,29 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
           
           yPos += 3;
           
-          // Item name - compact and clean
+          // Calculate proper row height based on content
+          const itemText = item.item_name + (item.description ? ` - ${item.description}` : '');
+          const itemLines = downloadPdf.splitTextToSize(itemText, 80); // Slightly reduce width for HSN code space
+          const hasHsnCode = item.hsn_code ? true : false;
+          const itemRowHeight = Math.max(itemLines.length * 3 + (hasHsnCode ? 6 : 3), 12); // Dynamic height
+          
+          // Item name with description - positioned at top of row
           downloadPdf.setFontSize(8);
           downloadPdf.setFont('helvetica', 'bold');
-          const itemNameLines = downloadPdf.splitTextToSize(item.item_name, 85);
-          downloadPdf.text(itemNameLines, leftMargin + 2, yPos);
+          downloadPdf.setTextColor(0, 0, 0);
+          downloadPdf.text(itemLines, leftMargin + 2, yPos);
           
-          let descY = yPos;
-          if (itemNameLines.length > 1) {
-            descY += (itemNameLines.length - 1) * 3;
-          }
-          
-          // Description and HSN - smaller and subtle
-          if (item.description || item.hsn_code) {
-            downloadPdf.setFontSize(7);
+          // HSN Code - positioned below description with proper spacing
+          if (item.hsn_code) {
+            const hsnYPos = yPos + (itemLines.length * 3) + 1; // Position below description
+            downloadPdf.setFontSize(6);
             downloadPdf.setFont('helvetica', 'normal');
             downloadPdf.setTextColor(100, 100, 100);
-            
-            if (item.description) {
-              descY += 4;
-              const descLines = downloadPdf.splitTextToSize(item.description, 85);
-              downloadPdf.text(descLines, leftMargin + 2, descY);
-              if (descLines.length > 1) {
-                descY += (descLines.length - 1) * 3.5;
-              }
-            }
-            
-            if (item.hsn_code) {
-              descY += 4;
-              downloadPdf.text('HSN: ' + String(item.hsn_code), leftMargin + 2, descY);
-            }
+            downloadPdf.text(`HSN: ${item.hsn_code}`, leftMargin + 2, hsnYPos);
           }
           
-          // Numeric values - right aligned and consistent (fix spacing issues)
+          // Reset for numbers - center them vertically in the row
+          const numbersYPos = yPos + (itemRowHeight / 2) + 1; // Center vertically
           downloadPdf.setTextColor(0, 0, 0);
           downloadPdf.setFontSize(8);
           downloadPdf.setFont('helvetica', 'normal');
@@ -1797,20 +1787,20 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
             calculatedCents: Math.round(item.unit_price * 100)
           });
           
-          downloadPdf.text(qtyText, leftMargin + 95, yPos, { align: 'center' });
+          downloadPdf.text(qtyText, leftMargin + 95, numbersYPos, { align: 'center' });
           
           // Safe currency format - concatenate symbol with formatted number
           const priceWithCurrency = safeCurrencySymbol + ' ' + priceText;
-          downloadPdf.text(priceWithCurrency, leftMargin + 120, yPos, { align: 'center' });
+          downloadPdf.text(priceWithCurrency, leftMargin + 120, numbersYPos, { align: 'center' });
           
-          downloadPdf.text(taxText, leftMargin + 145, yPos, { align: 'center' });
+          downloadPdf.text(taxText, leftMargin + 145, numbersYPos, { align: 'center' });
           downloadPdf.setFont('helvetica', 'bold');
           
           // Safe currency format for total
           const totalWithCurrency = safeCurrencySymbol + ' ' + totalText;
-          downloadPdf.text(totalWithCurrency, leftMargin + 175, yPos, { align: 'right' });
+          downloadPdf.text(totalWithCurrency, leftMargin + 175, numbersYPos, { align: 'right' });
           
-          yPos += rowHeight - 3;
+          yPos += itemRowHeight;
         });
       } else {
         downloadPdf.setTextColor(150, 150, 150);
@@ -1826,9 +1816,10 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
       
       yPos += 10;
       
-      // Professional Totals Section - compact and right-aligned
-      const totalsStartX = 140;
-      const totalsWidth = 55;
+      // Professional Totals Section - aligned with table boundary
+      const tableWidth = 180; // Same as table width
+      const totalsWidth = 60; // Slightly wider for better formatting
+      const totalsStartX = leftMargin + tableWidth - totalsWidth; // Right-align with table
       
       // Clean totals box
       downloadPdf.setFillColor(250, 251, 252);
@@ -2384,50 +2375,56 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
           const itemTax = itemSubtotal * item.tax_rate / 100;
           const itemTotal = itemSubtotal + itemTax;
           
-          // Alternating row background
+          // Calculate proper row height based on content
+          const itemText = item.item_name + (item.description ? ` - ${item.description}` : '');
+          const itemLines = emailPdf.splitTextToSize(itemText, 80); // Slightly reduce width for HSN code space
+          const hasHsnCode = item.hsn_code ? true : false;
+          const itemRowHeight = Math.max(itemLines.length * 3 + (hasHsnCode ? 6 : 3), 12); // Dynamic height
+          
+          // Alternating row background with proper height
           if (index % 2 === 0) {
             emailPdf.setFillColor(252, 253, 254);
-            emailPdf.rect(leftMargin, yPos - 2, 180, 8, 'F');
+            emailPdf.rect(leftMargin, yPos - 2, 180, itemRowHeight, 'F');
           }
           
           emailPdf.setFontSize(8);
           emailPdf.setFont('helvetica', 'bold');
           emailPdf.setTextColor(0, 0, 0);
           
-          // Item name with description
-          const itemText = item.item_name + (item.description ? ` - ${item.description}` : '');
-          const itemLines = emailPdf.splitTextToSize(itemText, 85);
+          // Item name with description - positioned at top of row
           emailPdf.text(itemLines, leftMargin + 2, yPos + 3);
           
-          // HSN Code
+          // HSN Code - positioned below description with proper spacing
           if (item.hsn_code) {
-            emailPdf.setFontSize(7);
+            const hsnYPos = yPos + 3 + (itemLines.length * 3) + 1; // Position below description
+            emailPdf.setFontSize(6);
             emailPdf.setFont('helvetica', 'normal');
             emailPdf.setTextColor(100, 100, 100);
-            emailPdf.text(`HSN: ${item.hsn_code}`, leftMargin + 2, yPos + 7);
+            emailPdf.text(`HSN: ${item.hsn_code}`, leftMargin + 2, hsnYPos);
           }
           
-          // Reset for numbers
+          // Reset for numbers - center them vertically in the row
+          const numbersYPos = yPos + (itemRowHeight / 2) + 1; // Center vertically
           emailPdf.setFontSize(8);
           emailPdf.setFont('helvetica', 'normal');
           emailPdf.setTextColor(0, 0, 0);
           
           // Quantity with unit
-          emailPdf.text(`${item.quantity} ${item.unit || 'pcs'}`, leftMargin + 95, yPos + 3, { align: 'center' });
+          emailPdf.text(`${item.quantity} ${item.unit || 'pcs'}`, leftMargin + 95, numbersYPos, { align: 'center' });
           
           // Unit price with currency and comma formatting
           const formattedUnitPrice = formatNumberWithCommas(item.unit_price);
-          emailPdf.text(`${safeCurrencySymbol} ${formattedUnitPrice}`, leftMargin + 120, yPos + 3, { align: 'center' });
+          emailPdf.text(`${safeCurrencySymbol} ${formattedUnitPrice}`, leftMargin + 120, numbersYPos, { align: 'center' });
           
           // Tax rate
-          emailPdf.text(`${item.tax_rate.toFixed(1)}%`, leftMargin + 145, yPos + 3, { align: 'center' });
+          emailPdf.text(`${item.tax_rate.toFixed(1)}%`, leftMargin + 145, numbersYPos, { align: 'center' });
           
           // Total amount with currency and comma formatting
           emailPdf.setFont('helvetica', 'bold');
           const formattedItemTotal = formatNumberWithCommas(itemTotal);
-          emailPdf.text(`${safeCurrencySymbol} ${formattedItemTotal}`, leftMargin + 175, yPos + 3, { align: 'right' });
+          emailPdf.text(`${safeCurrencySymbol} ${formattedItemTotal}`, leftMargin + 175, numbersYPos, { align: 'right' });
           
-          yPos += Math.max(itemLines.length * 3 + 3, 10);
+          yPos += itemRowHeight;
         });
       } else {
         emailPdf.setFontSize(8);
@@ -2443,9 +2440,10 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
       
       yPos += 10;
       
-      // Professional Totals Section - compact and right-aligned
-      const totalsStartX = 140;
-      const totalsWidth = 55;
+      // Professional Totals Section - aligned with table boundary
+      const tableWidth = 180; // Same as table width
+      const totalsWidth = 60; // Slightly wider for better formatting
+      const totalsStartX = leftMargin + tableWidth - totalsWidth; // Right-align with table
       
       // Clean totals box
       emailPdf.setFillColor(250, 251, 252);
