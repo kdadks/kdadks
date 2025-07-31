@@ -2229,6 +2229,7 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
       // BILL TO Section (Right Column)
       let billToYPos = 35;
       const billToX = 110;
+      const billToMaxWidth = 85; // Maximum width for customer details to prevent overflow
       
       emailPdf.setTextColor(0, 0, 0);
       emailPdf.setFontSize(9);
@@ -2239,47 +2240,62 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
       emailPdf.setFontSize(11);
       emailPdf.setFont('helvetica', 'bold');
       emailPdf.setTextColor(37, 99, 235);
-      emailPdf.text(customer.company_name || customer.contact_person || 'N/A', billToX, billToYPos);
       
-      billToYPos += 4;
+      // Wrap customer name properly
+      const customerName = customer.company_name || customer.contact_person || 'N/A';
+      const customerNameLines = emailPdf.splitTextToSize(customerName, billToMaxWidth);
+      emailPdf.text(customerNameLines, billToX, billToYPos);
+      billToYPos += customerNameLines.length * 4;
+      
       emailPdf.setFontSize(8);
       emailPdf.setFont('helvetica', 'normal');
       emailPdf.setTextColor(60, 60, 60);
       
       if (customer.contact_person && customer.company_name) {
-        emailPdf.text('Attn: ' + customer.contact_person, billToX, billToYPos);
-        billToYPos += 4;
+        const attnText = 'Attn: ' + customer.contact_person;
+        const attnLines = emailPdf.splitTextToSize(attnText, billToMaxWidth);
+        emailPdf.text(attnLines, billToX, billToYPos);
+        billToYPos += attnLines.length * 4;
       }
       
       if (customer.address_line1) {
-        emailPdf.text(customer.address_line1, billToX, billToYPos);
-        billToYPos += 4;
+        const addr1Lines = emailPdf.splitTextToSize(customer.address_line1, billToMaxWidth);
+        emailPdf.text(addr1Lines, billToX, billToYPos);
+        billToYPos += addr1Lines.length * 4;
       }
       
       if (customer.address_line2) {
-        emailPdf.text(customer.address_line2, billToX, billToYPos);
-        billToYPos += 4;
+        const addr2Lines = emailPdf.splitTextToSize(customer.address_line2, billToMaxWidth);
+        emailPdf.text(addr2Lines, billToX, billToYPos);
+        billToYPos += addr2Lines.length * 4;
       }
       
       const customerLocation = [customer.city, customer.state, customer.postal_code].filter(Boolean).join(', ');
       if (customerLocation) {
-        emailPdf.text(customerLocation, billToX, billToYPos);
-        billToYPos += 4;
+        const locationLines = emailPdf.splitTextToSize(customerLocation, billToMaxWidth);
+        emailPdf.text(locationLines, billToX, billToYPos);
+        billToYPos += locationLines.length * 4;
       }
       
       if (customer.email) {
-        emailPdf.text('Email: ' + customer.email, billToX, billToYPos);
-        billToYPos += 4;
+        const emailText = 'Email: ' + customer.email;
+        const emailLines = emailPdf.splitTextToSize(emailText, billToMaxWidth);
+        emailPdf.text(emailLines, billToX, billToYPos);
+        billToYPos += emailLines.length * 4;
       }
       
       if (customer.phone) {
-        emailPdf.text('Phone: ' + customer.phone, billToX, billToYPos);
-        billToYPos += 4;
+        const phoneText = 'Phone: ' + customer.phone;
+        const phoneLines = emailPdf.splitTextToSize(phoneText, billToMaxWidth);
+        emailPdf.text(phoneLines, billToX, billToYPos);
+        billToYPos += phoneLines.length * 4;
       }
       
       if (customer.gstin) {
-        emailPdf.text('GSTIN: ' + customer.gstin, billToX, billToYPos);
-        billToYPos += 4;
+        const gstinText = 'GSTIN: ' + customer.gstin;
+        const gstinLines = emailPdf.splitTextToSize(gstinText, billToMaxWidth);
+        emailPdf.text(gstinLines, billToX, billToYPos);
+        billToYPos += gstinLines.length * 4;
       }
       
       // Payment Status Badge - compact and professional
@@ -2342,6 +2358,26 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
         }
       }
       
+      // Helper function to format numbers with Indian comma format
+      const formatNumberWithCommas = (amount: number): string => {
+        const numStr = amount.toFixed(2);
+        const parts = numStr.split('.');
+        let integerPart = parts[0];
+        const decimalPart = parts[1];
+        
+        // Add commas in Indian format (last 3 digits, then groups of 2)
+        if (integerPart.length > 3) {
+          const lastThree = integerPart.slice(-3);
+          const remaining = integerPart.slice(0, -3);
+          
+          // Add commas every 2 digits for the remaining part
+          const formattedRemaining = remaining.replace(/\B(?=(\d{2})+(?!\d))/g, ',');
+          integerPart = formattedRemaining + ',' + lastThree;
+        }
+        
+        return integerPart + '.' + decimalPart;
+      };
+      
       if (fullInvoice.invoice_items && fullInvoice.invoice_items.length > 0) {
         fullInvoice.invoice_items.forEach((item: any, index: number) => {
           const itemSubtotal = item.quantity * item.unit_price;
@@ -2379,15 +2415,17 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
           // Quantity with unit
           emailPdf.text(`${item.quantity} ${item.unit || 'pcs'}`, leftMargin + 95, yPos + 3, { align: 'center' });
           
-          // Unit price with currency
-          emailPdf.text(`${safeCurrencySymbol} ${item.unit_price.toFixed(2)}`, leftMargin + 120, yPos + 3, { align: 'center' });
+          // Unit price with currency and comma formatting
+          const formattedUnitPrice = formatNumberWithCommas(item.unit_price);
+          emailPdf.text(`${safeCurrencySymbol} ${formattedUnitPrice}`, leftMargin + 120, yPos + 3, { align: 'center' });
           
           // Tax rate
           emailPdf.text(`${item.tax_rate.toFixed(1)}%`, leftMargin + 145, yPos + 3, { align: 'center' });
           
-          // Total amount with currency
+          // Total amount with currency and comma formatting
           emailPdf.setFont('helvetica', 'bold');
-          emailPdf.text(`${safeCurrencySymbol} ${itemTotal.toFixed(2)}`, leftMargin + 175, yPos + 3, { align: 'right' });
+          const formattedItemTotal = formatNumberWithCommas(itemTotal);
+          emailPdf.text(`${safeCurrencySymbol} ${formattedItemTotal}`, leftMargin + 175, yPos + 3, { align: 'right' });
           
           yPos += Math.max(itemLines.length * 3 + 3, 10);
         });
