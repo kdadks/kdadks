@@ -1,0 +1,168 @@
+const nodemailer = require('nodemailer');
+
+exports.handler = async (event, context) => {
+  // Enable CORS for all origins
+  const headers = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Headers': 'Content-Type',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Content-Type': 'application/json'
+  };
+
+  // Handle preflight OPTIONS request
+  if (event.httpMethod === 'OPTIONS') {
+    return {
+      statusCode: 200,
+      headers,
+      body: JSON.stringify({ message: 'CORS preflight check' })
+    };
+  }
+
+  // Only allow POST method
+  if (event.httpMethod !== 'POST') {
+    return {
+      statusCode: 405,
+      headers,
+      body: JSON.stringify({ error: 'Method not allowed' })
+    };
+  }
+
+  try {
+    // Parse request body
+    const { to, from, subject, text, html } = JSON.parse(event.body);
+
+    // Validate required fields
+    if (!to || !subject || (!text && !html)) {
+      return {
+        statusCode: 400,
+        headers,
+        body: JSON.stringify({ 
+          error: 'Missing required fields: to, subject, and text/html are required' 
+        })
+      };
+    }
+
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(to)) {
+      return {
+        statusCode: 400,
+        headers,
+        body: JSON.stringify({ 
+          error: 'Invalid email address format' 
+        })
+      };
+    }
+
+    // Get Brevo SMTP password from environment
+    const brevoPassword = process.env.BREVO_PASSWORD;
+    if (!brevoPassword) {
+      console.error('BREVO_PASSWORD environment variable is not set');
+      return {
+        statusCode: 500,
+        headers,
+        body: JSON.stringify({ 
+          error: 'Email service configuration error' 
+        })
+      };
+    }
+
+    // Configure Brevo SMTP transporter
+    const transporter = nodemailer.createTransport({
+      host: 'smtp-relay.brevo.com',
+      port: 587,
+      secure: false, // TLS
+      auth: {
+        user: '900018001@smtp-brevo.com',
+        pass: brevoPassword
+      },
+      // Additional options for better reliability
+      pool: true,
+      maxConnections: 1,
+      maxMessages: 3,
+      rateDelta: 1000,
+      rateLimit: 5
+    });
+
+    // Prepare email options
+    const mailOptions = {
+      from: from || 'support@kdadks.com', // Default sender
+      to: to,
+      subject: subject,
+      text: text,
+      html: html,
+      // Set reply-to if different from sender
+      replyTo: from && from !== 'support@kdadks.com' ? from : undefined
+    };
+
+    // Add attachment support for invoice PDFs (if provided)
+    if (event.body.includes('attachment')) {
+      try {
+        const parsedBody = JSON.parse(event.body);
+        if (parsedBody.attachment) {
+          mailOptions.attachments = [{
+            filename: parsedBody.attachment.filename || 'invoice.pdf',
+            content: parsedBody.attachment.content,
+            encoding: 'base64'
+          }];
+        }
+      } catch (attachmentError) {
+        console.warn('Failed to parse attachment:', attachmentError);
+      }
+    }
+
+    console.log('Sending email via Brevo SMTP...');
+    console.log('To:', to);
+    console.log('Subject:', subject);
+    console.log('From:', mailOptions.from);
+
+    // Send email
+    const info = await transporter.sendMail(mailOptions);
+
+    console.log('Email sent successfully:', info.messageId);
+
+    // Return success response
+    return {
+      statusCode: 200,
+      headers,
+      body: JSON.stringify({
+        success: true,
+        message: 'Email sent successfully',
+        messageId: info.messageId,
+        envelope: info.envelope
+      })
+    };
+
+  } catch (error) {
+    console.error('Email sending failed:', error);
+
+    // Handle specific SMTP errors
+    let errorMessage = 'Failed to send email';
+    let statusCode = 500;
+
+    if (error.code === 'EAUTH') {
+      errorMessage = 'Email authentication failed - please check SMTP credentials';
+      statusCode = 401;
+    } else if (error.code === 'ECONNECTION') {
+      errorMessage = 'Failed to connect to email server';
+      statusCode = 503;
+    } else if (error.code === 'EMESSAGE') {
+      errorMessage = 'Invalid email message format';
+      statusCode = 400;
+    } else if (error.responseCode === 550) {
+      errorMessage = 'Email address rejected by recipient server';
+      statusCode = 400;
+    } else if (error.message) {
+      errorMessage = error.message;
+    }
+
+    return {
+      statusCode,
+      headers,
+      body: JSON.stringify({
+        error: errorMessage,
+        details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+      })
+    };
+  }
+};

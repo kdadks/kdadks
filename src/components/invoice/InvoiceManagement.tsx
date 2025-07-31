@@ -1,4 +1,6 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
 import { 
   Plus, 
   Search, 
@@ -8,7 +10,6 @@ import {
   FileText,
   Download,
   Mail,
-  Settings,
   Users,
   Package,
   ArrowLeft,
@@ -17,9 +18,10 @@ import {
   Trash2,
   X,
   Save,
-  EyeOff,
   Trash,
-  CreditCard
+  CreditCard,
+  CheckCircle,
+  Settings
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { invoiceService } from '../../services/invoiceService';
@@ -27,7 +29,7 @@ import { simpleAuth } from '../../utils/simpleAuth';
 import { useToast } from '../ui/ToastProvider';
 import ConfirmDialog from '../ui/ConfirmDialog';
 import { useConfirmDialog } from '../../hooks/useConfirmDialog';
-import type { Invoice, InvoiceFilters, InvoiceStats, Customer, Product, CompanySettings, InvoiceSettings, Country, CreateProductData, CreateCompanySettingsData, CreateInvoiceSettingsData, CreateCustomerData, CreateInvoiceData, CreateInvoiceItemData, TermsTemplate } from '../../types/invoice';
+import type { Invoice, InvoiceFilters, InvoiceStats, Customer, Product, CompanySettings, InvoiceSettings, Country, CreateProductData, CreateCompanySettingsData, CreateInvoiceSettingsData, CreateCustomerData, CreateInvoiceData, UpdateInvoiceData, CreateInvoiceItemData, TermsTemplate } from '../../types/invoice';
 
 interface InvoiceManagementProps {
   onBackToDashboard?: () => void;
@@ -183,7 +185,7 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
   });
   
   const navigate = useNavigate();
-  const { showSuccess, showError, showWarning } = useToast();
+  const { showSuccess, showError, showWarning, showInfo } = useToast();
   const { confirm, dialogProps } = useConfirmDialog();
 
   useEffect(() => {
@@ -532,8 +534,8 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
     
     // Phone validation (basic)
     if ((customerFormData.phone || '').trim()) {
-      const phoneRegex = /^[\+]?[1-9][\d]{3,14}$/;
-      if (!phoneRegex.test((customerFormData.phone || '').replace(/[\s\-\(\)]/g, ''))) {
+      const phoneRegex = /^[+]?[1-9][\d]{3,14}$/;
+      if (!phoneRegex.test((customerFormData.phone || '').replace(/[\s\-()]/g, ''))) {
         errors.push('Please enter a valid phone number');
       }
     }
@@ -556,7 +558,7 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
     
     // Postal code validation (basic)
     if ((customerFormData.postal_code || '').trim()) {
-      const postalRegex = /^[A-Z0-9\s\-]{3,10}$/i;
+      const postalRegex = /^[A-Z0-9\s-]{3,10}$/i;
       if (!postalRegex.test(customerFormData.postal_code || '')) {
         errors.push('Please enter a valid postal code');
       }
@@ -581,15 +583,45 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
       if (customerModalMode === 'add') {
         const result = await invoiceService.createCustomer(customerFormData);
         console.log('✅ Customer created:', result);
+        console.log('🏁 Customer country relationship:', {
+          customer_id: result.id,
+          country_id: result.country_id,
+          country: result.country,
+          currency_code: result.country?.currency_code,
+          currency_symbol: result.country?.currency_symbol,
+          currency_name: result.country?.currency_name
+        });
+        
+        // Add the new customer to the existing customers list to avoid full reload
+        // This ensures the country relationship is preserved
+        setCustomers(prev => [result, ...prev]);
+        
         showSuccess('Customer created successfully!');
       } else if (customerModalMode === 'edit' && selectedCustomer) {
         const result = await invoiceService.updateCustomer(selectedCustomer.id, customerFormData);
         console.log('✅ Customer updated:', result);
+        console.log('🏁 Updated customer country relationship:', {
+          customer_id: result.id,
+          country_id: result.country_id,
+          country: result.country,
+          currency_code: result.country?.currency_code,
+          currency_symbol: result.country?.currency_symbol,
+          currency_name: result.country?.currency_name
+        });
+        
+        // Update the specific customer in the list
+        setCustomers(prev => prev.map(customer => 
+          customer.id === selectedCustomer.id ? result : customer
+        ));
+        
         showSuccess('Customer updated successfully!');
       }
       
       closeCustomerModal();
-      await loadData();
+      // Only reload data if we're not on the customers tab to avoid losing the country relationship
+      if (activeTab !== 'customers') {
+        await loadData();
+      }
     } catch (error) {
       console.error('Failed to save customer:', error);
       showError(`Failed to save customer: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -688,31 +720,6 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
     });
   };
 
-  const openInvoiceModal = async (mode: 'view' | 'edit' | 'add', invoice?: Invoice) => {
-    // For 'add' mode, redirect to create invoice tab
-    if (mode === 'add') {
-      await openCreateInvoiceTab();
-      return;
-    }
-    
-    setInvoiceModalMode(mode);
-    setSelectedInvoice(invoice || null);
-    
-    if (invoice) {
-      setInvoiceFormData({
-        customer_id: invoice.customer_id,
-        invoice_date: invoice.invoice_date,
-        due_date: invoice.due_date || '',
-        notes: invoice.notes || '',
-        terms_conditions: invoice.terms_conditions || '',
-        items: [] // Initialize with empty array since invoice details are loaded separately
-      });
-      setGeneratedInvoiceNumber(invoice.invoice_number);
-    }
-    
-    setShowInvoiceModal(true);
-  };
-
   const closeInvoiceModal = () => {
     setShowInvoiceModal(false);
     setSelectedInvoice(null);
@@ -774,9 +781,6 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
   };
 
   const addInvoiceItem = () => {
-    // Get the currently selected global product
-    const selectedProduct = products.find(p => p.id === selectedDefaultProduct);
-    
     setInvoiceFormData(prev => ({
       ...prev,
       items: [...prev.items, {
@@ -856,13 +860,13 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
       return result;
     };
 
-    let crores = Math.floor(num / 10000000);
+    const crores = Math.floor(num / 10000000);
     num %= 10000000;
-    let lakhs = Math.floor(num / 100000);
+    const lakhs = Math.floor(num / 100000);
     num %= 100000;
-    let thousands = Math.floor(num / 1000);
+    const thousands = Math.floor(num / 1000);
     num %= 1000;
-    let hundreds = num;
+    const hundreds = num;
 
     let result = '';
     if (crores > 0) result += convertHundreds(crores) + ' Crore ';
@@ -877,12 +881,12 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
     const integerPart = Math.floor(amount);
     const decimalPart = Math.round((amount - integerPart) * 100);
     
-    let result = numberToWords(integerPart) + ` ${currencyName}`;
+    let result = numberToWords(integerPart).trim() + ' ' + currencyName;
     if (decimalPart > 0) {
-      result += ` and ${numberToWords(decimalPart)} Paise`;
+      result += ' and ' + numberToWords(decimalPart).trim() + ' Paise';
     }
     result += ' Only';
-    return result;
+    return result.replace(/\s+/g, ' ').trim(); // Remove extra spaces
   };
 
   const getCurrencyInfo = (customer: Customer | undefined) => {
@@ -896,6 +900,14 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
     });
 
     const customerCountry = customer?.country;
+    console.log('🌍 Customer country details:', {
+      hasCountry: !!customerCountry,
+      countryCode: customerCountry?.code,
+      currencyCode: customerCountry?.currency_code,
+      currencySymbol: customerCountry?.currency_symbol,
+      currencyName: customerCountry?.currency_name
+    });
+
     if (customerCountry && customerCountry.currency_symbol && customerCountry.currency_code) {
       // Use the currency information from the customer's country
       console.log('✅ Using country currency data:', customerCountry);
@@ -910,12 +922,19 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
     if (customerCountry) {
       console.log('⚠️ Using fallback currency for country code:', customerCountry.code);
       switch (customerCountry.code) {
-        case 'US':
+        case 'IND':
+          return { symbol: '₹', name: 'Rupees', code: 'INR' };
+        case 'USA':
           return { symbol: '$', name: 'Dollars', code: 'USD' };
-        case 'UK':
+        case 'GBR':
         case 'GB':
+        case 'UK':
           return { symbol: '£', name: 'Pounds', code: 'GBP' };
-        case 'EU':
+        case 'DEU':
+        case 'FRA':
+        case 'ITA':
+        case 'ESP':
+        case 'NLD':
           return { symbol: '€', name: 'Euros', code: 'EUR' };
         default:
           break;
@@ -923,7 +942,7 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
     }
     
     // Default to Indian Rupee
-    console.log('🔄 Using default currency (INR)');
+    console.log('🔄 Using default currency (INR) - no country found or no currency data');
     return {
       symbol: '₹',
       name: 'Rupees',
@@ -932,12 +951,41 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
   };
 
   const formatCurrencyAmount = (amount: number, currencyInfo: { symbol: string; code: string }) => {
-    const formattedAmount = new Intl.NumberFormat('en-IN', {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2
-    }).format(amount);
+    // Use clean number formatting to prevent any Unicode spacing issues
+    const roundedAmount = Math.round(amount * 100) / 100;
+    const formattedNumber = roundedAmount.toFixed(2);
+    return currencyInfo.symbol + ' ' + formattedNumber;
+  };
+
+  // Completely clean number formatting - no Unicode issues
+  const formatPdfNumber = (num: number, decimals: number = 2): string => {
+    // Convert to string and handle manually to avoid ANY Unicode issues
+    const numStr = num.toString();
+    const parts = numStr.split('.');
+    let integerPart = parts[0] || '0';
+    let decimalPart = parts[1] || '';
     
-    return `${currencyInfo.symbol}${formattedAmount}`;
+    if (decimals === 0) {
+      return integerPart;
+    }
+    
+    // Pad or truncate decimal part
+    if (decimalPart.length < decimals) {
+      decimalPart = decimalPart + '0'.repeat(decimals - decimalPart.length);
+    } else if (decimalPart.length > decimals) {
+      decimalPart = decimalPart.substring(0, decimals);
+    }
+    
+    return integerPart + '.' + decimalPart;
+  };
+
+  // Simple currency formatting
+  const formatPdfCurrency = (amount: number, symbol: string): string => {
+    const numStr = amount.toString();
+    const parts = numStr.split('.');
+    const integerPart = parts[0] || '0';
+    const decimalPart = (parts[1] || '00').padEnd(2, '0').substring(0, 2);
+    return symbol + ' ' + integerPart + '.' + decimalPart;
   };
 
   const handleSaveInvoice = async () => {
@@ -1098,9 +1146,20 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
         showSuccess(`Invoice ${finalInvoiceNumber!} created successfully!`);
         setActiveTab('invoices'); // Switch to invoices tab after creation
       } else if (invoiceModalMode === 'edit' && selectedInvoice) {
-        // await invoiceService.updateInvoice(selectedInvoice.id, invoiceFormData);
-        console.log('Update invoice functionality needs to be implemented');
-        showSuccess('Invoice update functionality needs to be implemented!');
+        // For edit mode, update the invoice
+        const updateData: UpdateInvoiceData = {
+          customer_id: invoiceFormData.customer_id,
+          invoice_date: invoiceFormData.invoice_date,
+          due_date: invoiceFormData.due_date,
+          notes: invoiceFormData.notes,
+          terms_conditions: invoiceFormData.terms_conditions
+          // Note: Updating items requires a more complex operation
+          // For now, we only update basic invoice fields
+        };
+        
+        await invoiceService.updateInvoice(selectedInvoice.id, updateData);
+        console.log('✅ Invoice updated successfully');
+        showSuccess(`Invoice ${selectedInvoice.invoice_number} updated successfully!`);
       }
       
       closeInvoiceModal();
@@ -1186,21 +1245,1421 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
   const handleDeleteInvoice = async (invoice: Invoice) => {
     const confirmed = await confirm({
       title: 'Delete Invoice',
-      message: `Are you sure you want to delete invoice "${invoice.invoice_number}"?\n\nThis action cannot be undone.`,
+      message: `Are you sure you want to delete invoice "${invoice.invoice_number}"?\n\nThis action will mark the invoice as deleted but preserve it in the database for audit purposes. The invoice will no longer appear in regular lists but can be recovered if needed.`,
       confirmText: 'Delete',
       type: 'danger'
     });
     
     if (confirmed) {
       try {
-        // await invoiceService.deleteInvoice(invoice.id);
-        console.log('Delete invoice functionality needs to be implemented');
-        showSuccess('Delete invoice functionality needs to be implemented!');
-        // await loadData();
+        await invoiceService.deleteInvoice(invoice.id);
+        showSuccess('Invoice deleted successfully!');
+        await loadData();
       } catch (error) {
         console.error('Failed to delete invoice:', error);
         showError(`Failed to delete invoice: ${error instanceof Error ? error.message : 'Unknown error'}`);
       }
+    }
+  };
+
+  const handleViewInvoice = async (invoice: Invoice) => {
+    try {
+      // Load full invoice details
+      const fullInvoice = await invoiceService.getInvoiceById(invoice.id);
+      if (fullInvoice) {
+        setSelectedInvoice(fullInvoice);
+        setInvoiceFormData({
+          customer_id: fullInvoice.customer_id,
+          invoice_date: fullInvoice.invoice_date,
+          due_date: fullInvoice.due_date || '',
+          notes: fullInvoice.notes || '',
+          terms_conditions: fullInvoice.terms_conditions || '',
+          items: fullInvoice.invoice_items?.map(item => ({
+            product_id: item.product_id,
+            item_name: item.item_name,
+            description: item.description,
+            quantity: item.quantity,
+            unit: item.unit,
+            unit_price: item.unit_price,
+            tax_rate: item.tax_rate,
+            hsn_code: item.hsn_code
+          })) || []
+        });
+        setGeneratedInvoiceNumber(fullInvoice.invoice_number);
+        
+        // Only show preview modal for viewing - no edit modal
+        setInvoiceModalMode('view');
+        setShowInvoicePreview(true);
+        // Ensure the edit modal is closed
+        setShowInvoiceModal(false);
+      }
+    } catch (error) {
+      console.error('Failed to load invoice details:', error);
+      showError(`Failed to load invoice details: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  };
+
+  const handleEditInvoice = async (invoice: Invoice) => {
+    try {
+      // Load full invoice details
+      const fullInvoice = await invoiceService.getInvoiceById(invoice.id);
+      if (fullInvoice) {
+        setSelectedInvoice(fullInvoice);
+        setInvoiceFormData({
+          customer_id: fullInvoice.customer_id,
+          invoice_date: fullInvoice.invoice_date,
+          due_date: fullInvoice.due_date || '',
+          notes: fullInvoice.notes || '',
+          terms_conditions: fullInvoice.terms_conditions || '',
+          items: fullInvoice.invoice_items?.map(item => ({
+            product_id: item.product_id,
+            item_name: item.item_name,
+            description: item.description,
+            quantity: item.quantity,
+            unit: item.unit,
+            unit_price: item.unit_price,
+            tax_rate: item.tax_rate,
+            hsn_code: item.hsn_code
+          })) || []
+        });
+        setGeneratedInvoiceNumber(fullInvoice.invoice_number);
+        // Switch to create invoice tab for editing
+        setActiveTab('create-invoice');
+        setInvoiceModalMode('edit');
+      }
+    } catch (error) {
+      console.error('Failed to load invoice details:', error);
+      showError(`Failed to load invoice details: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  };
+
+  const handleDownloadInvoice = async (invoice: Invoice) => {
+    try {
+      // Load full invoice details first
+      const fullInvoice = await invoiceService.getInvoiceById(invoice.id);
+      if (!fullInvoice) {
+        showError('Invoice not found');
+        return;
+      }
+
+      // Get company settings (default company)
+      const company = companySettings.find(c => c.is_default) || companySettings[0];
+      if (!company) {
+        showError('No company settings found. Please go to Settings tab and configure your company information first, then try again.');
+        // Optionally switch to settings tab automatically
+        setActiveTab('settings');
+        return;
+      }
+
+      // Get customer details
+      let currentCustomers = customers;
+      if (customers.length === 0) {
+        try {
+          currentCustomers = await ensureCustomersLoaded();
+        } catch (error) {
+          showError('Failed to load customer data for PDF generation');
+          return;
+        }
+      }
+      
+      const customer = currentCustomers.find(c => c.id === fullInvoice.customer_id);
+      if (!customer) {
+        showError('Customer details not found for PDF generation');
+        return;
+      }
+
+      // Calculate totals
+      const subtotal = fullInvoice.invoice_items?.reduce((sum, item) => sum + (item.quantity * item.unit_price), 0) || 0;
+      const totalTax = fullInvoice.invoice_items?.reduce((sum, item) => sum + (item.quantity * item.unit_price * item.tax_rate / 100), 0) || 0;
+      const total = subtotal + totalTax;
+
+      // Get currency info for the customer
+      const selectedCustomer = currentCustomers.find(c => c.id === fullInvoice.customer_id);
+      const currencyInfo = getCurrencyInfo(selectedCustomer);
+      
+      console.log('💰 Currency info for PDF generation:', {
+        customer: selectedCustomer ? {
+          id: selectedCustomer.id,
+          name: selectedCustomer.company_name || selectedCustomer.contact_person,
+          country_id: selectedCustomer.country_id
+        } : 'Not found',
+        currencyInfo: currencyInfo,
+        symbol: currencyInfo.symbol,
+        name: currencyInfo.name,
+        code: currencyInfo.code
+      });
+
+      // Create PDF using the MOST BASIC configuration to avoid ALL encoding issues
+      const downloadPdf = new jsPDF({
+        orientation: 'p',
+        unit: 'mm',
+        format: 'a4'
+        // Remove ALL optional configuration that might cause issues
+      });
+      
+      // Use ONLY the most basic font without any variations that might trigger Unicode
+      downloadPdf.setFont('helvetica');
+      
+      let yPos = 15;
+      const leftMargin = 15;
+      const rightMargin = 195;
+      const pageWidth = 210;
+      
+      // Modern Header Section
+      downloadPdf.setFillColor(37, 99, 235);
+      downloadPdf.rect(0, 0, pageWidth, 25, 'F');
+      
+      // Invoice title - smaller and more elegant
+      downloadPdf.setFontSize(16);
+      downloadPdf.setTextColor(255, 255, 255);
+      downloadPdf.setFont('helvetica', 'bold');
+      downloadPdf.text('Invoice', leftMargin, 12);
+      
+      // Invoice number - right aligned
+      downloadPdf.setFontSize(10);
+      downloadPdf.setFont('helvetica', 'normal');
+      downloadPdf.text('Invoice #' + String(fullInvoice.invoice_number), rightMargin, 12, { align: 'right' });
+      
+      // Date information in header
+      downloadPdf.setFontSize(8);
+      downloadPdf.text('Date: ' + String(new Date(fullInvoice.invoice_date).toLocaleDateString()), rightMargin, 18, { align: 'right' });
+      downloadPdf.text('Due: ' + String(fullInvoice.due_date ? new Date(fullInvoice.due_date).toLocaleDateString() : 'N/A'), rightMargin, 22, { align: 'right' });
+      
+      yPos = 35;
+      
+      // Company and Customer Information Section - Two columns
+      downloadPdf.setTextColor(0, 0, 0);
+      
+      // FROM Section (Left Column)
+      downloadPdf.setFontSize(9);
+      downloadPdf.setFont('helvetica', 'bold');
+      downloadPdf.text('From:', leftMargin, yPos);
+      
+      yPos += 5;
+      downloadPdf.setFontSize(11);
+      downloadPdf.setFont('helvetica', 'bold');
+      downloadPdf.text(company.company_name, leftMargin, yPos);
+      
+      yPos += 4;
+      downloadPdf.setFontSize(8);
+      downloadPdf.setFont('helvetica', 'normal');
+      downloadPdf.setTextColor(60, 60, 60);
+      
+      if (company.legal_name && company.legal_name !== company.company_name) {
+        downloadPdf.text(company.legal_name, leftMargin, yPos);
+        yPos += 4;
+      }
+      
+      if (company.address_line1) {
+        const address1Lines = downloadPdf.splitTextToSize(company.address_line1, 85);
+        downloadPdf.text(address1Lines, leftMargin, yPos);
+        yPos += address1Lines.length * 4;
+      }
+      
+      if (company.address_line2) {
+        const address2Lines = downloadPdf.splitTextToSize(company.address_line2, 85);
+        downloadPdf.text(address2Lines, leftMargin, yPos);
+        yPos += address2Lines.length * 4;
+      }
+      
+      const companyLocation = [company.city, company.state, company.postal_code].filter(Boolean).join(', ');
+      if (companyLocation) {
+        const locationLines = downloadPdf.splitTextToSize(companyLocation, 85);
+        downloadPdf.text(locationLines, leftMargin, yPos);
+        yPos += locationLines.length * 4;
+      }
+      
+      if (company.email) {
+        downloadPdf.text('Email: ' + String(company.email), leftMargin, yPos);
+        yPos += 4;
+      }
+      
+      if (company.phone) {
+        downloadPdf.text('Phone: ' + String(company.phone), leftMargin, yPos);
+        yPos += 4;
+      }
+      
+      if (company.gstin) {
+        downloadPdf.text('GSTIN: ' + String(company.gstin), leftMargin, yPos);
+        yPos += 4;
+      }
+      
+      if (company.pan) {
+        downloadPdf.text('PAN: ' + String(company.pan), leftMargin, yPos);
+        yPos += 4;
+      }
+      
+      // BILL TO Section (Right Column)
+      let billToYPos = 35;
+      const billToX = 110;
+      
+      downloadPdf.setTextColor(0, 0, 0);
+      downloadPdf.setFontSize(9);
+      downloadPdf.setFont('helvetica', 'bold');
+      downloadPdf.text('Bill To:', billToX, billToYPos);
+      
+      billToYPos += 5;
+      downloadPdf.setFontSize(11);
+      downloadPdf.setFont('helvetica', 'bold');
+      downloadPdf.setTextColor(37, 99, 235);
+      downloadPdf.text(customer.company_name || customer.contact_person || 'N/A', billToX, billToYPos);
+      
+      billToYPos += 4;
+      downloadPdf.setFontSize(8);
+      downloadPdf.setFont('helvetica', 'normal');
+      downloadPdf.setTextColor(60, 60, 60);
+      
+      if (customer.contact_person && customer.company_name) {
+        downloadPdf.text('Attn: ' + String(customer.contact_person), billToX, billToYPos);
+        billToYPos += 4;
+      }
+      
+      if (customer.address_line1) {
+        const address1Lines = downloadPdf.splitTextToSize(customer.address_line1, 85);
+        downloadPdf.text(address1Lines, billToX, billToYPos);
+        billToYPos += address1Lines.length * 4;
+      }
+      
+      if (customer.address_line2) {
+        const address2Lines = downloadPdf.splitTextToSize(customer.address_line2, 85);
+        downloadPdf.text(address2Lines, billToX, billToYPos);
+        billToYPos += address2Lines.length * 4;
+      }
+      
+      const customerLocation = [customer.city, customer.state, customer.postal_code].filter(Boolean).join(', ');
+      if (customerLocation) {
+        const locationLines = downloadPdf.splitTextToSize(customerLocation, 85);
+        downloadPdf.text(locationLines, billToX, billToYPos);
+        billToYPos += locationLines.length * 4;
+      }
+      
+      if (customer.email) {
+        downloadPdf.text('Email: ' + String(customer.email), billToX, billToYPos);
+        billToYPos += 4;
+      }
+      
+      if (customer.phone) {
+        downloadPdf.text('Phone: ' + String(customer.phone), billToX, billToYPos);
+        billToYPos += 4;
+      }
+      
+      if (customer.gstin) {
+        downloadPdf.text('GSTIN: ' + String(customer.gstin), billToX, billToYPos);
+        billToYPos += 4;
+      }
+      
+      // Payment Status Badge - compact and professional
+      const statusX = billToX;
+      billToYPos += 5;
+      const paymentStatusColor = fullInvoice.payment_status === 'paid' ? [34, 197, 94] : [239, 68, 68];
+      downloadPdf.setFillColor(paymentStatusColor[0], paymentStatusColor[1], paymentStatusColor[2]);
+      downloadPdf.roundedRect(statusX, billToYPos - 3, 25, 6, 1, 1, 'F');
+      downloadPdf.setTextColor(255, 255, 255);
+      downloadPdf.setFontSize(7);
+      downloadPdf.setFont('helvetica', 'bold');
+      downloadPdf.text(fullInvoice.payment_status.toUpperCase(), statusX + 12.5, billToYPos + 1, { align: 'center' });
+      
+      // Set yPos to the maximum of both columns
+      yPos = Math.max(yPos, billToYPos) + 10;
+      
+      // Professional Items Table
+      downloadPdf.setFillColor(245, 247, 250);
+      downloadPdf.rect(leftMargin, yPos, 180, 8, 'F');
+      
+      downloadPdf.setTextColor(37, 99, 235);
+      downloadPdf.setFontSize(8);
+      downloadPdf.setFont('helvetica', 'bold');
+      downloadPdf.text('Description', leftMargin + 2, yPos + 5);
+      downloadPdf.text('Qty', leftMargin + 95, yPos + 5, { align: 'center' });
+      downloadPdf.text('Rate', leftMargin + 120, yPos + 5, { align: 'center' });
+      downloadPdf.text('GST%', leftMargin + 145, yPos + 5, { align: 'center' });
+      downloadPdf.text('Amount', leftMargin + 175, yPos + 5, { align: 'right' });
+      
+      yPos += 8;
+      
+      // Table border
+      downloadPdf.setDrawColor(220, 220, 220);
+      downloadPdf.setLineWidth(0.1);
+      
+      // Items with better spacing and typography
+      downloadPdf.setTextColor(0, 0, 0);
+      downloadPdf.setFont('helvetica', 'normal');
+      
+      // Get currency symbol dynamically from customer's country - with safety checks
+      let safeCurrencySymbol = 'Rs.'; // Default safe ASCII fallback
+      
+      // Safely extract currency symbol and convert to ASCII-safe version
+      if (currencyInfo && currencyInfo.code) {
+        const currencyCode = currencyInfo.code.toUpperCase();
+        switch (currencyCode) {
+          case 'INR':
+            safeCurrencySymbol = 'Rs.';
+            break;
+          case 'USD':
+            safeCurrencySymbol = '$';
+            break;
+          case 'EUR':
+            safeCurrencySymbol = '€';
+            break;
+          case 'GBP':
+            safeCurrencySymbol = '£';
+            break;
+          default:
+            safeCurrencySymbol = currencyCode || 'Rs.';
+        }
+      }
+      
+      console.log('� Final currency symbol for PDF:', {
+        customerCountry: selectedCustomer?.country_id || 'Unknown',
+        currencySymbol: safeCurrencySymbol,
+        currencyCode: currencyInfo?.code || 'Unknown',
+        currencyName: currencyInfo?.name || 'Unknown'
+      });
+      
+      // Helper function to format numbers without Unicode issues - alternative approach
+      const formatCleanNumber = (num: number): string => {
+        // Use basic string operations to avoid any Unicode formatting issues
+        const wholeNumber = Math.floor(num);
+        const decimal = Math.round((num - wholeNumber) * 100);
+        const decimalStr = decimal.toString().padStart(2, '0');
+        return wholeNumber.toString() + '.' + decimalStr;
+      };
+      
+      // Helper function to format currency amounts with safe symbols
+      const formatCurrencyForPdf = (amount: number): string => {
+        const cleanAmount = formatCleanNumber(amount);
+        return safeCurrencySymbol + ' ' + cleanAmount;
+      };
+      
+      // Debug: Test number formatting
+      console.log('🧪 Number formatting test with Times font:', {
+        testAmount: 14130,
+        cleanFormatted: formatCleanNumber(14130),
+        withCurrency: formatCurrencyForPdf(14130),
+        basicString: '14130.00',
+        directCurrency: safeCurrencySymbol + ' 14130.00'
+      });
+      
+      // Alternative simple format function for testing
+      const formatSimple = (num: number): string => {
+        return num.toString() + '.00';
+      };
+      
+      console.log('🔧 Simple format test:', {
+        simple14130: formatSimple(14130),
+        basicConcat: '14130' + '.' + '00'
+      });
+      
+      // Debug: Currency symbol in PDF generation
+      console.log('📄 PDF currency formatting test:', {
+        testAmount: 15000.00,
+        currencySymbol: safeCurrencySymbol,
+        formattedPrice: safeCurrencySymbol + ' ' + '15000.00'
+      });
+      
+      if (fullInvoice.invoice_items && fullInvoice.invoice_items.length > 0) {
+        fullInvoice.invoice_items.forEach((item, index) => {
+          const itemSubtotal = item.quantity * item.unit_price;
+          const itemTax = itemSubtotal * item.tax_rate / 100;
+          const itemTotal = itemSubtotal + itemTax;
+          
+          // Calculate row height based on content
+          let rowHeight = 12;
+          if (item.description || item.hsn_code) {
+            rowHeight = 18;
+          }
+          
+          // Check for page break
+          if (yPos + rowHeight > 240) {
+            downloadPdf.addPage();
+            yPos = 20;
+            
+            // Repeat header
+            downloadPdf.setFillColor(245, 247, 250);
+            downloadPdf.rect(leftMargin, yPos, 180, 8, 'F');
+            
+            downloadPdf.setTextColor(37, 99, 235);
+            downloadPdf.setFontSize(8);
+            downloadPdf.setFont('helvetica', 'bold');
+            downloadPdf.text('Description', leftMargin + 2, yPos + 5);
+            downloadPdf.text('Qty', leftMargin + 95, yPos + 5, { align: 'center' });
+            downloadPdf.text('Rate', leftMargin + 120, yPos + 5, { align: 'center' });
+            downloadPdf.text('GST%', leftMargin + 145, yPos + 5, { align: 'center' });
+            downloadPdf.text('Amount', leftMargin + 175, yPos + 5, { align: 'right' });
+            
+            yPos += 8;
+            downloadPdf.setTextColor(0, 0, 0);
+            downloadPdf.setFont('helvetica', 'normal');
+          }
+          
+          // Subtle row separator
+          if (index > 0) {
+            downloadPdf.setDrawColor(240, 240, 240);
+            downloadPdf.line(leftMargin, yPos, leftMargin + 180, yPos);
+          }
+          
+          yPos += 3;
+          
+          // Item name - compact and clean
+          downloadPdf.setFontSize(8);
+          downloadPdf.setFont('helvetica', 'bold');
+          const itemNameLines = downloadPdf.splitTextToSize(item.item_name, 85);
+          downloadPdf.text(itemNameLines, leftMargin + 2, yPos);
+          
+          let descY = yPos;
+          if (itemNameLines.length > 1) {
+            descY += (itemNameLines.length - 1) * 3;
+          }
+          
+          // Description and HSN - smaller and subtle
+          if (item.description || item.hsn_code) {
+            downloadPdf.setFontSize(7);
+            downloadPdf.setFont('helvetica', 'normal');
+            downloadPdf.setTextColor(100, 100, 100);
+            
+            if (item.description) {
+              descY += 4;
+              const descLines = downloadPdf.splitTextToSize(item.description, 85);
+              downloadPdf.text(descLines, leftMargin + 2, descY);
+              if (descLines.length > 1) {
+                descY += (descLines.length - 1) * 3.5;
+              }
+            }
+            
+            if (item.hsn_code) {
+              descY += 4;
+              downloadPdf.text('HSN: ' + String(item.hsn_code), leftMargin + 2, descY);
+            }
+          }
+          
+          // Numeric values - right aligned and consistent (fix spacing issues)
+          downloadPdf.setTextColor(0, 0, 0);
+          downloadPdf.setFontSize(8);
+          downloadPdf.setFont('helvetica', 'normal');
+          
+          // INDIAN CURRENCY FORMATTING - Lakhs/Crores system with currency symbol
+          
+          // SAFE INDIAN CURRENCY FORMATTING - No Unicode issues
+          const formatIndianNumber = (amount: number): string => {
+            const amountStr = amount.toString();
+            let wholePart: string;
+            let decimalPart: string;
+            
+            if (!amountStr.includes('.')) {
+              wholePart = amountStr;
+              decimalPart = '00';
+            } else {
+              const parts = amountStr.split('.');
+              wholePart = parts[0];
+              decimalPart = parts[1];
+              if (decimalPart.length === 1) {
+                decimalPart = decimalPart + '0';
+              } else if (decimalPart.length > 2) {
+                decimalPart = decimalPart.substring(0, 2);
+              }
+            }
+            
+            // Add Indian comma formatting (lakhs/crores)
+            let formattedWhole = '';
+            const wholePartReversed = wholePart.split('').reverse().join('');
+            
+            for (let i = 0; i < wholePartReversed.length; i++) {
+              if (i === 3) {
+                formattedWhole = ',' + formattedWhole;
+              } else if (i > 3 && (i - 3) % 2 === 0) {
+                formattedWhole = ',' + formattedWhole;
+              }
+              formattedWhole = wholePartReversed[i] + formattedWhole;
+            }
+            
+            return formattedWhole + '.' + decimalPart;
+          };
+          
+          const qtyText = item.quantity.toString();
+          const priceText = formatIndianNumber(item.unit_price);
+          const taxText = item.tax_rate.toString() + '%';
+          const totalText = formatIndianNumber(itemTotal);
+          
+          // Test with even simpler strings
+          const testPriceText = '15000.00';
+          const testTotalText = '17700.00';
+          
+          // Log everything for debugging
+          console.log('� PDF DEBUG - Multiple formats:', {
+            qty: qtyText,
+            priceCalculated: priceText,
+            priceTest: testPriceText,
+            tax: taxText,
+            totalCalculated: totalText,
+            totalTest: testTotalText,
+            itemIndex: index,
+            originalAmount: item.unit_price,
+            calculatedCents: Math.round(item.unit_price * 100)
+          });
+          
+          downloadPdf.text(qtyText, leftMargin + 95, yPos, { align: 'center' });
+          
+          // Safe currency format - concatenate symbol with formatted number
+          const priceWithCurrency = safeCurrencySymbol + ' ' + priceText;
+          downloadPdf.text(priceWithCurrency, leftMargin + 120, yPos, { align: 'center' });
+          
+          downloadPdf.text(taxText, leftMargin + 145, yPos, { align: 'center' });
+          downloadPdf.setFont('helvetica', 'bold');
+          
+          // Safe currency format for total
+          const totalWithCurrency = safeCurrencySymbol + ' ' + totalText;
+          downloadPdf.text(totalWithCurrency, leftMargin + 175, yPos, { align: 'right' });
+          
+          yPos += rowHeight - 3;
+        });
+      } else {
+        downloadPdf.setTextColor(150, 150, 150);
+        downloadPdf.setFontSize(8);
+        downloadPdf.text('No items found', leftMargin + 90, yPos + 10, { align: 'center' });
+        yPos += 20;
+      }
+      
+      // Table bottom border
+      downloadPdf.setDrawColor(200, 200, 200);
+      downloadPdf.setLineWidth(0.3);
+      downloadPdf.line(leftMargin, yPos, leftMargin + 180, yPos);
+      
+      yPos += 10;
+      
+      // Professional Totals Section - compact and right-aligned
+      const totalsStartX = 140;
+      const totalsWidth = 55;
+      
+      // Clean totals box
+      downloadPdf.setFillColor(250, 251, 252);
+      downloadPdf.rect(totalsStartX, yPos - 3, totalsWidth, 25, 'F');
+      downloadPdf.setDrawColor(225, 229, 235);
+      downloadPdf.setLineWidth(0.2);
+      downloadPdf.rect(totalsStartX, yPos - 3, totalsWidth, 25);
+      
+      downloadPdf.setTextColor(60, 60, 60);
+      downloadPdf.setFontSize(8);
+      downloadPdf.setFont('helvetica', 'normal');
+      
+      // SAFE INDIAN NUMBER FORMATTING - No currency symbol concatenation
+      const formatIndianNumber = (amount: number): string => {
+        const amountStr = amount.toString();
+        let wholePart: string;
+        let decimalPart: string;
+        
+        if (!amountStr.includes('.')) {
+          wholePart = amountStr;
+          decimalPart = '00';
+        } else {
+          const parts = amountStr.split('.');
+          wholePart = parts[0];
+          decimalPart = parts[1];
+          if (decimalPart.length === 1) {
+            decimalPart = decimalPart + '0';
+          } else if (decimalPart.length > 2) {
+            decimalPart = decimalPart.substring(0, 2);
+          }
+        }
+        
+        // Add Indian comma formatting (lakhs/crores)
+        let formattedWhole = '';
+        const wholePartReversed = wholePart.split('').reverse().join('');
+        
+        for (let i = 0; i < wholePartReversed.length; i++) {
+          if (i === 3) {
+            formattedWhole = ',' + formattedWhole;
+          } else if (i > 3 && (i - 3) % 2 === 0) {
+            formattedWhole = ',' + formattedWhole;
+          }
+          formattedWhole = wholePartReversed[i] + formattedWhole;
+        }
+        
+        return formattedWhole + '.' + decimalPart;
+      };
+      
+      // Format the totals with Indian number formatting (no currency concatenation)
+      const subtotalText = formatIndianNumber(subtotal);
+      const taxAmountText = formatIndianNumber(totalTax);  
+      const finalTotalText = formatIndianNumber(total);
+      
+      // Subtotal - safe currency concatenation
+      downloadPdf.text('Subtotal:', totalsStartX + 3, yPos + 2);
+      downloadPdf.setFont('helvetica', 'bold');
+      const subtotalWithCurrency = safeCurrencySymbol + ' ' + subtotalText;
+      downloadPdf.text(subtotalWithCurrency, totalsStartX + totalsWidth - 3, yPos + 2, { align: 'right' });
+      
+      yPos += 6;
+      downloadPdf.setFont('helvetica', 'normal');
+      downloadPdf.text('GST Amount:', totalsStartX + 3, yPos + 2);
+      downloadPdf.setFont('helvetica', 'bold');
+      const taxWithCurrency = safeCurrencySymbol + ' ' + taxAmountText;
+      downloadPdf.text(taxWithCurrency, totalsStartX + totalsWidth - 3, yPos + 2, { align: 'right' });
+      
+      // Total line - elegant
+      yPos += 6;
+      downloadPdf.setDrawColor(37, 99, 235);
+      downloadPdf.setLineWidth(0.3);
+      downloadPdf.line(totalsStartX + 3, yPos, totalsStartX + totalsWidth - 3, yPos);
+      
+      yPos += 6;
+      downloadPdf.setFontSize(9);
+      downloadPdf.setFont('helvetica', 'bold');
+      downloadPdf.setTextColor(37, 99, 235);
+      downloadPdf.text('Total:', totalsStartX + 3, yPos + 2);
+      const finalTotalWithCurrency = safeCurrencySymbol + ' ' + finalTotalText;
+      downloadPdf.text(finalTotalWithCurrency, totalsStartX + totalsWidth - 3, yPos + 2, { align: 'right' });
+      
+      yPos += 8;
+      
+      // Amount in Words - positioned directly below totals
+      const amountInWords = formatAmountInWords(total, currencyInfo.name);
+      
+      downloadPdf.setTextColor(37, 99, 235);
+      downloadPdf.setFontSize(9);
+      downloadPdf.setFont('helvetica', 'bold');
+      downloadPdf.text('Amount in Words', totalsStartX, yPos);
+      
+      yPos += 5;
+      downloadPdf.setFontSize(7);
+      downloadPdf.setFont('helvetica', 'italic');
+      downloadPdf.setTextColor(60, 60, 60);
+      const amountLines = downloadPdf.splitTextToSize(amountInWords, totalsWidth);
+      downloadPdf.text(amountLines, totalsStartX, yPos);
+      
+      yPos += amountLines.length * 3 + 8;
+      
+      // Banking Information - left side
+      const leftSectionStart = leftMargin;
+      
+      if (company.bank_name || company.account_number || company.ifsc_code) {
+        downloadPdf.setTextColor(37, 99, 235);
+        downloadPdf.setFontSize(9);
+        downloadPdf.setFont('helvetica', 'bold');
+        downloadPdf.text('Banking Details', leftSectionStart, yPos);
+        
+        yPos += 5;
+        downloadPdf.setFillColor(248, 250, 252);
+        const bankingBoxHeight = 20;
+        const leftColWidth = 85;
+        downloadPdf.rect(leftSectionStart, yPos - 2, leftColWidth, bankingBoxHeight, 'F');
+        downloadPdf.setDrawColor(225, 229, 235);
+        downloadPdf.setLineWidth(0.2);
+        downloadPdf.rect(leftSectionStart, yPos - 2, leftColWidth, bankingBoxHeight);
+        
+        downloadPdf.setFontSize(7);
+        downloadPdf.setTextColor(60, 60, 60);
+        
+        let bankingYPos = yPos + 2;
+        
+        if (company.bank_name) {
+          downloadPdf.setFont('helvetica', 'bold');
+          downloadPdf.text('Bank:', leftSectionStart + 2, bankingYPos);
+          downloadPdf.setFont('helvetica', 'normal');
+          downloadPdf.text(company.bank_name, leftSectionStart + 15, bankingYPos);
+          bankingYPos += 4;
+        }
+        
+        if (company.account_number) {
+          downloadPdf.setFont('helvetica', 'bold');
+          downloadPdf.text('A/C:', leftSectionStart + 2, bankingYPos);
+          downloadPdf.setFont('helvetica', 'normal');
+          downloadPdf.text(company.account_number, leftSectionStart + 15, bankingYPos);
+          bankingYPos += 4;
+        }
+        
+        if (company.ifsc_code) {
+          downloadPdf.setFont('helvetica', 'bold');
+          downloadPdf.text('IFSC:', leftSectionStart + 2, bankingYPos);
+          downloadPdf.setFont('helvetica', 'normal');
+          downloadPdf.text(company.ifsc_code, leftSectionStart + 15, bankingYPos);
+        }
+        
+        yPos += 25;
+      }
+      
+      // Notes Section - compact and clean
+      if (fullInvoice.notes) {
+        downloadPdf.setTextColor(37, 99, 235);
+        downloadPdf.setFontSize(9);
+        downloadPdf.setFont('helvetica', 'bold');
+        downloadPdf.text('Notes', leftMargin, yPos);
+        
+        yPos += 6;
+        downloadPdf.setFontSize(8);
+        downloadPdf.setFont('helvetica', 'normal');
+        downloadPdf.setTextColor(60, 60, 60);
+        const notesLines = downloadPdf.splitTextToSize(fullInvoice.notes, 180);
+        downloadPdf.text(notesLines, leftMargin, yPos);
+        yPos += notesLines.length * 4 + 8;
+      }
+      
+      // Terms & Conditions - compact and clean
+      if (fullInvoice.terms_conditions) {
+        downloadPdf.setTextColor(37, 99, 235);
+        downloadPdf.setFontSize(9);
+        downloadPdf.setFont('helvetica', 'bold');
+        downloadPdf.text('Terms & Conditions', leftMargin, yPos);
+        
+        yPos += 6;
+        downloadPdf.setFontSize(8);
+        downloadPdf.setFont('helvetica', 'normal');
+        downloadPdf.setTextColor(60, 60, 60);
+        const termsLines = downloadPdf.splitTextToSize(fullInvoice.terms_conditions, 180);
+        downloadPdf.text(termsLines, leftMargin, yPos);
+        yPos += termsLines.length * 4 + 12;
+      }
+      
+      // Professional Footer
+      if (yPos > 270) {
+        downloadPdf.addPage();
+        yPos = 20;
+      }
+      
+      yPos = Math.max(yPos, 275);
+      downloadPdf.setDrawColor(240, 240, 240);
+      downloadPdf.setLineWidth(0.2);
+      downloadPdf.line(leftMargin, yPos, rightMargin, yPos);
+      
+      yPos += 5;
+      downloadPdf.setTextColor(37, 99, 235);
+      downloadPdf.setFontSize(9);
+      downloadPdf.setFont('helvetica', 'bold');
+      downloadPdf.text('Thank you for your business!', 105, yPos, { align: 'center' });
+      
+      yPos += 4;
+      downloadPdf.setTextColor(120, 120, 120);
+      downloadPdf.setFontSize(7);
+      downloadPdf.setFont('helvetica', 'normal');
+      downloadPdf.text('This is a computer-generated invoice and does not require a signature.', 105, yPos, { align: 'center' });
+      
+      // Save with descriptive filename
+      const downloadFilename = `Invoice-${fullInvoice.invoice_number}-${customer.company_name || customer.contact_person || 'Customer'}.pdf`;
+      downloadPdf.save(downloadFilename.replace(/[^a-zA-Z0-9.-]/g, '_')); // Clean filename
+      
+      showSuccess(`Invoice ${fullInvoice.invoice_number} downloaded successfully!`);
+    } catch (error) {
+      console.error('Failed to download invoice:', error);
+      showError(`Failed to download invoice: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  };
+
+  // Helper function to ensure customers are loaded
+  const ensureCustomersLoaded = async () => {
+    if (customers.length === 0) {
+      try {
+        const customersData = await invoiceService.getCustomers({}, 1, 1000);
+        setCustomers(customersData.data || []);
+        return customersData.data || [];
+      } catch (error) {
+        console.error('Failed to load customers:', error);
+        throw new Error('Failed to load customer data');
+      }
+    }
+    return customers;
+  };
+
+  const handleEmailInvoice = async (invoice: Invoice) => {
+    try {
+      showInfo('📧 Preparing to send invoice email...');
+      
+      // Ensure customers are loaded
+      let currentCustomers = customers;
+      if (customers.length === 0) {
+        showInfo('🔄 Loading customer data...');
+        try {
+          currentCustomers = await ensureCustomersLoaded();
+          if (currentCustomers.length === 0) {
+            showError('No customers found in database. Please add customers first.');
+            return;
+          }
+        } catch (customerLoadError) {
+          console.error('Failed to load customers:', customerLoadError);
+          showError('Failed to load customer data. Please refresh the page and try again.');
+          return;
+        }
+      }
+      
+      // Find customer
+      const customer = currentCustomers.find(c => c.id === invoice.customer_id);
+      
+      if (!customer) {
+        showError(`Cannot send email: Customer not found (ID: ${invoice.customer_id}). Please refresh the page and try again.`);
+        return;
+      }
+
+      // Log customer data for debugging
+      console.log('📋 Found customer for email:', {
+        id: customer.id,
+        company_name: customer.company_name,
+        contact_person: customer.contact_person,
+        email: customer.email
+      });
+
+      // Check if customer has email
+      if (!customer.email || customer.email.trim() === '') {
+        const customerName = customer.company_name || customer.contact_person || `Customer ID: ${customer.id}`;
+        showError(`Cannot send email: "${customerName}" does not have an email address. Please edit the customer profile and add an email address first.`);
+        return;
+      }
+
+      // Validate email format
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(customer.email)) {
+        showError(`Cannot send email: Customer email "${customer.email}" is not valid. Please update the customer's email address.`);
+        return;
+      }
+
+      // Get company settings for email content
+      const company = companySettings.find(c => c.is_default) || companySettings[0];
+      
+      if (!company) {
+        showError('Cannot send email: No company settings found. Please go to Settings tab and configure your company information first, then try again.');
+        // Optionally switch to settings tab automatically
+        setActiveTab('settings');
+        return;
+      }
+
+      showInfo('📄 Generating PDF attachment...');
+
+      // Load full invoice details first
+      const fullInvoice = await invoiceService.getInvoiceById(invoice.id);
+      if (!fullInvoice) {
+        showError('Invoice not found');
+        return;
+      }
+
+      // Generate high-quality PDF with native jsPDF (no canvas/HTML conversion needed)
+      const subtotal = fullInvoice.invoice_items?.reduce((sum: number, item: any) => sum + (item.quantity * item.unit_price), 0) || 0;
+      const totalTax = fullInvoice.invoice_items?.reduce((sum: number, item: any) => sum + (item.quantity * item.unit_price * item.tax_rate / 100), 0) || 0;
+      const total = subtotal + totalTax;
+
+      // Create PDF directly with jsPDF for crisp text and small file size
+      const emailPdf = new jsPDF('p', 'mm', 'a4');
+      const pageWidth = emailPdf.internal.pageSize.getWidth();
+      const pageHeight = emailPdf.internal.pageSize.getHeight();
+      let yPosition = 20;
+
+      // Helper function to add text with auto-wrap
+      const addText = (text: string, x: number, y: number, maxWidth?: number, options?: any) => {
+        emailPdf.setFont(options?.font || 'helvetica', options?.style || 'normal');
+        emailPdf.setFontSize(options?.fontSize || 10);
+        emailPdf.setTextColor(options?.color || '#000000');
+        
+        if (maxWidth) {
+          const lines = emailPdf.splitTextToSize(text, maxWidth);
+          emailPdf.text(lines, x, y);
+          return y + (lines.length * (options?.fontSize || 10) * 0.5);
+        } else {
+          emailPdf.text(text, x, y);
+          return y + ((options?.fontSize || 10) * 0.5);
+        }
+      };
+
+      // Header Section with blue background
+      emailPdf.setFillColor(37, 99, 235);
+      emailPdf.rect(0, 0, pageWidth, 50, 'F');
+      
+      // Company Name (White text on blue)
+      emailPdf.setFont('helvetica', 'bold');
+      emailPdf.setFontSize(24);
+      emailPdf.setTextColor(255, 255, 255);
+      emailPdf.text(company.company_name, 20, 25);
+      
+      // Invoice Title
+      emailPdf.setFont('helvetica', 'bold');
+      emailPdf.setFontSize(32);
+      emailPdf.setTextColor(255, 255, 255);
+      emailPdf.text('INVOICE', pageWidth - 80, 25);
+      
+      // Invoice Number
+      emailPdf.setFont('helvetica', 'normal');
+      emailPdf.setFontSize(14);
+      emailPdf.text(`#${fullInvoice.invoice_number}`, pageWidth - 80, 35);
+      
+      // Reset text color
+      emailPdf.setTextColor(0, 0, 0);
+      yPosition = 60;
+
+      // Company Details (Left side)
+      emailPdf.setFont('helvetica', 'bold');
+      emailPdf.setFontSize(12);
+      emailPdf.text('From:', 20, yPosition);
+      
+      yPosition += 8;
+      emailPdf.setFont('helvetica', 'normal');
+      emailPdf.setFontSize(10);
+      
+      if (company.legal_name && company.legal_name !== company.company_name) {
+        yPosition = addText(company.legal_name, 20, yPosition, 80, { fontSize: 9, color: '#666666' });
+      }
+      
+      if (company.address_line1) {
+        yPosition = addText(company.address_line1, 20, yPosition, 80);
+      }
+      if (company.address_line2) {
+        yPosition = addText(company.address_line2, 20, yPosition, 80);
+      }
+      
+      const companyLocation = [company.city, company.state, company.postal_code].filter(Boolean).join(', ');
+      if (companyLocation) {
+        yPosition = addText(companyLocation, 20, yPosition, 80);
+      }
+      
+      if (company.email) {
+        yPosition = addText(`Email: ${company.email}`, 20, yPosition, 80);
+      }
+      if (company.phone) {
+        yPosition = addText(`Phone: ${company.phone}`, 20, yPosition, 80);
+      }
+      
+      // Invoice Details (Right side)
+      let rightYPosition = 60;
+      
+      // Date Information
+      emailPdf.setFont('helvetica', 'bold');
+      emailPdf.setFontSize(10);
+      emailPdf.text('Invoice Date:', pageWidth - 80, rightYPosition);
+      emailPdf.setFont('helvetica', 'normal');
+      emailPdf.text(new Date(fullInvoice.invoice_date).toLocaleDateString(), pageWidth - 40, rightYPosition);
+      
+      rightYPosition += 8;
+      emailPdf.setFont('helvetica', 'bold');
+      emailPdf.text('Due Date:', pageWidth - 80, rightYPosition);
+      emailPdf.setFont('helvetica', 'normal');
+      emailPdf.text(fullInvoice.due_date ? new Date(fullInvoice.due_date).toLocaleDateString() : 'N/A', pageWidth - 40, rightYPosition);
+      
+      // Payment Status Badge (ONLY payment status shown as requested)
+      rightYPosition += 15;
+      const paymentStatus = fullInvoice.payment_status?.toLowerCase() || 'unpaid';
+      const statusColor = paymentStatus === 'paid' ? [34, 197, 94] : [239, 68, 68]; // Green for paid, red for unpaid
+      const statusText = paymentStatus.toUpperCase();
+      
+      // Status background
+      emailPdf.setFillColor(statusColor[0], statusColor[1], statusColor[2]);
+      emailPdf.roundedRect(pageWidth - 80, rightYPosition - 5, 35, 10, 2, 2, 'F');
+      
+      // Status text (white)
+      emailPdf.setFont('helvetica', 'bold');
+      emailPdf.setFontSize(9);
+      emailPdf.setTextColor(255, 255, 255);
+      emailPdf.text(statusText, pageWidth - 72, rightYPosition + 1);
+      
+      // Reset text color
+      emailPdf.setTextColor(0, 0, 0);
+
+      // Bill To Section
+      yPosition = Math.max(yPosition, rightYPosition) + 20;
+      
+      emailPdf.setFont('helvetica', 'bold');
+      emailPdf.setFontSize(12);
+      emailPdf.text('Bill To:', 20, yPosition);
+      
+      yPosition += 8;
+      
+      // Customer details
+      emailPdf.setFont('helvetica', 'bold');
+      emailPdf.setFontSize(11);
+      yPosition = addText(customer.company_name || customer.contact_person || 'N/A', 20, yPosition, 80, { fontSize: 11, style: 'bold' });
+      
+      if (customer.contact_person && customer.company_name) {
+        yPosition = addText(`Attn: ${customer.contact_person}`, 20, yPosition, 80, { fontSize: 10, color: '#666666' });
+      }
+      
+      emailPdf.setFont('helvetica', 'normal');
+      emailPdf.setFontSize(10);
+      
+      if (customer.address_line1) {
+        yPosition = addText(customer.address_line1, 20, yPosition, 80);
+      }
+      if (customer.address_line2) {
+        yPosition = addText(customer.address_line2, 20, yPosition, 80);
+      }
+      
+      const customerLocation = [customer.city, customer.state, customer.postal_code].filter(Boolean).join(', ');
+      if (customerLocation) {
+        yPosition = addText(customerLocation, 20, yPosition, 80);
+      }
+      
+      if (customer.email) {
+        yPosition = addText(`Email: ${customer.email}`, 20, yPosition, 80);
+      }
+      if (customer.phone) {
+        yPosition = addText(`Phone: ${customer.phone}`, 20, yPosition, 80);
+      }
+      if (customer.gstin) {
+        yPosition = addText(`GSTIN: ${customer.gstin}`, 20, yPosition, 80, { fontSize: 9, font: 'courier' });
+      }
+
+      // Items Table Header
+      yPosition += 15;
+      const tableStartY = yPosition;
+      
+      // Table header background
+      emailPdf.setFillColor(37, 99, 235);
+      emailPdf.rect(20, yPosition - 5, pageWidth - 40, 12, 'F');
+      
+      // Header text (white)
+      emailPdf.setFont('helvetica', 'bold');
+      emailPdf.setFontSize(10);
+      emailPdf.setTextColor(255, 255, 255);
+      
+      const colPositions = [25, 105, 125, 150, 170];
+      const headers = ['Description', 'Qty', 'Rate', 'GST%', 'Amount'];
+      
+      headers.forEach((header, index) => {
+        emailPdf.text(header, colPositions[index], yPosition + 2);
+      });
+      
+      // Reset text color for table content
+      emailPdf.setTextColor(0, 0, 0);
+      yPosition += 12;
+
+      // Table rows
+      fullInvoice.invoice_items?.forEach((item: any, index: number) => {
+        const itemSubtotal = item.quantity * item.unit_price;
+        const itemTax = itemSubtotal * item.tax_rate / 100;
+        const itemTotal = itemSubtotal + itemTax;
+        
+        // Alternate row background
+        if (index % 2 === 0) {
+          emailPdf.setFillColor(248, 249, 250);
+          emailPdf.rect(20, yPosition - 3, pageWidth - 40, 10, 'F');
+        }
+        
+        emailPdf.setFont('helvetica', 'normal');
+        emailPdf.setFontSize(9);
+        
+        // Item name (bold)
+        emailPdf.setFont('helvetica', 'bold');
+        emailPdf.text(item.item_name, colPositions[0], yPosition + 2);
+        
+        // Description and HSN (smaller, gray)
+        let descriptionY = yPosition + 2;
+        if (item.description) {
+          descriptionY += 4;
+          emailPdf.setFont('helvetica', 'normal');
+          emailPdf.setFontSize(8);
+          emailPdf.setTextColor(107, 114, 128);
+          const descLines = emailPdf.splitTextToSize(item.description, 75);
+          emailPdf.text(descLines, colPositions[0], descriptionY);
+          descriptionY += descLines.length * 3;
+        }
+        
+        if (item.hsn_code) {
+          emailPdf.setFont('helvetica', 'normal');
+          emailPdf.setFontSize(7);
+          emailPdf.setTextColor(156, 163, 175);
+          emailPdf.text(`HSN: ${item.hsn_code}`, colPositions[0], descriptionY + 3);
+        }
+        
+        // Reset color for numbers
+        emailPdf.setTextColor(0, 0, 0);
+        emailPdf.setFont('helvetica', 'normal');
+        emailPdf.setFontSize(9);
+        
+        // Quantity
+        emailPdf.text(`${item.quantity} ${item.unit || ''}`, colPositions[1], yPosition + 2);
+        
+        // Rate
+        emailPdf.text(`₹${item.unit_price.toFixed(2)}`, colPositions[2], yPosition + 2);
+        
+        // Tax Rate
+        emailPdf.text(`${item.tax_rate.toFixed(1)}%`, colPositions[3], yPosition + 2);
+        
+        // Amount (bold)
+        emailPdf.setFont('helvetica', 'bold');
+        emailPdf.text(`₹${itemTotal.toFixed(2)}`, colPositions[4], yPosition + 2);
+        
+        yPosition += Math.max(10, (item.description ? 15 : 10));
+      });
+
+      // Table border
+      emailPdf.setDrawColor(229, 231, 235);
+      emailPdf.rect(20, tableStartY - 5, pageWidth - 40, yPosition - tableStartY + 5);
+
+      // Totals section
+      yPosition += 10;
+      const totalsStartX = pageWidth - 70;
+      
+      // Totals background
+      emailPdf.setFillColor(248, 249, 250);
+      emailPdf.rect(totalsStartX - 10, yPosition - 5, 60, 30, 'F');
+      
+      emailPdf.setFont('helvetica', 'normal');
+      emailPdf.setFontSize(10);
+      
+      // Subtotal
+      emailPdf.text('Subtotal:', totalsStartX, yPosition);
+      emailPdf.text(`₹${subtotal.toFixed(2)}`, totalsStartX + 35, yPosition);
+      
+      yPosition += 7;
+      
+      // GST
+      emailPdf.text('GST Amount:', totalsStartX, yPosition);
+      emailPdf.text(`₹${totalTax.toFixed(2)}`, totalsStartX + 35, yPosition);
+      
+      yPosition += 10;
+      
+      // Total (bold and larger)
+      emailPdf.setFont('helvetica', 'bold');
+      emailPdf.setFontSize(12);
+      emailPdf.setTextColor(37, 99, 235);
+      emailPdf.text('TOTAL:', totalsStartX, yPosition);
+      emailPdf.text(`₹${total.toFixed(2)}`, totalsStartX + 35, yPosition);
+      
+      // Reset color
+      emailPdf.setTextColor(0, 0, 0);
+
+      // Notes and Terms
+      yPosition += 20;
+      
+      if (fullInvoice.notes) {
+        emailPdf.setFont('helvetica', 'bold');
+        emailPdf.setFontSize(10);
+        emailPdf.text('Notes:', 20, yPosition);
+        yPosition += 6;
+        
+        emailPdf.setFont('helvetica', 'normal');
+        emailPdf.setFontSize(9);
+        const noteLines = emailPdf.splitTextToSize(fullInvoice.notes, pageWidth - 40);
+        emailPdf.text(noteLines, 20, yPosition);
+        yPosition += noteLines.length * 4 + 5;
+      }
+      
+      if (fullInvoice.terms_conditions) {
+        emailPdf.setFont('helvetica', 'bold');
+        emailPdf.setFontSize(10);
+        emailPdf.text('Terms & Conditions:', 20, yPosition);
+        yPosition += 6;
+        
+        emailPdf.setFont('helvetica', 'normal');
+        emailPdf.setFontSize(9);
+        const termLines = emailPdf.splitTextToSize(fullInvoice.terms_conditions, pageWidth - 40);
+        emailPdf.text(termLines, 20, yPosition);
+        yPosition += termLines.length * 4;
+      }
+
+      // Footer
+      yPosition = pageHeight - 30;
+      emailPdf.setDrawColor(229, 231, 235);
+      emailPdf.line(20, yPosition, pageWidth - 20, yPosition);
+      
+      yPosition += 8;
+      emailPdf.setFont('helvetica', 'bold');
+      emailPdf.setFontSize(10);
+      emailPdf.setTextColor(37, 99, 235);
+      emailPdf.text('Thank you for your business!', 20, yPosition);
+      
+      yPosition += 6;
+      emailPdf.setFont('helvetica', 'normal');
+      emailPdf.setFontSize(8);
+      emailPdf.setTextColor(107, 114, 128);
+      emailPdf.text('This is a computer-generated invoice and does not require a signature.', 20, yPosition);
+
+      // Get PDF as base64 string for email attachment
+      const emailPdfBase64 = emailPdf.output('datauristring').split(',')[1]; // Remove data:application/pdf;base64, prefix
+      const emailFilename = `Invoice-${fullInvoice.invoice_number}-${customer.company_name || customer.contact_person || 'Customer'}.pdf`;
+
+      // Check PDF size (much smaller now with native PDF generation)
+      const emailPdfSizeKB = (emailPdfBase64.length * 3) / 4 / 1024; // Approximate size in KB
+      console.log(`📄 Generated crisp PDF size: ${emailPdfSizeKB.toFixed(2)} KB`);
+      
+      if (emailPdfSizeKB > 25000) { // 25MB limit (very unlikely now with native PDF)
+        showError(`❌ PDF file too large (${(emailPdfSizeKB/1024).toFixed(1)}MB). Maximum size is 25MB.`);
+        return;
+      }
+
+      showInfo('📧 Generating email content...');
+
+      // Prepare email content
+      const emailSubject = `Invoice ${invoice.invoice_number} from ${company.company_name}`;
+      const emailHtml = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <title>Invoice ${invoice.invoice_number}</title>
+            <style>
+                body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; }
+                .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+                .header { background: linear-gradient(135deg, #2563eb, #1d4ed8); color: white; padding: 30px 20px; border-radius: 8px; text-align: center; margin-bottom: 30px; }
+                .content { background: #ffffff; padding: 25px; border: 1px solid #e5e7eb; border-radius: 8px; margin-bottom: 20px; }
+                .invoice-details { background: #f8f9fa; padding: 20px; border-radius: 6px; margin: 20px 0; }
+                .company-info { background: #f0f9ff; padding: 15px; border-radius: 6px; margin: 20px 0; border-left: 4px solid #2563eb; }
+                .footer { text-align: center; padding: 20px; color: #6b7280; font-size: 12px; border-top: 1px solid #e5e7eb; }
+                .btn { display: inline-block; padding: 12px 24px; background: #2563eb; color: white; text-decoration: none; border-radius: 6px; font-weight: 600; }
+                .amount { font-size: 24px; font-weight: bold; color: #2563eb; }
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <h1 style="margin: 0; font-size: 28px;">Invoice ${invoice.invoice_number}</h1>
+                    <p style="margin: 10px 0 0 0; opacity: 0.9;">from ${company.company_name}</p>
+                </div>
+                
+                <div class="content">
+                    <p>Dear ${customer.contact_person || 'Valued Customer'},</p>
+                    
+                    <p>Thank you for your business! Please find the details of your invoice below:</p>
+                    
+                    <div class="invoice-details">
+                        <h3 style="margin-top: 0; color: #374151;">Invoice Details</h3>
+                        <p><strong>Invoice Number:</strong> ${invoice.invoice_number}</p>
+                        <p><strong>Invoice Date:</strong> ${new Date(invoice.invoice_date).toLocaleDateString()}</p>
+                        <p><strong>Due Date:</strong> ${invoice.due_date ? new Date(invoice.due_date).toLocaleDateString() : 'N/A'}</p>
+                        <p class="amount"><strong>Total Amount:</strong> ₹${invoice.total_amount.toFixed(2)}</p>
+                    </div>
+                    
+                    ${invoice.notes ? `
+                        <div style="background: #fffbeb; padding: 15px; border-radius: 6px; border-left: 4px solid #f59e0b; margin: 20px 0;">
+                            <h4 style="margin-top: 0; color: #92400e;">Notes:</h4>
+                            <p style="margin-bottom: 0; color: #451a03;">${invoice.notes}</p>
+                        </div>
+                    ` : ''}
+                    
+                    <p>If you have any questions about this invoice, please don't hesitate to contact us.</p>
+                    
+                    <div class="company-info">
+                        <h4 style="margin-top: 0; color: #1e40af;">Contact Information</h4>
+                        <p style="margin: 5px 0;"><strong>${company.company_name}</strong></p>
+                        ${company.email ? `<p style="margin: 5px 0;">Email: ${company.email}</p>` : ''}
+                        ${company.phone ? `<p style="margin: 5px 0;">Phone: ${company.phone}</p>` : ''}
+                        ${company.website ? `<p style="margin: 5px 0;">Website: ${company.website}</p>` : ''}
+                    </div>
+                </div>
+                
+                <div class="footer">
+                    <p>This email was sent from ${company.company_name}'s invoice management system.</p>
+                    <p>Please do not reply to this email. If you need assistance, please contact us using the information above.</p>
+                </div>
+            </div>
+        </body>
+        </html>
+      `;
+
+      const emailText = `
+Dear ${customer.contact_person || 'Valued Customer'},
+
+Thank you for your business! Please find the details of your invoice below:
+
+Invoice Details:
+- Invoice Number: ${invoice.invoice_number}
+- Invoice Date: ${new Date(invoice.invoice_date).toLocaleDateString()}
+- Due Date: ${invoice.due_date ? new Date(invoice.due_date).toLocaleDateString() : 'N/A'}
+- Total Amount: ₹${invoice.total_amount.toFixed(2)}
+
+${invoice.notes ? `Notes: ${invoice.notes}\n\n` : ''}
+
+If you have any questions about this invoice, please don't hesitate to contact us.
+
+Contact Information:
+${company.company_name}
+${company.email ? `Email: ${company.email}` : ''}
+${company.phone ? `Phone: ${company.phone}` : ''}
+${company.website ? `Website: ${company.website}` : ''}
+
+Best regards,
+${company.company_name}
+
+---
+This email was sent from ${company.company_name}'s invoice management system.
+      `;
+
+      showInfo('📤 Sending email to ' + customer.email + '...');
+
+      // Send email using existing email service
+      try {
+        const emailData = {
+          to: customer.email,
+          from: 'support@kdadks.com', // Fixed sender email
+          subject: emailSubject,
+          text: emailText,
+          html: emailHtml,
+          attachment: {
+            filename: emailFilename.replace(/[^a-zA-Z0-9.-]/g, '_'), // Clean filename
+            content: emailPdfBase64
+          }
+        };
+
+        // Use Netlify function for email service
+        const emailEndpoint = '/.netlify/functions/send-email';
+        
+        const response = await fetch(emailEndpoint, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(emailData),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          
+          // Provide specific error messages based on status
+          let errorMessage = `Email service error: ${response.status}`;
+          if (response.status === 401) {
+            errorMessage = 'Email service authentication failed. Please contact support.';
+          } else if (response.status === 500) {
+            errorMessage = 'Email service temporarily unavailable. Please try again later or contact support.';
+          } else if (response.status === 404) {
+            errorMessage = 'Email service not configured. Please contact the administrator.';
+          } else if (errorData.message) {
+            errorMessage = errorData.message;
+          }
+          
+          throw new Error(errorMessage);
+        }
+
+        const result = await response.json();
+        console.log('✅ Email sent successfully:', result);
+
+        // Email sent successfully - update invoice status to 'sent'
+        try {
+          await invoiceService.updateInvoiceStatus(invoice.id, 'sent');
+          
+          // Refresh invoices list to show updated status
+          await loadData();
+          
+          showSuccess(`✅ Email sent successfully! Invoice ${invoice.invoice_number} has been emailed to ${customer.email} and status updated to 'Sent'.`);
+        } catch (statusError) {
+          console.error('Failed to update invoice status:', statusError);
+          showSuccess(`✅ Email sent successfully! Invoice ${invoice.invoice_number} has been emailed to ${customer.email}. (Note: Status update failed - please refresh the page)`);
+        }
+
+      } catch (emailError) {
+        console.error('Email sending failed:', emailError);
+        throw new Error(`Failed to send email: ${emailError instanceof Error ? emailError.message : 'Email service unavailable'}`);
+      }
+
+    } catch (error) {
+      console.error('Failed to email invoice:', error);
+      showError(`❌ Failed to email invoice: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  };
+
+  const handleUpdateInvoiceStatus = async (invoice: Invoice, newStatus: Invoice['status'], newPaymentStatus?: Invoice['payment_status']) => {
+    try {
+      await invoiceService.updateInvoiceStatus(invoice.id, newStatus, newPaymentStatus);
+      showSuccess(`Invoice status updated to ${newStatus}${newPaymentStatus ? ` with payment status ${newPaymentStatus}` : ''}`);
+      await loadData();
+    } catch (error) {
+      console.error('Failed to update invoice status:', error);
+      showError(`Failed to update invoice status: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  };
+
+  const handleMarkAsPaid = async (invoice: Invoice) => {
+    const confirmed = await confirm({
+      title: 'Mark as Paid',
+      message: `Mark invoice "${invoice.invoice_number}" as paid?`,
+      confirmText: 'Mark as Paid',
+      cancelText: 'Cancel',
+      type: 'info'
+    });
+
+    if (confirmed) {
+      await handleUpdateInvoiceStatus(invoice, 'paid', 'paid');
     }
   };
 
@@ -1798,17 +3257,36 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
         }
       }
 
+      // Always load company settings and invoice settings for PDF/email functionality
+      try {
+        const [companyData, invoiceSettingsData] = await Promise.all([
+          invoiceService.getCompanySettings(),
+          invoiceService.getInvoiceSettings()
+        ]);
+        setCompanySettings(companyData);
+        setInvoiceSettings(invoiceSettingsData);
+      } catch (settingsError) {
+        console.warn('Failed to load settings:', settingsError);
+        // Don't block the rest of the data loading
+      }
+
       if (activeTab === 'dashboard') {
-        const [invoicesData, statsData] = await Promise.all([
+        const [invoicesData, statsData, customersData] = await Promise.all([
           invoiceService.getInvoices(filters, currentPage, 10),
-          invoiceService.getInvoiceStats()
+          invoiceService.getInvoiceStats(),
+          invoiceService.getCustomers({}, 1, 1000) // Load all customers for email functionality
         ]);
         setInvoices(invoicesData.data);
+        setCustomers(customersData.data || []); // Ensure customers are available for email
         setTotalPages(invoicesData.total_pages);
         setStats(statsData);
       } else if (activeTab === 'invoices') {
-        const invoicesData = await invoiceService.getInvoices(filters, currentPage, 20);
+        const [invoicesData, customersData] = await Promise.all([
+          invoiceService.getInvoices(filters, currentPage, 20),
+          invoiceService.getCustomers({}, 1, 1000) // Load all customers for email functionality
+        ]);
         setInvoices(invoicesData.data);
+        setCustomers(customersData.data || []); // Ensure customers are available for email
         setTotalPages(invoicesData.total_pages);
       } else if (activeTab === 'customers') {
         console.log('👥 Loading customers with filters:', filters);
@@ -1830,30 +3308,22 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
           setTotalPages(1);
         }
       } else if (activeTab === 'settings') {
-        const [companyData, invoiceSettingsData] = await Promise.all([
-          invoiceService.getCompanySettings(),
-          invoiceService.getInvoiceSettings()
-        ]);
-        setCompanySettings(companyData);
-        setInvoiceSettings(invoiceSettingsData);
+        // Settings are already loaded above, no additional loading needed
       } else if (activeTab === 'create-invoice') {
         // Load all necessary data for creating invoices
         console.log('🔍 Loading data for create invoice tab...');
-        const [customersData, productsData, companyData, termsData] = await Promise.all([
+        const [customersData, productsData, termsData] = await Promise.all([
           invoiceService.getCustomers({}, 1, 1000), // Load all customers
           invoiceService.getProducts({}, 1, 1000),  // Load all products
-          invoiceService.getCompanySettings(),
           invoiceService.getTermsTemplates()
         ]);
         
         console.log('👥 Customers loaded:', customersData.data?.length || 0);
         console.log('📦 Products loaded:', productsData.data?.length || 0);
-        console.log('🏢 Company settings loaded:', companyData?.length || 0);
         console.log('📋 Terms templates loaded:', termsData?.length || 0);
         
         setCustomers(customersData.data || []);
         setProducts(productsData.data || []);
-        setCompanySettings(companyData || []);
         setTermsTemplates(termsData || []);
       }
     } catch (err) {
@@ -1904,7 +3374,7 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
       case 'sent': return 'bg-blue-100 text-blue-800';
       case 'paid': return 'bg-green-100 text-green-800';
       case 'overdue': return 'bg-red-100 text-red-800';
-      case 'cancelled': return 'bg-red-100 text-red-800';
+      case 'cancelled': return 'bg-slate-100 text-slate-600 line-through';
       default: return 'bg-gray-100 text-gray-800';
     }
   };
@@ -2018,7 +3488,7 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
           <h3 className="text-lg font-medium text-gray-900">Recent Invoices</h3>
         </div>
         <div className="overflow-x-auto">
-          {renderInvoiceTable(invoices.slice(0, 5))}
+          {renderRecentInvoicesTable(invoices.slice(0, 5))}
         </div>
       </div>
     </div>
@@ -2053,9 +3523,11 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
       </thead>
       <tbody className="bg-white divide-y divide-gray-200">
         {invoiceList.map((invoice) => (
-          <tr key={invoice.id} className="hover:bg-gray-50">
+          <tr key={invoice.id} className={`hover:bg-gray-50 ${invoice.status === 'cancelled' ? 'opacity-60 bg-gray-50' : ''}`}>
             <td className="px-6 py-4 whitespace-nowrap">
-              <div className="text-sm font-medium text-gray-900">{invoice.invoice_number}</div>
+              <div className={`text-sm font-medium ${invoice.status === 'cancelled' ? 'text-gray-500 line-through' : 'text-gray-900'}`}>
+                {invoice.invoice_number}
+              </div>
             </td>
             <td className="px-6 py-4 whitespace-nowrap">
               <div className="text-sm text-gray-900">
@@ -2084,17 +3556,142 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
             </td>
             <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
               <div className="flex items-center justify-end space-x-2">
-                <button className="text-blue-600 hover:text-blue-900">
+                <button 
+                  onClick={() => handleViewInvoice(invoice)}
+                  className="text-blue-600 hover:text-blue-900"
+                  title="View Invoice"
+                >
                   <Eye className="w-4 h-4" />
                 </button>
-                <button className="text-gray-600 hover:text-gray-900">
-                  <Edit className="w-4 h-4" />
-                </button>
-                <button className="text-green-600 hover:text-green-900">
+                {invoice.status !== 'cancelled' && (
+                  <button 
+                    onClick={() => handleEditInvoice(invoice)}
+                    className="text-gray-600 hover:text-gray-900"
+                    title="Edit Invoice"
+                  >
+                    <Edit className="w-4 h-4" />
+                  </button>
+                )}
+                <button 
+                  onClick={() => handleDownloadInvoice(invoice)}
+                  className="text-green-600 hover:text-green-900"
+                  title="Download Invoice"
+                >
                   <Download className="w-4 h-4" />
                 </button>
-                <button className="text-purple-600 hover:text-purple-900">
+                <button 
+                  onClick={() => handleEmailInvoice(invoice)}
+                  className="text-purple-600 hover:text-purple-900"
+                  title="Email Invoice"
+                >
                   <Mail className="w-4 h-4" />
+                </button>
+                
+                {/* Mark as Paid Button */}
+                {(invoice.status === 'sent' || invoice.status === 'draft') && invoice.payment_status !== 'paid' && (
+                  <button 
+                    onClick={() => handleMarkAsPaid(invoice)}
+                    className="text-green-600 hover:text-green-900"
+                    title="Mark as Paid"
+                  >
+                    <CheckCircle className="w-4 h-4" />
+                  </button>
+                )}
+                
+                {/* Delete Button */}
+                {invoice.status !== 'cancelled' && (
+                  <button 
+                    onClick={() => handleDeleteInvoice(invoice)}
+                    className="text-red-600 hover:text-red-900"
+                    title="Delete Invoice"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+
+  // Separate table for recent invoices with limited actions
+  const renderRecentInvoicesTable = (invoiceList: Invoice[]) => (
+    <table className="min-w-full divide-y divide-gray-200">
+      <thead className="bg-gray-50">
+        <tr>
+          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+            Invoice
+          </th>
+          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+            Customer
+          </th>
+          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+            Date
+          </th>
+          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+            Amount
+          </th>
+          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+            Status
+          </th>
+          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+            Payment
+          </th>
+          <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+            Actions
+          </th>
+        </tr>
+      </thead>
+      <tbody className="bg-white divide-y divide-gray-200">
+        {invoiceList.map((invoice) => (
+          <tr key={invoice.id} className={`hover:bg-gray-50 ${invoice.status === 'cancelled' ? 'opacity-60 bg-gray-50' : ''}`}>
+            <td className="px-6 py-4 whitespace-nowrap">
+              <div className={`text-sm font-medium ${invoice.status === 'cancelled' ? 'text-gray-500 line-through' : 'text-gray-900'}`}>
+                {invoice.invoice_number}
+              </div>
+            </td>
+            <td className="px-6 py-4 whitespace-nowrap">
+              <div className="text-sm text-gray-900">
+                {invoice.customer?.company_name || invoice.customer?.contact_person || 'N/A'}
+              </div>
+            </td>
+            <td className="px-6 py-4 whitespace-nowrap">
+              <div className="text-sm text-gray-900">
+                {new Date(invoice.invoice_date).toLocaleDateString()}
+              </div>
+            </td>
+            <td className="px-6 py-4 whitespace-nowrap">
+              <div className="text-sm font-medium text-gray-900">
+                {formatInvoiceCurrency(invoice.total_amount, invoice.currency_code)}
+              </div>
+            </td>
+            <td className="px-6 py-4 whitespace-nowrap">
+              <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(invoice.status)}`}>
+                {invoice.status}
+              </span>
+            </td>
+            <td className="px-6 py-4 whitespace-nowrap">
+              <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getPaymentStatusColor(invoice.payment_status)}`}>
+                {invoice.payment_status}
+              </span>
+            </td>
+            <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+              <div className="flex items-center justify-end space-x-2">
+                <button 
+                  onClick={() => handleViewInvoice(invoice)}
+                  className="text-blue-600 hover:text-blue-900"
+                  title="View Invoice"
+                >
+                  <Eye className="w-4 h-4" />
+                </button>
+                <button 
+                  onClick={() => handleDownloadInvoice(invoice)}
+                  className="text-green-600 hover:text-green-900"
+                  title="Download Invoice"
+                >
+                  <Download className="w-4 h-4" />
                 </button>
               </div>
             </td>

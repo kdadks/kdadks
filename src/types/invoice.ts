@@ -255,6 +255,17 @@ export interface CreateInvoiceItemData {
   hsn_code?: string;
 }
 
+export interface UpdateInvoiceData {
+  customer_id?: string;
+  invoice_date?: string;
+  due_date?: string;
+  notes?: string;
+  terms_conditions?: string;
+  items?: CreateInvoiceItemData[];
+  status?: Invoice['status'];
+  payment_status?: Invoice['payment_status'];
+}
+
 export interface CreateCustomerData {
   company_name?: string;
   contact_person?: string;

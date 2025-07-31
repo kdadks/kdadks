@@ -575,7 +575,6 @@ class InvoiceService {
     const currentFinancialYear = this.calculateFinancialYear(fyStartMonth, currentDate);
     
     let nextSequentialNumber = settings.current_number;
-    let shouldUpdateSettings = false;
     
     // Check if there are any invoices in the database
     const { count: invoiceCount } = await supabase
@@ -594,14 +593,12 @@ class InvoiceService {
     // If no invoices exist, reset to 1
     if (actualInvoiceCount === 0) {
       nextSequentialNumber = 1;
-      shouldUpdateSettings = true;
       console.log(`🔄 No invoices found in database - resetting sequential number to 1`);
     }
     // Check if we need to reset the counter for new financial year (only if reset_annually is enabled)
     else if (settings.reset_annually && this.isNewFinancialYear(settings.current_financial_year, currentFinancialYear)) {
       // New financial year detected - reset the sequential number
       nextSequentialNumber = 1;
-      shouldUpdateSettings = true;
       console.log(`🔄 New financial year detected: ${settings.current_financial_year} → ${currentFinancialYear}`);
       console.log(`📊 Resetting sequential number from ${settings.current_number} to 1 (Financial Year Start: ${fyStartMonth === 4 ? 'April' : `Month ${fyStartMonth}`})`);
     }
@@ -609,7 +606,6 @@ class InvoiceService {
     else if (actualInvoiceCount > 0 && settings.current_number > actualInvoiceCount + 1) {
       // Settings counter is ahead, sync it to actual count + 1
       nextSequentialNumber = actualInvoiceCount + 1;
-      shouldUpdateSettings = true;
       console.log(`⚠️ Generate: Settings counter (${settings.current_number}) ahead of invoice count (${actualInvoiceCount}), syncing to ${nextSequentialNumber}`);
     }
 
@@ -899,8 +895,45 @@ class InvoiceService {
     return this.getInvoiceById(invoice.id) as Promise<Invoice>;
   }
 
+  async updateInvoice(id: string, invoiceData: Partial<CreateInvoiceData>): Promise<Invoice> {
+    const { data, error } = await supabase
+      .from('invoices')
+      .update({
+        customer_id: invoiceData.customer_id,
+        invoice_date: invoiceData.invoice_date,
+        due_date: invoiceData.due_date,
+        notes: invoiceData.notes,
+        terms_conditions: invoiceData.terms_conditions,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', id)
+      .select(`
+        *,
+        customer:customers(
+          *,
+          country:countries(*)
+        ),
+        company_settings:company_settings(
+          *,
+          country:countries(*)
+        ),
+        invoice_items:invoice_items(
+          *,
+          product:products(*)
+        ),
+        payments:payments(*)
+      `)
+      .single();
+    
+    if (error) throw error;
+    return data;
+  }
+
   async updateInvoiceStatus(id: string, status: Invoice['status'], paymentStatus?: Invoice['payment_status']): Promise<Invoice> {
-    const updateData: { status: Invoice['status']; payment_status?: Invoice['payment_status'] } = { status };
+    const updateData: { status: Invoice['status']; payment_status?: Invoice['payment_status']; updated_at: string } = { 
+      status, 
+      updated_at: new Date().toISOString() 
+    };
     if (paymentStatus) {
       updateData.payment_status = paymentStatus;
     }
@@ -909,11 +942,70 @@ class InvoiceService {
       .from('invoices')
       .update(updateData)
       .eq('id', id)
-      .select('*')
+      .select(`
+        *,
+        customer:customers(
+          *,
+          country:countries(*)
+        ),
+        company_settings:company_settings(
+          *,
+          country:countries(*)
+        ),
+        invoice_items:invoice_items(
+          *,
+          product:products(*)
+        ),
+        payments:payments(*)
+      `)
       .single();
     
     if (error) throw error;
     return data;
+  }
+
+  async deleteInvoice(id: string): Promise<void> {
+    // Soft delete: update status to cancelled instead of hard delete
+    // This preserves data integrity and audit trails
+    const { error } = await supabase
+      .from('invoices')
+      .update({ 
+        status: 'cancelled', 
+        updated_at: new Date().toISOString() 
+      })
+      .eq('id', id);
+    
+    if (error) throw error;
+  }
+
+  async duplicateInvoice(id: string): Promise<Invoice> {
+    // Get the original invoice with all its items
+    const originalInvoice = await this.getInvoiceById(id);
+    if (!originalInvoice) {
+      throw new Error('Invoice not found');
+    }
+
+    // Create new invoice data
+    const newInvoiceData: CreateInvoiceData = {
+      customer_id: originalInvoice.customer_id,
+      invoice_date: new Date().toISOString().split('T')[0],
+      due_date: originalInvoice.due_date || '',
+      notes: originalInvoice.notes || '',
+      terms_conditions: originalInvoice.terms_conditions || '',
+      items: originalInvoice.invoice_items?.map(item => ({
+        product_id: item.product_id,
+        item_name: item.item_name,
+        description: item.description,
+        quantity: item.quantity,
+        unit: item.unit,
+        unit_price: item.unit_price,
+        tax_rate: item.tax_rate,
+        hsn_code: item.hsn_code
+      })) || []
+    };
+
+    // Create the new invoice
+    return await this.createInvoice(newInvoiceData);
   }
 
   // Payments
