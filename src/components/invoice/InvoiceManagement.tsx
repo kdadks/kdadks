@@ -29,6 +29,9 @@ import { simpleAuth } from '../../utils/simpleAuth';
 import { useToast } from '../ui/ToastProvider';
 import ConfirmDialog from '../ui/ConfirmDialog';
 import { useConfirmDialog } from '../../hooks/useConfirmDialog';
+import { CreateInvoice } from './CreateInvoice';
+import { EditInvoice } from './EditInvoice';
+import { getTaxLabel, getTaxRegistrationLabel, validateTaxRegistration, getDefaultTaxRate, getClassificationCodeLabel } from '../../utils/taxUtils';
 import type { Invoice, InvoiceFilters, InvoiceStats, Customer, Product, CompanySettings, InvoiceSettings, Country, CreateProductData, CreateCompanySettingsData, CreateInvoiceSettingsData, CreateCustomerData, CreateInvoiceData, UpdateInvoiceData, CreateInvoiceItemData, TermsTemplate } from '../../types/invoice';
 
 interface InvoiceManagementProps {
@@ -540,11 +543,13 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
       }
     }
     
-    // GSTIN validation
+    // Tax registration validation (GSTIN/VAT Number)
     if ((customerFormData.gstin || '').trim()) {
-      const gstinRegex = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
-      if (!gstinRegex.test(customerFormData.gstin || '')) {
-        errors.push('Please enter a valid GSTIN (15 characters: 22AAAAA0000A1Z5)');
+      const selectedCustomer = customers.find(c => c.id === customerFormData.country_id) || 
+                               { country: countries.find(country => country.id === customerFormData.country_id) } as Customer;
+      const taxValidation = validateTaxRegistration(customerFormData.gstin || '', selectedCustomer);
+      if (!taxValidation.isValid && taxValidation.error) {
+        errors.push(taxValidation.error);
       }
     }
     
@@ -730,6 +735,10 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
     setModalLoading(false);
   };
 
+  const handleShowPreview = () => {
+    setShowInvoicePreview(true);
+  };
+
   const handleInvoiceFormChange = (field: keyof CreateInvoiceData, value: string | CreateInvoiceItemData[]) => {
     if (field === 'customer_id') {
       console.log('👤 Customer selection changed:', {
@@ -781,21 +790,41 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
   };
 
   const addInvoiceItem = () => {
+    console.log('➕ Adding new line item with current state:', {
+      selectedDefaultProduct,
+      globalHsnCode,
+      hasSelectedProduct: !!selectedDefaultProduct,
+      hasGlobalHsn: !!globalHsnCode,
+      currentItems: invoiceFormData.items.length
+    });
+
+    // Get selected customer to determine appropriate tax rate
+    const selectedCustomer = customers.find(c => c.id === invoiceFormData.customer_id);
+    const defaultTaxRate = getDefaultTaxRate(selectedCustomer);
+
+    const newItem = {
+      product_id: selectedDefaultProduct || undefined, // Apply global product_id to new items
+      item_name: '',
+      description: '',
+      quantity: 1,
+      unit: 'pcs',
+      unit_price: 0,
+      tax_rate: defaultTaxRate,
+      hsn_code: globalHsnCode || undefined // Apply global HSN code to new items
+    };
+
+    console.log('📦 New item created with country-specific tax rate:', {
+      ...newItem,
+      customerCountry: selectedCustomer?.country?.name || 'Unknown',
+      taxLabel: getTaxLabel(selectedCustomer)
+    });
+
     setInvoiceFormData(prev => ({
       ...prev,
-      items: [...prev.items, {
-        product_id: selectedDefaultProduct || undefined, // Apply global product_id to new items
-        item_name: '',
-        description: '',
-        quantity: 1,
-        unit: 'pcs',
-        unit_price: 0,
-        tax_rate: 18,
-        hsn_code: globalHsnCode || undefined // Apply global HSN code to new items
-      }]
+      items: [...prev.items, newItem]
     }));
     
-    console.log('➕ Added new line item with global product_id:', {
+    console.log('✅ Added new line item with global product_id:', {
       productId: selectedDefaultProduct || 'None',
       hsnCode: globalHsnCode || 'None',
       totalItems: invoiceFormData.items.length + 1
@@ -992,33 +1021,113 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
     try {
       setModalLoading(true);
       
-      // Validate required fields
-      if (!invoiceFormData.customer_id) {
-        showError('Please select a customer');
+      // Enhanced validation for all required fields
+      console.log('🔍 Starting invoice validation:', {
+        customer_id: invoiceFormData.customer_id,
+        invoice_date: invoiceFormData.invoice_date,
+        items_count: invoiceFormData.items.length
+      });
+      
+      // Validate customer selection
+      if (!invoiceFormData.customer_id || invoiceFormData.customer_id.trim() === '') {
+        showError('Customer is required. Please select a customer from the dropdown.');
         return;
       }
       
-      if (invoiceFormData.items.length === 0 || !invoiceFormData.items[0].item_name || !invoiceFormData.items[0].description) {
-        showError('Please add at least one item with both name and description');
+      // Validate invoice date
+      if (!invoiceFormData.invoice_date || invoiceFormData.invoice_date.trim() === '') {
+        showError('Invoice date is required. Please select an invoice date.');
         return;
       }
       
-      // Validate all items have required fields
+      // Validate invoice date is not in the future (optional business rule)
+      const invoiceDate = new Date(invoiceFormData.invoice_date);
+      const today = new Date();
+      today.setHours(23, 59, 59, 999); // Set to end of day for comparison
+      if (invoiceDate > today) {
+        showError('Invoice date cannot be in the future. Please select a valid date.');
+        return;
+      }
+      
+      // Validate due date if provided
+      if (invoiceFormData.due_date && invoiceFormData.due_date.trim() !== '') {
+        const dueDate = new Date(invoiceFormData.due_date);
+        if (dueDate < invoiceDate) {
+          showError('Due date cannot be earlier than invoice date. Please select a valid due date.');
+          return;
+        }
+      }
+      
+      // Validate at least one line item exists
+      if (!invoiceFormData.items || invoiceFormData.items.length === 0) {
+        showError('At least one line item is required. Please add items to the invoice.');
+        return;
+      }
+      
+      // Count valid items (items with any content)
+      let validItemsCount = 0;
+      let hasCompleteItems = false;
+      
+      // Validate all items have required fields (skip completely empty items)
       for (let i = 0; i < invoiceFormData.items.length; i++) {
         const item = invoiceFormData.items[i];
-        if (!item.item_name || !item.description) {
-          showError(`Item ${i + 1}: Both name and description are required`);
+        
+        // Skip validation for completely empty items (newly added but not filled)
+        // An empty item has: no item_name, no description, quantity=1, unit_price=0
+        // Also check if user has started filling any field
+        const hasAnyContent = item.item_name || item.description || item.quantity !== 1 || item.unit_price !== 0 || (item.unit && item.unit !== 'pcs');
+        
+        if (!hasAnyContent) {
+          console.log(`⏭️ Skipping validation for completely empty item ${i + 1}:`, item);
+          continue; // Skip validation for empty items
+        }
+        
+        validItemsCount++;
+        console.log(`✅ Validating item ${i + 1} with content:`, item);
+        
+        // Validate item name
+        if (!item.item_name || item.item_name.trim() === '') {
+          showError(`Item ${i + 1}: Item name is required. Please enter an item name.`);
           return;
         }
-        if (item.quantity <= 0) {
-          showError(`Item ${i + 1}: Quantity must be greater than 0`);
+        
+        // Validate description
+        if (!item.description || item.description.trim() === '') {
+          showError(`Item ${i + 1}: Description is required. Please enter an item description.`);
           return;
         }
+        
+        // Validate quantity
+        if (!item.quantity || item.quantity <= 0) {
+          showError(`Item ${i + 1}: Quantity must be greater than 0. Please enter a valid quantity.`);
+          return;
+        }
+        
+        // Validate unit price
         if (item.unit_price < 0) {
-          showError(`Item ${i + 1}: Unit price cannot be negative`);
+          showError(`Item ${i + 1}: Unit price cannot be negative. Please enter a valid price.`);
           return;
+        }
+        
+        // Validate tax rate
+        if (item.tax_rate < 0 || item.tax_rate > 100) {
+          showError(`Item ${i + 1}: Tax rate must be between 0% and 100%. Please enter a valid tax rate.`);
+          return;
+        }
+        
+        // Check if this item is complete
+        if (item.item_name && item.description && item.quantity > 0 && item.unit_price >= 0) {
+          hasCompleteItems = true;
         }
       }
+      
+      // Ensure at least one complete item exists
+      if (validItemsCount === 0 || !hasCompleteItems) {
+        showError('At least one complete line item is required. Please fill in item name, description, quantity, and price for at least one item.');
+        return;
+      }
+      
+      console.log(`✅ Validation passed with ${validItemsCount} valid items`);
       
       console.log('💾 Saving invoice with validated data:', {
         totalItems: invoiceFormData.items.length,
@@ -1146,27 +1255,107 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
         showSuccess(`Invoice ${finalInvoiceNumber!} created successfully!`);
         setActiveTab('invoices'); // Switch to invoices tab after creation
       } else if (invoiceModalMode === 'edit' && selectedInvoice) {
-        // For edit mode, update the invoice
-        const updateData: UpdateInvoiceData = {
-          customer_id: invoiceFormData.customer_id,
-          invoice_date: invoiceFormData.invoice_date,
-          due_date: invoiceFormData.due_date,
-          notes: invoiceFormData.notes,
-          terms_conditions: invoiceFormData.terms_conditions
-          // Note: Updating items requires a more complex operation
-          // For now, we only update basic invoice fields
-        };
-        
-        await invoiceService.updateInvoice(selectedInvoice.id, updateData);
-        console.log('✅ Invoice updated successfully');
-        showSuccess(`Invoice ${selectedInvoice.invoice_number} updated successfully!`);
+        // For edit mode, check invoice status to determine action
+        if (selectedInvoice.status === 'draft') {
+          // For draft invoices, update the existing invoice
+          console.log('📝 Updating draft invoice:', selectedInvoice.invoice_number);
+          
+          // Prepare update data with line items - using Partial<CreateInvoiceData> to match service
+          const updateData: Partial<CreateInvoiceData> = {
+            customer_id: invoiceFormData.customer_id,
+            invoice_date: invoiceFormData.invoice_date,
+            due_date: invoiceFormData.due_date,
+            notes: invoiceFormData.notes,
+            terms_conditions: invoiceFormData.terms_conditions,
+            items: validItems // Use the filtered and validated items
+          };
+          
+          await invoiceService.updateInvoice(selectedInvoice.id, updateData);
+          console.log('✅ Draft invoice updated successfully');
+          showSuccess(`Draft invoice ${selectedInvoice.invoice_number} updated successfully!`);
+          
+        } else if (selectedInvoice.status === 'sent') {
+          // For sent invoices, create a new invoice (revision)
+          console.log('📄 Creating new invoice revision for sent invoice:', selectedInvoice.invoice_number);
+          
+          // Generate new invoice number for the revision
+          const newInvoiceNumber = await invoiceService.generateInvoiceNumber();
+          console.log('🔢 Generated new invoice number for revision:', newInvoiceNumber);
+          
+          // Prepare new invoice data (service will calculate totals and set status)
+          const revisionInvoiceData: CreateInvoiceData = {
+            customer_id: invoiceFormData.customer_id,
+            invoice_date: invoiceFormData.invoice_date,
+            due_date: invoiceFormData.due_date,
+            notes: invoiceFormData.notes,
+            terms_conditions: invoiceFormData.terms_conditions,
+            items: invoiceFormData.items.map(item => ({
+              product_id: item.product_id,
+              item_name: item.item_name,
+              description: item.description,
+              quantity: item.quantity,
+              unit: item.unit,
+              unit_price: item.unit_price,
+              tax_rate: item.tax_rate,
+              hsn_code: item.hsn_code
+            }))
+          };
+          
+          // Create new invoice
+          await invoiceService.createInvoice(revisionInvoiceData, newInvoiceNumber);
+          console.log('💾 New invoice revision created successfully:', newInvoiceNumber);
+          showSuccess(`New invoice ${newInvoiceNumber} created as revision of ${selectedInvoice.invoice_number}!`);
+          
+        } else {
+          // For other statuses (paid, overdue, cancelled), show warning
+          showWarning(`Cannot edit invoice with status: ${selectedInvoice.status}. Only draft and sent invoices can be edited.`);
+          return;
+        }
       }
       
       closeInvoiceModal();
       await loadData(); // Refresh the data
     } catch (error) {
-      console.error('❌ Failed to save invoice:', error);
-      showError(`Failed to save invoice: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      console.error('❌ Failed to save invoice:', {
+        error,
+        message: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined,
+        name: error instanceof Error ? error.name : 'Unknown',
+        invoiceModalMode,
+        selectedInvoice: selectedInvoice?.id,
+        formData: invoiceFormData,
+        fullError: error
+      });
+      
+      // Provide specific, user-friendly error messages
+      let errorMessage = 'Failed to save invoice due to an unexpected error.';
+      
+      if (error instanceof Error) {
+        const errorMsg = error.message.toLowerCase();
+        
+        if (errorMsg.includes('duplicate key') || errorMsg.includes('already exists')) {
+          errorMessage = 'This invoice number already exists. Please try again with a different invoice number.';
+        } else if (errorMsg.includes('foreign key') || errorMsg.includes('invalid customer')) {
+          errorMessage = 'Invalid customer selected. Please select a valid customer from the dropdown.';
+        } else if (errorMsg.includes('check constraint') || errorMsg.includes('invalid data')) {
+          errorMessage = 'Some data values are invalid. Please check all fields and ensure they contain valid information.';
+        } else if (errorMsg.includes('network') || errorMsg.includes('connection')) {
+          errorMessage = 'Network connection error. Please check your internet connection and try again.';
+        } else if (errorMsg.includes('permission') || errorMsg.includes('unauthorized')) {
+          errorMessage = 'You do not have permission to perform this action. Please contact your administrator.';
+        } else if (errorMsg.includes('timeout')) {
+          errorMessage = 'The request timed out. Please try again in a moment.';
+        } else if (errorMsg.includes('validation') || errorMsg.includes('required')) {
+          errorMessage = `Validation error: ${error.message}`;
+        } else if (errorMsg.includes('not found')) {
+          errorMessage = 'The invoice or related data could not be found. Please refresh the page and try again.';
+        } else {
+          // For other errors, show a more informative message
+          errorMessage = `Unable to save invoice: ${error.message}. Please check your data and try again.`;
+        }
+      }
+      
+      showError(errorMessage);
     } finally {
       setModalLoading(false);
     }
@@ -1176,16 +1365,31 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
   
   // Product Selection Functions
   const handleDefaultProductChange = (productId: string) => {
-    console.log('🛒 Global product selection changed:', { productId, availableProducts: products.length });
+    console.log('🛒 Global product selection changed:', { 
+      productId, 
+      availableProducts: products.length,
+      previousSelection: selectedDefaultProduct,
+      previousGlobalHsn: globalHsnCode
+    });
     setSelectedDefaultProduct(productId);
     
     if (productId) {
       const product = products.find(p => p.id === productId);
-      console.log('📦 Selected global product:', product);
+      console.log('📦 Selected global product details:', {
+        product,
+        hasHsnCode: !!product?.hsn_code,
+        hsnCodeValue: product?.hsn_code
+      });
       if (product) {
         // Set global HSN code for all line items
         const hsnCode = product.hsn_code || '';
         setGlobalHsnCode(hsnCode);
+        
+        console.log('🔧 Setting global values:', {
+          productId: product.id,
+          hsnCode,
+          willApplyToItems: invoiceFormData.items.length
+        });
         
         // Apply product_id and HSN code to ALL line items (like a global setting)
         const updatedItems = invoiceFormData.items.map(item => ({
@@ -1300,36 +1504,108 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
   };
 
   const handleEditInvoice = async (invoice: Invoice) => {
+    console.log('🔧 handleEditInvoice called with invoice:', invoice);
     try {
       // Load full invoice details
       const fullInvoice = await invoiceService.getInvoiceById(invoice.id);
+      console.log('📄 Full invoice loaded:', fullInvoice);
+      
       if (fullInvoice) {
         setSelectedInvoice(fullInvoice);
-        setInvoiceFormData({
+        
+        // Map invoice items to form data format
+        const mappedItems = fullInvoice.invoice_items?.map(item => ({
+          product_id: item.product_id,
+          item_name: item.item_name,
+          description: item.description,
+          quantity: item.quantity,
+          unit: item.unit,
+          unit_price: item.unit_price,
+          tax_rate: item.tax_rate,
+          hsn_code: item.hsn_code
+        })) || [];
+        
+        console.log('🛒 Mapped items for editing:', mappedItems);
+        console.log('📊 Invoice status:', fullInvoice.status);
+        console.log('📊 Original invoice_items:', fullInvoice.invoice_items);
+        
+        // Ensure we have at least one item for editing
+        const itemsForForm = mappedItems.length > 0 ? mappedItems : [{
+          product_id: undefined,
+          item_name: '',
+          description: '',
+          quantity: 1,
+          unit: 'pcs',
+          unit_price: 0,
+          tax_rate: 18,
+          hsn_code: undefined
+        }];
+        
+        console.log('📝 Final items for form:', itemsForForm);
+        
+        const formData = {
           customer_id: fullInvoice.customer_id,
           invoice_date: fullInvoice.invoice_date,
           due_date: fullInvoice.due_date || '',
           notes: fullInvoice.notes || '',
           terms_conditions: fullInvoice.terms_conditions || '',
-          items: fullInvoice.invoice_items?.map(item => ({
-            product_id: item.product_id,
-            item_name: item.item_name,
-            description: item.description,
-            quantity: item.quantity,
-            unit: item.unit,
-            unit_price: item.unit_price,
-            tax_rate: item.tax_rate,
-            hsn_code: item.hsn_code
-          })) || []
-        });
+          items: itemsForForm
+        };
+        
+        console.log('📝 Setting form data for editing:', formData);
+        setInvoiceFormData(formData);
         setGeneratedInvoiceNumber(fullInvoice.invoice_number);
-        // Switch to create invoice tab for editing
-        setActiveTab('create-invoice');
+        
+        // Set default product and HSN code for new items based on existing items
+        if (itemsForForm.length > 0) {
+          // Check if all items have the same product_id
+          const firstProductId = itemsForForm[0].product_id;
+          const allSameProduct = itemsForForm.every(item => item.product_id === firstProductId);
+          
+          if (allSameProduct && firstProductId) {
+            console.log('📦 Setting default product for edit mode:', firstProductId);
+            setSelectedDefaultProduct(firstProductId);
+          }
+          
+          // Check if all items have the same HSN code
+          const firstHsnCode = itemsForForm[0].hsn_code;
+          const allSameHsn = itemsForForm.every(item => item.hsn_code === firstHsnCode);
+          
+          if (allSameHsn && firstHsnCode) {
+            console.log('🏷️ Setting global HSN code for edit mode:', firstHsnCode);
+            setGlobalHsnCode(firstHsnCode);
+          }
+        }
+        
+        // Open edit modal instead of switching tabs
         setInvoiceModalMode('edit');
+        setShowInvoiceModal(true);
+        
+        // Ensure customers, products, and terms are loaded for editing
+        await ensureDataLoadedForEdit();
       }
     } catch (error) {
       console.error('Failed to load invoice details:', error);
       showError(`Failed to load invoice details: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  };
+
+  // Helper function to ensure data is loaded for editing
+  const ensureDataLoadedForEdit = async () => {
+    try {
+      if (customers.length === 0 || products.length === 0 || termsTemplates.length === 0) {
+        const [customersData, productsData, termsData] = await Promise.all([
+          customers.length === 0 ? invoiceService.getCustomers({}, 1, 1000) : Promise.resolve({ data: customers }),
+          products.length === 0 ? invoiceService.getProducts({}, 1, 1000) : Promise.resolve({ data: products }),
+          termsTemplates.length === 0 ? invoiceService.getTermsTemplates() : Promise.resolve(termsTemplates)
+        ]);
+        
+        if (customers.length === 0) setCustomers(customersData.data || []);
+        if (products.length === 0) setProducts(productsData.data || []);
+        if (termsTemplates.length === 0) setTermsTemplates(termsData || []);
+      }
+    } catch (error) {
+      console.warn('Failed to load data for editing:', error);
     }
   };
 
@@ -1376,6 +1652,9 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
       // Get currency info for the customer
       const selectedCustomer = currentCustomers.find(c => c.id === fullInvoice.customer_id);
       const currencyInfo = getCurrencyInfo(selectedCustomer);
+      
+      // Get dynamic tax label based on customer's country
+      const taxLabel = getTaxLabel(selectedCustomer);
       
       console.log('💰 Currency info for PDF generation:', {
         customer: selectedCustomer ? {
@@ -1479,8 +1758,15 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
         yPos += 4;
       }
       
+      if (company.website) {
+        downloadPdf.text('Website: ' + String(company.website), leftMargin, yPos);
+        yPos += 4;
+      }
+      
       if (company.gstin) {
-        downloadPdf.text('GSTIN: ' + String(company.gstin), leftMargin, yPos);
+        const companyWithCountry = { country: company.country } as Customer;
+        const taxRegLabel = getTaxRegistrationLabel(companyWithCountry);
+        downloadPdf.text(`${taxRegLabel}: ` + String(company.gstin), leftMargin, yPos);
         yPos += 4;
       }
       
@@ -1544,7 +1830,8 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
       }
       
       if (customer.gstin) {
-        downloadPdf.text('GSTIN: ' + String(customer.gstin), billToX, billToYPos);
+        const taxRegLabel = getTaxRegistrationLabel(customer);
+        downloadPdf.text(`${taxRegLabel}: ` + String(customer.gstin), billToX, billToYPos);
         billToYPos += 4;
       }
       
@@ -1572,7 +1859,7 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
       downloadPdf.text('Description', leftMargin + 2, yPos + 5);
       downloadPdf.text('Qty', leftMargin + 95, yPos + 5, { align: 'center' });
       downloadPdf.text('Rate', leftMargin + 120, yPos + 5, { align: 'center' });
-      downloadPdf.text('GST%', leftMargin + 145, yPos + 5, { align: 'center' });
+      downloadPdf.text(`${taxLabel}%`, leftMargin + 145, yPos + 5, { align: 'center' });
       downloadPdf.text('Amount', leftMargin + 175, yPos + 5, { align: 'right' });
       
       yPos += 8;
@@ -1684,7 +1971,7 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
             downloadPdf.text('Description', leftMargin + 2, yPos + 5);
             downloadPdf.text('Qty', leftMargin + 95, yPos + 5, { align: 'center' });
             downloadPdf.text('Rate', leftMargin + 120, yPos + 5, { align: 'center' });
-            downloadPdf.text('GST%', leftMargin + 145, yPos + 5, { align: 'center' });
+            downloadPdf.text(`${taxLabel}%`, leftMargin + 145, yPos + 5, { align: 'center' });
             downloadPdf.text('Amount', leftMargin + 175, yPos + 5, { align: 'right' });
             
             yPos += 8;
@@ -1710,19 +1997,21 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
           downloadPdf.setFontSize(8);
           downloadPdf.setFont('helvetica', 'bold');
           downloadPdf.setTextColor(0, 0, 0);
-          downloadPdf.text(itemLines, leftMargin + 2, yPos);
+          downloadPdf.text(itemLines, leftMargin + 2, yPos + 3);
           
-          // HSN Code - positioned below description with proper spacing
+          // Classification Code - positioned below description with proper spacing
           if (item.hsn_code) {
-            const hsnYPos = yPos + (itemLines.length * 3) + 1; // Position below description
+            const hsnYPos = yPos + 3 + (itemLines.length * 3) + 1; // Position below description
             downloadPdf.setFontSize(6);
             downloadPdf.setFont('helvetica', 'normal');
             downloadPdf.setTextColor(100, 100, 100);
-            downloadPdf.text(`HSN: ${item.hsn_code}`, leftMargin + 2, hsnYPos);
+            const classificationLabel = getClassificationCodeLabel(selectedCustomer);
+            const shortLabel = classificationLabel === 'HSN Code' ? 'HSN' : 'Code';
+            downloadPdf.text(`${shortLabel}: ${item.hsn_code}`, leftMargin + 2, hsnYPos);
           }
           
-          // Reset for numbers - center them vertically in the row
-          const numbersYPos = yPos + (itemRowHeight / 2) + 1; // Center vertically
+          // Position numbers at the top baseline, same as the first line of item text
+          const numbersYPos = yPos + 3; // Same baseline as item text for proper alignment
           downloadPdf.setTextColor(0, 0, 0);
           downloadPdf.setFontSize(8);
           downloadPdf.setFont('helvetica', 'normal');
@@ -1881,7 +2170,7 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
       
       yPos += 6;
       downloadPdf.setFont('helvetica', 'normal');
-      downloadPdf.text('GST Amount:', totalsStartX + 3, yPos + 2);
+      downloadPdf.text(`${taxLabel} Amount:`, totalsStartX + 3, yPos + 2);
       downloadPdf.setFont('helvetica', 'bold');
       const taxWithCurrency = safeCurrencySymbol + ' ' + taxAmountText;
       downloadPdf.text(taxWithCurrency, totalsStartX + totalsWidth - 3, yPos + 2, { align: 'right' });
@@ -2078,6 +2367,9 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
         return;
       }
 
+      // Get dynamic tax label based on customer's country
+      const taxLabel = getTaxLabel(customer);
+
       // Log customer data for debugging
       console.log('📋 Found customer for email:', {
         id: customer.id,
@@ -2207,8 +2499,15 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
         yPos += 4;
       }
       
+      if (company.website) {
+        emailPdf.text('Website: ' + company.website, leftMargin, yPos);
+        yPos += 4;
+      }
+      
       if (company.gstin) {
-        emailPdf.text('GSTIN: ' + company.gstin, leftMargin, yPos);
+        const companyWithCountry = { country: company.country } as Customer;
+        const taxRegLabel = getTaxRegistrationLabel(companyWithCountry);
+        emailPdf.text(`${taxRegLabel}: ` + company.gstin, leftMargin, yPos);
         yPos += 4;
       }
       
@@ -2283,10 +2582,11 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
       }
       
       if (customer.gstin) {
-        const gstinText = 'GSTIN: ' + customer.gstin;
-        const gstinLines = emailPdf.splitTextToSize(gstinText, billToMaxWidth);
-        emailPdf.text(gstinLines, billToX, billToYPos);
-        billToYPos += gstinLines.length * 4;
+        const taxRegLabel = getTaxRegistrationLabel(customer);
+        const taxRegText = `${taxRegLabel}: ` + customer.gstin;
+        const taxRegLines = emailPdf.splitTextToSize(taxRegText, billToMaxWidth);
+        emailPdf.text(taxRegLines, billToX, billToYPos);
+        billToYPos += taxRegLines.length * 4;
       }
       
       // Payment Status Badge - compact and professional
@@ -2313,7 +2613,7 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
       emailPdf.text('Description', leftMargin + 2, yPos + 5);
       emailPdf.text('Qty', leftMargin + 95, yPos + 5, { align: 'center' });
       emailPdf.text('Rate', leftMargin + 120, yPos + 5, { align: 'center' });
-      emailPdf.text('GST%', leftMargin + 145, yPos + 5, { align: 'center' });
+      emailPdf.text(`${taxLabel}%`, leftMargin + 145, yPos + 5, { align: 'center' });
       emailPdf.text('Amount', leftMargin + 175, yPos + 5, { align: 'right' });
       
       yPos += 8;
@@ -2394,17 +2694,19 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
           // Item name with description - positioned at top of row
           emailPdf.text(itemLines, leftMargin + 2, yPos + 3);
           
-          // HSN Code - positioned below description with proper spacing
+          // Classification Code - positioned below description with proper spacing
           if (item.hsn_code) {
             const hsnYPos = yPos + 3 + (itemLines.length * 3) + 1; // Position below description
             emailPdf.setFontSize(6);
             emailPdf.setFont('helvetica', 'normal');
             emailPdf.setTextColor(100, 100, 100);
-            emailPdf.text(`HSN: ${item.hsn_code}`, leftMargin + 2, hsnYPos);
+            const classificationLabel = getClassificationCodeLabel(customer);
+            const shortLabel = classificationLabel === 'HSN Code' ? 'HSN' : 'Code';
+            emailPdf.text(`${shortLabel}: ${item.hsn_code}`, leftMargin + 2, hsnYPos);
           }
           
-          // Reset for numbers - center them vertically in the row
-          const numbersYPos = yPos + (itemRowHeight / 2) + 1; // Center vertically
+          // Reset for numbers - position at the top baseline for proper alignment
+          const numbersYPos = yPos + 3; // Same baseline as item text for proper alignment
           emailPdf.setFontSize(8);
           emailPdf.setFont('helvetica', 'normal');
           emailPdf.setTextColor(0, 0, 0);
@@ -2490,7 +2792,7 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
       
       yPos += 6;
       emailPdf.setFont('helvetica', 'normal');
-      emailPdf.text('GST Amount:', totalsStartX + 3, yPos + 2);
+      emailPdf.text(`${taxLabel} Amount:`, totalsStartX + 3, yPos + 2);
       emailPdf.setFont('helvetica', 'bold');
       const taxWithCurrency = safeCurrencySymbol + ' ' + taxAmountText;
       emailPdf.text(taxWithCurrency, totalsStartX + totalsWidth - 3, yPos + 2, { align: 'right' });
@@ -2825,12 +3127,27 @@ This email was sent from ${company.company_name}'s invoice management system.
   // Render Functions
   const renderCreateInvoice = () => {
     console.log('🎯 Rendering Create Invoice - Current data:', {
+      modalMode: invoiceModalMode,
       customers: customers.length,
       products: products.length,
       companySettings: companySettings.length,
       termsTemplates: termsTemplates.length,
       generatedInvoiceNumber,
-      invoiceFormData
+      invoiceFormData,
+      invoiceFormDataItems: invoiceFormData.items,
+      itemsLength: invoiceFormData.items.length
+    });
+    
+    // Debug each item individually
+    invoiceFormData.items.forEach((item, index) => {
+      console.log(`🔍 Item ${index + 1}:`, {
+        item_name: item.item_name,
+        description: item.description,
+        quantity: item.quantity,
+        unit_price: item.unit_price,
+        tax_rate: item.tax_rate,
+        hsn_code: item.hsn_code
+      });
     });
     
     const { subtotal, taxAmount, total } = calculateInvoiceTotals();
@@ -2863,48 +3180,50 @@ This email was sent from ${company.company_name}'s invoice management system.
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50" key={`invoice-${invoiceFormData.customer_id}-${currencyInfo.code}`}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          {/* Modern Header */}
-          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-8">
-            <div className="flex items-center justify-between">
-              <div>
-                <h1 className="text-3xl font-bold text-slate-900">Create New Invoice</h1>
-                <p className="text-slate-600 mt-1">Generate professional invoices for your customers</p>
-              </div>
-              <div className="flex items-center space-x-3">
-                <button
-                  onClick={() => setActiveTab('invoices')}
-                  className="inline-flex items-center px-4 py-2 border border-slate-300 rounded-lg shadow-sm text-sm font-medium text-slate-700 bg-white hover:bg-slate-50 transition-colors"
-                >
-                  <X className="w-4 h-4 mr-2" />
-                  Cancel
-                </button>
-                <button
-                  onClick={() => setShowInvoicePreview(true)}
-                  className="inline-flex items-center px-4 py-2 border border-slate-300 rounded-lg shadow-sm text-sm font-medium text-slate-700 bg-white hover:bg-slate-50 transition-colors"
-                >
-                  <Eye className="w-4 h-4 mr-2" />
-                  Show Preview
-                </button>
-                <button
-                  onClick={handleSaveInvoice}
-                  disabled={loading || !invoiceFormData.customer_id || !invoiceFormData.items[0]?.item_name || !invoiceFormData.items[0]?.description}
-                  className="inline-flex items-center px-6 py-2 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                >
-                  {loading ? (
-                    <>
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                      Saving...
-                    </>
-                  ) : (
-                    <>
-                      <Save className="w-4 h-4 mr-2" />
-                      Save Invoice
-                    </>
-                  )}
-                </button>
+          {/* Modern Header - Only show for create mode, not edit mode */}
+          {invoiceModalMode !== 'edit' && (
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-8">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h1 className="text-3xl font-bold text-slate-900">Create New Invoice</h1>
+                  <p className="text-slate-600 mt-1">Generate professional invoices for your customers</p>
+                </div>
+                <div className="flex items-center space-x-3">
+                  <button
+                    onClick={() => setActiveTab('invoices')}
+                    className="inline-flex items-center px-4 py-2 border border-slate-300 rounded-lg shadow-sm text-sm font-medium text-slate-700 bg-white hover:bg-slate-50 transition-colors"
+                  >
+                    <X className="w-4 h-4 mr-2" />
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => setShowInvoicePreview(true)}
+                    className="inline-flex items-center px-4 py-2 border border-slate-300 rounded-lg shadow-sm text-sm font-medium text-slate-700 bg-white hover:bg-slate-50 transition-colors"
+                  >
+                    <Eye className="w-4 h-4 mr-2" />
+                    Show Preview
+                  </button>
+                  <button
+                    onClick={handleSaveInvoice}
+                    disabled={loading || !invoiceFormData.customer_id || !invoiceFormData.items[0]?.item_name || !invoiceFormData.items[0]?.description}
+                    className="inline-flex items-center px-6 py-2 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  >
+                    {loading ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                        Saving...
+                      </>
+                    ) : (
+                      <>
+                        <Save className="w-4 h-4 mr-2" />
+                        Save Invoice
+                      </>
+                    )}
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
+          )}
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             {/* Main Form Column */}
@@ -3014,8 +3333,15 @@ This email was sent from ${company.company_name}'s invoice management system.
                   </button>
                 </div>
 
-                <div className="space-y-4">
-                  {invoiceFormData.items.map((item, index) => {
+                {/* Calculate tax label based on selected customer */}
+                {(() => {
+                  const selectedCustomer = customers.find(c => c.id === invoiceFormData.customer_id);
+                  const taxLabel = getTaxLabel(selectedCustomer);
+                  
+                  return (
+                    <div className="space-y-4">
+                      {invoiceFormData.items.map((item, index) => {
+                    console.log(`🔍 Rendering item ${index}:`, item);
                     const lineSubtotal = item.quantity * item.unit_price;
                     const lineTaxAmount = (lineSubtotal * item.tax_rate) / 100;
                     const lineTotal = lineSubtotal + lineTaxAmount;
@@ -3083,7 +3409,7 @@ This email was sent from ${company.company_name}'s invoice management system.
                           </div>
                         </div>
                         
-                        {/* Description and HSN Code */}
+                        {/* Description and Classification Code */}
                         <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
                           <div className="md:col-span-2">
                             <label className="block text-sm font-medium text-slate-700 mb-1">
@@ -3099,30 +3425,39 @@ This email was sent from ${company.company_name}'s invoice management system.
                             />
                           </div>
                           
-                          {/* HSN Code - Read Only */}
+                          {/* Classification Code - Read Only */}
                           <div>
                             <label className="block text-sm font-medium text-slate-700 mb-1">
-                              HSN Code
+                              {(() => {
+                                const selectedCustomer = customers.find(c => c.id === invoiceFormData.customer_id);
+                                return getClassificationCodeLabel(selectedCustomer);
+                              })()}
                             </label>
                             <input
                               type="text"
                               value={globalHsnCode || item.hsn_code || ''}
                               className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-gray-50 text-gray-600 text-sm"
-                              placeholder="HSN Code"
+                              placeholder={(() => {
+                                const selectedCustomer = customers.find(c => c.id === invoiceFormData.customer_id);
+                                return getClassificationCodeLabel(selectedCustomer);
+                              })()}
                               readOnly
                             />
                             {!globalHsnCode && !item.hsn_code && (
-                              <p className="text-xs text-slate-500 mt-1">Select a product above to set HSN code</p>
+                              <p className="text-xs text-slate-500 mt-1">Select a product above to set {(() => {
+                                const selectedCustomer = customers.find(c => c.id === invoiceFormData.customer_id);
+                                return getClassificationCodeLabel(selectedCustomer).toLowerCase();
+                              })()}</p>
                             )}
                           </div>
                         </div>
                         
-                        {/* GST and Total */}
+                        {/* Tax and Total */}
                         <div className="mt-4 flex items-center justify-between">
                           <div className="flex items-center space-x-4">
                             <div>
                               <label className="block text-sm font-medium text-slate-700 mb-1">
-                                GST (%)
+                                {taxLabel} (%)
                               </label>
                               <input
                                 type="number"
@@ -3150,7 +3485,7 @@ This email was sent from ${company.company_name}'s invoice management system.
                                 {item.quantity} × {formatCurrencyAmount(item.unit_price, currencyInfo)} = {formatCurrencyAmount(lineSubtotal, currencyInfo)}
                               </div>
                               <div className="text-xs text-slate-600">
-                                GST ({item.tax_rate}%): {formatCurrencyAmount(lineTaxAmount, currencyInfo)}
+                                {taxLabel} ({item.tax_rate}%): {formatCurrencyAmount(lineTaxAmount, currencyInfo)}
                               </div>
                               <div className="text-sm font-medium text-slate-700 border-t border-slate-300 pt-1">
                                 Total: <span className="text-lg font-semibold text-slate-900">{formatCurrencyAmount(lineTotal, currencyInfo)}</span>
@@ -3162,6 +3497,8 @@ This email was sent from ${company.company_name}'s invoice management system.
                     );
                   })}
                 </div>
+                  );
+                })()}
               </div>
 
               {/* Notes and Terms */}
@@ -3233,25 +3570,33 @@ This email was sent from ${company.company_name}'s invoice management system.
                   </div>
                 )}
                 
-                <div className="space-y-3">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-slate-600">Subtotal:</span>
-                    <span className="font-medium">{formatCurrencyAmount(subtotal, currencyInfo)}</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-slate-600">GST:</span>
-                    <span className="font-medium">{formatCurrencyAmount(taxAmount, currencyInfo)}</span>
-                  </div>
-                  <div className="border-t border-slate-200 pt-3">
-                    <div className="flex justify-between text-lg font-bold">
-                      <span className="text-slate-900">Total:</span>
-                      <span className="text-blue-600">{formatCurrencyAmount(total, currencyInfo)}</span>
+                {/* Calculate tax label for totals */}
+                {(() => {
+                  const currentCustomer = selectedCustomer || customers.find(c => c.id === invoiceFormData.customer_id);
+                  const taxLabel = getTaxLabel(currentCustomer);
+                  
+                  return (
+                    <div className="space-y-3">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-slate-600">Subtotal:</span>
+                        <span className="font-medium">{formatCurrencyAmount(subtotal, currencyInfo)}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-slate-600">{taxLabel}:</span>
+                        <span className="font-medium">{formatCurrencyAmount(taxAmount, currencyInfo)}</span>
+                      </div>
+                      <div className="border-t border-slate-200 pt-3">
+                        <div className="flex justify-between text-lg font-bold">
+                          <span className="text-slate-900">Total:</span>
+                          <span className="text-blue-600">{formatCurrencyAmount(total, currencyInfo)}</span>
+                        </div>
+                        <p className="text-xs text-slate-500 mt-2 italic">
+                          {formatAmountInWords(total, currencyInfo.name)}
+                        </p>
+                      </div>
                     </div>
-                    <p className="text-xs text-slate-500 mt-2 italic">
-                      {formatAmountInWords(total, currencyInfo.name)}
-                    </p>
-                  </div>
-                </div>
+                  );
+                })()}
               </div>
             </div>
           </div>
@@ -3722,29 +4067,33 @@ This email was sent from ${company.company_name}'s invoice management system.
                 >
                   <Eye className="w-4 h-4" />
                 </button>
-                {invoice.status !== 'cancelled' && (
+                {(invoice.status === 'draft' || invoice.status === 'sent') && (
                   <button 
                     onClick={() => handleEditInvoice(invoice)}
                     className="text-gray-600 hover:text-gray-900"
-                    title="Edit Invoice"
+                    title={invoice.status === 'draft' ? 'Edit draft invoice' : 'Edit sent invoice (creates new version)'}
                   >
                     <Edit className="w-4 h-4" />
                   </button>
                 )}
-                <button 
-                  onClick={() => handleDownloadInvoice(invoice)}
-                  className="text-green-600 hover:text-green-900"
-                  title="Download Invoice"
-                >
-                  <Download className="w-4 h-4" />
-                </button>
-                <button 
-                  onClick={() => handleEmailInvoice(invoice)}
-                  className="text-purple-600 hover:text-purple-900"
-                  title="Email Invoice"
-                >
-                  <Mail className="w-4 h-4" />
-                </button>
+                {invoice.status !== 'cancelled' && (
+                  <button 
+                    onClick={() => handleDownloadInvoice(invoice)}
+                    className="text-green-600 hover:text-green-900"
+                    title="Download Invoice"
+                  >
+                    <Download className="w-4 h-4" />
+                  </button>
+                )}
+                {invoice.status !== 'cancelled' && (
+                  <button 
+                    onClick={() => handleEmailInvoice(invoice)}
+                    className="text-purple-600 hover:text-purple-900"
+                    title="Email Invoice"
+                  >
+                    <Mail className="w-4 h-4" />
+                  </button>
+                )}
                 
                 {/* Mark as Paid Button */}
                 {(invoice.status === 'sent' || invoice.status === 'draft') && invoice.payment_status !== 'paid' && (
@@ -3845,13 +4194,15 @@ This email was sent from ${company.company_name}'s invoice management system.
                 >
                   <Eye className="w-4 h-4" />
                 </button>
-                <button 
-                  onClick={() => handleDownloadInvoice(invoice)}
-                  className="text-green-600 hover:text-green-900"
-                  title="Download Invoice"
-                >
-                  <Download className="w-4 h-4" />
-                </button>
+                {invoice.status !== 'cancelled' && (
+                  <button 
+                    onClick={() => handleDownloadInvoice(invoice)}
+                    className="text-green-600 hover:text-green-900"
+                    title="Download Invoice"
+                  >
+                    <Download className="w-4 h-4" />
+                  </button>
+                )}
               </div>
             </td>
           </tr>
@@ -4414,7 +4765,7 @@ This email was sent from ${company.company_name}'s invoice management system.
                       </div>
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700">GSTIN</label>
+                      <label className="block text-sm font-medium text-gray-700">{getTaxRegistrationLabel({ country: { code: 'IN' } } as Customer)}</label>
                       <div className="mt-1 text-sm text-gray-900">{company.gstin || 'N/A'}</div>
                     </div>
                     <div>
@@ -4543,7 +4894,7 @@ This email was sent from ${company.company_name}'s invoice management system.
                   <div className="mt-1 text-sm text-gray-900">{invoiceSettings.template_name}</div>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">GST Enabled</label>
+                  <label className="block text-sm font-medium text-gray-700">Tax Enabled</label>
                   <div className="mt-1 text-sm text-gray-900">
                     <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
                       invoiceSettings.enable_gst ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
@@ -5060,10 +5411,10 @@ This email was sent from ${company.company_name}'s invoice management system.
                 />
               </div>
 
-              {/* GSTIN */}
+              {/* Tax Registration */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  GSTIN
+                  {getTaxRegistrationLabel({ country: { code: 'IN' } } as Customer)}
                 </label>
                 <input
                   type="text"
@@ -5073,7 +5424,7 @@ This email was sent from ${company.company_name}'s invoice management system.
                   className={`w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 ${
                     isReadOnly ? 'bg-gray-50 text-gray-500' : ''
                   }`}
-                  placeholder="Enter GSTIN"
+                  placeholder={`Enter ${getTaxRegistrationLabel({ country: { code: 'IN' } } as Customer)}`}
                 />
               </div>
 
@@ -5446,7 +5797,7 @@ This email was sent from ${company.company_name}'s invoice management system.
                 </select>
               </div>
 
-              {/* Enable GST */}
+              {/* Enable Tax */}
               <div className="md:col-span-2">
                 <label className="flex items-center">
                   <input
@@ -5457,7 +5808,7 @@ This email was sent from ${company.company_name}'s invoice management system.
                     className="mr-2 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                   />
                   <span className="text-sm font-medium text-gray-700">
-                    Enable GST calculations
+                    Enable tax calculations
                   </span>
                 </label>
               </div>
@@ -5524,6 +5875,9 @@ This email was sent from ${company.company_name}'s invoice management system.
     const selectedCustomer = customers.find(c => c.id === invoiceFormData.customer_id);
     const currencyInfo = getCurrencyInfo(selectedCustomer);
     const company = companySettings[0];
+    
+    // Get dynamic tax label based on customer's country
+    const taxLabel = getTaxLabel(selectedCustomer);
 
     console.log('🖨️ Preview Currency Info:', {
       customer: selectedCustomer?.company_name || selectedCustomer?.contact_person,
@@ -5551,8 +5905,9 @@ This email was sent from ${company.company_name}'s invoice management system.
               <div className="flex gap-4 mt-1">
                 {company?.email && <span>📧 {company.email}</span>}
                 {company?.phone && <span>📞 {company.phone}</span>}
+                {company?.website && <span>🌐 {company.website}</span>}
               </div>
-              {company?.gstin && <div className="mt-1"><strong>GSTIN:</strong> {company.gstin}</div>}
+              {company?.gstin && <div className="mt-1"><strong>{getTaxRegistrationLabel({ country: { code: 'IN' } } as Customer)}:</strong> {company.gstin}</div>}
             </div>
           </div>
           <div className="text-right ml-6">
@@ -5587,7 +5942,7 @@ This email was sent from ${company.company_name}'s invoice management system.
                 <div className="space-y-1">
                   {selectedCustomer.email && <div>📧 {selectedCustomer.email}</div>}
                   {selectedCustomer.phone && <div>📞 {selectedCustomer.phone}</div>}
-                  {selectedCustomer.gstin && <div><strong>GSTIN:</strong> {selectedCustomer.gstin}</div>}
+                  {selectedCustomer.gstin && <div><strong>{getTaxRegistrationLabel(selectedCustomer)}:</strong> {selectedCustomer.gstin}</div>}
                 </div>
               </div>
             </div>
@@ -5601,11 +5956,11 @@ This email was sent from ${company.company_name}'s invoice management system.
               <tr className="bg-gray-100">
                 <th className="border border-gray-300 px-2 py-2 text-left font-medium text-gray-900">Item</th>
                 <th className="border border-gray-300 px-2 py-2 text-left font-medium text-gray-900">Description</th>
-                <th className="border border-gray-300 px-2 py-2 text-center font-medium text-gray-900 w-20">HSN Code</th>
+                <th className="border border-gray-300 px-2 py-2 text-center font-medium text-gray-900 w-20">{getClassificationCodeLabel(selectedCustomer)}</th>
                 <th className="border border-gray-300 px-2 py-2 text-center font-medium text-gray-900 w-16">Qty</th>
                 <th className="border border-gray-300 px-2 py-2 text-center font-medium text-gray-900 w-16">Unit</th>
                 <th className="border border-gray-300 px-2 py-2 text-right font-medium text-gray-900 w-20">Rate</th>
-                <th className="border border-gray-300 px-2 py-2 text-right font-medium text-gray-900 w-16">GST%</th>
+                <th className="border border-gray-300 px-2 py-2 text-right font-medium text-gray-900 w-16">{taxLabel}%</th>
                 <th className="border border-gray-300 px-2 py-2 text-right font-medium text-gray-900 w-24">Amount</th>
               </tr>
             </thead>
@@ -5650,7 +6005,7 @@ This email was sent from ${company.company_name}'s invoice management system.
                 <span>{formatCurrencyAmount(subtotal, currencyInfo)}</span>
               </div>
               <div className="flex justify-between px-3 py-2 border-b border-gray-300">
-                <span className="font-medium">GST:</span>
+                <span className="font-medium">{taxLabel}:</span>
                 <span>{formatCurrencyAmount(taxAmount, currencyInfo)}</span>
               </div>
               <div className="flex justify-between px-3 py-2 bg-gray-50 font-bold">
@@ -5773,7 +6128,33 @@ This email was sent from ${company.company_name}'s invoice management system.
       <main className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
         {activeTab === 'dashboard' && renderDashboard()}
         {activeTab === 'invoices' && renderInvoicesList()}
-        {activeTab === 'create-invoice' && renderCreateInvoice()}
+        {activeTab === 'create-invoice' && (
+          <CreateInvoice
+            invoiceFormData={invoiceFormData}
+            onFormChange={handleInvoiceFormChange}
+            onItemChange={handleInvoiceItemChange}
+            onAddItem={addInvoiceItem}
+            onRemoveItem={removeInvoiceItem}
+            onTermsChange={handleTermsChange}
+            onTermsTemplateSelect={handleTermsTemplateSelect}
+            onDefaultProductChange={handleDefaultProductChange}
+            onSaveInvoice={handleSaveInvoice}
+            onCloseInvoice={() => setActiveTab('dashboard')}
+            onShowPreview={handleShowPreview}
+            customers={customers}
+            products={products}
+            termsTemplates={termsTemplates}
+            companySettings={companySettings}
+            selectedDefaultProduct={selectedDefaultProduct}
+            selectedTermsTemplateId={selectedTermsTemplateId}
+            globalHsnCode={globalHsnCode}
+            generatedInvoiceNumber={generatedInvoiceNumber}
+            calculateInvoiceTotals={calculateInvoiceTotals}
+            getCurrencyInfo={getCurrencyInfo}
+            formatCurrencyAmount={formatCurrencyAmount}
+            formatAmountInWords={formatAmountInWords}
+          />
+        )}
         {activeTab === 'customers' && renderCustomers()}
         {activeTab === 'products' && renderProducts()}
         {activeTab === 'settings' && renderSettings()}
@@ -5951,19 +6332,31 @@ This email was sent from ${company.company_name}'s invoice management system.
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    GSTIN
-                  </label>
-                  <input
-                    type="text"
-                    value={customerFormData.gstin}
-                    onChange={(e) => handleCustomerFormChange('gstin', e.target.value.toUpperCase())}
-                    disabled={customerModalMode === 'view'}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50"
-                    placeholder="e.g., 22AAAAA0000A1Z5"
-                    pattern="[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}"
-                    maxLength={15}
-                  />
+                  {(() => {
+                    // Get selected country for dynamic labels
+                    const selectedCountry = countries.find(c => c.id === customerFormData.country_id);
+                    const customerWithCountry = { country: selectedCountry } as Customer;
+                    const taxRegLabel = getTaxRegistrationLabel(customerWithCountry);
+                    const isGST = getTaxLabel(customerWithCountry) === 'GST';
+                    
+                    return (
+                      <>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          {taxRegLabel}
+                        </label>
+                        <input
+                          type="text"
+                          value={customerFormData.gstin}
+                          onChange={(e) => handleCustomerFormChange('gstin', e.target.value.toUpperCase())}
+                          disabled={customerModalMode === 'view'}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50"
+                          placeholder={isGST ? "e.g., 22AAAAA0000A1Z5" : "e.g., VAT123456789"}
+                          pattern={isGST ? "[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}" : undefined}
+                          maxLength={isGST ? 15 : 20}
+                        />
+                      </>
+                    );
+                  })()}
                 </div>
                 
                 <div>
@@ -6056,39 +6449,89 @@ This email was sent from ${company.company_name}'s invoice management system.
       {/* Invoice Modal */}
       {showInvoiceModal && (
         <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-          <div className="relative top-20 mx-auto p-5 border w-11/12 max-w-4xl shadow-lg rounded-md bg-white">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-medium text-gray-900">
-                {invoiceModalMode === 'view' ? 'Invoice Details' : 
-                 invoiceModalMode === 'edit' ? 'Edit Invoice' : 'Create Invoice'}
-              </h3>
-              <button
-                onClick={closeInvoiceModal}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                <X className="w-6 h-6" />
-              </button>
-            </div>
+          <div className="relative top-4 mx-auto border w-[95%] max-w-7xl shadow-lg rounded-lg bg-white">
+            {/* Close button overlay */}
+            <button
+              onClick={closeInvoiceModal}
+              className="absolute top-4 right-4 z-10 text-gray-400 hover:text-gray-600 transition-colors bg-white rounded-full p-2 shadow-md"
+            >
+              <X className="w-6 h-6" />
+            </button>
 
-            <div className="max-h-96 overflow-y-auto">
-              {renderCreateInvoice()}
-            </div>
+            {invoiceModalMode === 'add' ? (
+              <CreateInvoice
+                invoiceFormData={invoiceFormData}
+                onFormChange={handleInvoiceFormChange}
+                onItemChange={handleInvoiceItemChange}
+                onAddItem={addInvoiceItem}
+                onRemoveItem={removeInvoiceItem}
+                onTermsChange={handleTermsChange}
+                onTermsTemplateSelect={handleTermsTemplateSelect}
+                onDefaultProductChange={handleDefaultProductChange}
+                onSaveInvoice={handleSaveInvoice}
+                onCloseInvoice={closeInvoiceModal}
+                onShowPreview={handleShowPreview}
+                customers={customers}
+                products={products}
+                termsTemplates={termsTemplates}
+                companySettings={companySettings}
+                selectedDefaultProduct={selectedDefaultProduct}
+                selectedTermsTemplateId={selectedTermsTemplateId}
+                globalHsnCode={globalHsnCode}
+                generatedInvoiceNumber={generatedInvoiceNumber}
+                calculateInvoiceTotals={calculateInvoiceTotals}
+                getCurrencyInfo={getCurrencyInfo}
+                formatCurrencyAmount={formatCurrencyAmount}
+                formatAmountInWords={formatAmountInWords}
+                modalLoading={modalLoading}
+              />
+            ) : invoiceModalMode === 'edit' && selectedInvoice ? (
+              <EditInvoice
+                selectedInvoice={selectedInvoice}
+                invoiceFormData={invoiceFormData}
+                onFormChange={handleInvoiceFormChange}
+                onItemChange={handleInvoiceItemChange}
+                onAddItem={addInvoiceItem}
+                onRemoveItem={removeInvoiceItem}
+                onSaveInvoice={handleSaveInvoice}
+                onCloseInvoice={closeInvoiceModal}
+                onTermsChange={handleTermsChange}
+                onTermsTemplateSelect={handleTermsTemplateSelect}
+                onDefaultProductChange={handleDefaultProductChange}
+                customers={customers}
+                products={products}
+                termsTemplates={termsTemplates}
+                companySettings={companySettings}
+                selectedDefaultProduct={selectedDefaultProduct}
+                selectedTermsTemplateId={selectedTermsTemplateId}
+                globalHsnCode={globalHsnCode}
+                modalLoading={modalLoading}
+                calculateInvoiceTotals={calculateInvoiceTotals}
+                getCurrencyInfo={getCurrencyInfo}
+                formatCurrencyAmount={formatCurrencyAmount}
+                formatAmountInWords={formatAmountInWords}
+                getStatusColor={getStatusColor}
+              />
+            ) : null}
 
-            {invoiceModalMode !== 'view' && (
-              <div className="flex justify-end space-x-3 mt-6">
-                <button
-                  onClick={closeInvoiceModal}
-                  className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleSaveInvoice}
-                  disabled={modalLoading || !invoiceFormData.customer_id}
-                  className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50"
-                >
-                  {modalLoading ? 'Saving...' : 'Save'}
-                </button>
+            {/* Modal Actions - only for add mode */}
+            {invoiceModalMode === 'add' && (
+              <div className="absolute bottom-0 left-0 right-0 bg-white border-t p-6 rounded-b-lg">
+                <div className="flex justify-end space-x-3">
+                  <button
+                    onClick={closeInvoiceModal}
+                    className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleSaveInvoice}
+                    disabled={modalLoading || !invoiceFormData.customer_id || invoiceFormData.items.length === 0 || !invoiceFormData.items[0]?.item_name}
+                    className="px-4 py-2 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                  >
+                    {modalLoading ? 'Saving...' : 'Create Invoice'}
+                  </button>
+                </div>
               </div>
             )}
           </div>
@@ -6107,7 +6550,14 @@ This email was sent from ${company.company_name}'s invoice management system.
           <div className="relative top-4 mx-auto p-5 border w-11/12 max-w-5xl shadow-lg rounded-lg bg-white">
             {/* Modal Header */}
             <div className="flex items-center justify-between mb-6">
-              <h3 className="text-xl font-semibold text-slate-900">Invoice Preview</h3>
+              <h3 className="text-xl font-semibold text-slate-900">
+                Invoice Preview
+                {selectedInvoice?.status === 'cancelled' && (
+                  <span className="ml-3 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                    CANCELLED
+                  </span>
+                )}
+              </h3>
               <button
                 onClick={() => setShowInvoicePreview(false)}
                 className="text-slate-400 hover:text-slate-600 transition-colors"
@@ -6116,9 +6566,23 @@ This email was sent from ${company.company_name}'s invoice management system.
               </button>
             </div>
 
-            {/* Preview Content */}
-            <div className="max-h-[80vh] overflow-y-auto">
-              {renderInvoicePreviewContent()}
+            {/* Preview Content with Watermark */}
+            <div className="max-h-[80vh] overflow-y-auto relative">
+              {/* Cancelled Watermark Overlay */}
+              {selectedInvoice?.status === 'cancelled' && (
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
+                  <div className="transform rotate-45 opacity-10">
+                    <div className="text-8xl font-bold text-red-600 select-none">
+                      CANCELLED
+                    </div>
+                  </div>
+                </div>
+              )}
+              
+              {/* Invoice Content */}
+              <div className={selectedInvoice?.status === 'cancelled' ? 'relative z-0' : ''}>
+                {renderInvoicePreviewContent()}
+              </div>
             </div>
 
             {/* Modal Footer */}
@@ -6129,13 +6593,27 @@ This email was sent from ${company.company_name}'s invoice management system.
               >
                 Close
               </button>
-              <button
-                onClick={() => window.print()}
-                className="inline-flex items-center px-4 py-2 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 transition-colors"
-              >
-                <FileText className="w-4 h-4 mr-2" />
-                Print
-              </button>
+              {/* Only show print button for non-cancelled invoices */}
+              {selectedInvoice?.status !== 'cancelled' && (
+                <button
+                  onClick={() => window.print()}
+                  className="inline-flex items-center px-4 py-2 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 transition-colors"
+                >
+                  <FileText className="w-4 h-4 mr-2" />
+                  Print
+                </button>
+              )}
+              {/* Show different print button for cancelled invoices */}
+              {selectedInvoice?.status === 'cancelled' && (
+                <button
+                  onClick={() => window.print()}
+                  className="inline-flex items-center px-4 py-2 border border-red-300 rounded-lg shadow-sm text-sm font-medium text-red-700 bg-red-50 hover:bg-red-100 transition-colors"
+                  title="Print cancelled invoice for reference"
+                >
+                  <FileText className="w-4 h-4 mr-2" />
+                  Print (Cancelled)
+                </button>
+              )}
             </div>
           </div>
         </div>

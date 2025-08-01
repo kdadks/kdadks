@@ -869,6 +869,23 @@ class InvoiceService {
       return processedItem;
     });
 
+    // Validate data before insertion
+    console.log('🔍 Validating items before insertion:', {
+      totalItems: itemsWithCalculations.length,
+      validation: itemsWithCalculations.map((item, index) => ({
+        index: index + 1,
+        hasInvoiceId: !!item.invoice_id,
+        hasItemName: !!item.item_name,
+        hasDescription: !!item.description,
+        productIdType: typeof item.product_id,
+        productIdValue: item.product_id,
+        hsnCodeType: typeof item.hsn_code,
+        hsnCodeValue: item.hsn_code,
+        quantityType: typeof item.quantity,
+        unitPriceType: typeof item.unit_price
+      }))
+    });
+
     console.log('💾 Inserting invoice items:', {
       invoiceId: invoice.id,
       itemCount: itemsWithCalculations.length,
@@ -876,8 +893,12 @@ class InvoiceService {
         index: index + 1,
         product_id: item.product_id,
         item_name: item.item_name,
-        line_total: item.line_total
-      }))
+        description: item.description,
+        hsn_code: item.hsn_code,
+        line_total: item.line_total,
+        tax_rate: item.tax_rate
+      })),
+      fullItemsData: itemsWithCalculations
     });
 
     const { error: itemsError } = await supabase
@@ -885,7 +906,19 @@ class InvoiceService {
       .insert(itemsWithCalculations);
 
     if (itemsError) {
-      console.error('❌ Error inserting invoice items:', itemsError);
+      console.error('❌ Error inserting invoice items:', {
+        error: itemsError,
+        message: itemsError.message,
+        details: itemsError.details,
+        hint: itemsError.hint,
+        code: itemsError.code,
+        itemsData: itemsWithCalculations.map(item => ({
+          product_id: item.product_id,
+          item_name: item.item_name,
+          hsn_code: item.hsn_code,
+          description: item.description
+        }))
+      });
       throw itemsError;
     }
 
@@ -896,37 +929,202 @@ class InvoiceService {
   }
 
   async updateInvoice(id: string, invoiceData: Partial<CreateInvoiceData>): Promise<Invoice> {
-    const { data, error } = await supabase
-      .from('invoices')
-      .update({
-        customer_id: invoiceData.customer_id,
-        invoice_date: invoiceData.invoice_date,
-        due_date: invoiceData.due_date,
-        notes: invoiceData.notes,
-        terms_conditions: invoiceData.terms_conditions,
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', id)
-      .select(`
-        *,
-        customer:customers(
-          *,
-          country:countries(*)
-        ),
-        company_settings:company_settings(
-          *,
-          country:countries(*)
-        ),
-        invoice_items:invoice_items(
-          *,
-          product:products(*)
-        ),
-        payments:payments(*)
-      `)
-      .single();
+    console.log('🔧 updateInvoice started:', { id, invoiceData });
     
-    if (error) throw error;
-    return data;
+    try {
+      // First update the basic invoice fields
+      const { data: invoice, error: invoiceError } = await supabase
+        .from('invoices')
+        .update({
+          customer_id: invoiceData.customer_id,
+          invoice_date: invoiceData.invoice_date,
+          due_date: invoiceData.due_date,
+          notes: invoiceData.notes,
+          terms_conditions: invoiceData.terms_conditions,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', id)
+        .select('*')
+        .single();
+      
+      if (invoiceError) {
+        console.error('❌ Invoice update error:', invoiceError);
+        throw invoiceError;
+      }
+      
+      console.log('✅ Invoice basic fields updated:', invoice);
+
+      // If items are provided, update them
+      if (invoiceData.items && invoiceData.items.length > 0) {
+        console.log('🔄 Updating invoice items, count:', invoiceData.items.length);
+        
+        // Delete existing invoice items
+        const { error: deleteError } = await supabase
+          .from('invoice_items')
+          .delete()
+          .eq('invoice_id', id);
+        
+        if (deleteError) {
+          console.error('❌ Delete existing items error:', {
+            error: deleteError,
+            message: deleteError.message,
+            details: deleteError.details,
+            hint: deleteError.hint,
+            code: deleteError.code,
+            invoiceId: id
+          });
+          throw new Error(`Failed to delete existing invoice items: ${deleteError.message || JSON.stringify(deleteError)}`);
+        }
+        
+        console.log('🗑️ Existing items deleted');
+
+        // Calculate totals and prepare new items
+        let subtotal = 0;
+        let taxAmount = 0;
+
+        console.log('📋 Processing invoice items:', {
+          itemCount: invoiceData.items.length,
+          items: invoiceData.items.map((item, index) => ({
+            index,
+            item_name: item.item_name,
+            quantity: item.quantity,
+            unit_price: item.unit_price,
+            tax_rate: item.tax_rate,
+            product_id: item.product_id,
+            hasDescription: !!item.description,
+            hasUnit: !!item.unit,
+            hasHsnCode: !!item.hsn_code
+          }))
+        });
+
+        const invoiceItems = invoiceData.items.map(item => {
+          const lineTotal = item.quantity * item.unit_price;
+          const lineTax = (lineTotal * item.tax_rate) / 100;
+          subtotal += lineTotal;
+          taxAmount += lineTax;
+
+          return {
+            invoice_id: id,
+            product_id: item.product_id || null,
+            item_name: item.item_name,
+            description: item.description,
+            quantity: item.quantity,
+            unit: item.unit,
+            unit_price: item.unit_price,
+            tax_rate: item.tax_rate,
+            hsn_code: item.hsn_code || null,
+            line_total: lineTotal,
+            tax_amount: lineTax,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          };
+        });
+
+        console.log('💾 Inserting new items with totals:', { 
+          itemCount: invoiceItems.length, 
+          subtotal, 
+          taxAmount,
+          preparedItems: invoiceItems.map((item, index) => ({
+            index,
+            invoice_id: item.invoice_id,
+            item_name: item.item_name,
+            description: item.description,
+            quantity: item.quantity,
+            unit_price: item.unit_price,
+            line_total: item.line_total,
+            tax_amount: item.tax_amount,
+            product_id: item.product_id,
+            unit: item.unit,
+            hsn_code: item.hsn_code
+          }))
+        });
+
+        // Insert new invoice items
+        const { error: itemsError } = await supabase
+          .from('invoice_items')
+          .insert(invoiceItems);
+        
+        if (itemsError) {
+          console.error('❌ Insert new items error:', {
+            error: itemsError,
+            message: itemsError.message,
+            details: itemsError.details,
+            hint: itemsError.hint,
+            code: itemsError.code,
+            invoiceItems
+          });
+          throw new Error(`Failed to insert invoice items: ${itemsError.message || JSON.stringify(itemsError)}`);
+        }
+        
+        console.log('✅ New items inserted successfully');
+
+        // Update invoice totals
+        const total = subtotal + taxAmount;
+        console.log('🧮 Updating invoice totals:', { subtotal, taxAmount, total });
+        
+        const { error: totalsError } = await supabase
+          .from('invoices')
+          .update({
+            subtotal,
+            tax_amount: taxAmount,
+            total_amount: total,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', id);
+        
+        if (totalsError) {
+          console.error('❌ Update totals error:', totalsError);
+          throw totalsError;
+        }
+        
+        console.log('✅ Invoice totals updated');
+      }
+
+      // Return the complete updated invoice with all relations
+      console.log('🔍 Fetching complete updated invoice');
+      const { data: updatedInvoice, error: fetchError } = await supabase
+        .from('invoices')
+        .select(`
+          *,
+          customer:customers(
+            *,
+            country:countries(*)
+          ),
+          company_settings:company_settings(
+            *,
+            country:countries(*)
+          ),
+          invoice_items:invoice_items(
+            *,
+            product:products(*)
+          ),
+          payments:payments(*)
+        `)
+        .eq('id', id)
+        .single();
+      
+      if (fetchError) {
+        console.error('❌ Fetch updated invoice error:', fetchError);
+        throw fetchError;
+      }
+      
+      console.log('✅ Invoice update completed successfully');
+      return updatedInvoice;
+    } catch (error) {
+      console.error('❌ updateInvoice failed:', {
+        error,
+        message: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined,
+        invoiceId: id,
+        invoiceData
+      });
+      
+      if (error instanceof Error) {
+        throw error;
+      } else {
+        throw new Error(`Update invoice failed: ${JSON.stringify(error)}`);
+      }
+    }
   }
 
   async updateInvoiceStatus(id: string, status: Invoice['status'], paymentStatus?: Invoice['payment_status']): Promise<Invoice> {

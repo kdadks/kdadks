@@ -108,6 +108,7 @@ const InvoiceGenerator: React.FC<InvoiceGeneratorProps> = ({
               <p>{invoice.company_settings?.city}, {invoice.company_settings?.state} {invoice.company_settings?.postal_code}</p>
               <p>{invoice.company_settings?.email}</p>
               <p>{invoice.company_settings?.phone}</p>
+              {invoice.company_settings?.website && <p>{invoice.company_settings.website}</p>}
             </div>
           </div>
 
