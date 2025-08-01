@@ -3979,7 +3979,7 @@ This email was sent from ${company.company_name}'s invoice management system.
           </div>
           <div className="text-center">
             <div className="text-2xl font-bold text-gray-400">
-              {(stats?.total_invoices || 0) - (stats?.paid_invoices || 0)}
+              {(stats?.total_invoices || 0) - (stats?.paid_invoices || 0) - (stats?.cancelled_invoices || 0)}
             </div>
             <div className="text-sm text-gray-500">Unpaid</div>
           </div>

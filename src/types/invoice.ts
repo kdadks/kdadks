@@ -364,6 +364,7 @@ export interface InvoiceStats {
   sent_invoices: number;
   paid_invoices: number;
   overdue_invoices: number;
+  cancelled_invoices: number;
   total_revenue: number;
   pending_amount: number;
   this_month_revenue: number;

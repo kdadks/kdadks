@@ -1252,8 +1252,9 @@ class InvoiceService {
       sent_invoices: invoices?.filter(i => i.status === 'sent').length || 0,
       paid_invoices: invoices?.filter(i => i.payment_status === 'paid').length || 0,
       overdue_invoices: invoices?.filter(i => i.status === 'overdue').length || 0,
+      cancelled_invoices: invoices?.filter(i => i.status === 'cancelled').length || 0,
       total_revenue: invoices?.filter(i => i.payment_status === 'paid').reduce((sum, i) => sum + i.total_amount, 0) || 0,
-      pending_amount: invoices?.filter(i => i.payment_status !== 'paid').reduce((sum, i) => sum + i.total_amount, 0) || 0,
+      pending_amount: invoices?.filter(i => i.payment_status !== 'paid' && i.status !== 'cancelled').reduce((sum, i) => sum + i.total_amount, 0) || 0,
       this_month_revenue: invoices?.filter(i => {
         const invoiceDate = new Date(i.invoice_date);
         return i.payment_status === 'paid' && 
