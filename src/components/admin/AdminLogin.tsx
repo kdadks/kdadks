@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { supabase, isSupabaseConfigured } from '../../config/supabase';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '../ui/ToastProvider';
+import { exchangeRateService } from '../../services/exchangeRateService';
 
 const AdminLogin: React.FC = () => {
   const { showSuccess, showError } = useToast();
@@ -77,6 +78,14 @@ const AdminLogin: React.FC = () => {
         showError('Login Failed', error.message);
       } else {
         showSuccess('Login Successful!', 'Redirecting to admin dashboard...');
+        
+        // Initialize exchange rate service after successful authentication
+        setTimeout(() => {
+          exchangeRateService.initialize().catch(error => {
+            console.warn('Exchange rate service initialization failed:', error);
+            // Continue with admin dashboard even if exchange rates fail
+          });
+        }, 1000);
         
         // Add a small delay to ensure auth state is set
         setTimeout(() => {

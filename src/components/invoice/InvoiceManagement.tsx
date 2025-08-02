@@ -2348,14 +2348,15 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
       }
       
       // Professional Footer - respect footer image positioning
-      if (yPos > contentEndY - 20) {
-        downloadPdf.addPage();
-        yPos = 20;
-      }
+      console.log(`Current yPos before footer: ${yPos.toFixed(1)}mm`);
+      console.log(`contentEndY (calculated by footer image): ${contentEndY.toFixed(1)}mm`);
       
-      // Use contentEndY to position footer text above footer image
-      const footerStartY = Math.min(yPos, contentEndY - 20);
+      // Force footer text to be positioned based on contentEndY (which includes the gap calculation)
+      // Don't add a new page - use the calculated position from footer image gap
+      const footerStartY = contentEndY - 5; // Position footer text just above the calculated gap
       yPos = footerStartY;
+      
+      console.log(`Forced footer text yPos to: ${yPos.toFixed(1)}mm (based on contentEndY with gap)`);
       
       downloadPdf.setDrawColor(240, 240, 240);
       downloadPdf.setLineWidth(0.2);
@@ -2901,37 +2902,114 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
       
       yPos += amountLines.length * 3 + 8;
       
-      // Banking Information - left side
+      // Smart layout: Banking details and Notes positioning (same as download PDF)
       const leftSectionStart = leftMargin;
+      const bankingDetailsAvailable = company.bank_name || company.account_number || company.ifsc_code;
+      const notesAvailable = fullInvoice.notes;
       
-      if (company.bank_name || company.account_number || company.ifsc_code) {
+      // If we have banking details but no notes, position banking details beside totals
+      if (bankingDetailsAvailable && !notesAvailable) {
+        // Position banking details to the left of totals at the same height
+        const bankingStartY = totalsStartX > 100 ? (yPos - amountLines.length * 3 - 8 - 25) : yPos; // Align with totals if space allows
+        
         emailPdf.setTextColor(37, 99, 235);
         emailPdf.setFontSize(9);
         emailPdf.setFont('helvetica', 'bold');
-        emailPdf.text('Payment Details', leftSectionStart, yPos);
+        emailPdf.text('Banking Details', leftSectionStart, bankingStartY);
         
-        yPos += 5;
+        let bankingYPos = bankingStartY + 5;
+        emailPdf.setFillColor(248, 250, 252);
+        const bankingBoxHeight = 20;
+        const leftColWidth = 85;
+        emailPdf.rect(leftSectionStart, bankingYPos - 2, leftColWidth, bankingBoxHeight, 'F');
+        emailPdf.setDrawColor(225, 229, 235);
+        emailPdf.setLineWidth(0.2);
+        emailPdf.rect(leftSectionStart, bankingYPos - 2, leftColWidth, bankingBoxHeight);
+        
         emailPdf.setFontSize(7);
-        emailPdf.setFont('helvetica', 'normal');
         emailPdf.setTextColor(60, 60, 60);
         
+        let bankingContentY = bankingYPos + 2;
+        
         if (company.bank_name) {
-          emailPdf.text('Bank: ' + company.bank_name, leftSectionStart, yPos);
-          yPos += 3;
+          emailPdf.setFont('helvetica', 'bold');
+          emailPdf.text('Bank:', leftSectionStart + 2, bankingContentY);
+          emailPdf.setFont('helvetica', 'normal');
+          emailPdf.text(company.bank_name, leftSectionStart + 15, bankingContentY);
+          bankingContentY += 4;
         }
+        
         if (company.account_number) {
-          emailPdf.text('Account: ' + company.account_number, leftSectionStart, yPos);
-          yPos += 3;
+          emailPdf.setFont('helvetica', 'bold');
+          emailPdf.text('A/C:', leftSectionStart + 2, bankingContentY);
+          emailPdf.setFont('helvetica', 'normal');
+          emailPdf.text(company.account_number, leftSectionStart + 15, bankingContentY);
+          bankingContentY += 4;
         }
+        
         if (company.ifsc_code) {
-          emailPdf.text('IFSC: ' + company.ifsc_code, leftSectionStart, yPos);
-          yPos += 3;
+          emailPdf.setFont('helvetica', 'bold');
+          emailPdf.text('IFSC:', leftSectionStart + 2, bankingContentY);
+          emailPdf.setFont('helvetica', 'normal');
+          emailPdf.text(company.ifsc_code, leftSectionStart + 15, bankingContentY);
         }
-        if (company.branch_name) {
-          emailPdf.text('Branch: ' + company.branch_name, leftSectionStart, yPos);
-          yPos += 3;
-        }
+        
+        // Update yPos to ensure proper spacing after side-by-side layout
+        yPos = Math.max(yPos, bankingStartY + 25);
+        
+      } else if (bankingDetailsAvailable) {
+        // Default layout: Banking details below totals (when notes are present)
+        emailPdf.setTextColor(37, 99, 235);
+        emailPdf.setFontSize(9);
+        emailPdf.setFont('helvetica', 'bold');
+        emailPdf.text('Banking Details', leftSectionStart, yPos);
+        
         yPos += 5;
+        emailPdf.setFillColor(248, 250, 252);
+        const bankingBoxHeight = 20;
+        const leftColWidth = 90;
+        emailPdf.rect(leftSectionStart, yPos - 2, leftColWidth, bankingBoxHeight, 'F');
+        emailPdf.setDrawColor(225, 229, 235);
+        emailPdf.setLineWidth(0.2);
+        emailPdf.rect(leftSectionStart, yPos - 2, leftColWidth, bankingBoxHeight);
+        
+        emailPdf.setFontSize(7);
+        emailPdf.setTextColor(60, 60, 60);
+        
+        let bankingContentY = yPos + 2;
+        
+        if (company.bank_name) {
+          emailPdf.setFont('helvetica', 'bold');
+          emailPdf.text('Bank:', leftSectionStart + 2, bankingContentY);
+          emailPdf.setFont('helvetica', 'normal');
+          emailPdf.text(company.bank_name, leftSectionStart + 15, bankingContentY);
+          bankingContentY += 4;
+        }
+        
+        if (company.account_number) {
+          emailPdf.setFont('helvetica', 'bold');
+          emailPdf.text('A/C:', leftSectionStart + 2, bankingContentY);
+          emailPdf.setFont('helvetica', 'normal');
+          emailPdf.text(company.account_number, leftSectionStart + 15, bankingContentY);
+          bankingContentY += 4;
+        }
+        
+        if (company.ifsc_code) {
+          emailPdf.setFont('helvetica', 'bold');
+          emailPdf.text('IFSC:', leftSectionStart + 2, bankingContentY);
+          emailPdf.setFont('helvetica', 'normal');
+          emailPdf.text(company.ifsc_code, leftSectionStart + 15, bankingContentY);
+          bankingContentY += 4;
+        }
+        
+        if (company.branch_name) {
+          emailPdf.setFont('helvetica', 'bold');
+          emailPdf.text('Branch:', leftSectionStart + 2, bankingContentY);
+          emailPdf.setFont('helvetica', 'normal');
+          emailPdf.text(company.branch_name, leftSectionStart + 15, bankingContentY);
+        }
+        
+        yPos += bankingBoxHeight + 5;
       }
       
       // Notes Section - compact and clean
@@ -2967,13 +3045,15 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
       }
       
       // Professional Footer - respect footer image positioning
-      if (yPos > contentEndY - 20) {
-        yPos = contentEndY - 20; // Ensure footer fits above footer image
-      }
+      console.log(`EMAIL PDF - Current yPos before footer: ${yPos.toFixed(1)}mm`);
+      console.log(`EMAIL PDF - contentEndY (calculated by footer image): ${contentEndY.toFixed(1)}mm`);
       
-      // Use contentEndY to position footer text above footer image
-      const footerStartY = Math.min(yPos, contentEndY - 20);
+      // Force footer text to be positioned based on contentEndY (which includes the gap calculation)
+      // Don't add a new page - use the calculated position from footer image gap
+      const footerStartY = contentEndY - 5; // Position footer text just above the calculated gap
       yPos = footerStartY;
+      
+      console.log(`EMAIL PDF - Forced footer text yPos to: ${yPos.toFixed(1)}mm (based on contentEndY with gap)`);
       
       emailPdf.setDrawColor(240, 240, 240);
       emailPdf.setLineWidth(0.2);

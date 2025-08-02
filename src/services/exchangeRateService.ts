@@ -25,23 +25,107 @@ class ExchangeRateService {
   };
 
   /**
+   * Check if user is authenticated before making API calls or database operations
+   */
+  private async checkAuthentication(): Promise<boolean> {
+    try {
+      const { data: { user }, error } = await supabase.auth.getUser();
+      
+      if (error || !user) {
+        console.warn('Exchange rate service: User not authenticated');
+        return false;
+      }
+      
+      return true;
+    } catch (error) {
+      console.warn('Exchange rate service: Authentication check failed:', error);
+      return false;
+    }
+  }
+
+  /**
    * Get exchange rate directly from database for specific date
+   * NEW STRUCTURE: target_currency is always 'INR'
+   * REQUIRES AUTHENTICATION
    */
   private async getDatabaseRate(fromCurrency: string, toCurrency: string, date: string): Promise<number | null> {
     try {
-      const { data, error } = await supabase
-        .from('exchange_rates')
-        .select('rate')
-        .eq('base_currency', fromCurrency)
-        .eq('target_currency', toCurrency)
-        .eq('date', date)
-        .single();
-
-      if (error || !data) {
+      // Check authentication before database access
+      const isAuthenticated = await this.checkAuthentication();
+      if (!isAuthenticated) {
+        console.warn('Exchange rate database access denied: User not authenticated');
         return null;
       }
 
-      return parseFloat(data.rate);
+      // Case 1: Same currency
+      if (fromCurrency === toCurrency) {
+        return 1.0;
+      }
+      
+      // Case 2: Converting TO INR (foreign currency → INR)
+      if (toCurrency === 'INR') {
+        const { data, error } = await supabase
+          .from('exchange_rates')
+          .select('rate')
+          .eq('base_currency', fromCurrency)
+          .eq('target_currency', 'INR')
+          .eq('date', date)
+          .single();
+
+        if (error || !data) {
+          return null;
+        }
+
+        return parseFloat(data.rate);
+      }
+      
+      // Case 3: Converting FROM INR (INR → foreign currency)
+      if (fromCurrency === 'INR') {
+        const { data, error } = await supabase
+          .from('exchange_rates')
+          .select('rate')
+          .eq('base_currency', toCurrency)
+          .eq('target_currency', 'INR')
+          .eq('date', date)
+          .single();
+
+        if (error || !data) {
+          return null;
+        }
+
+        // Inverse the rate since we have foreign→INR but need INR→foreign
+        return 1 / parseFloat(data.rate);
+      }
+      
+      // Case 4: Cross conversion (foreign currency A → foreign currency B)
+      // This requires two lookups: A→INR and B→INR, then calculate A→B
+      const [aToInrData, bToInrData] = await Promise.all([
+        supabase
+          .from('exchange_rates')
+          .select('rate')
+          .eq('base_currency', fromCurrency)
+          .eq('target_currency', 'INR')
+          .eq('date', date)
+          .single(),
+        supabase
+          .from('exchange_rates')
+          .select('rate')
+          .eq('base_currency', toCurrency)
+          .eq('target_currency', 'INR')
+          .eq('date', date)
+          .single()
+      ]);
+      
+      if (aToInrData.error || !aToInrData.data || bToInrData.error || !bToInrData.data) {
+        return null;
+      }
+      
+      const aToInrRate = parseFloat(aToInrData.data.rate);
+      const bToInrRate = parseFloat(bToInrData.data.rate);
+      
+      // Calculate cross rate: A→B = (A→INR) / (B→INR)
+      return aToInrRate / bToInrRate;
+      
     } catch (error) {
       console.error(`Error fetching database rate for ${fromCurrency}→${toCurrency} on ${date}:`, error);
       return null;
@@ -50,27 +134,90 @@ class ExchangeRateService {
 
   /**
    * Get recent exchange rate from database (within specified days)
+   * NEW STRUCTURE: target_currency is always 'INR'
    */
   private async getRecentDatabaseRate(fromCurrency: string, toCurrency: string, withinDays: number = 7): Promise<number | null> {
     try {
+      // Case 1: Same currency
+      if (fromCurrency === toCurrency) {
+        return 1.0;
+      }
+      
       const dateThreshold = new Date();
       dateThreshold.setDate(dateThreshold.getDate() - withinDays);
+      const thresholdDate = dateThreshold.toISOString().split('T')[0];
       
-      const { data, error } = await supabase
-        .from('exchange_rates')
-        .select('rate, date')
-        .eq('base_currency', fromCurrency)
-        .eq('target_currency', toCurrency)
-        .gte('date', dateThreshold.toISOString().split('T')[0])
-        .order('date', { ascending: false })
-        .limit(1)
-        .single();
+      // Case 2: Converting TO INR (foreign currency → INR)
+      if (toCurrency === 'INR') {
+        const { data, error } = await supabase
+          .from('exchange_rates')
+          .select('rate, date')
+          .eq('base_currency', fromCurrency)
+          .eq('target_currency', 'INR')
+          .gte('date', thresholdDate)
+          .order('date', { ascending: false })
+          .limit(1)
+          .single();
 
-      if (error || !data) {
+        if (error || !data) {
+          return null;
+        }
+
+        return parseFloat(data.rate);
+      }
+      
+      // Case 3: Converting FROM INR (INR → foreign currency)
+      if (fromCurrency === 'INR') {
+        const { data, error } = await supabase
+          .from('exchange_rates')
+          .select('rate, date')
+          .eq('base_currency', toCurrency)
+          .eq('target_currency', 'INR')
+          .gte('date', thresholdDate)
+          .order('date', { ascending: false })
+          .limit(1)
+          .single();
+
+        if (error || !data) {
+          return null;
+        }
+
+        // Inverse the rate since we have foreign→INR but need INR→foreign
+        return 1 / parseFloat(data.rate);
+      }
+      
+      // Case 4: Cross conversion - get most recent rates for both currencies
+      const [aToInrData, bToInrData] = await Promise.all([
+        supabase
+          .from('exchange_rates')
+          .select('rate, date')
+          .eq('base_currency', fromCurrency)
+          .eq('target_currency', 'INR')
+          .gte('date', thresholdDate)
+          .order('date', { ascending: false })
+          .limit(1)
+          .single(),
+        supabase
+          .from('exchange_rates')
+          .select('rate, date')
+          .eq('base_currency', toCurrency)
+          .eq('target_currency', 'INR')
+          .gte('date', thresholdDate)
+          .order('date', { ascending: false })
+          .limit(1)
+          .single()
+      ]);
+      
+      if (aToInrData.error || !aToInrData.data || bToInrData.error || !bToInrData.data) {
         return null;
       }
-
-      return parseFloat(data.rate);
+      
+      const aToInrRate = parseFloat(aToInrData.data.rate);
+      const bToInrRate = parseFloat(bToInrData.data.rate);
+      
+      // Calculate cross rate: A→B = (A→INR) / (B→INR)
+      return aToInrRate / bToInrRate;
+      
     } catch (error) {
       return null;
     }
@@ -117,6 +264,13 @@ class ExchangeRateService {
       return 1.0;
     }
 
+    // Check authentication before any operations
+    const isAuthenticated = await this.checkAuthentication();
+    if (!isAuthenticated) {
+      console.warn('Exchange rate access denied: User not authenticated');
+      return null;
+    }
+
     if (!isSupabaseConfigured) {
       console.warn('Database not configured, using emergency fallback rates');
       return this.getEmergencyFallbackRate(fromCurrency, toCurrency);
@@ -125,36 +279,16 @@ class ExchangeRateService {
     const targetDate = date || new Date().toISOString().split('T')[0];
     
     try {
-      // Primary: Try direct conversion from database
+      // Primary: Try direct conversion from database (handles all cases with new structure)
       console.log(`🔍 Checking database for ${fromCurrency} → ${toCurrency} on ${targetDate}`);
       
       const directRate = await this.getDatabaseRate(fromCurrency, toCurrency, targetDate);
       if (directRate) {
-        console.log(`✅ Found direct rate in database: 1 ${fromCurrency} = ${directRate} ${toCurrency}`);
+        console.log(`✅ Found rate in database: 1 ${fromCurrency} = ${directRate} ${toCurrency}`);
         return directRate;
       }
 
-      // Secondary: Try inverse conversion if direct not found
-      const inverseRate = await this.getDatabaseRate(toCurrency, fromCurrency, targetDate);
-      if (inverseRate && inverseRate !== 0) {
-        const calculatedRate = 1 / inverseRate;
-        console.log(`✅ Found inverse rate in database: 1 ${toCurrency} = ${inverseRate} ${fromCurrency}, calculated: 1 ${fromCurrency} = ${calculatedRate} ${toCurrency}`);
-        return calculatedRate;
-      }
-
-      // Tertiary: Try via INR conversion (most common scenario)
-      if (fromCurrency !== 'INR' && toCurrency !== 'INR') {
-        const fromToINR = await this.getDatabaseRate(fromCurrency, 'INR', targetDate);
-        const inrToTarget = await this.getDatabaseRate('INR', toCurrency, targetDate);
-        
-        if (fromToINR && inrToTarget) {
-          const crossRate = fromToINR * inrToTarget;
-          console.log(`✅ Found cross rate via INR: ${fromCurrency} → INR (${fromToINR}) → ${toCurrency} (${inrToTarget}) = ${crossRate}`);
-          return crossRate;
-        }
-      }
-
-      // Quaternary: Check for recent rates (within 7 days)
+      // Secondary: Check for recent rates (within 7 days)
       console.log(`🔍 No rate found for ${targetDate}, checking recent rates...`);
       const recentRate = await this.getRecentDatabaseRate(fromCurrency, toCurrency, 7);
       if (recentRate) {
@@ -162,7 +296,7 @@ class ExchangeRateService {
         return recentRate;
       }
 
-      // Last resort: Try to update rates and check again
+      // Tertiary: Try to update rates and check again
       console.log(`🔄 No recent rates found, attempting to update exchange rates...`);
       const updateSuccess = await this.updateExchangeRates(false);
       
@@ -189,7 +323,14 @@ class ExchangeRateService {
    * @returns Exchange rates object
    */
   async fetchCurrentRates(baseCurrency: string = 'INR'): Promise<ExchangeRateApiResponse> {
-    // Enhanced API list with more accurate sources (closer to xe.com rates)
+    // Check authentication before making any API calls
+    const isAuthenticated = await this.checkAuthentication();
+    if (!isAuthenticated) {
+      console.warn('Exchange rate API access denied: User not authenticated');
+      throw new Error('Authentication required for exchange rate API access');
+    }
+
+    // Enhanced API list with working free sources (no API key required)
     const apis = [
       { 
         url: `https://api.exchangerate-api.com/v4/latest/${baseCurrency}`, 
@@ -197,23 +338,29 @@ class ExchangeRateService {
         transform: (data: any) => data
       },
       { 
+        url: `https://api.fxratesapi.com/latest?base=${baseCurrency}`, 
+        name: 'FX Rates API (Free)',
+        transform: (data: any) => data
+      },
+      { 
+        url: `https://open.er-api.com/v6/latest/${baseCurrency}`, 
+        name: 'Open Exchange Rates API',
+        transform: (data: any) => data
+      },
+      { 
+        url: `https://api.exchangerate.host/latest?base=${baseCurrency}`, 
+        name: 'ExchangeRate.host (Free)',
+        transform: (data: any) => data
+      },
+      // Keep the premium ones but they'll fail gracefully if no API key
+      { 
         url: `https://api.currencyapi.com/v3/latest?apikey=FREE&base_currency=${baseCurrency}`, 
-        name: 'CurrencyAPI (Premium Source)',
+        name: 'CurrencyAPI (Premium - Requires Key)',
         transform: (data: any) => ({ base: baseCurrency, rates: data.data || {} })
       },
       { 
         url: `https://v6.exchangerate-api.com/v6/latest/${baseCurrency}`, 
-        name: 'ExchangeRate-API v6 (XE Compatible)',
-        transform: (data: any) => data
-      },
-      { 
-        url: `https://api.fxratesapi.com/latest?base=${baseCurrency}`, 
-        name: 'FX Rates API',
-        transform: (data: any) => data
-      },
-      { 
-        url: `https://api.exchangeratesapi.io/v1/latest?base=${baseCurrency}&access_key=FREE`, 
-        name: 'ExchangeRatesAPI.io',
+        name: 'ExchangeRate-API v6 (Premium - Requires Key)',
         transform: (data: any) => data
       }
     ];
@@ -224,13 +371,21 @@ class ExchangeRateService {
     for (const api of apis) {
       try {
         console.log(`🌐 Fetching live rates from ${api.name}...`);
+        
+        // Add timeout to prevent hanging requests
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+        
         const response = await fetch(api.url, {
           headers: {
             'Accept': 'application/json',
             'User-Agent': 'KDADKS-Invoice-System/1.0',
             'Content-Type': 'application/json'
-          }
+          },
+          signal: controller.signal
         });
+        
+        clearTimeout(timeoutId);
         
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status} - ${response.statusText}`);
@@ -265,12 +420,28 @@ class ExchangeRateService {
         
         return data;
       } catch (error) {
-        console.warn(`❌ ${api.name} failed:`, error instanceof Error ? error.message : error);
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        console.warn(`❌ ${api.name} failed: ${errorMessage}`);
+        
+        // Add specific handling for common errors
+        if (errorMessage.includes('Failed to fetch')) {
+          console.warn(`🌐 Network connectivity issue with ${api.name}:`);
+          console.warn(`   - This may be due to CORS policy, network connectivity, or API server issues`);
+          console.warn(`   - The app will try other APIs automatically`);
+          console.warn(`   - If all APIs fail, cached/fallback rates will be used`);
+        } else if (errorMessage.includes('AbortError')) {
+          console.warn(`⏱️ ${api.name} request timed out after 10 seconds`);
+        } else if (errorMessage.includes('401') || errorMessage.includes('403')) {
+          console.warn(`🔑 ${api.name} requires API key - skipping to free alternatives`);
+        }
+        
         continue;
       }
     }
 
-    throw new Error('All exchange rate APIs failed. Please try again later.');
+    const errorMsg = 'All exchange rate APIs failed. Using fallback rates or cached data.';
+    console.error(`❌ ${errorMsg}`);
+    throw new Error(errorMsg);
   }
   
   /**
@@ -281,6 +452,13 @@ class ExchangeRateService {
   async updateExchangeRates(forceUpdate: boolean = false): Promise<boolean> {
     if (!isSupabaseConfigured) {
       console.warn('Database not configured, skipping exchange rate update');
+      return false;
+    }
+
+    // Check authentication before any API calls or database operations
+    const isAuthenticated = await this.checkAuthentication();
+    if (!isAuthenticated) {
+      console.warn('Exchange rate update denied: User not authenticated');
       return false;
     }
 
@@ -311,30 +489,20 @@ class ExchangeRateService {
       console.log(`🔍 XE.com comparison: GBP should be ~116.047, fetched=${ratesData.rates.GBP}`);
       
       // Prepare batch insert data
+      // NEW STRUCTURE: Only insert foreign_currency → INR rates
+      // base_currency = foreign currency, target_currency = always 'INR'
       const ratesToInsert: any[] = [];
       
+      // Convert API rates (which are INR → foreign currency) to our format (foreign currency → INR)
       for (const [currency, rate] of Object.entries(ratesData.rates)) {
-        if (currency !== 'INR' && typeof rate === 'number') {
+        if (currency !== 'INR' && typeof rate === 'number' && rate !== 0) {
+          // API gives us how many foreign units = 1 INR
+          // We want how many INR = 1 foreign unit, so we take the inverse
+          const inrRate = 1 / rate;
           ratesToInsert.push({
-            base_currency: 'INR',
-            target_currency: currency,
-            rate: rate,
-            date: today,
-            source: forceUpdate ? 'manual-update' : 'api-automated-update'
-          });
-        }
-      }
-
-      // Also add major currencies to INR conversions (inverse rates)
-      const majorCurrencies = ['USD', 'EUR', 'GBP', 'AUD', 'CAD', 'SGD', 'AED', 'SAR', 'JPY', 'CNY'];
-      
-      for (const currency of majorCurrencies) {
-        if (ratesData.rates[currency] && ratesData.rates[currency] !== 0) {
-          const inverseRate = 1 / ratesData.rates[currency];
-          ratesToInsert.push({
-            base_currency: currency,
-            target_currency: 'INR',
-            rate: inverseRate,
+            base_currency: currency,        // Foreign currency (USD, EUR, etc.)
+            target_currency: 'INR',        // Always INR
+            rate: inrRate,                 // How many INR = 1 unit of foreign currency
             date: today,
             source: forceUpdate ? 'manual-update' : 'api-automated-update'
           });
@@ -347,17 +515,17 @@ class ExchangeRateService {
       }
 
       // Log specific rates being inserted
-      const gbpToInr = ratesToInsert.find(r => r.base_currency === 'GBP' && r.target_currency === 'INR');
-      const eurToInr = ratesToInsert.find(r => r.base_currency === 'EUR' && r.target_currency === 'INR');
-      const usdToInr = ratesToInsert.find(r => r.base_currency === 'USD' && r.target_currency === 'INR');
+      const gbpToInr = ratesToInsert.find(r => r.base_currency === 'GBP');
+      const eurToInr = ratesToInsert.find(r => r.base_currency === 'EUR');
+      const usdToInr = ratesToInsert.find(r => r.base_currency === 'USD');
       
-      console.log(`💱 Inserting key rates: GBP→INR=${gbpToInr?.rate}, EUR→INR=${eurToInr?.rate}, USD→INR=${usdToInr?.rate}`);
+      console.log(`💱 Inserting rates (Foreign→INR): GBP→INR=${gbpToInr?.rate?.toFixed(2)}, EUR→INR=${eurToInr?.rate?.toFixed(2)}, USD→INR=${usdToInr?.rate?.toFixed(2)}`);
 
-      // Batch insert with upsert (handle conflicts)
+      // Batch insert with upsert (handle conflicts with new constraint)
       const { error } = await supabase
         .from('exchange_rates')
         .upsert(ratesToInsert, {
-          onConflict: 'base_currency,target_currency,date',
+          onConflict: 'base_currency,date',  // Updated conflict resolution
           ignoreDuplicates: false
         });
 
@@ -385,6 +553,13 @@ class ExchangeRateService {
    * This should be called on application startup
    */
   async scheduleDailyUpdates(): Promise<void> {
+    // Check authentication before setting up scheduled updates
+    const isAuthenticated = await this.checkAuthentication();
+    if (!isAuthenticated) {
+      console.warn('Daily update scheduling denied: User not authenticated');
+      return;
+    }
+
     console.log('📅 Setting up daily exchange rate update schedule...');
     
     // Calculate milliseconds until next 00:01 UTC
@@ -580,6 +755,18 @@ class ExchangeRateService {
       };
     }
 
+    // Check authentication before database access
+    const isAuthenticated = await this.checkAuthentication();
+    if (!isAuthenticated) {
+      console.warn('Database health check denied: User not authenticated');
+      return {
+        total_rates: 0,
+        latest_update: 'Authentication Required',
+        currencies_covered: [],
+        missing_today: []
+      };
+    }
+
     try {
       const today = new Date().toISOString().split('T')[0];
       
@@ -596,14 +783,14 @@ class ExchangeRateService {
         .limit(1)
         .single();
 
-      // Get currencies covered today
+      // Get currencies covered today (NEW STRUCTURE: base_currency = foreign, target_currency = INR)
       const { data: todayRates } = await supabase
         .from('exchange_rates')
-        .select('target_currency')
+        .select('base_currency')
         .eq('date', today)
-        .eq('base_currency', 'INR');
+        .eq('target_currency', 'INR');
 
-      const currenciesToday = todayRates?.map(r => r.target_currency) || [];
+      const currenciesToday = todayRates?.map(r => r.base_currency) || [];
       const expectedCurrencies = Object.keys(this.EMERGENCY_FALLBACK_RATES);
       const missingToday = expectedCurrencies.filter(curr => !currenciesToday.includes(curr));
 
@@ -630,15 +817,29 @@ class ExchangeRateService {
   async initialize(): Promise<void> {
     console.log('🚀 Initializing Exchange Rate Service...');
     
+    // Check authentication before initialization
+    const isAuthenticated = await this.checkAuthentication();
+    if (!isAuthenticated) {
+      console.warn('Exchange rate service initialization denied: User not authenticated');
+      return;
+    }
+    
     try {
-      // Check database health
+      // Check database health first
       const health = await this.getDatabaseHealth();
       console.log('📊 Database Health:', health);
       
-      // Update rates if missing for today
-      if (health.missing_today.length > 0) {
-        console.log('🔄 Missing rates for today, updating...');
+      // Only update rates if we have NO rates for today AND we're missing critical currencies
+      const criticalCurrencies = ['USD', 'EUR', 'GBP'];
+      const missingCritical = health.missing_today.filter(curr => criticalCurrencies.includes(curr));
+      
+      if (missingCritical.length > 0) {
+        console.log(`🔄 Missing critical currencies (${missingCritical.join(', ')}) for today, updating...`);
+        // Add a small delay to avoid immediate API bombardment
+        await new Promise(resolve => setTimeout(resolve, 1000));
         await this.updateExchangeRates(false);
+      } else if (health.missing_today.length > 0) {
+        console.log(`ℹ️ Missing some currencies for today (${health.missing_today.join(', ')}), but critical ones available. Will update on-demand.`);
       }
       
       // Schedule daily updates
@@ -647,6 +848,7 @@ class ExchangeRateService {
       console.log('✅ Exchange Rate Service initialized successfully');
     } catch (error) {
       console.warn('⚠️ Exchange Rate Service initialization had issues:', error);
+      // Continue gracefully - the app should work even without live exchange rates
     }
   }
 }

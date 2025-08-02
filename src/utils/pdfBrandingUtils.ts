@@ -99,7 +99,7 @@ export class PDFBrandingUtils {
       
       // Calculate aspect ratio and scale to fit page width edge-to-edge
       const aspectRatio = img.naturalWidth / img.naturalHeight;
-      const maxFooterHeight = 25; // Increased for better proportion
+      const maxFooterHeight = 60; // Increased to allow larger footer images for proper measurement
       
       // Edge-to-edge width
       const footerWidth = pageWidth;
@@ -126,8 +126,32 @@ export class PDFBrandingUtils {
         'FAST'
       );
       
-      // Return Y position where content should end (well above footer image)
-      return footerY - 15; // Enough space for footer text above image
+      // Calculate gap based on RENDERED footer image height in the PDF
+      // Convert PDF mm to pixels for comparison: 1mm = 2.83px approximately
+      const footerHeightInPixels = footerHeight * 2.83;
+      let footerTextGap = 5; // Default minimal gap in mm
+      
+      console.log(`Footer image original dimensions: ${img.naturalWidth}x${img.naturalHeight}px`);
+      console.log(`Footer image rendered in PDF: ${footerWidth.toFixed(1)}mm x ${footerHeight.toFixed(1)}mm`);
+      console.log(`Footer image rendered height in pixels: ${footerHeightInPixels.toFixed(0)}px`);
+      
+      if (footerHeightInPixels <= 155) {
+        // For footer images rendered ≤155px height in PDF: Use 15px gap
+        // Convert 15px to mm: 15px ÷ 2.83 ≈ 5.3mm
+        footerTextGap = 15; // Making gap very large (15mm) to make it visible for testing
+        console.log(`Footer rendered height ${footerHeightInPixels.toFixed(0)}px ≤ 155px: Using LARGE 15mm gap for testing`);
+      } else {
+        // For larger footer images, use smaller gap
+        footerTextGap = 3; // Smaller fixed gap for larger images
+        console.log(`Footer rendered height ${footerHeightInPixels.toFixed(0)}px > 155px: Using smaller 3mm gap`);
+      }
+      
+      console.log(`Applied footer text gap: ${footerTextGap}mm`);
+      console.log(`Footer Y position: ${footerY.toFixed(1)}mm`);
+      console.log(`Content end Y (after gap): ${(footerY - footerTextGap).toFixed(1)}mm`);
+      
+      // Return Y position where content should end (gap above footer image)
+      return footerY - footerTextGap;
       
     } catch (error) {
       console.error('Failed to add footer image:', error);
@@ -236,11 +260,15 @@ export class PDFBrandingUtils {
     
     // Add footer image if available (this affects contentEndY)
     if (companySettings.footer_image_data) {
+      console.log(`Applying footer image branding...`);
       contentEndY = await this.addFooterImage(
         pdf, 
         companySettings.footer_image_data, 
         dimensions
       );
+      console.log(`Footer image applied, contentEndY set to: ${contentEndY.toFixed(1)}mm`);
+    } else {
+      console.log(`No footer image found in company settings`);
     }
     
     // Add logo image if available (positioned to avoid text conflict)
