@@ -148,11 +148,6 @@ export const ExchangeRateDisplay: React.FC<ExchangeRateDisplayProps> = ({
                 <span className="text-lg font-bold text-slate-900">
                   1 {customerCurrency} = ₹{currentRate.toFixed(4)}
                 </span>
-                <div className="text-xs text-slate-600 mt-1">
-                  {lastUpdated && (
-                    <>Last updated: {lastUpdated.toLocaleString()}</>
-                  )}
-                </div>
               </div>
               {showUpdateButton && (
                 <div className="text-right">

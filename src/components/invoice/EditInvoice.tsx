@@ -166,8 +166,9 @@ export const EditInvoice: React.FC<EditInvoiceProps> = ({
                   <select
                     value={invoiceFormData.customer_id}
                     onChange={(e) => handleFormChange('customer_id', e.target.value)}
-                    className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                    className="w-full px-4 py-3 border border-slate-300 rounded-lg bg-slate-50 text-slate-500 cursor-not-allowed"
                     required
+                    disabled
                   >
                     <option value="">Select Customer</option>
                     {customers.filter(customer => customer.is_active !== false).map(customer => (
