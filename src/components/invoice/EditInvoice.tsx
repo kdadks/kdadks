@@ -2,6 +2,7 @@ import React from 'react';
 import { FileText, Package, Plus, Trash } from 'lucide-react';
 import type { CreateInvoiceData, CreateInvoiceItemData, Customer, Product, TermsTemplate, CompanySettings, Invoice } from '../../types/invoice';
 import { getTaxLabel, getClassificationCodeLabel } from '../../utils/taxUtils';
+import { ExchangeRateDisplay } from '../ui/ExchangeRateDisplay';
 
 interface EditInvoiceProps {
   selectedInvoice: Invoice;
@@ -41,12 +42,12 @@ export const EditInvoice: React.FC<EditInvoiceProps> = ({
   onCloseInvoice,
   onTermsChange,
   onTermsTemplateSelect,
-  onDefaultProductChange,
+  // onDefaultProductChange: _onDefaultProductChange, // Unused for now
   customers,
   products,
   termsTemplates,
-  companySettings,
-  selectedDefaultProduct,
+  // companySettings: _companySettings, // Unused for now
+  // selectedDefaultProduct: _selectedDefaultProduct, // Unused for now
   selectedTermsTemplateId,
   globalHsnCode,
   modalLoading,
@@ -59,7 +60,7 @@ export const EditInvoice: React.FC<EditInvoiceProps> = ({
   const { subtotal, taxAmount, total } = calculateInvoiceTotals();
   const selectedCustomer = customers.find(c => c.id === invoiceFormData.customer_id);
   const currencyInfo = getCurrencyInfo(selectedCustomer);
-  const activeProducts = products.filter(p => p.is_active);
+  // const _activeProducts = products.filter(p => p.is_active); // Unused for now
 
   // Get dynamic tax label based on customer's country
   const taxLabel = getTaxLabel(selectedCustomer);
@@ -490,6 +491,9 @@ export const EditInvoice: React.FC<EditInvoiceProps> = ({
                 </div>
               </div>
             </div>
+
+            {/* Exchange Rate Display for Non-INR Customers */}
+            <ExchangeRateDisplay selectedCustomer={selectedCustomer} showUpdateButton={false} />
           </div>
         </div>
 

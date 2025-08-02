@@ -29,7 +29,8 @@ exports.handler = async (event, context) => {
 
   try {
     // Parse request body
-    const { to, from, subject, text, html } = JSON.parse(event.body);
+    const body = JSON.parse(event.body);
+    const { to, from, subject, text, html, attachments, attachment } = body;
 
     // Validate required fields
     if (!to || !subject || (!text && !html)) {
@@ -95,20 +96,22 @@ exports.handler = async (event, context) => {
       replyTo: from && from !== 'support@kdadks.com' ? from : undefined
     };
 
-    // Add attachment support for invoice PDFs (if provided)
-    if (event.body.includes('attachment')) {
-      try {
-        const parsedBody = JSON.parse(event.body);
-        if (parsedBody.attachment) {
-          mailOptions.attachments = [{
-            filename: parsedBody.attachment.filename || 'invoice.pdf',
-            content: parsedBody.attachment.content,
-            encoding: 'base64'
-          }];
-        }
-      } catch (attachmentError) {
-        console.warn('Failed to parse attachment:', attachmentError);
-      }
+    // Add attachment support for invoice PDFs (new array format and legacy single attachment)
+    if (attachments && Array.isArray(attachments)) {
+      // New array format for multiple attachments
+      mailOptions.attachments = attachments.map(att => ({
+        filename: att.filename || 'attachment.pdf',
+        content: att.content,
+        encoding: att.encoding || 'base64',
+        contentType: att.type || 'application/pdf'
+      }));
+    } else if (attachment) {
+      // Legacy single attachment format (backward compatibility)
+      mailOptions.attachments = [{
+        filename: attachment.filename || 'invoice.pdf',
+        content: attachment.content,
+        encoding: 'base64'
+      }];
     }
 
     console.log('Sending email via Brevo SMTP...');

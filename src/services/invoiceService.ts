@@ -1,5 +1,6 @@
 import { supabase, isSupabaseConfigured } from '../config/supabase';
 import { simpleAuth } from '../utils/simpleAuth';
+import { exchangeRateService } from './exchangeRateService';
 import type {
   Country,
   CompanySettings,
@@ -777,7 +778,7 @@ class InvoiceService {
       console.log('⚠️ No customer country found, using default INR');
     }
 
-    // Calculate totals
+    // Calculate totals in original currency
     let subtotal = 0;
     let taxAmount = 0;
 
@@ -790,15 +791,67 @@ class InvoiceService {
 
     const totalAmount = subtotal + taxAmount;
 
-    console.log('💾 Creating invoice with currency:', {
+    // Get exchange rate and convert to INR
+    const invoiceDate = invoiceData.invoice_date.split('T')[0]; // Get date part only
+    let exchangeRate = 1.0;
+    let inrSubtotal = subtotal;
+    let inrTaxAmount = taxAmount;
+    let inrTotalAmount = totalAmount;
+
+    if (currencyCode !== 'INR') {
+      console.log('🔄 Converting currency to INR:', {
+        originalCurrency: currencyCode,
+        originalAmount: totalAmount,
+        invoiceDate
+      });
+
+      try {
+        // Use enhanced database-first exchange rate service
+        const serviceRate = await exchangeRateService.getExchangeRate(currencyCode, 'INR', invoiceDate);
+        
+        if (serviceRate && serviceRate > 0) {
+          // Validate rate to prevent backward conversion
+          if (serviceRate < 10 && ['EUR', 'USD', 'GBP'].includes(currencyCode)) {
+            console.warn(`🚨 Exchange rate ${serviceRate} seems too low for ${currencyCode} → INR, this may be incorrect`);
+            throw new Error(`Suspicious exchange rate: ${serviceRate}`);
+          }
+          
+          exchangeRate = serviceRate;
+          console.log(`✅ Using database exchange rate: 1 ${currencyCode} = ${exchangeRate} INR`);
+          
+          // Convert amounts to INR using the exchange rate service
+          inrSubtotal = await exchangeRateService.convertToINR(subtotal, currencyCode, invoiceDate);
+          inrTaxAmount = await exchangeRateService.convertToINR(taxAmount, currencyCode, invoiceDate);
+          inrTotalAmount = await exchangeRateService.convertToINR(totalAmount, currencyCode, invoiceDate);
+          
+          console.log('✅ Currency conversion completed via database:', {
+            exchangeRate,
+            original: { subtotal, taxAmount, totalAmount, currency: currencyCode },
+            inr: { inrSubtotal, inrTaxAmount, inrTotalAmount }
+          });
+        } else {
+          throw new Error('Exchange rate service returned null or invalid rate');
+        }
+
+      } catch (error) {
+        console.error('❌ Currency conversion failed:', error);
+        // The enhanced exchange rate service already has emergency fallbacks
+        // so this should not happen, but if it does, we need to handle it
+        throw new Error(`Currency conversion failed for ${currencyCode}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      }
+    }
+
+    console.log('💾 Creating invoice with multi-currency support:', {
       invoiceNumber: finalInvoiceNumber,
       customerId: invoiceData.customer_id,
-      currencyCode,
-      totalAmount,
-      createdBy: currentUser.id // Use user ID instead of email
+      originalCurrency: currencyCode,
+      originalTotal: totalAmount,
+      exchangeRate,
+      inrTotal: inrTotalAmount,
+      createdBy: currentUser.id
     });
 
-    // Create invoice
+    // Create invoice with multi-currency support
     const { data: invoice, error: invoiceError } = await supabase
       .from('invoices')
       .insert({
@@ -807,13 +860,25 @@ class InvoiceService {
         company_settings_id: companySettings.id,
         invoice_date: invoiceData.invoice_date,
         due_date: invoiceData.due_date,
+        // Original currency amounts (for display and PDF generation)
         subtotal,
         tax_amount: taxAmount,
         total_amount: totalAmount,
-        currency_code: currencyCode, // Use customer's currency
+        currency_code: currencyCode,
+        // Multi-currency fields
+        original_currency_code: currencyCode,
+        original_subtotal: subtotal,
+        original_tax_amount: taxAmount,
+        original_total_amount: totalAmount,
+        exchange_rate: exchangeRate,
+        exchange_rate_date: invoiceDate,
+        inr_subtotal: inrSubtotal,
+        inr_tax_amount: inrTaxAmount,
+        inr_total_amount: inrTotalAmount,
+        // Other fields
         notes: invoiceData.notes,
         terms_conditions: invoiceData.terms_conditions,
-        created_by: currentUser.id // Use current user's UUID
+        created_by: currentUser.id
       })
       .select('*')
       .single();
@@ -824,81 +889,64 @@ class InvoiceService {
       id: invoice.id,
       invoiceNumber: invoice.invoice_number,
       currencyCode: invoice.currency_code,
-      totalAmount: invoice.total_amount
+      originalTotal: invoice.original_total_amount,
+      inrTotal: invoice.inr_total_amount,
+      exchangeRate: invoice.exchange_rate
     });
 
-    // Create invoice items
-    const itemsWithCalculations = invoiceData.items.map((item, index) => {
+    // Create invoice items with multi-currency support
+    const itemsWithCalculations = await Promise.all(invoiceData.items.map(async (item, index) => {
       const lineTotal = item.quantity * item.unit_price;
       const itemTaxAmount = (lineTotal * item.tax_rate) / 100;
       
-      console.log(`📦 Processing item ${index + 1}:`, {
+      // Convert item amounts to INR
+      let inrUnitPrice = item.unit_price;
+      let inrLineTotal = lineTotal;
+      let inrItemTaxAmount = itemTaxAmount;
+
+      if (currencyCode !== 'INR') {
+        inrUnitPrice = await exchangeRateService.convertToINR(item.unit_price, currencyCode, invoiceDate);
+        inrLineTotal = await exchangeRateService.convertToINR(lineTotal, currencyCode, invoiceDate);
+        inrItemTaxAmount = await exchangeRateService.convertToINR(itemTaxAmount, currencyCode, invoiceDate);
+      }
+      
+      console.log(`📦 Processing item ${index + 1} with multi-currency:`, {
         product_id: item.product_id || 'NULL/UNDEFINED',
         item_name: item.item_name,
-        description: item.description,
-        quantity: item.quantity,
-        unit: item.unit,
-        unit_price: item.unit_price,
-        tax_rate: item.tax_rate,
-        hsn_code: item.hsn_code || 'NULL/UNDEFINED',
-        lineTotal,
-        itemTaxAmount
+        original: { unit_price: item.unit_price, line_total: lineTotal, tax_amount: itemTaxAmount },
+        inr: { unit_price: inrUnitPrice, line_total: inrLineTotal, tax_amount: inrItemTaxAmount }
       });
       
       // Ensure product_id is handled correctly (null for undefined)
       const processedItem = {
         invoice_id: invoice.id,
-        product_id: item.product_id || null, // Convert undefined to null for database
+        product_id: item.product_id || null,
         item_name: item.item_name,
         description: item.description,
         quantity: item.quantity,
         unit: item.unit,
+        // Original currency amounts
         unit_price: item.unit_price,
         line_total: lineTotal,
         tax_rate: item.tax_rate,
         tax_amount: itemTaxAmount,
-        hsn_code: item.hsn_code || null // Convert undefined to null for database
+        // Multi-currency fields
+        original_unit_price: item.unit_price,
+        original_line_total: lineTotal,
+        original_tax_amount: itemTaxAmount,
+        inr_unit_price: inrUnitPrice,
+        inr_line_total: inrLineTotal,
+        inr_tax_amount: inrItemTaxAmount,
+        // Other fields
+        hsn_code: item.hsn_code || null
       };
       
-      console.log(`📝 Processed item ${index + 1} for database:`, {
-        product_id: processedItem.product_id,
-        item_name: processedItem.item_name,
-        hsn_code: processedItem.hsn_code
-      });
-      
       return processedItem;
-    });
+    }));
 
-    // Validate data before insertion
-    console.log('🔍 Validating items before insertion:', {
-      totalItems: itemsWithCalculations.length,
-      validation: itemsWithCalculations.map((item, index) => ({
-        index: index + 1,
-        hasInvoiceId: !!item.invoice_id,
-        hasItemName: !!item.item_name,
-        hasDescription: !!item.description,
-        productIdType: typeof item.product_id,
-        productIdValue: item.product_id,
-        hsnCodeType: typeof item.hsn_code,
-        hsnCodeValue: item.hsn_code,
-        quantityType: typeof item.quantity,
-        unitPriceType: typeof item.unit_price
-      }))
-    });
-
-    console.log('💾 Inserting invoice items:', {
+    console.log('💾 Inserting invoice items with multi-currency:', {
       invoiceId: invoice.id,
-      itemCount: itemsWithCalculations.length,
-      items: itemsWithCalculations.map((item, index) => ({
-        index: index + 1,
-        product_id: item.product_id,
-        item_name: item.item_name,
-        description: item.description,
-        hsn_code: item.hsn_code,
-        line_total: item.line_total,
-        tax_rate: item.tax_rate
-      })),
-      fullItemsData: itemsWithCalculations
+      itemCount: itemsWithCalculations.length
     });
 
     const { error: itemsError } = await supabase
@@ -911,18 +959,15 @@ class InvoiceService {
         message: itemsError.message,
         details: itemsError.details,
         hint: itemsError.hint,
-        code: itemsError.code,
-        itemsData: itemsWithCalculations.map(item => ({
-          product_id: item.product_id,
-          item_name: item.item_name,
-          hsn_code: item.hsn_code,
-          description: item.description
-        }))
+        code: itemsError.code
       });
       throw itemsError;
     }
 
-    console.log('✅ Invoice items inserted successfully');
+    console.log('✅ Invoice items inserted successfully with multi-currency support');
+
+    // Automatically fix currency conversion after creating the invoice
+    await this.fixInvoiceCurrencyConversion(invoice.id);
 
     // Return complete invoice with relations
     return this.getInvoiceById(invoice.id) as Promise<Invoice>;
@@ -958,6 +1003,21 @@ class InvoiceService {
       if (invoiceData.items && invoiceData.items.length > 0) {
         console.log('🔄 Updating invoice items, count:', invoiceData.items.length);
         
+        // Get customer to determine currency for multi-currency conversion
+        const customer = await this.getCustomerById(invoice.customer_id);
+        let currencyCode = 'INR'; // Default fallback
+        
+        if (customer && customer.country) {
+          currencyCode = customer.country.currency_code;
+          console.log('✅ Using customer country currency for update:', {
+            countryCode: customer.country.code,
+            currencyCode: customer.country.currency_code,
+            currencySymbol: customer.country.currency_symbol
+          });
+        } else {
+          console.log('⚠️ No customer country found for update, using default INR');
+        }
+        
         // Delete existing invoice items
         const { error: deleteError } = await supabase
           .from('invoice_items')
@@ -978,12 +1038,15 @@ class InvoiceService {
         
         console.log('🗑️ Existing items deleted');
 
-        // Calculate totals and prepare new items
+        // Calculate totals and prepare new items with multi-currency support
         let subtotal = 0;
         let taxAmount = 0;
+        const invoiceDate = invoiceData.invoice_date?.split('T')[0] || invoice.invoice_date?.split('T')[0];
 
-        console.log('📋 Processing invoice items:', {
+        console.log('📋 Processing invoice items with multi-currency:', {
           itemCount: invoiceData.items.length,
+          currencyCode,
+          invoiceDate,
           items: invoiceData.items.map((item, index) => ({
             index,
             item_name: item.item_name,
@@ -997,11 +1060,54 @@ class InvoiceService {
           }))
         });
 
-        const invoiceItems = invoiceData.items.map(item => {
+        // Get exchange rate for currency conversion
+        let exchangeRate = 1.0;
+        if (currencyCode !== 'INR') {
+          try {
+            const serviceRate = await exchangeRateService.getExchangeRate(currencyCode, 'INR', invoiceDate);
+            
+            if (serviceRate && serviceRate > 0) {
+              // Validate rate to prevent backward conversion
+              if (serviceRate < 10 && ['EUR', 'USD', 'GBP'].includes(currencyCode)) {
+                console.warn(`🚨 Exchange rate ${serviceRate} seems too low for ${currencyCode} → INR during update`);
+                throw new Error(`Suspicious exchange rate: ${serviceRate}`);
+              }
+              
+              exchangeRate = serviceRate;
+              console.log(`✅ Using database exchange rate for update: 1 ${currencyCode} = ${exchangeRate} INR`);
+            } else {
+              throw new Error('Exchange rate service returned null or invalid rate');
+            }
+          } catch (error) {
+            console.error('❌ Currency conversion failed during update:', error);
+            throw new Error(`Currency conversion failed for ${currencyCode}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+          }
+        }
+
+        // Create invoice items with multi-currency support
+        const itemsWithCalculations = await Promise.all(invoiceData.items.map(async (item, index) => {
           const lineTotal = item.quantity * item.unit_price;
-          const lineTax = (lineTotal * item.tax_rate) / 100;
+          const itemTaxAmount = (lineTotal * item.tax_rate) / 100;
           subtotal += lineTotal;
-          taxAmount += lineTax;
+          taxAmount += itemTaxAmount;
+          
+          // Convert item amounts to INR
+          let inrUnitPrice = item.unit_price;
+          let inrLineTotal = lineTotal;
+          let inrItemTaxAmount = itemTaxAmount;
+
+          if (currencyCode !== 'INR') {
+            inrUnitPrice = await exchangeRateService.convertToINR(item.unit_price, currencyCode, invoiceDate);
+            inrLineTotal = await exchangeRateService.convertToINR(lineTotal, currencyCode, invoiceDate);
+            inrItemTaxAmount = await exchangeRateService.convertToINR(itemTaxAmount, currencyCode, invoiceDate);
+          }
+          
+          console.log(`� Processing update item ${index + 1} with multi-currency:`, {
+            product_id: item.product_id || 'NULL/UNDEFINED',
+            item_name: item.item_name,
+            original: { unit_price: item.unit_price, line_total: lineTotal, tax_amount: itemTaxAmount },
+            inr: { unit_price: inrUnitPrice, line_total: inrLineTotal, tax_amount: inrItemTaxAmount }
+          });
 
           return {
             invoice_id: id,
@@ -1010,39 +1116,37 @@ class InvoiceService {
             description: item.description,
             quantity: item.quantity,
             unit: item.unit,
+            // Original currency amounts
             unit_price: item.unit_price,
-            tax_rate: item.tax_rate,
-            hsn_code: item.hsn_code || null,
             line_total: lineTotal,
-            tax_amount: lineTax,
+            tax_rate: item.tax_rate,
+            tax_amount: itemTaxAmount,
+            // Multi-currency fields
+            original_unit_price: item.unit_price,
+            original_line_total: lineTotal,
+            original_tax_amount: itemTaxAmount,
+            inr_unit_price: inrUnitPrice,
+            inr_line_total: inrLineTotal,
+            inr_tax_amount: inrItemTaxAmount,
+            // Other fields
+            hsn_code: item.hsn_code || null,
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString()
           };
-        });
+        }));
 
-        console.log('💾 Inserting new items with totals:', { 
-          itemCount: invoiceItems.length, 
+        console.log('💾 Inserting new items with multi-currency support:', { 
+          itemCount: itemsWithCalculations.length, 
           subtotal, 
           taxAmount,
-          preparedItems: invoiceItems.map((item, index) => ({
-            index,
-            invoice_id: item.invoice_id,
-            item_name: item.item_name,
-            description: item.description,
-            quantity: item.quantity,
-            unit_price: item.unit_price,
-            line_total: item.line_total,
-            tax_amount: item.tax_amount,
-            product_id: item.product_id,
-            unit: item.unit,
-            hsn_code: item.hsn_code
-          }))
+          currencyCode,
+          exchangeRate
         });
 
         // Insert new invoice items
         const { error: itemsError } = await supabase
           .from('invoice_items')
-          .insert(invoiceItems);
+          .insert(itemsWithCalculations);
         
         if (itemsError) {
           console.error('❌ Insert new items error:', {
@@ -1051,23 +1155,61 @@ class InvoiceService {
             details: itemsError.details,
             hint: itemsError.hint,
             code: itemsError.code,
-            invoiceItems
+            invoiceItems: itemsWithCalculations
           });
           throw new Error(`Failed to insert invoice items: ${itemsError.message || JSON.stringify(itemsError)}`);
         }
         
-        console.log('✅ New items inserted successfully');
+        console.log('✅ New items inserted successfully with multi-currency support');
 
-        // Update invoice totals
-        const total = subtotal + taxAmount;
-        console.log('🧮 Updating invoice totals:', { subtotal, taxAmount, total });
+        // Convert totals to INR for multi-currency support
+        const totalAmount = subtotal + taxAmount;
+        let inrSubtotal = subtotal;
+        let inrTaxAmount = taxAmount;
+        let inrTotalAmount = totalAmount;
+
+        if (currencyCode !== 'INR') {
+          inrSubtotal = await exchangeRateService.convertToINR(subtotal, currencyCode, invoiceDate);
+          inrTaxAmount = await exchangeRateService.convertToINR(taxAmount, currencyCode, invoiceDate);
+          inrTotalAmount = await exchangeRateService.convertToINR(totalAmount, currencyCode, invoiceDate);
+          
+          console.log('✅ Currency conversion completed for invoice update:', {
+            exchangeRate,
+            original: { subtotal, taxAmount, totalAmount, currency: currencyCode },
+            inr: { inrSubtotal, inrTaxAmount, inrTotalAmount }
+          });
+        }
+
+        // Update invoice totals with multi-currency support
+        console.log('🧮 Updating invoice totals with multi-currency:', { 
+          subtotal, 
+          taxAmount, 
+          totalAmount,
+          currencyCode,
+          exchangeRate,
+          inrSubtotal,
+          inrTaxAmount,
+          inrTotalAmount
+        });
         
         const { error: totalsError } = await supabase
           .from('invoices')
           .update({
+            // Original currency amounts (for display and PDF generation)
             subtotal,
             tax_amount: taxAmount,
-            total_amount: total,
+            total_amount: totalAmount,
+            currency_code: currencyCode,
+            // Multi-currency fields
+            original_currency_code: currencyCode,
+            original_subtotal: subtotal,
+            original_tax_amount: taxAmount,
+            original_total_amount: totalAmount,
+            exchange_rate: exchangeRate,
+            exchange_rate_date: invoiceDate,
+            inr_subtotal: inrSubtotal,
+            inr_tax_amount: inrTaxAmount,
+            inr_total_amount: inrTotalAmount,
             updated_at: new Date().toISOString()
           })
           .eq('id', id);
@@ -1077,7 +1219,7 @@ class InvoiceService {
           throw totalsError;
         }
         
-        console.log('✅ Invoice totals updated');
+        console.log('✅ Invoice totals updated with multi-currency support');
       }
 
       // Return the complete updated invoice with all relations
@@ -1107,6 +1249,9 @@ class InvoiceService {
         console.error('❌ Fetch updated invoice error:', fetchError);
         throw fetchError;
       }
+      
+      // Automatically fix currency conversion after updating the invoice
+      await this.fixInvoiceCurrencyConversion(id);
       
       console.log('✅ Invoice update completed successfully');
       return updatedInvoice;
@@ -1236,38 +1381,616 @@ class InvoiceService {
 
   // Dashboard Statistics
   async getInvoiceStats(): Promise<InvoiceStats> {
-    const { data: invoices, error } = await supabase
-      .from('invoices')
-      .select('status, payment_status, total_amount, invoice_date');
+    console.log('📊 Starting getInvoiceStats calculation...');
     
-    if (error) throw error;
+    // Always try the database view first, but prepare for fallback
+    const { data: multicurrencyStats, error: viewError } = await supabase
+      .from('invoice_stats_multicurrency')
+      .select('*')
+      .single();
+    
+    if (viewError) {
+      console.warn('📋 Multi-currency stats view not available, using fallback calculation:', viewError.message);
+    } else {
+      console.log('✅ Multi-currency view data retrieved:', multicurrencyStats);
+    }
+    
+    // Always fetch raw invoice data for verification and fallback
+    const { data: invoices, error: invoicesError } = await supabase
+      .from('invoices')
+      .select('status, payment_status, total_amount, inr_total_amount, original_currency_code, invoice_date');
+    
+    if (invoicesError) {
+      console.error('❌ Failed to fetch invoices for stats:', invoicesError);
+      throw invoicesError;
+    }
+
+    console.log(`📊 Processing ${invoices?.length || 0} invoices for stats calculation`);
 
     const currentDate = new Date();
     const currentMonth = currentDate.getMonth();
     const currentYear = currentDate.getFullYear();
 
-    const stats: InvoiceStats = {
+    // Calculate fallback stats using raw invoice data with INR amounts
+    const fallbackStats = {
       total_invoices: invoices?.length || 0,
       draft_invoices: invoices?.filter(i => i.status === 'draft').length || 0,
       sent_invoices: invoices?.filter(i => i.status === 'sent').length || 0,
-      paid_invoices: invoices?.filter(i => i.payment_status === 'paid').length || 0,
+      paid_invoices: invoices?.filter(i => i.payment_status === 'paid' && i.status !== 'cancelled').length || 0,
       overdue_invoices: invoices?.filter(i => i.status === 'overdue').length || 0,
       cancelled_invoices: invoices?.filter(i => i.status === 'cancelled').length || 0,
-      total_revenue: invoices?.filter(i => i.payment_status === 'paid').reduce((sum, i) => sum + i.total_amount, 0) || 0,
-      pending_amount: invoices?.filter(i => i.payment_status !== 'paid' && i.status !== 'cancelled').reduce((sum, i) => sum + i.total_amount, 0) || 0,
+      
+      // All calculations now use INR amounts for consistency
+      total_revenue: invoices?.filter(i => i.payment_status === 'paid' && i.status !== 'cancelled').reduce((sum, i) => sum + (i.inr_total_amount || i.total_amount || 0), 0) || 0,
+      pending_amount: invoices?.filter(i => i.payment_status !== 'paid' && i.status !== 'cancelled').reduce((sum, i) => sum + (i.inr_total_amount || i.total_amount || 0), 0) || 0,
       this_month_revenue: invoices?.filter(i => {
         const invoiceDate = new Date(i.invoice_date);
-        return i.payment_status === 'paid' && 
+        return i.payment_status === 'paid' && i.status !== 'cancelled' &&
                invoiceDate.getMonth() === currentMonth && 
                invoiceDate.getFullYear() === currentYear;
-      }).reduce((sum, i) => sum + i.total_amount, 0) || 0,
+      }).reduce((sum, i) => sum + (i.inr_total_amount || i.total_amount || 0), 0) || 0,
       this_year_revenue: invoices?.filter(i => {
         const invoiceDate = new Date(i.invoice_date);
-        return i.payment_status === 'paid' && invoiceDate.getFullYear() === currentYear;
-      }).reduce((sum, i) => sum + i.total_amount, 0) || 0
+        return i.payment_status === 'paid' && i.status !== 'cancelled' && invoiceDate.getFullYear() === currentYear;
+      }).reduce((sum, i) => sum + (i.inr_total_amount || i.total_amount || 0), 0) || 0,
+      
+      // Multi-currency calculations (INR) - with fallback to original amounts
+      total_revenue_inr: invoices?.filter(i => i.payment_status === 'paid' && i.status !== 'cancelled').reduce((sum, i) => sum + (i.inr_total_amount || i.total_amount || 0), 0) || 0,
+      pending_amount_inr: invoices?.filter(i => i.payment_status !== 'paid' && i.status !== 'cancelled').reduce((sum, i) => sum + (i.inr_total_amount || i.total_amount || 0), 0) || 0,
+      this_month_revenue_inr: invoices?.filter(i => {
+        const invoiceDate = new Date(i.invoice_date);
+        return i.payment_status === 'paid' && i.status !== 'cancelled' &&
+               invoiceDate.getMonth() === currentMonth && 
+               invoiceDate.getFullYear() === currentYear;
+      }).reduce((sum, i) => sum + (i.inr_total_amount || i.total_amount || 0), 0) || 0,
+      this_year_revenue_inr: invoices?.filter(i => {
+        const invoiceDate = new Date(i.invoice_date);
+        return i.payment_status === 'paid' && i.status !== 'cancelled' && invoiceDate.getFullYear() === currentYear;
+      }).reduce((sum, i) => sum + (i.inr_total_amount || i.total_amount || 0), 0) || 0
     };
 
+    console.log('💰 Calculated fallback stats:', {
+      pending_amount_inr: fallbackStats.pending_amount_inr,
+      total_revenue_inr: fallbackStats.total_revenue_inr,
+      total_invoices: fallbackStats.total_invoices,
+      paid_invoices: fallbackStats.paid_invoices,
+      cancelled_invoices: fallbackStats.cancelled_invoices
+    });
+
+    // If view is not available or unreliable, use fallback calculation
+    if (viewError || !multicurrencyStats) {
+      console.log('🔄 Using fallback stats calculation');
+      const stats: InvoiceStats = {
+        ...fallbackStats,
+        // Ensure multi-currency fields are properly set
+        currency_breakdown: {}
+      };
+      return stats;
+    }
+
+    // If view is available, use it but verify pending amount calculation
+    console.log('🔍 Comparing view vs fallback pending amounts:', {
+      viewPending: multicurrencyStats.pending_amount_inr,
+      fallbackPending: fallbackStats.pending_amount_inr,
+      difference: Math.abs((multicurrencyStats.pending_amount_inr || 0) - fallbackStats.pending_amount_inr)
+    });
+
+    // Use fallback calculation for pending amount if there's a significant difference
+    const useFallbackPending = Math.abs((multicurrencyStats.pending_amount_inr || 0) - fallbackStats.pending_amount_inr) > 1000;
+    
+    if (useFallbackPending) {
+      console.warn('⚠️ Large difference detected in pending amounts, using fallback calculation');
+    }
+
+    const stats: InvoiceStats = {
+      total_invoices: multicurrencyStats.total_invoices || fallbackStats.total_invoices,
+      draft_invoices: multicurrencyStats.draft_invoices || fallbackStats.draft_invoices,
+      sent_invoices: multicurrencyStats.sent_invoices || fallbackStats.sent_invoices,
+      paid_invoices: multicurrencyStats.paid_invoices || fallbackStats.paid_invoices,
+      overdue_invoices: multicurrencyStats.overdue_invoices || fallbackStats.overdue_invoices,
+      cancelled_invoices: multicurrencyStats.cancelled_invoices || fallbackStats.cancelled_invoices,
+      
+      // Use INR amounts as primary amounts for dashboard
+      total_revenue: multicurrencyStats.total_revenue_inr || fallbackStats.total_revenue_inr,
+      pending_amount: useFallbackPending ? fallbackStats.pending_amount_inr : (multicurrencyStats.pending_amount_inr || fallbackStats.pending_amount_inr),
+      this_month_revenue: multicurrencyStats.this_month_revenue_inr || fallbackStats.this_month_revenue_inr,
+      this_year_revenue: multicurrencyStats.this_year_revenue_inr || fallbackStats.this_year_revenue_inr,
+      
+      // Multi-currency specific fields
+      total_revenue_inr: multicurrencyStats.total_revenue_inr || fallbackStats.total_revenue_inr,
+      pending_amount_inr: useFallbackPending ? fallbackStats.pending_amount_inr : (multicurrencyStats.pending_amount_inr || fallbackStats.pending_amount_inr),
+      this_month_revenue_inr: multicurrencyStats.this_month_revenue_inr || fallbackStats.this_month_revenue_inr,
+      currency_breakdown: multicurrencyStats.currency_breakdown || {}
+    };
+
+    console.log('✅ Final stats calculated:', {
+      pending_amount: stats.pending_amount,
+      pending_amount_inr: stats.pending_amount_inr,
+      total_revenue_inr: stats.total_revenue_inr,
+      usedFallbackForPending: useFallbackPending
+    });
+
     return stats;
+  }
+
+  // Exchange rate management methods
+  async updateExchangeRates(forceUpdate: boolean = false): Promise<boolean> {
+    return await exchangeRateService.updateExchangeRates(forceUpdate);
+  }
+
+  async getExchangeRate(fromCurrency: string, toCurrency: string, date?: string): Promise<number | null> {
+    return await exchangeRateService.getExchangeRate(fromCurrency, toCurrency, date);
+  }
+
+  async convertCurrency(amount: number, fromCurrency: string, toCurrency: string, date?: string) {
+    return await exchangeRateService.convertCurrency(amount, fromCurrency, toCurrency, date);
+  }
+
+  async convertToINR(amount: number, fromCurrency: string, date?: string): Promise<number> {
+    return await exchangeRateService.convertToINR(amount, fromCurrency, date);
+  }
+
+  async getAvailableCurrencies() {
+    return await exchangeRateService.getAvailableCurrencies();
+  }
+
+  /**
+   * Fix currency conversion for a specific invoice
+   * This method should be called after saving/updating an invoice to ensure correct INR amounts
+   */
+  async fixInvoiceCurrencyConversion(invoiceId: string): Promise<boolean> {
+    try {
+      console.log(`🔧 Fixing currency conversion for invoice ${invoiceId}...`);
+      
+      // Get the invoice
+      const { data: invoice, error } = await supabase
+        .from('invoices')
+        .select('id, currency_code, original_currency_code, total_amount, subtotal, tax_amount, inr_total_amount, inr_subtotal, inr_tax_amount, invoice_date')
+        .eq('id', invoiceId)
+        .single();
+        
+      if (error || !invoice) {
+        console.error('❌ Failed to fetch invoice for currency fix:', error);
+        return false;
+      }
+      
+      const currencyCode = invoice.original_currency_code || invoice.currency_code || 'INR';
+      
+      // If already INR or INR amounts already exist and seem correct, skip
+      if (currencyCode === 'INR') {
+        if (!invoice.inr_total_amount || invoice.inr_total_amount !== invoice.total_amount) {
+          await supabase
+            .from('invoices')
+            .update({
+              inr_total_amount: invoice.total_amount,
+              inr_subtotal: invoice.subtotal,
+              inr_tax_amount: invoice.tax_amount,
+              original_currency_code: 'INR',
+              exchange_rate: 1.0,
+              exchange_rate_date: invoice.invoice_date
+            })
+            .eq('id', invoiceId);
+          console.log(`✅ Fixed INR invoice ${invoiceId}`);
+        }
+        return true;
+      }
+      
+      // For non-INR currencies, check if conversion is needed
+      if (invoice.inr_total_amount && invoice.inr_total_amount > 10) {
+        console.log(`✅ Invoice ${invoiceId} already has valid INR conversion`);
+        return true;
+      }
+      
+      // Need to convert to INR
+      console.log(`🔄 Converting ${currencyCode} to INR for invoice ${invoiceId}`);
+      
+      // Use fallback rates for reliability - Updated with current market rates (Aug 2025)
+      const fallbackRates: { [key: string]: number } = {
+        'USD': 83.0,      // 1 USD = 83.0 INR
+        'GBP': 105.0,     // 1 GBP = 105.0 INR  
+        'EUR': 101.15,    // 1 EUR = 101.15 INR (updated from 90.0)
+        'AUD': 55.0,      // 1 AUD = 55.0 INR
+        'CAD': 61.0,      // 1 CAD = 61.0 INR
+        'SGD': 62.0,      // 1 SGD = 62.0 INR
+        'AED': 22.5,      // 1 AED = 22.5 INR
+        'SAR': 22.0,      // 1 SAR = 22.0 INR
+        'JPY': 0.56,      // 1 JPY = 0.56 INR
+        'CNY': 11.5       // 1 CNY = 11.5 INR
+      };
+      
+      const exchangeRate = fallbackRates[currencyCode] || 1.0;
+      const inrTotalAmount = Math.round((invoice.total_amount * exchangeRate) * 100) / 100;
+      const inrSubtotal = Math.round((invoice.subtotal * exchangeRate) * 100) / 100;
+      const inrTaxAmount = Math.round((invoice.tax_amount * exchangeRate) * 100) / 100;
+      
+      const { error: updateError } = await supabase
+        .from('invoices')
+        .update({
+          original_currency_code: currencyCode,
+          original_total_amount: invoice.total_amount,
+          original_subtotal: invoice.subtotal,
+          original_tax_amount: invoice.tax_amount,
+          inr_total_amount: inrTotalAmount,
+          inr_subtotal: inrSubtotal,
+          inr_tax_amount: inrTaxAmount,
+          exchange_rate: exchangeRate,
+          exchange_rate_date: invoice.invoice_date
+        })
+        .eq('id', invoiceId);
+        
+      if (updateError) {
+        console.error(`❌ Failed to update invoice ${invoiceId} with INR amounts:`, updateError);
+        return false;
+      }
+      
+      console.log(`✅ Fixed invoice ${invoiceId}: ${currencyCode} ${invoice.total_amount} → INR ${inrTotalAmount} (rate: ${exchangeRate})`);
+      return true;
+    } catch (error) {
+      console.error(`❌ Currency fix failed for invoice ${invoiceId}:`, error);
+      return false;
+    }
+  }
+
+  /**
+   * Fix missing INR amounts for existing invoices
+   * This method should be called to update invoices that were created before multi-currency support
+   */
+  async fixMissingINRAmounts(): Promise<{ updated: number; errors: string[] }> {
+    console.log('🔧 Starting to fix missing INR amounts for existing invoices...');
+
+    try {
+      // Check authentication first
+      const currentUser = await simpleAuth.getCurrentUser();
+      if (!currentUser) {
+        throw new Error('User not authenticated');
+      }
+
+      // Get all invoices with missing INR amounts or where INR amount seems incorrect
+      console.log('📋 Fetching invoices that need INR amount fixes...');
+      const { data: invoices, error } = await supabase
+        .from('invoices')
+        .select('id, currency_code, original_currency_code, total_amount, original_total_amount, inr_total_amount, subtotal, original_subtotal, inr_subtotal, tax_amount, original_tax_amount, inr_tax_amount, invoice_date, exchange_rate')
+        .or('inr_total_amount.is.null,and(currency_code.neq.INR,inr_total_amount.lt.10),and(currency_code.neq.INR,inr_total_amount.eq.total_amount)');
+
+      if (error) {
+        console.error('❌ Database error:', error);
+        throw error;
+      }
+
+      if (!invoices || invoices.length === 0) {
+        console.log('✅ No invoices need INR amount fixes');
+        return { updated: 0, errors: [] };
+      }
+
+      console.log(`📊 Found ${invoices.length} invoices that need INR amount fixes`);
+
+      let updated = 0;
+      const errors: string[] = [];
+
+      for (const invoice of invoices) {
+        try {
+          const currencyCode = invoice.original_currency_code || invoice.currency_code;
+          
+          if (currencyCode === 'INR') {
+            // For INR invoices, INR amount should equal original amount
+            console.log(`💰 Fixing INR invoice ${invoice.id}`);
+            const { error: updateError } = await supabase
+              .from('invoices')
+              .update({
+                inr_total_amount: invoice.original_total_amount || invoice.total_amount,
+                inr_subtotal: invoice.original_subtotal || invoice.subtotal,
+                inr_tax_amount: invoice.original_tax_amount || invoice.tax_amount,
+                exchange_rate: 1.0
+              })
+              .eq('id', invoice.id);
+
+            if (updateError) {
+              console.error(`❌ Failed to update INR invoice ${invoice.id}:`, updateError);
+              throw updateError;
+            }
+            updated++;
+            console.log(`✅ Fixed INR invoice ${invoice.id}`);
+          } else {
+            // For non-INR invoices, convert to INR using exchange rate service
+            const totalAmount = invoice.original_total_amount || invoice.total_amount;
+            const subtotal = invoice.original_subtotal || invoice.subtotal;
+            const taxAmount = invoice.original_tax_amount || invoice.tax_amount;
+
+            console.log(`🔄 Converting ${currencyCode} amounts to INR for invoice ${invoice.id}`);
+
+            try {
+              const exchangeRate = await exchangeRateService.getExchangeRate(currencyCode, 'INR', invoice.invoice_date) || 1.0;
+              const inrTotalAmount = await exchangeRateService.convertToINR(totalAmount, currencyCode, invoice.invoice_date);
+              const inrSubtotal = await exchangeRateService.convertToINR(subtotal, currencyCode, invoice.invoice_date);
+              const inrTaxAmount = await exchangeRateService.convertToINR(taxAmount, currencyCode, invoice.invoice_date);
+
+              console.log(`💱 Conversion results: ${currencyCode} ${totalAmount} -> INR ${inrTotalAmount} (rate: ${exchangeRate})`);
+
+              const { error: updateError } = await supabase
+                .from('invoices')
+                .update({
+                  original_currency_code: currencyCode,
+                  original_total_amount: totalAmount,
+                  original_subtotal: subtotal,
+                  original_tax_amount: taxAmount,
+                  inr_total_amount: inrTotalAmount,
+                  inr_subtotal: inrSubtotal,
+                  inr_tax_amount: inrTaxAmount,
+                  exchange_rate: exchangeRate,
+                  exchange_rate_date: invoice.invoice_date
+                })
+                .eq('id', invoice.id);
+
+              if (updateError) {
+                console.error(`❌ Failed to update non-INR invoice ${invoice.id}:`, updateError);
+                throw updateError;
+              }
+              updated++;
+              console.log(`✅ Fixed non-INR invoice ${invoice.id}: ${currencyCode} ${totalAmount} -> INR ${inrTotalAmount} (rate: ${exchangeRate})`);
+            } catch (conversionError) {
+              console.warn(`⚠️ Conversion failed for invoice ${invoice.id}, using fallback (rate=1.0)`);
+              // Fallback: use 1:1 conversion if exchange rate service fails
+              const { error: updateError } = await supabase
+                .from('invoices')
+                .update({
+                  original_currency_code: currencyCode,
+                  original_total_amount: totalAmount,
+                  original_subtotal: subtotal,
+                  original_tax_amount: taxAmount,
+                  inr_total_amount: totalAmount, // Fallback 1:1
+                  inr_subtotal: subtotal,
+                  inr_tax_amount: taxAmount,
+                  exchange_rate: 1.0,
+                  exchange_rate_date: invoice.invoice_date
+                })
+                .eq('id', invoice.id);
+
+              if (updateError) throw updateError;
+              updated++;
+              console.log(`✅ Fixed invoice ${invoice.id} with fallback conversion`);
+            }
+          }
+        } catch (error) {
+          const errorMsg = `Failed to fix invoice ${invoice.id}: ${error instanceof Error ? error.message : 'Unknown error'}`;
+          console.error('❌', errorMsg);
+          errors.push(errorMsg);
+        }
+      }
+
+      console.log(`🎉 INR amount fix completed: ${updated} invoices updated, ${errors.length} errors`);
+      return { updated, errors };
+    } catch (error) {
+      console.error('💥 Failed to fix missing INR amounts:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Quick fix for missing INR amounts using fallback exchange rates
+   * This is a simpler version that doesn't rely on external APIs
+   */
+  async quickFixMissingINRAmounts(): Promise<{ updated: number; errors: string[] }> {
+    console.log('🔧 Starting quick fix for missing INR amounts using fallback rates...');
+
+    try {
+      // Check authentication first
+      const currentUser = await simpleAuth.getCurrentUser();
+      if (!currentUser) {
+        throw new Error('User not authenticated');
+      }
+
+      // Simple fallback exchange rates (approximate values)
+      const fallbackRates: { [key: string]: number } = {
+        'USD': 83.0,
+        'GBP': 105.0,
+        'EUR': 90.0,
+        'AUD': 55.0,
+        'CAD': 61.0,
+        'SGD': 62.0,
+        'AED': 22.5,
+        'SAR': 22.0,
+        'JPY': 0.56,
+        'CNY': 11.5,
+        'INR': 1.0
+      };
+
+      // Get all invoices with missing or incorrect INR amounts
+      console.log('📋 Fetching invoices that need INR amount fixes...');
+      const { data: invoices, error } = await supabase
+        .from('invoices')
+        .select('id, currency_code, original_currency_code, total_amount, original_total_amount, inr_total_amount, subtotal, original_subtotal, inr_subtotal, tax_amount, original_tax_amount, inr_tax_amount, invoice_date')
+        .or('inr_total_amount.is.null,and(currency_code.neq.INR,inr_total_amount.lt.10),and(currency_code.neq.INR,inr_total_amount.eq.total_amount)');
+
+      if (error) {
+        console.error('❌ Database error:', error);
+        throw error;
+      }
+
+      if (!invoices || invoices.length === 0) {
+        console.log('✅ No invoices need INR amount fixes');
+        return { updated: 0, errors: [] };
+      }
+
+      console.log(`📊 Found ${invoices.length} invoices that need INR amount fixes`);
+
+      let updated = 0;
+      const errors: string[] = [];
+
+      for (const invoice of invoices) {
+        try {
+          const currencyCode = invoice.original_currency_code || invoice.currency_code || 'INR';
+          const totalAmount = invoice.original_total_amount || invoice.total_amount;
+          const subtotal = invoice.original_subtotal || invoice.subtotal;
+          const taxAmount = invoice.original_tax_amount || invoice.tax_amount;
+
+          const exchangeRate = fallbackRates[currencyCode] || 1.0;
+          const inrTotalAmount = totalAmount * exchangeRate;
+          const inrSubtotal = subtotal * exchangeRate;
+          const inrTaxAmount = taxAmount * exchangeRate;
+
+          console.log(`💱 Converting ${currencyCode} ${totalAmount} -> INR ${inrTotalAmount} (rate: ${exchangeRate})`);
+
+          const { error: updateError } = await supabase
+            .from('invoices')
+            .update({
+              original_currency_code: currencyCode,
+              original_total_amount: totalAmount,
+              original_subtotal: subtotal,
+              original_tax_amount: taxAmount,
+              inr_total_amount: Math.round(inrTotalAmount * 100) / 100, // Round to 2 decimal places
+              inr_subtotal: Math.round(inrSubtotal * 100) / 100,
+              inr_tax_amount: Math.round(inrTaxAmount * 100) / 100,
+              exchange_rate: exchangeRate,
+              exchange_rate_date: invoice.invoice_date
+            })
+            .eq('id', invoice.id);
+
+          if (updateError) {
+            console.error(`❌ Failed to update invoice ${invoice.id}:`, updateError);
+            throw updateError;
+          }
+          
+          updated++;
+          console.log(`✅ Fixed invoice ${invoice.id}: ${currencyCode} ${totalAmount} -> INR ${Math.round(inrTotalAmount * 100) / 100}`);
+        } catch (error) {
+          const errorMsg = `Failed to fix invoice ${invoice.id}: ${error instanceof Error ? error.message : 'Unknown error'}`;
+          console.error('❌', errorMsg);
+          errors.push(errorMsg);
+        }
+      }
+
+      console.log(`🎉 Quick fix completed: ${updated} invoices updated, ${errors.length} errors`);
+      return { updated, errors };
+    } catch (error) {
+      console.error('💥 Failed to quick fix missing INR amounts:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Force fix ALL invoices with currency conversion (more aggressive)
+   * This will recalculate INR amounts for all non-INR invoices regardless of current state
+   */
+  async forceFixAllCurrencyConversions(): Promise<{ updated: number; errors: string[] }> {
+    console.log('🔧 Starting FORCE fix for ALL invoice currency conversions...');
+
+    try {
+      // Check authentication first
+      const currentUser = await simpleAuth.getCurrentUser();
+      if (!currentUser) {
+        throw new Error('User not authenticated');
+      }
+
+      // Simple fallback exchange rates (approximate values)
+      const fallbackRates: { [key: string]: number } = {
+        'USD': 83.0,
+        'GBP': 105.0,
+        'EUR': 90.0,
+        'AUD': 55.0,
+        'CAD': 61.0,
+        'SGD': 62.0,
+        'AED': 22.5,
+        'SAR': 22.0,
+        'JPY': 0.56,
+        'CNY': 11.5,
+        'INR': 1.0
+      };
+
+      // Get ALL invoices to force fix them
+      console.log('📋 Fetching ALL invoices for force currency fix...');
+      const { data: invoices, error } = await supabase
+        .from('invoices')
+        .select('id, currency_code, original_currency_code, total_amount, original_total_amount, inr_total_amount, subtotal, original_subtotal, inr_subtotal, tax_amount, original_tax_amount, inr_tax_amount, invoice_date');
+
+      if (error) {
+        console.error('❌ Database error:', error);
+        throw error;
+      }
+
+      if (!invoices || invoices.length === 0) {
+        console.log('✅ No invoices found');
+        return { updated: 0, errors: [] };
+      }
+
+      console.log(`📊 Found ${invoices.length} invoices for force currency fix`);
+
+      let updated = 0;
+      const errors: string[] = [];
+
+      for (const invoice of invoices) {
+        try {
+          const currencyCode = invoice.original_currency_code || invoice.currency_code || 'INR';
+          const totalAmount = invoice.original_total_amount || invoice.total_amount;
+          const subtotal = invoice.original_subtotal || invoice.subtotal;
+          const taxAmount = invoice.original_tax_amount || invoice.tax_amount;
+
+          console.log(`🔄 Force fixing invoice ${invoice.id}: ${currencyCode} ${totalAmount}`);
+
+          if (currencyCode === 'INR') {
+            // For INR invoices, INR amount should equal original amount
+            const { error: updateError } = await supabase
+              .from('invoices')
+              .update({
+                original_currency_code: 'INR',
+                original_total_amount: totalAmount,
+                original_subtotal: subtotal,
+                original_tax_amount: taxAmount,
+                inr_total_amount: totalAmount,
+                inr_subtotal: subtotal,
+                inr_tax_amount: taxAmount,
+                exchange_rate: 1.0,
+                exchange_rate_date: invoice.invoice_date
+              })
+              .eq('id', invoice.id);
+
+            if (updateError) {
+              console.error(`❌ Failed to update INR invoice ${invoice.id}:`, updateError);
+              throw updateError;
+            }
+            console.log(`✅ Force fixed INR invoice ${invoice.id}: INR ${totalAmount}`);
+          } else {
+            // For non-INR invoices, convert using fallback rates
+            const exchangeRate = fallbackRates[currencyCode] || 1.0;
+            const inrTotalAmount = totalAmount * exchangeRate;
+            const inrSubtotal = subtotal * exchangeRate;
+            const inrTaxAmount = taxAmount * exchangeRate;
+
+            const { error: updateError } = await supabase
+              .from('invoices')
+              .update({
+                original_currency_code: currencyCode,
+                original_total_amount: totalAmount,
+                original_subtotal: subtotal,
+                original_tax_amount: taxAmount,
+                inr_total_amount: Math.round(inrTotalAmount * 100) / 100,
+                inr_subtotal: Math.round(inrSubtotal * 100) / 100,
+                inr_tax_amount: Math.round(inrTaxAmount * 100) / 100,
+                exchange_rate: exchangeRate,
+                exchange_rate_date: invoice.invoice_date
+              })
+              .eq('id', invoice.id);
+
+            if (updateError) {
+              console.error(`❌ Failed to update invoice ${invoice.id}:`, updateError);
+              throw updateError;
+            }
+            console.log(`✅ Force fixed invoice ${invoice.id}: ${currencyCode} ${totalAmount} -> INR ${Math.round(inrTotalAmount * 100) / 100} (rate: ${exchangeRate})`);
+          }
+          
+          updated++;
+        } catch (error) {
+          const errorMsg = `Failed to force fix invoice ${invoice.id}: ${error instanceof Error ? error.message : 'Unknown error'}`;
+          console.error('❌', errorMsg);
+          errors.push(errorMsg);
+        }
+      }
+
+      console.log(`🎉 Force fix completed: ${updated} invoices updated, ${errors.length} errors`);
+      return { updated, errors };
+    } catch (error) {
+      console.error('💥 Failed to force fix currency conversions:', error);
+      throw error;
+    }
   }
 }
 

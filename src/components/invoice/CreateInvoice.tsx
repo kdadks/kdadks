@@ -2,6 +2,7 @@ import React from 'react';
 import { FileText, Package, Plus, Trash, X, Eye, Save } from 'lucide-react';
 import type { CreateInvoiceData, CreateInvoiceItemData, Customer, Product, TermsTemplate, CompanySettings } from '../../types/invoice';
 import { getTaxLabel, getClassificationCodeLabel } from '../../utils/taxUtils';
+import { ExchangeRateDisplay } from '../ui/ExchangeRateDisplay';
 
 interface CreateInvoiceProps {
   invoiceFormData: CreateInvoiceData;
@@ -45,7 +46,7 @@ export const CreateInvoice: React.FC<CreateInvoiceProps> = ({
   customers,
   products,
   termsTemplates,
-  companySettings,
+  // companySettings: _companySettings, // Unused for now
   selectedDefaultProduct,
   selectedTermsTemplateId,
   globalHsnCode,
@@ -460,6 +461,9 @@ export const CreateInvoice: React.FC<CreateInvoiceProps> = ({
                 </div>
               </div>
             </div>
+
+            {/* Exchange Rate Display for Non-INR Customers */}
+            <ExchangeRateDisplay selectedCustomer={selectedCustomer} />
           </div>
         </div>
       </div>

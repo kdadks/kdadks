@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import jsPDF from 'jspdf';
-import html2canvas from 'html2canvas';
 import { 
   Plus, 
   Search, 
@@ -25,9 +24,11 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { invoiceService } from '../../services/invoiceService';
+import { EmailService } from '../../services/emailService';
 import { simpleAuth } from '../../utils/simpleAuth';
 import { useToast } from '../ui/ToastProvider';
 import ConfirmDialog from '../ui/ConfirmDialog';
+import { CurrencyDisplay } from '../ui/CurrencyDisplay';
 import { useConfirmDialog } from '../../hooks/useConfirmDialog';
 import { CreateInvoice } from './CreateInvoice';
 import { EditInvoice } from './EditInvoice';
@@ -2930,162 +2931,43 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
         return;
       }
 
-      showInfo('📧 Generating email content...');
+      showInfo('📧 Sending invoice email...');
 
-      // Prepare email content
-      const emailSubject = `Invoice ${invoice.invoice_number} from ${company.company_name}`;
-      const emailHtml = `
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <meta charset="UTF-8">
-            <title>Invoice ${invoice.invoice_number}</title>
-            <style>
-                body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; }
-                .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-                .header { background: linear-gradient(135deg, #2563eb, #1d4ed8); color: white; padding: 30px 20px; border-radius: 8px; text-align: center; margin-bottom: 30px; }
-                .content { background: #ffffff; padding: 25px; border: 1px solid #e5e7eb; border-radius: 8px; margin-bottom: 20px; }
-                .invoice-details { background: #f8f9fa; padding: 20px; border-radius: 6px; margin: 20px 0; }
-                .company-info { background: #f0f9ff; padding: 15px; border-radius: 6px; margin: 20px 0; border-left: 4px solid #2563eb; }
-                .footer { text-align: center; padding: 20px; color: #6b7280; font-size: 12px; border-top: 1px solid #e5e7eb; }
-                .btn { display: inline-block; padding: 12px 24px; background: #2563eb; color: white; text-decoration: none; border-radius: 6px; font-weight: 600; }
-                .amount { font-size: 24px; font-weight: bold; color: #2563eb; }
-            </style>
-        </head>
-        <body>
-            <div class="container">
-                <div class="header">
-                    <h1 style="margin: 0; font-size: 28px;">Invoice ${invoice.invoice_number}</h1>
-                    <p style="margin: 10px 0 0 0; opacity: 0.9;">from ${company.company_name}</p>
-                </div>
-                
-                <div class="content">
-                    <p>Dear ${customer.contact_person || 'Valued Customer'},</p>
-                    
-                    <p>Thank you for your business! Please find the details of your invoice below:</p>
-                    
-                    <div class="invoice-details">
-                        <h3 style="margin-top: 0; color: #374151;">Invoice Details</h3>
-                        <p><strong>Invoice Number:</strong> ${invoice.invoice_number}</p>
-                        <p><strong>Invoice Date:</strong> ${new Date(invoice.invoice_date).toLocaleDateString()}</p>
-                        <p><strong>Due Date:</strong> ${invoice.due_date ? new Date(invoice.due_date).toLocaleDateString() : 'N/A'}</p>
-                        <p class="amount"><strong>Total Amount:</strong> ₹${invoice.total_amount.toFixed(2)}</p>
-                    </div>
-                    
-                    ${invoice.notes ? `
-                        <div style="background: #fffbeb; padding: 15px; border-radius: 6px; border-left: 4px solid #f59e0b; margin: 20px 0;">
-                            <h4 style="margin-top: 0; color: #92400e;">Notes:</h4>
-                            <p style="margin-bottom: 0; color: #451a03;">${invoice.notes}</p>
-                        </div>
-                    ` : ''}
-                    
-                    <p>If you have any questions about this invoice, please don't hesitate to contact us.</p>
-                    
-                    <div class="company-info">
-                        <h4 style="margin-top: 0; color: #1e40af;">Contact Information</h4>
-                        <p style="margin: 5px 0;"><strong>${company.company_name}</strong></p>
-                        ${company.email ? `<p style="margin: 5px 0;">Email: ${company.email}</p>` : ''}
-                        ${company.phone ? `<p style="margin: 5px 0;">Phone: ${company.phone}</p>` : ''}
-                        ${company.website ? `<p style="margin: 5px 0;">Website: ${company.website}</p>` : ''}
-                    </div>
-                </div>
-                
-                <div class="footer">
-                    <p>This email was sent from ${company.company_name}'s invoice management system.</p>
-                    <p>Please do not reply to this email. If you need assistance, please contact us using the information above.</p>
-                </div>
-            </div>
-        </body>
-        </html>
-      `;
+      // Check if this is a paid invoice
+      const isPaidInvoice = fullInvoice.payment_status === 'paid';
+      
+      if (isPaidInvoice) {
+        showInfo('💳 Sending payment confirmation email...');
+      } else {
+        showInfo('📄 Sending invoice email...');
+      }
 
-      const emailText = `
-Dear ${customer.contact_person || 'Valued Customer'},
-
-Thank you for your business! Please find the details of your invoice below:
-
-Invoice Details:
-- Invoice Number: ${invoice.invoice_number}
-- Invoice Date: ${new Date(invoice.invoice_date).toLocaleDateString()}
-- Due Date: ${invoice.due_date ? new Date(invoice.due_date).toLocaleDateString() : 'N/A'}
-- Total Amount: ₹${invoice.total_amount.toFixed(2)}
-
-${invoice.notes ? `Notes: ${invoice.notes}\n\n` : ''}
-
-If you have any questions about this invoice, please don't hesitate to contact us.
-
-Contact Information:
-${company.company_name}
-${company.email ? `Email: ${company.email}` : ''}
-${company.phone ? `Phone: ${company.phone}` : ''}
-${company.website ? `Website: ${company.website}` : ''}
-
-Best regards,
-${company.company_name}
-
----
-This email was sent from ${company.company_name}'s invoice management system.
-      `;
-
-      showInfo('📤 Sending email to ' + customer.email + '...');
-
-      // Send email using existing email service
+      // Send email using EmailService with PDF attachment
       try {
-        const emailData = {
-          to: customer.email,
-          from: 'support@kdadks.com', // Fixed sender email
-          subject: emailSubject,
-          text: emailText,
-          html: emailHtml,
-          attachment: {
-            filename: emailFilename.replace(/[^a-zA-Z0-9.-]/g, '_'), // Clean filename
-            content: emailPdfBase64
+        await EmailService.sendInvoiceEmail(
+          fullInvoice,
+          customer,
+          company,
+          emailPdfBase64,
+          isPaidInvoice
+        );
+
+        // Email sent successfully - update invoice status to 'sent' if not already paid
+        if (!isPaidInvoice) {
+          try {
+            await invoiceService.updateInvoiceStatus(invoice.id, 'sent');
+            
+            // Refresh invoices list to show updated status
+            await loadData();
+            
+            showSuccess(`✅ Email sent successfully! Invoice ${invoice.invoice_number} has been emailed to ${customer.email} and status updated to 'Sent'.`);
+          } catch (statusError) {
+            console.error('Failed to update invoice status:', statusError);
+            showSuccess(`✅ Email sent successfully! Invoice ${invoice.invoice_number} has been emailed to ${customer.email}. (Note: Status update failed - please refresh the page)`);
           }
-        };
-
-        // Use Netlify function for email service
-        const emailEndpoint = '/.netlify/functions/send-email';
-        
-        const response = await fetch(emailEndpoint, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(emailData),
-        });
-
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}));
-          
-          // Provide specific error messages based on status
-          let errorMessage = `Email service error: ${response.status}`;
-          if (response.status === 401) {
-            errorMessage = 'Email service authentication failed. Please contact support.';
-          } else if (response.status === 500) {
-            errorMessage = 'Email service temporarily unavailable. Please try again later or contact support.';
-          } else if (response.status === 404) {
-            errorMessage = 'Email service not configured. Please contact the administrator.';
-          } else if (errorData.message) {
-            errorMessage = errorData.message;
-          }
-          
-          throw new Error(errorMessage);
-        }
-
-        const result = await response.json();
-        console.log('✅ Email sent successfully:', result);
-
-        // Email sent successfully - update invoice status to 'sent'
-        try {
-          await invoiceService.updateInvoiceStatus(invoice.id, 'sent');
-          
-          // Refresh invoices list to show updated status
-          await loadData();
-          
-          showSuccess(`✅ Email sent successfully! Invoice ${invoice.invoice_number} has been emailed to ${customer.email} and status updated to 'Sent'.`);
-        } catch (statusError) {
-          console.error('Failed to update invoice status:', statusError);
-          showSuccess(`✅ Email sent successfully! Invoice ${invoice.invoice_number} has been emailed to ${customer.email}. (Note: Status update failed - please refresh the page)`);
+        } else {
+          // For paid invoices, just confirm email was sent
+          showSuccess(`✅ Payment confirmation email sent successfully! Thank you receipt for Invoice ${invoice.invoice_number} has been emailed to ${customer.email}.`);
         }
 
       } catch (emailError) {
@@ -4045,7 +3927,13 @@ This email was sent from ${company.company_name}'s invoice management system.
             </td>
             <td className="px-6 py-4 whitespace-nowrap">
               <div className="text-sm font-medium text-gray-900">
-                {formatInvoiceCurrency(invoice.total_amount, invoice.currency_code)}
+                <CurrencyDisplay 
+                  amount={invoice.total_amount}
+                  currencyCode={invoice.currency_code}
+                  inrAmount={invoice.inr_total_amount}
+                  showBothCurrencies={invoice.currency_code !== 'INR'}
+                  conversionDate={invoice.invoice_date}
+                />
               </div>
             </td>
             <td className="px-6 py-4 whitespace-nowrap">
@@ -4172,7 +4060,13 @@ This email was sent from ${company.company_name}'s invoice management system.
             </td>
             <td className="px-6 py-4 whitespace-nowrap">
               <div className="text-sm font-medium text-gray-900">
-                {formatInvoiceCurrency(invoice.total_amount, invoice.currency_code)}
+                <CurrencyDisplay 
+                  amount={invoice.total_amount}
+                  currencyCode={invoice.currency_code}
+                  inrAmount={invoice.inr_total_amount}
+                  showBothCurrencies={invoice.currency_code !== 'INR'}
+                  conversionDate={invoice.invoice_date}
+                />
               </div>
             </td>
             <td className="px-6 py-4 whitespace-nowrap">
@@ -4216,7 +4110,7 @@ This email was sent from ${company.company_name}'s invoice management system.
       {/* Header with Actions */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
         <h2 className="text-2xl font-bold text-gray-900">Invoices</h2>
-        <div className="mt-4 sm:mt-0">
+        <div className="mt-4 sm:mt-0 flex gap-2">
           <button 
             onClick={() => openCreateInvoiceTab()}
             className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
@@ -6415,13 +6309,20 @@ This email was sent from ${company.company_name}'s invoice management system.
               <>
                 {/* Validation Guidelines */}
                 <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-md">
-                  <h4 className="text-sm font-medium text-blue-900 mb-2">📋 Form Guidelines:</h4>
+                  <h4 className="text-sm font-medium text-blue-900 mb-2">📋 Form Guidelines & International Policies:</h4>
                   <ul className="text-xs text-blue-800 space-y-1">
-                    <li>• Either Company Name or Contact Person is required</li>
-                    <li>• Email format will be validated if provided</li>
-                    <li>• GSTIN should be 15 characters (e.g., 22AAAAA0000A1Z5)</li>
-                    <li>• PAN should be 10 characters (e.g., ABCDE1234F)</li>
-                    <li>• All other fields are optional</li>
+                    <li>• <strong>Required Fields:</strong> Either Company Name or Contact Person is mandatory</li>
+                    <li>• <strong>Email Validation:</strong> Valid email format required if provided</li>
+                    <li>• <strong>India (GST):</strong> GSTIN: 15 chars (e.g., 22AAAAA0000A1Z5), PAN: 10 chars (e.g., ABCDE1234F)</li>
+                    <li>• <strong>USA:</strong> Federal Tax ID/EIN format required for business customers</li>
+                    <li>• <strong>UK:</strong> VAT number format validation for VAT-registered entities</li>
+                    <li>• <strong>EU:</strong> EU VAT ID format compliance for cross-border transactions</li>
+                    <li>• <strong>Canada:</strong> GST/HST number format validation for registered businesses</li>
+                    <li>• <strong>Australia:</strong> ABN (Australian Business Number) format verification</li>
+                    <li>• <strong>Singapore:</strong> UEN (Unique Entity Number) format for business registration</li>
+                    <li>• <strong>UAE:</strong> TRN (Tax Registration Number) format for VAT compliance</li>
+                    <li>• <strong>Global Policy:</strong> All tax IDs auto-validated based on selected country</li>
+                    <li>• <strong>Data Privacy:</strong> Customer data handled per GDPR, CCPA, and local regulations</li>
                   </ul>
                 </div>
 

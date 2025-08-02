@@ -168,6 +168,14 @@ export interface InvoiceItem {
   tax_rate: number;
   tax_amount: number;
   
+  // Multi-currency support
+  original_unit_price?: number;
+  original_line_total?: number;
+  original_tax_amount?: number;
+  inr_unit_price?: number;
+  inr_line_total?: number;
+  inr_tax_amount?: number;
+  
   // HSN/SAC for India GST
   hsn_code?: string;
   
@@ -187,11 +195,22 @@ export interface Invoice {
   invoice_date: string;
   due_date?: string;
   
-  // Financial Information
+  // Financial Information (current/display amounts)
   subtotal: number;
   tax_amount: number;
   total_amount: number;
   currency_code: string;
+  
+  // Multi-currency support
+  original_currency_code?: string;
+  original_subtotal?: number;
+  original_tax_amount?: number;
+  original_total_amount?: number;
+  exchange_rate?: number;
+  exchange_rate_date?: string;
+  inr_subtotal?: number;
+  inr_tax_amount?: number;
+  inr_total_amount?: number;
   
   // Status
   status: 'draft' | 'sent' | 'paid' | 'cancelled' | 'overdue';
@@ -222,6 +241,13 @@ export interface Payment {
   amount: number;
   payment_method?: string;
   reference_number?: string;
+  
+  // Multi-currency support
+  original_currency_code?: string;
+  original_amount?: number;
+  exchange_rate?: number;
+  exchange_rate_date?: string;
+  inr_amount?: number;
   
   // Bank Details (if applicable)
   bank_name?: string;
@@ -369,6 +395,49 @@ export interface InvoiceStats {
   pending_amount: number;
   this_month_revenue: number;
   this_year_revenue: number;
+  
+  // Multi-currency stats (all in INR)
+  total_revenue_inr?: number;
+  pending_amount_inr?: number;
+  this_month_revenue_inr?: number;
+  currency_breakdown?: Record<string, {
+    total_amount: number;
+    count: number;
+  }>;
+}
+
+// Exchange Rate Types
+export interface ExchangeRate {
+  id: string;
+  base_currency: string;
+  target_currency: string;
+  rate: number;
+  date: string;
+  source?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CurrencyConversion {
+  from_currency: string;
+  to_currency: string;
+  original_amount: number;
+  converted_amount: number;
+  exchange_rate: number;
+  conversion_date: string;
+}
+
+// API Response for exchange rates
+export interface ExchangeRateApiResponse {
+  base: string;
+  date: string;
+  rates: Record<string, number>;
+  success?: boolean;
+  error?: {
+    code: number;
+    type: string;
+    info: string;
+  };
 }
 
 // Search and Filter types
