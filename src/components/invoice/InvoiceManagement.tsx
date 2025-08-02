@@ -28,6 +28,8 @@ import { EmailService } from '../../services/emailService';
 import { simpleAuth } from '../../utils/simpleAuth';
 import { useToast } from '../ui/ToastProvider';
 import ConfirmDialog from '../ui/ConfirmDialog';
+import { PDFBrandingUtils } from '../../utils/pdfBrandingUtils';
+import PDFBrandingManager from '../admin/PDFBrandingManager';
 import { CurrencyDisplay } from '../ui/CurrencyDisplay';
 import { useConfirmDialog } from '../../hooks/useConfirmDialog';
 import { CreateInvoice } from './CreateInvoice';
@@ -1680,106 +1682,108 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
       // Use ONLY the most basic font without any variations that might trigger Unicode
       downloadPdf.setFont('helvetica');
       
-      let yPos = 15;
-      const leftMargin = 15;
-      const rightMargin = 195;
-      const pageWidth = 210;
+      // Get PDF dimensions for branding
+      const dimensions = PDFBrandingUtils.getStandardDimensions();
       
-      // Modern Header Section
-      downloadPdf.setFillColor(37, 99, 235);
-      downloadPdf.rect(0, 0, pageWidth, 25, 'F');
+      // Apply branding images (header, footer, logo)
+      const { contentStartY, contentEndY } = await PDFBrandingUtils.applyBranding(
+        downloadPdf, 
+        company, 
+        dimensions
+      );
       
-      // Invoice title - smaller and more elegant
-      downloadPdf.setFontSize(16);
-      downloadPdf.setTextColor(255, 255, 255);
-      downloadPdf.setFont('helvetica', 'bold');
-      downloadPdf.text('Invoice', leftMargin, 12);
+      // Create branded header section
+      let yPos = PDFBrandingUtils.createBrandedHeader(
+        downloadPdf,
+        company,
+        String(fullInvoice.invoice_number),
+        String(new Date(fullInvoice.invoice_date).toLocaleDateString()),
+        String(fullInvoice.due_date ? new Date(fullInvoice.due_date).toLocaleDateString() : 'N/A'),
+        dimensions,
+        contentStartY
+      );
       
-      // Invoice number - right aligned
-      downloadPdf.setFontSize(10);
-      downloadPdf.setFont('helvetica', 'normal');
-      downloadPdf.text('Invoice #' + String(fullInvoice.invoice_number), rightMargin, 12, { align: 'right' });
+      // Extract dimensions for use throughout the function
+      const leftMargin = dimensions.leftMargin;
+      const rightMargin = dimensions.rightMargin;
+      const pageWidth = dimensions.pageWidth;
       
-      // Date information in header
-      downloadPdf.setFontSize(8);
-      downloadPdf.text('Date: ' + String(new Date(fullInvoice.invoice_date).toLocaleDateString()), rightMargin, 18, { align: 'right' });
-      downloadPdf.text('Due: ' + String(fullInvoice.due_date ? new Date(fullInvoice.due_date).toLocaleDateString() : 'N/A'), rightMargin, 22, { align: 'right' });
-      
-      yPos = 35;
-      
-      // Company and Customer Information Section - Two columns
+      // Company and Customer Information Section - Two columns with aligned starting positions
       downloadPdf.setTextColor(0, 0, 0);
+      
+      // Remember starting position for both columns
+      const fromToStartY = yPos;
+      let fromYPos = fromToStartY;
+      let billToYPos = fromToStartY;
+      const billToX = 110;
       
       // FROM Section (Left Column)
       downloadPdf.setFontSize(9);
       downloadPdf.setFont('helvetica', 'bold');
-      downloadPdf.text('From:', leftMargin, yPos);
+      downloadPdf.text('From:', leftMargin, fromYPos);
       
-      yPos += 5;
+      fromYPos += 5;
       downloadPdf.setFontSize(11);
       downloadPdf.setFont('helvetica', 'bold');
-      downloadPdf.text(company.company_name, leftMargin, yPos);
+      downloadPdf.text(company.company_name, leftMargin, fromYPos);
       
-      yPos += 4;
+      fromYPos += 4;
       downloadPdf.setFontSize(8);
       downloadPdf.setFont('helvetica', 'normal');
       downloadPdf.setTextColor(60, 60, 60);
       
       if (company.legal_name && company.legal_name !== company.company_name) {
-        downloadPdf.text(company.legal_name, leftMargin, yPos);
-        yPos += 4;
+        downloadPdf.text(company.legal_name, leftMargin, fromYPos);
+        fromYPos += 4;
       }
       
       if (company.address_line1) {
         const address1Lines = downloadPdf.splitTextToSize(company.address_line1, 85);
-        downloadPdf.text(address1Lines, leftMargin, yPos);
-        yPos += address1Lines.length * 4;
+        downloadPdf.text(address1Lines, leftMargin, fromYPos);
+        fromYPos += address1Lines.length * 4;
       }
       
       if (company.address_line2) {
         const address2Lines = downloadPdf.splitTextToSize(company.address_line2, 85);
-        downloadPdf.text(address2Lines, leftMargin, yPos);
-        yPos += address2Lines.length * 4;
+        downloadPdf.text(address2Lines, leftMargin, fromYPos);
+        fromYPos += address2Lines.length * 4;
       }
       
       const companyLocation = [company.city, company.state, company.postal_code].filter(Boolean).join(', ');
       if (companyLocation) {
         const locationLines = downloadPdf.splitTextToSize(companyLocation, 85);
-        downloadPdf.text(locationLines, leftMargin, yPos);
-        yPos += locationLines.length * 4;
+        downloadPdf.text(locationLines, leftMargin, fromYPos);
+        fromYPos += locationLines.length * 4;
       }
       
       if (company.email) {
-        downloadPdf.text('Email: ' + String(company.email), leftMargin, yPos);
-        yPos += 4;
+        downloadPdf.text('Email: ' + String(company.email), leftMargin, fromYPos);
+        fromYPos += 4;
       }
       
       if (company.phone) {
-        downloadPdf.text('Phone: ' + String(company.phone), leftMargin, yPos);
-        yPos += 4;
+        downloadPdf.text('Phone: ' + String(company.phone), leftMargin, fromYPos);
+        fromYPos += 4;
       }
       
       if (company.website) {
-        downloadPdf.text('Website: ' + String(company.website), leftMargin, yPos);
-        yPos += 4;
+        downloadPdf.text('Website: ' + String(company.website), leftMargin, fromYPos);
+        fromYPos += 4;
       }
       
       if (company.gstin) {
         const companyWithCountry = { country: company.country } as Customer;
         const taxRegLabel = getTaxRegistrationLabel(companyWithCountry);
-        downloadPdf.text(`${taxRegLabel}: ` + String(company.gstin), leftMargin, yPos);
-        yPos += 4;
+        downloadPdf.text(`${taxRegLabel}: ` + String(company.gstin), leftMargin, fromYPos);
+        fromYPos += 4;
       }
       
       if (company.pan) {
-        downloadPdf.text('PAN: ' + String(company.pan), leftMargin, yPos);
-        yPos += 4;
+        downloadPdf.text('PAN: ' + String(company.pan), leftMargin, fromYPos);
+        fromYPos += 4;
       }
       
-      // BILL TO Section (Right Column)
-      let billToYPos = 35;
-      const billToX = 110;
-      
+      // BILL TO Section (Right Column) - aligned with FROM section
       downloadPdf.setTextColor(0, 0, 0);
       downloadPdf.setFontSize(9);
       downloadPdf.setFont('helvetica', 'bold');
@@ -1847,8 +1851,8 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
       downloadPdf.setFont('helvetica', 'bold');
       downloadPdf.text(fullInvoice.payment_status.toUpperCase(), statusX + 12.5, billToYPos + 1, { align: 'center' });
       
-      // Set yPos to the maximum of both columns
-      yPos = Math.max(yPos, billToYPos) + 10;
+      // Set yPos to the maximum of both columns for proper spacing
+      yPos = Math.max(fromYPos, billToYPos) + 10;
       
       // Professional Items Table
       downloadPdf.setFillColor(245, 247, 250);
@@ -2209,10 +2213,63 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
       
       yPos += amountLines.length * 3 + 8;
       
-      // Banking Information - left side
+      // Smart layout: Banking details and Notes positioning
       const leftSectionStart = leftMargin;
+      const bankingDetailsAvailable = company.bank_name || company.account_number || company.ifsc_code;
+      const notesAvailable = fullInvoice.notes;
       
-      if (company.bank_name || company.account_number || company.ifsc_code) {
+      // If we have banking details but no notes, position banking details beside totals
+      if (bankingDetailsAvailable && !notesAvailable) {
+        // Position banking details to the left of totals at the same height
+        const bankingStartY = totalsStartX > 100 ? (yPos - amountLines.length * 3 - 8 - 25) : yPos; // Align with totals if space allows
+        
+        downloadPdf.setTextColor(37, 99, 235);
+        downloadPdf.setFontSize(9);
+        downloadPdf.setFont('helvetica', 'bold');
+        downloadPdf.text('Banking Details', leftSectionStart, bankingStartY);
+        
+        let bankingYPos = bankingStartY + 5;
+        downloadPdf.setFillColor(248, 250, 252);
+        const bankingBoxHeight = 20;
+        const leftColWidth = 85;
+        downloadPdf.rect(leftSectionStart, bankingYPos - 2, leftColWidth, bankingBoxHeight, 'F');
+        downloadPdf.setDrawColor(225, 229, 235);
+        downloadPdf.setLineWidth(0.2);
+        downloadPdf.rect(leftSectionStart, bankingYPos - 2, leftColWidth, bankingBoxHeight);
+        
+        downloadPdf.setFontSize(7);
+        downloadPdf.setTextColor(60, 60, 60);
+        
+        let bankingContentY = bankingYPos + 2;
+        
+        if (company.bank_name) {
+          downloadPdf.setFont('helvetica', 'bold');
+          downloadPdf.text('Bank:', leftSectionStart + 2, bankingContentY);
+          downloadPdf.setFont('helvetica', 'normal');
+          downloadPdf.text(company.bank_name, leftSectionStart + 15, bankingContentY);
+          bankingContentY += 4;
+        }
+        
+        if (company.account_number) {
+          downloadPdf.setFont('helvetica', 'bold');
+          downloadPdf.text('A/C:', leftSectionStart + 2, bankingContentY);
+          downloadPdf.setFont('helvetica', 'normal');
+          downloadPdf.text(company.account_number, leftSectionStart + 15, bankingContentY);
+          bankingContentY += 4;
+        }
+        
+        if (company.ifsc_code) {
+          downloadPdf.setFont('helvetica', 'bold');
+          downloadPdf.text('IFSC:', leftSectionStart + 2, bankingContentY);
+          downloadPdf.setFont('helvetica', 'normal');
+          downloadPdf.text(company.ifsc_code, leftSectionStart + 15, bankingContentY);
+        }
+        
+        // Update yPos to ensure proper spacing after side-by-side layout
+        yPos = Math.max(yPos, bankingStartY + 25);
+        
+      } else if (bankingDetailsAvailable) {
+        // Default layout: Banking details below totals (when notes are present)
         downloadPdf.setTextColor(37, 99, 235);
         downloadPdf.setFontSize(9);
         downloadPdf.setFont('helvetica', 'bold');
@@ -2290,13 +2347,16 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
         yPos += termsLines.length * 4 + 12;
       }
       
-      // Professional Footer
-      if (yPos > 270) {
+      // Professional Footer - respect footer image positioning
+      if (yPos > contentEndY - 20) {
         downloadPdf.addPage();
         yPos = 20;
       }
       
-      yPos = Math.max(yPos, 275);
+      // Use contentEndY to position footer text above footer image
+      const footerStartY = Math.min(yPos, contentEndY - 20);
+      yPos = footerStartY;
+      
       downloadPdf.setDrawColor(240, 240, 240);
       downloadPdf.setLineWidth(0.2);
       downloadPdf.line(leftMargin, yPos, rightMargin, yPos);
@@ -2417,7 +2477,7 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
       const totalTax = fullInvoice.invoice_items?.reduce((sum: number, item: any) => sum + (item.quantity * item.unit_price * item.tax_rate / 100), 0) || 0;
       const total = subtotal + totalTax;
 
-      // Create PDF using EXACT same format as download function
+      // Create PDF using EXACT same format as download function with branding
       const emailPdf = new jsPDF('p', 'mm', 'a4');
       const pageWidth = emailPdf.internal.pageSize.getWidth();
       const pageHeight = emailPdf.internal.pageSize.getHeight();
@@ -2429,99 +2489,106 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
       const selectedCustomer = customer;
       const currencyInfo = getCurrencyInfo(selectedCustomer);
 
-      // Professional Header with Company Branding - SAME AS DOWNLOAD
-      emailPdf.setFillColor(37, 99, 235);
-      emailPdf.rect(0, 0, pageWidth, 25, 'F');
+      // Use same branding system as download PDF
+      const dimensions = PDFBrandingUtils.getStandardDimensions();
       
-      // Invoice title - smaller and more elegant
-      emailPdf.setFontSize(16);
-      emailPdf.setTextColor(255, 255, 255);
-      emailPdf.setFont('helvetica', 'bold');
-      emailPdf.text('Invoice', leftMargin, 12);
+      // Apply branding images (header, footer, logo) - same as download
+      const { contentStartY, contentEndY } = await PDFBrandingUtils.applyBranding(
+        emailPdf, 
+        company, 
+        dimensions
+      );
       
-      // Invoice number - right aligned
-      emailPdf.setFontSize(10);
-      emailPdf.setFont('helvetica', 'normal');
-      emailPdf.text('Invoice #' + String(fullInvoice.invoice_number), rightMargin, 12, { align: 'right' });
+      // Create branded header section - same as download
+      yPos = PDFBrandingUtils.createBrandedHeader(
+        emailPdf,
+        company,
+        String(fullInvoice.invoice_number),
+        String(new Date(fullInvoice.invoice_date).toLocaleDateString()),
+        String(fullInvoice.due_date ? new Date(fullInvoice.due_date).toLocaleDateString() : 'N/A'),
+        dimensions,
+        contentStartY
+      );
       
-      // Date information in header
-      emailPdf.setFontSize(8);
-      emailPdf.text('Date: ' + String(new Date(fullInvoice.invoice_date).toLocaleDateString()), rightMargin, 18, { align: 'right' });
-      emailPdf.text('Due: ' + String(fullInvoice.due_date ? new Date(fullInvoice.due_date).toLocaleDateString() : 'N/A'), rightMargin, 22, { align: 'right' });
+      // Extract dimensions for use throughout the function (same as download)
+      const emailLeftMargin = dimensions.leftMargin;
+      const emailRightMargin = dimensions.rightMargin;
+      const emailPageWidth = dimensions.pageWidth;
       
-      yPos = 35;
-      
-      // Company and Customer Information Section - Two columns
+      // Company and Customer Information Section - Two columns with aligned starting positions
       emailPdf.setTextColor(0, 0, 0);
+      
+      // Remember starting position for both columns
+      const fromToStartY = yPos;
+      let fromYPos = fromToStartY;
+      let billToYPos = fromToStartY;
+      const billToX = 110;
+      const billToMaxWidth = 85; // Maximum width for customer details to prevent overflow
       
       // FROM Section (Left Column)
       emailPdf.setFontSize(9);
       emailPdf.setFont('helvetica', 'bold');
-      emailPdf.text('From:', leftMargin, yPos);
+      emailPdf.text('From:', leftMargin, fromYPos);
       
-      yPos += 5;
+      fromYPos += 5;
       emailPdf.setFontSize(11);
       emailPdf.setFont('helvetica', 'bold');
-      emailPdf.text(company.company_name, leftMargin, yPos);
+      emailPdf.text(company.company_name, leftMargin, fromYPos);
       
-      yPos += 4;
+      fromYPos += 4;
       emailPdf.setFontSize(8);
       emailPdf.setFont('helvetica', 'normal');
       emailPdf.setTextColor(60, 60, 60);
       
       if (company.legal_name && company.legal_name !== company.company_name) {
-        emailPdf.text(company.legal_name, leftMargin, yPos);
-        yPos += 4;
+        emailPdf.text(company.legal_name, leftMargin, fromYPos);
+        fromYPos += 4;
       }
       
       if (company.address_line1) {
-        emailPdf.text(company.address_line1, leftMargin, yPos);
-        yPos += 4;
+        emailPdf.text(company.address_line1, leftMargin, fromYPos);
+        fromYPos += 4;
       }
       
       if (company.address_line2) {
-        emailPdf.text(company.address_line2, leftMargin, yPos);
-        yPos += 4;
+        emailPdf.text(company.address_line2, leftMargin, fromYPos);
+        fromYPos += 4;
       }
       
       const companyLocation = [company.city, company.state, company.postal_code].filter(Boolean).join(', ');
       if (companyLocation) {
-        emailPdf.text(companyLocation, leftMargin, yPos);
-        yPos += 4;
+        emailPdf.text(companyLocation, leftMargin, fromYPos);
+        fromYPos += 4;
       }
       
       if (company.email) {
-        emailPdf.text('Email: ' + company.email, leftMargin, yPos);
-        yPos += 4;
+        emailPdf.text('Email: ' + company.email, leftMargin, fromYPos);
+        fromYPos += 4;
       }
       
       if (company.phone) {
-        emailPdf.text('Phone: ' + company.phone, leftMargin, yPos);
-        yPos += 4;
+        emailPdf.text('Phone: ' + company.phone, leftMargin, fromYPos);
+        fromYPos += 4;
       }
       
       if (company.website) {
-        emailPdf.text('Website: ' + company.website, leftMargin, yPos);
-        yPos += 4;
+        emailPdf.text('Website: ' + company.website, leftMargin, fromYPos);
+        fromYPos += 4;
       }
       
       if (company.gstin) {
         const companyWithCountry = { country: company.country } as Customer;
         const taxRegLabel = getTaxRegistrationLabel(companyWithCountry);
-        emailPdf.text(`${taxRegLabel}: ` + company.gstin, leftMargin, yPos);
-        yPos += 4;
+        emailPdf.text(`${taxRegLabel}: ` + company.gstin, leftMargin, fromYPos);
+        fromYPos += 4;
       }
       
       if (company.pan) {
-        emailPdf.text('PAN: ' + company.pan, leftMargin, yPos);
-        yPos += 4;
+        emailPdf.text('PAN: ' + company.pan, leftMargin, fromYPos);
+        fromYPos += 4;
       }
       
-      // BILL TO Section (Right Column)
-      let billToYPos = 35;
-      const billToX = 110;
-      const billToMaxWidth = 85; // Maximum width for customer details to prevent overflow
-      
+      // BILL TO Section (Right Column) - aligned with FROM section
       emailPdf.setTextColor(0, 0, 0);
       emailPdf.setFontSize(9);
       emailPdf.setFont('helvetica', 'bold');
@@ -2601,8 +2668,8 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
       emailPdf.setFont('helvetica', 'bold');
       emailPdf.text(fullInvoice.payment_status.toUpperCase(), statusX + 12.5, billToYPos + 1, { align: 'center' });
       
-      // Set yPos to the maximum of both columns
-      yPos = Math.max(yPos, billToYPos) + 10;
+      // Set yPos to the maximum of both columns for proper spacing
+      yPos = Math.max(fromYPos, billToYPos) + 10;
       
       // Professional Items Table
       emailPdf.setFillColor(245, 247, 250);
@@ -2632,42 +2699,66 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
       
       // Safely extract currency symbol and convert to ASCII-safe version
       if (currencyInfo && currencyInfo.code) {
-        switch (currencyInfo.code) {
+        const currencyCode = currencyInfo.code.toUpperCase();
+        switch (currencyCode) {
           case 'INR':
             safeCurrencySymbol = 'Rs.';
             break;
           case 'USD':
             safeCurrencySymbol = '$';
             break;
-          case 'GBP':
-            safeCurrencySymbol = 'GBP';
-            break;
           case 'EUR':
-            safeCurrencySymbol = 'EUR';
+            safeCurrencySymbol = '€';
+            break;
+          case 'GBP':
+            safeCurrencySymbol = '£';
             break;
           default:
-            safeCurrencySymbol = currencyInfo.code || 'Rs.';
+            safeCurrencySymbol = currencyCode || 'Rs.';
         }
       }
       
-      // Helper function to format numbers with Indian comma format
-      const formatNumberWithCommas = (amount: number): string => {
-        const numStr = amount.toFixed(2);
-        const parts = numStr.split('.');
-        let integerPart = parts[0];
-        const decimalPart = parts[1];
+      console.log('📧 Email PDF currency symbol:', {
+        customerCountry: selectedCustomer?.country_id || 'Unknown',
+        currencySymbol: safeCurrencySymbol,
+        currencyCode: currencyInfo?.code || 'Unknown',
+        currencyName: currencyInfo?.name || 'Unknown'
+      });
+      
+      // Helper function to format numbers with Indian comma format - SAME AS DOWNLOAD PDF
+      const formatIndianNumber = (amount: number): string => {
+        const amountStr = amount.toString();
+        let wholePart: string;
+        let decimalPart: string;
         
-        // Add commas in Indian format (last 3 digits, then groups of 2)
-        if (integerPart.length > 3) {
-          const lastThree = integerPart.slice(-3);
-          const remaining = integerPart.slice(0, -3);
-          
-          // Add commas every 2 digits for the remaining part
-          const formattedRemaining = remaining.replace(/\B(?=(\d{2})+(?!\d))/g, ',');
-          integerPart = formattedRemaining + ',' + lastThree;
+        if (!amountStr.includes('.')) {
+          wholePart = amountStr;
+          decimalPart = '00';
+        } else {
+          const parts = amountStr.split('.');
+          wholePart = parts[0];
+          decimalPart = parts[1];
+          if (decimalPart.length === 1) {
+            decimalPart = decimalPart + '0';
+          } else if (decimalPart.length > 2) {
+            decimalPart = decimalPart.substring(0, 2);
+          }
         }
         
-        return integerPart + '.' + decimalPart;
+        // Add Indian comma formatting (lakhs/crores)
+        let formattedWhole = '';
+        const wholePartReversed = wholePart.split('').reverse().join('');
+        
+        for (let i = 0; i < wholePartReversed.length; i++) {
+          if (i === 3) {
+            formattedWhole = ',' + formattedWhole;
+          } else if (i > 3 && (i - 3) % 2 === 0) {
+            formattedWhole = ',' + formattedWhole;
+          }
+          formattedWhole = wholePartReversed[i] + formattedWhole;
+        }
+        
+        return formattedWhole + '.' + decimalPart;
       };
       
       if (fullInvoice.invoice_items && fullInvoice.invoice_items.length > 0) {
@@ -2716,7 +2807,7 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
           emailPdf.text(`${item.quantity} ${item.unit || 'pcs'}`, leftMargin + 95, numbersYPos, { align: 'center' });
           
           // Unit price with currency and comma formatting
-          const formattedUnitPrice = formatNumberWithCommas(item.unit_price);
+          const formattedUnitPrice = formatIndianNumber(item.unit_price);
           emailPdf.text(`${safeCurrencySymbol} ${formattedUnitPrice}`, leftMargin + 120, numbersYPos, { align: 'center' });
           
           // Tax rate
@@ -2724,7 +2815,7 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
           
           // Total amount with currency and comma formatting
           emailPdf.setFont('helvetica', 'bold');
-          const formattedItemTotal = formatNumberWithCommas(itemTotal);
+          const formattedItemTotal = formatIndianNumber(itemTotal);
           emailPdf.text(`${safeCurrencySymbol} ${formattedItemTotal}`, leftMargin + 175, numbersYPos, { align: 'right' });
           
           yPos += itemRowHeight;
@@ -2758,27 +2849,6 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
       emailPdf.setTextColor(60, 60, 60);
       emailPdf.setFontSize(8);
       emailPdf.setFont('helvetica', 'normal');
-      
-      // SAFE INDIAN NUMBER FORMATTING - No currency symbol concatenation
-      const formatIndianNumber = (amount: number): string => {
-        // Convert number to string with 2 decimal places
-        const numStr = amount.toFixed(2);
-        const parts = numStr.split('.');
-        let integerPart = parts[0];
-        const decimalPart = parts[1];
-        
-        // Add commas in Indian format (last 3 digits, then groups of 2)
-        if (integerPart.length > 3) {
-          const lastThree = integerPart.slice(-3);
-          const remaining = integerPart.slice(0, -3);
-          
-          // Add commas every 2 digits for the remaining part
-          const formattedRemaining = remaining.replace(/\B(?=(\d{2})+(?!\d))/g, ',');
-          integerPart = formattedRemaining + ',' + lastThree;
-        }
-        
-        return integerPart + '.' + decimalPart;
-      };
       
       // Format the totals with Indian number formatting (no currency concatenation)
       const subtotalText = formatIndianNumber(subtotal);
@@ -2896,12 +2966,15 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
         yPos += termsLines.length * 3;
       }
       
-      // Professional Footer
-      if (yPos > 270) {
-        yPos = 270; // Ensure footer fits on page
+      // Professional Footer - respect footer image positioning
+      if (yPos > contentEndY - 20) {
+        yPos = contentEndY - 20; // Ensure footer fits above footer image
       }
       
-      yPos = Math.max(yPos, 275);
+      // Use contentEndY to position footer text above footer image
+      const footerStartY = Math.min(yPos, contentEndY - 20);
+      yPos = footerStartY;
+      
       emailPdf.setDrawColor(240, 240, 240);
       emailPdf.setLineWidth(0.2);
       emailPdf.line(leftMargin, yPos, rightMargin, yPos);
@@ -4819,6 +4892,32 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
           )}
         </div>
       </div>
+
+      {/* PDF Branding Settings */}
+      {companySettings.length > 0 && (
+        <div className="bg-white rounded-lg shadow">
+          <div className="px-6 py-4 border-b border-gray-200">
+            <h3 className="text-lg font-medium text-gray-900">PDF Invoice Branding</h3>
+            <p className="text-sm text-gray-600 mt-1">
+              Customize your PDF invoices with header, footer, and logo images. Images will be optimized to keep PDF size under 2MB.
+            </p>
+          </div>
+          <div className="p-6">
+            <PDFBrandingManager
+              companySettings={companySettings[0]} // Use the first/default company
+              onSettingsUpdate={(updatedSettings) => {
+                setCompanySettings(prev => 
+                  prev.map(company => 
+                    company.id === updatedSettings.id ? updatedSettings : company
+                  )
+                );
+              }}
+              onSuccess={showSuccess}
+              onError={showError}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 

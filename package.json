@@ -13,7 +13,8 @@
     "validate": "node validate-deployment.cjs",
     "deploy": "./deploy.sh",
     "deploy:netlify": "npm run build && npx netlify deploy --prod --dir=dist",
-    "deploy:preview": "npm run build && npx netlify deploy --dir=dist"
+    "deploy:preview": "npm run build && npx netlify deploy --dir=dist",
+    "merge-pdf-docs": "node scripts/merge-pdf-docs.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.52.1",

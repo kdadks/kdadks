@@ -39,9 +39,17 @@ export interface CompanySettings {
   ifsc_code?: string;
   branch_name?: string;
   
-  // Logo and Branding
+  // Logo and Branding (legacy)
   logo_url?: string;
   signature_url?: string;
+  
+  // PDF Branding Images (new)
+  header_image_url?: string;
+  footer_image_url?: string;
+  logo_image_url?: string;
+  header_image_data?: string; // Base64 encoded
+  footer_image_data?: string; // Base64 encoded
+  logo_image_data?: string;   // Base64 encoded
   
   // Settings
   is_default: boolean;
