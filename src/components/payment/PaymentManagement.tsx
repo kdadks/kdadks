@@ -185,6 +185,13 @@ const PaymentManagement: React.FC<PaymentManagementProps> = ({
           const paymentUrl = `${window.location.origin}/payment/${paymentLink.link_token}`;
           console.log('Payment URL generated:', paymentUrl);
           
+          // DEBUG: Test if payment URL is accessible
+          console.group('🔗 PAYMENT URL ACCESSIBILITY TEST');
+          console.log('Payment URL:', paymentUrl);
+          console.log('Click this to test:', paymentUrl);
+          console.log('Link token:', paymentLink.link_token);
+          console.groupEnd();
+          
           // Debug: Log what the email content will contain
           console.log('Payment URL that will be in email:', paymentUrl);
           console.log('URL should replace ${paymentUrl} in template');
@@ -283,6 +290,51 @@ const PaymentManagement: React.FC<PaymentManagementProps> = ({
 </body>
 </html>`;
 
+          // CRITICAL DEBUG: Check if template interpolation actually worked
+          console.group('🔍 EMAIL TEMPLATE DEBUG ANALYSIS');
+          console.log('📝 Payment URL Variable:', paymentUrl);
+          console.log('🔗 URL Length:', paymentUrl ? paymentUrl.length : 'UNDEFINED');
+          console.log('✅ Template contains actual URL:', emailHtmlTemplate.includes(paymentUrl));
+          console.log('❌ Template contains literal ${paymentUrl}:', emailHtmlTemplate.includes('${paymentUrl}'));
+          
+          // Extract and show the actual button HTML
+          const buttonStart = emailHtmlTemplate.indexOf('<a href=');
+          const buttonEnd = emailHtmlTemplate.indexOf('</a>', buttonStart) + 4;
+          const buttonHtml = emailHtmlTemplate.substring(buttonStart, buttonEnd);
+          console.log('🔘 ACTUAL BUTTON HTML:');
+          console.log(buttonHtml);
+          
+          // Show fallback section
+          const fallbackStart = emailHtmlTemplate.indexOf('<!-- Fallback URL Section -->');
+          const fallbackEnd = emailHtmlTemplate.indexOf('</div>', fallbackStart + 200) + 6;
+          const fallbackHtml = emailHtmlTemplate.substring(fallbackStart, fallbackEnd);
+          console.log('🔄 ACTUAL FALLBACK SECTION:');
+          console.log(fallbackHtml);
+          
+          console.groupEnd();
+
+          // ADDITIONAL DEBUG: Log the actual email body being sent
+          console.group('📧 EMAIL BODY BEING SENT TO SERVER');
+          console.log('Email recipient:', data.customer_email);
+          console.log('Email subject:', `Payment Request from KDADKS Service - ${formatCurrency(data.amount, data.currency)}`);
+          console.log('HTML body length:', emailHtmlTemplate.length);
+          const textBody = `Dear ${data.customer_name || 'Valued Customer'},
+
+You have a new payment request for ${formatCurrency(data.amount, data.currency)}.
+
+Description: ${data.description || 'Payment Request'}
+Amount: ${formatCurrency(data.amount, data.currency)}
+Request ID: ${request.id}
+
+To complete your payment, please visit: ${paymentUrl}
+
+Please complete your payment at your earliest convenience.
+
+Best regards,
+KDADKS Service Private Limited`;
+          console.log('Text body contains URL:', textBody.includes(paymentUrl));
+          console.groupEnd();
+
           // Send payment request email
           const emailResponse = await fetch('/.netlify/functions/send-email', {
             method: 'POST',
@@ -326,13 +378,48 @@ KDADKS Service Private Limited`,
               statusText: emailResponse.statusText,
               body: errorText
             });
-            throw new Error(`Email sending failed: ${emailResponse.status} - ${errorText}`);
+            
+            // Development mode: Show a helpful message instead of failing
+            if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+              console.group('🚀 DEVELOPMENT MODE INFO');
+              console.log('✅ Email template ready with payment URL:', paymentUrl);
+              console.log('📧 Email would be sent to:', data.customer_email);
+              console.log('🔗 Test this payment URL directly:', paymentUrl);
+              console.log('📝 In production, this email will be sent via Netlify functions');
+              console.groupEnd();
+              
+              showSuccess(`Payment request created! Development mode - test URL: ${paymentUrl}`);
+            } else {
+              throw new Error(`Email sending failed: ${emailResponse.status} - ${errorText}`);
+            }
+          } else {
+            const emailResult = await emailResponse.json();
+            console.log('📧 Email sent successfully:', emailResult);
+            
+            // Display server-side debugging information
+            if (emailResult.debug) {
+              console.group('🔧 SERVER-SIDE EMAIL ANALYSIS');
+              console.log('❌ Has literal placeholder:', emailResult.debug.hasLiteralPlaceholder);
+              console.log('✅ Has HTTP URLs:', emailResult.debug.hasHttpUrls);
+              console.log('🔘 Button HTML from server:', emailResult.debug.buttonHtml);
+              console.log('🔄 Fallback HTML from server:', emailResult.debug.fallbackHtml);
+              console.groupEnd();
+              
+              // Alert user if there's a template interpolation issue
+              if (emailResult.debug.hasLiteralPlaceholder) {
+                console.error('🚨 CRITICAL: Email contains ${paymentUrl} literal text - button will not work!');
+                showError('Email sent but payment button may not work. Please check console for details.');
+              } else if (!emailResult.debug.hasHttpUrls) {
+                console.warn('⚠️ WARNING: No HTTP URLs found in email - links may be missing');
+                showWarning('Email sent but payment links may be missing. Please verify manually.');
+              } else {
+                console.log('✅ Email template interpolation appears successful');
+                showSuccess('Payment request created and email sent successfully with working payment links!');
+              }
+            } else {
+              showSuccess('Payment request created and email sent successfully!');
+            }
           }
-
-          const emailResult = await emailResponse.json();
-          console.log('Email sent successfully:', emailResult);
-
-          showSuccess('Payment request created and email sent successfully!');
         } catch (emailError) {
           console.error('Email sending failed:', emailError);
           const errorMessage = emailError instanceof Error ? emailError.message : 'Unknown error';

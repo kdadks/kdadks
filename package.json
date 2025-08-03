@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:netlify": "netlify dev",
     "dev:email": "node server.cjs",
     "dev:email:bg": "start /B node server.cjs",
     "dev:full": "concurrently \"npm run dev\" \"npm run dev:email\"",

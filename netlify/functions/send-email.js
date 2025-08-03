@@ -33,15 +33,46 @@ exports.handler = async (event, context) => {
     const { to, from, subject, text, html, attachments, attachment } = body;
 
     // Debug: Log email content to see if URLs are present
-    console.log('Email details:');
+    console.log('=== EMAIL CONTENT ANALYSIS ===');
     console.log('- To:', to);
     console.log('- Subject:', subject);
     console.log('- HTML content length:', html ? html.length : 0);
-    if (html && html.includes('paymentUrl')) {
-      console.log('WARNING: HTML contains literal ${paymentUrl} - template not interpolated!');
-    }
-    if (html && html.includes('http')) {
-      console.log('✓ HTML contains http URLs - likely interpolated correctly');
+    
+    let debugInfo = {
+      hasLiteralPlaceholder: false,
+      hasHttpUrls: false,
+      buttonHtml: '',
+      fallbackHtml: ''
+    };
+
+    if (html) {
+      // Check for literal template placeholders
+      if (html.includes('${paymentUrl}')) {
+        console.log('❌ WARNING: HTML contains literal ${paymentUrl} - template not interpolated!');
+        debugInfo.hasLiteralPlaceholder = true;
+      }
+      
+      // Check for actual HTTP URLs
+      if (html.includes('http')) {
+        console.log('✅ HTML contains http URLs - likely interpolated correctly');
+        debugInfo.hasHttpUrls = true;
+      }
+      
+      // Extract button HTML for debugging
+      const buttonStart = html.indexOf('<a href=');
+      if (buttonStart !== -1) {
+        const buttonEnd = html.indexOf('</a>', buttonStart) + 4;
+        debugInfo.buttonHtml = html.substring(buttonStart, buttonEnd);
+        console.log('🔘 Button HTML:', debugInfo.buttonHtml);
+      }
+      
+      // Extract fallback section for debugging
+      const fallbackStart = html.indexOf('Alternative Payment Link');
+      if (fallbackStart !== -1) {
+        const fallbackEnd = html.indexOf('</div>', fallbackStart + 300) + 6;
+        debugInfo.fallbackHtml = html.substring(fallbackStart, Math.min(fallbackEnd, fallbackStart + 500));
+        console.log('🔄 Fallback section:', debugInfo.fallbackHtml);
+      }
     }
 
     // Validate required fields
@@ -119,14 +150,15 @@ exports.handler = async (event, context) => {
     // Send email
     const info = await transporter.sendMail(mailOptions);
 
-    // Return success response
+    // Return success response with debugging info
     return {
       statusCode: 200,
       headers,
       body: JSON.stringify({
         success: true,
         message: 'Email sent successfully',
-        messageId: info.messageId
+        messageId: info.messageId,
+        debug: debugInfo // Include debugging information
       })
     };
 
