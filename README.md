@@ -1,6 +1,32 @@
 # KDADKS Website
 
-A modern website for KDADKS Service Private Limited showcasing our diverse portfolio across IT consulting, healthcare, fashion, and travel services.
+A modern website for KDADKS Service Private Limited showcasing our d## 🔌 Integration with Other Projects
+
+The Invoice Management System is designed to be modular and can be integrated into other TypeScript projects:
+
+### Integration Features
+- **Self-contained Components**: Modular React components
+- **Service Layer API**: Clean API for data access
+- **Type Definitions**: Complete TypeScript types
+- **Database Scripts**: Ready-to-use database setup
+
+### Integration Steps
+
+1. **Database Setup**: Run schema migration in your Supabase project
+2. **Copy Core Files**: Services, components, types, and utilities
+3. **Environment Configuration**: Set up Supabase connection
+4. **Import Components**: Use the InvoiceManagement component
+5. **Customize**: Adapt styling and business logic as needed
+
+For detailed integration instructions, see [docs/INTEGRATION_GUIDE.md](./docs/INTEGRATION_GUIDE.md)
+
+## 🚀 Quick Start
+
+### Prerequisites
+
+- Node.js 18+ 
+- npm or yarn package manager
+- Git for version controlportfolio across IT consulting, healthcare, fashion, and travel services.
 
 ## 🔐 Admin Access
 
@@ -19,7 +45,7 @@ The website includes a secure admin console for authorized personnel:
 **Authentication Method:**
 - **Email/Password**: Sign in with email and password
 
-**Note**: Admin users need to be created in Supabase. Contact the administrator for access.e website for KDADKS Service Private Limited showcasing our diverse portfolio across IT consulting, healthcare, fashion, and travel services.
+**Note**: Admin users need to be created in Supabase. Contact the administrator for access.
 
 ## 🌟 Features
 
@@ -40,22 +66,51 @@ The website includes a secure admin console for authorized personnel:
 - **Nirchal**: Fashion design and custom tailoring
 - **Raahirides**: Travel solutions and transportation services
 
-## � Admin Access
+## 🔐 Admin Console & Invoice Management System
 
-The website includes a secure admin console for authorized personnel:
+The website includes a comprehensive admin console with a full invoice management system:
 
-- **Admin URL**: `/admin/login`
+- **Admin URL**: `/admin/login` (protected by Supabase Auth)
 - **Hidden Access**: Quintuple-click "Made with ❤️ in India" in the footer
-- **Default Credentials**: `admin` / `admin123` (⚠️ Change in production!)
+- **Authentication**: Secure Supabase email/password authentication
 
-**Admin Features:**
-- Contact form submissions management
-- Email response system
-- Dashboard analytics
-- User authentication with JWT
-- Secure API endpoints
+### 🧾 Invoice Management Features
 
-For detailed admin documentation, see [ADMIN_CONSOLE_GUIDE.md](./ADMIN_CONSOLE_GUIDE.md)
+- **Dashboard Overview**: 
+  - Invoice statistics and financial metrics
+  - Status-based tracking (Draft, Sent, Paid, Overdue)
+  - Recent activity and pending payments
+
+- **Invoice Generation**: 
+  - Professional GST-compliant invoices
+  - Automatic invoice numbering (format: `INV/YYYY/MM/###`)
+  - Multi-currency support based on customer country
+  - Line item management with HSN/SAC codes
+
+- **Customer Management**:
+  - Complete customer database with GST details
+  - Address and contact information
+  - Payment terms and credit limits
+  - Country-specific settings
+
+- **Product/Service Catalog**:
+  - Product database with descriptions
+  - HSN/SAC codes for GST compliance
+  - Pricing and tax configuration
+  - Active/inactive status management
+
+- **Business Settings**:
+  - Company profile with branding
+  - GST/Tax configuration
+  - Invoice templates and numbering
+  - Terms and conditions templates
+
+- **Email Integration**:
+  - Send invoices directly to customers
+  - Professional email templates
+  - Delivery tracking and notifications
+
+For detailed documentation on the invoice system, see [docs/INVOICE_SYSTEM_SETUP.md](./docs/INVOICE_SYSTEM_SETUP.md)
 
 ## �🚀 Quick Start
 
@@ -255,6 +310,13 @@ Edit `tailwind.config.js` to customize:
 - **Text content**: Edit respective component files in `src/components/`
 - **Images**: Replace files in `public/` directory
 - **Contact information**: Update in `src/components/Contact.tsx` and `src/components/Footer.tsx`
+
+### Invoice System Customization
+- **Company Settings**: Update in admin dashboard or directly in database
+- **Invoice Templates**: Modify `InvoicePdf.tsx` for design changes
+- **Email Templates**: Customize in `emailService.ts`
+- **Tax Rates**: Configure in admin dashboard settings
+- **Invoice Numbering**: Set format in invoice settings
 
 ### Adding New Sections
 1. Create new component in `src/components/`
