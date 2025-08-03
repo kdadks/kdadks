@@ -166,14 +166,17 @@ const PaymentManagement: React.FC<PaymentManagementProps> = ({
       if (data.customer_email) {
         try {
           // Create and send payment link
-          await paymentService.createPaymentLink(request.id, 'email', {
+          const paymentLink = await paymentService.createPaymentLink(request.id, 'email', {
             payment_request_id: request.id,
             link_type: 'email',
             recipient_email: data.customer_email,
             send_immediately: true
           });
 
-          // Send payment request email using a generic contact email format
+          // Generate the payment URL
+          const paymentUrl = `${window.location.origin}/payment/${paymentLink.link_token}`;
+
+          // Send payment request email using proper business email
           await fetch('/.netlify/functions/send-email', {
             method: 'POST',
             headers: {
@@ -181,7 +184,7 @@ const PaymentManagement: React.FC<PaymentManagementProps> = ({
             },
             body: JSON.stringify({
               to: data.customer_email,
-              from: 'kdadks@outlook.com',
+              from: 'support@kdadks.com',
               subject: `Payment Request - ${data.description || 'Payment Required'}`,
               text: `Dear ${data.customer_name || 'Valued Customer'},
 
@@ -191,21 +194,64 @@ Description: ${data.description || 'Payment Request'}
 Amount: ${data.currency} ${data.amount}
 Request ID: ${request.id}
 
+To complete your payment, please visit: ${paymentUrl}
+
 Please complete your payment at your earliest convenience.
 
 Best regards,
 KDADKS Service Private Limited`,
-              html: `<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-                <h2 style="color: #2563eb;">Payment Request</h2>
-                <p>Dear ${data.customer_name || 'Valued Customer'},</p>
-                <p>You have a new payment request:</p>
-                <div style="background: #f3f4f6; padding: 20px; border-radius: 8px; margin: 20px 0;">
-                  <p><strong>Description:</strong> ${data.description || 'Payment Request'}</p>
-                  <p><strong>Amount:</strong> ${data.currency} ${data.amount}</p>
-                  <p><strong>Request ID:</strong> ${request.id}</p>
+              html: `<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #ffffff; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden;">
+                <!-- Header -->
+                <div style="background: #2563eb; padding: 20px; text-align: center;">
+                  <h2 style="color: #ffffff; margin: 0; font-size: 24px; font-weight: 600;">Payment Request</h2>
                 </div>
-                <p>Please complete your payment at your earliest convenience.</p>
-                <p>Best regards,<br>KDADKS Service Private Limited</p>
+                
+                <!-- Body -->
+                <div style="padding: 30px;">
+                  <p style="color: #374151; font-size: 16px; line-height: 1.6; margin: 0 0 20px 0;">Dear ${data.customer_name || 'Valued Customer'},</p>
+                  
+                  <p style="color: #374151; font-size: 16px; line-height: 1.6; margin: 0 0 25px 0;">You have received a new payment request from KDADKS Service Private Limited:</p>
+                  
+                  <!-- Payment Details Card -->
+                  <div style="background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 25px; margin: 25px 0;">
+                    <table style="width: 100%; border-collapse: collapse;">
+                      <tr>
+                        <td style="color: #6b7280; font-size: 14px; padding: 8px 0; border-bottom: 1px solid #e5e7eb;"><strong>Description:</strong></td>
+                        <td style="color: #111827; font-size: 14px; padding: 8px 0; border-bottom: 1px solid #e5e7eb; text-align: right;">${data.description || 'Payment Request'}</td>
+                      </tr>
+                      <tr>
+                        <td style="color: #6b7280; font-size: 14px; padding: 8px 0; border-bottom: 1px solid #e5e7eb;"><strong>Amount:</strong></td>
+                        <td style="color: #111827; font-size: 18px; font-weight: 600; padding: 8px 0; border-bottom: 1px solid #e5e7eb; text-align: right;">${data.currency} ${data.amount}</td>
+                      </tr>
+                      <tr>
+                        <td style="color: #6b7280; font-size: 14px; padding: 8px 0;"><strong>Request ID:</strong></td>
+                        <td style="color: #111827; font-size: 14px; padding: 8px 0; text-align: right; font-family: monospace;">${request.id}</td>
+                      </tr>
+                    </table>
+                  </div>
+                  
+                  <!-- Payment Button -->
+                  <div style="text-align: center; margin: 30px 0;">
+                    <a href="${paymentUrl}" style="display: inline-block; background: #2563eb; color: #ffffff; text-decoration: none; padding: 15px 30px; border-radius: 8px; font-size: 16px; font-weight: 600; transition: background-color 0.3s;">
+                      Complete Payment Now
+                    </a>
+                  </div>
+                  
+                  <!-- Alternative Link -->
+                  <div style="background: #fef3c7; border: 1px solid #f59e0b; border-radius: 6px; padding: 15px; margin: 20px 0;">
+                    <p style="color: #92400e; font-size: 14px; margin: 0 0 8px 0;"><strong>Having trouble with the button above?</strong></p>
+                    <p style="color: #92400e; font-size: 14px; margin: 0;">Copy and paste this link into your browser:</p>
+                    <p style="color: #1d4ed8; font-size: 14px; word-break: break-all; margin: 8px 0 0 0; font-family: monospace;">${paymentUrl}</p>
+                  </div>
+                  
+                  <p style="color: #6b7280; font-size: 14px; line-height: 1.6; margin: 25px 0 0 0;">Please complete your payment at your earliest convenience. If you have any questions, feel free to contact our support team.</p>
+                </div>
+                
+                <!-- Footer -->
+                <div style="background: #f9fafb; padding: 20px; border-top: 1px solid #e5e7eb; text-align: center;">
+                  <p style="color: #6b7280; font-size: 14px; margin: 0 0 10px 0;"><strong>KDADKS Service Private Limited</strong></p>
+                  <p style="color: #6b7280; font-size: 12px; margin: 0;">Lucknow, Uttar Pradesh, India | support@kdadks.com | +91 7982303199</p>
+                </div>
               </div>`
             }),
           });

@@ -18,7 +18,7 @@ import type { PaymentRequest, PaymentGateway } from '../../types/payment';
 import type { Invoice } from '../../types/invoice';
 
 export const CheckoutPage: React.FC = () => {
-  const { requestId } = useParams<{ requestId: string }>();
+  const { requestId, token } = useParams<{ requestId?: string; token?: string }>();
   const navigate = useNavigate();
   
   const [paymentRequest, setPaymentRequest] = useState<PaymentRequest | null>(null);
@@ -36,21 +36,40 @@ export const CheckoutPage: React.FC = () => {
   });
 
   useEffect(() => {
-    if (requestId) {
+    if (requestId || token) {
       loadPaymentRequest();
     } else {
-      setError('Payment request ID is required');
+      setError('Payment request ID or token is required');
       setLoading(false);
     }
-  }, [requestId]);
+  }, [requestId, token]);
 
   const loadPaymentRequest = async () => {
     try {
       setLoading(true);
       setError(null);
 
-      // Load payment request details
-      const request = await paymentService.getPaymentRequestById(requestId!);
+      let request: PaymentRequest | null = null;
+
+      // Load payment request either by ID or by token
+      if (token) {
+        // If we have a token, get the payment link first and then the request
+        const paymentLink = await paymentService.getPaymentLinkByToken(token);
+        if (!paymentLink) {
+          throw new Error('Payment link not found or expired');
+        }
+        
+        // Get the actual payment request using the payment_request_id
+        if (paymentLink.payment_request_id) {
+          request = await paymentService.getPaymentRequestById(paymentLink.payment_request_id);
+        } else {
+          throw new Error('Payment request not found for this link');
+        }
+      } else if (requestId) {
+        // Load payment request by ID directly
+        request = await paymentService.getPaymentRequestById(requestId);
+      }
+
       if (!request) {
         throw new Error('Payment request not found');
       }
@@ -64,6 +83,15 @@ export const CheckoutPage: React.FC = () => {
       }
 
       setPaymentRequest(request);
+
+      // Pre-fill customer information if available
+      if (request.customer_name || request.customer_email) {
+        setCustomerInfo(prev => ({
+          ...prev,
+          name: request.customer_name || '',
+          email: request.customer_email || ''
+        }));
+      }
 
       // Load invoice details if available
       if (request.invoice_id) {

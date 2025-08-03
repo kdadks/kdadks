@@ -109,6 +109,7 @@ const Router = () => {
           <Route path="/admin" element={<SimpleAdminDashboard />} />
           
           {/* Payment routes */}
+          <Route path="/payment/:token" element={<CheckoutPage />} />
           <Route path="/payment/checkout/:requestId" element={<CheckoutPage />} />
           <Route path="/payment/status/:requestId" element={<PaymentPage />} />
           <Route path="/payment/success/:requestId" element={<PaymentPage />} />
