@@ -85,10 +85,11 @@ exports.handler = async (event, context) => {
       rateLimit: 5
     });
 
-    // Prepare email options with Brevo-compatible sender format
+    // Prepare email options with Brevo-compliant sender format
+    // Note: Brevo requires the authenticated sender domain but we can set a friendly name
     const mailOptions = {
-      from: 'KDADKS Service <kdadks@9437208.brevosend.com>', // Use Brevo's sender domain but with business name
-      replyTo: 'support@kdadks.com', // Set proper reply-to for customer responses
+      from: 'KDADKS Service <kdadks@9437208.brevosend.com>', // Must use Brevo's authenticated domain
+      replyTo: 'support@kdadks.com', // This is what users will reply to
       to: to,
       subject: subject,
       text: text,

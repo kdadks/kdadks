@@ -177,14 +177,13 @@ const PaymentManagement: React.FC<PaymentManagementProps> = ({
           const paymentUrl = `${window.location.origin}/payment/${paymentLink.link_token}`;
 
           // Send payment request email using proper business email
-          await fetch('/.netlify/functions/send-email', {
+          const emailResponse = await fetch('/.netlify/functions/send-email', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
             },
             body: JSON.stringify({
               to: data.customer_email,
-              from: 'KDADKS Service <support@kdadks.com>',
               subject: `Payment Request - ${data.description || 'Payment Required'}`,
               text: `Dear ${data.customer_name || 'Valued Customer'},
 
@@ -308,10 +307,28 @@ KDADKS Service Private Limited`,
             }),
           });
 
+          // Check if email was sent successfully
+          if (!emailResponse.ok) {
+            const errorData = await emailResponse.json();
+            console.error('Email sending failed:', errorData);
+            throw new Error(`Email sending failed: ${errorData.error || 'Unknown error'}`);
+          }
+
+          const emailResult = await emailResponse.json();
+          console.log('Email sent successfully:', emailResult);
+
           showSuccess('Payment request created and email sent successfully!');
         } catch (emailError) {
           console.error('Email sending failed:', emailError);
-          showWarning('Payment request created but email sending failed. Please resend manually.');
+          const errorMessage = emailError instanceof Error ? emailError.message : 'Unknown error';
+          
+          if (errorMessage.includes('Email service configuration error')) {
+            showError('Email service not configured. Please check environment variables.');
+          } else if (errorMessage.includes('BREVO_PASSWORD')) {
+            showError('Email service authentication failed. Please check BREVO_PASSWORD.');
+          } else {
+            showWarning(`Payment request created but email sending failed: ${errorMessage}. Please resend manually.`);
+          }
         }
       } else {
         showSuccess('Payment request created successfully!');
