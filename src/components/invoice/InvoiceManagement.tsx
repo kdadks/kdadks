@@ -3185,12 +3185,16 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
       const paymentRequest = await paymentService.createPaymentRequest(paymentRequestData);
 
       // Create payment link for email
-      await paymentService.createPaymentLink(paymentRequest.id, 'email', {
+      const paymentLink = await paymentService.createPaymentLink(paymentRequest.id, 'email', {
         payment_request_id: paymentRequest.id,
         link_type: 'email',
         recipient_email: customer.email,
         send_immediately: true
       });
+
+      // Generate the actual payment URL that customers will use
+      const paymentUrl = `${window.location.origin}/payment/${paymentLink.link_token}`;
+      console.log('Payment URL generated for invoice system:', paymentUrl);
 
       // Send email notification with payment link
       try {
@@ -3214,7 +3218,7 @@ Payment Details:
 - Payment Request ID: ${paymentRequest.id}
 
 Click the link below to make your payment securely:
-[Payment Link will be provided by the gateway]
+${paymentUrl}
 
 This payment request will expire in 72 hours.
 
@@ -3256,10 +3260,44 @@ KDADKS Service Private Limited`,
                 
                 <div style="text-align: center; margin: 30px 0;">
                   <p style="color: #374151; margin-bottom: 15px;">Click the button below to make your payment securely:</p>
-                  <div style="background: #2563eb; color: white; padding: 15px 30px; border-radius: 8px; display: inline-block; text-decoration: none; font-weight: bold;">
-                    🔒 Pay Securely Online
-                  </div>
+                  <table border="0" cellspacing="0" cellpadding="0" style="margin: 0 auto;">
+                    <tr>
+                      <td align="center" style="border-radius: 8px; background-color: #2563eb; padding: 0;">
+                        <a href="${paymentUrl}" 
+                           target="_blank" 
+                           style="font-size: 16px; 
+                                  font-family: Arial, Helvetica, sans-serif; 
+                                  color: #ffffff !important; 
+                                  text-decoration: none !important; 
+                                  border-radius: 8px; 
+                                  padding: 15px 30px; 
+                                  border: none;
+                                  display: inline-block; 
+                                  font-weight: bold;
+                                  background-color: #2563eb;
+                                  line-height: 20px;">
+                          🔒 Pay Securely Online
+                        </a>
+                      </td>
+                    </tr>
+                  </table>
                   <p style="color: #6b7280; font-size: 12px; margin-top: 10px;">Payment powered by ${primaryGateway.name}</p>
+                </div>
+                
+                <!-- Fallback URL Section -->
+                <div style="background: #e0f2fe; border: 1px solid #0277bd; border-radius: 6px; padding: 20px; margin: 25px 0; text-align: center;">
+                  <p style="color: #01579b; font-size: 16px; font-weight: bold; margin: 0 0 10px 0;">
+                    🔗 Alternative Payment Link
+                  </p>
+                  <p style="color: #424242; font-size: 14px; margin: 0 0 15px 0;">
+                    If the button above doesn't work, copy and paste this link into your browser:
+                  </p>
+                  <div style="background: #ffffff; border: 1px solid #e0e0e0; border-radius: 4px; padding: 12px; word-break: break-all; font-family: monospace; font-size: 14px; color: #1976d2;">
+                    ${paymentUrl}
+                  </div>
+                  <p style="margin: 10px 0 0 0;">
+                    <a href="${paymentUrl}" target="_blank" style="color: #1976d2; font-weight: 600; text-decoration: underline;">Click here to pay</a>
+                  </p>
                 </div>
                 
                 <div style="background: #fef3c7; border: 1px solid #f59e0b; padding: 15px; border-radius: 8px; margin: 20px 0;">

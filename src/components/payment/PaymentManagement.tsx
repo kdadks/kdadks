@@ -163,8 +163,31 @@ const PaymentManagement: React.FC<PaymentManagementProps> = ({
         return;
       }
 
-      console.log('Creating payment request...');
-      const request = await paymentService.createPaymentRequest(data);
+      // Get active payment gateways to ensure we have a gateway_id
+      const activeGateways = await paymentService.getActivePaymentGateways();
+      if (activeGateways.length === 0) {
+        showError('No active payment gateways available. Please configure a payment gateway first.');
+        return;
+      }
+
+      // Use the first active gateway
+      const primaryGateway = activeGateways[0];
+
+      // Enhanced payment request data with all required fields
+      const enhancedData = {
+        ...data,
+        gateway_id: primaryGateway.id, // Ensure gateway_id is set
+        description: data.description || 'Payment Request', // Ensure description is set
+        customer_phone: data.customer_phone || undefined, // Include phone if provided
+        metadata: {
+          created_via: 'payment_management',
+          gateway_name: primaryGateway.name,
+          ...(data.metadata || {})
+        }
+      };
+
+      console.log('Creating payment request with enhanced data:', enhancedData);
+      const request = await paymentService.createPaymentRequest(enhancedData);
       console.log('Payment request created:', request);
       
       // Send email notification if customer email is provided
@@ -1173,6 +1196,7 @@ const CreatePaymentRequestModal: React.FC<CreatePaymentRequestModalProps> = ({
     description: '',
     customer_email: '',
     customer_name: '',
+    customer_phone: '',
     expires_in_hours: 24
   });
 
@@ -1236,6 +1260,16 @@ const CreatePaymentRequestModal: React.FC<CreatePaymentRequestModalProps> = ({
                   type="text"
                   value={formData.customer_name}
                   onChange={(e) => setFormData({ ...formData, customer_name: e.target.value })}
+                  className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Customer Phone (Optional)</label>
+                <input
+                  type="tel"
+                  value={formData.customer_phone || ''}
+                  onChange={(e) => setFormData({ ...formData, customer_phone: e.target.value })}
                   className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
               </div>
