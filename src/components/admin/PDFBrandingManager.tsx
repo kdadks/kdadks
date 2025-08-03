@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
-import { Upload, X, Image, AlertCircle, Check } from 'lucide-react';
-import { PDFBrandingService, type PDFBrandingImages, type ImageUploadResult } from '../../services/pdfBrandingService';
+import { Upload, X, AlertCircle, Check } from 'lucide-react';
+import { PDFBrandingService, type PDFBrandingImages } from '../../services/pdfBrandingService';
 import type { CompanySettings } from '../../types/invoice';
 
 interface PDFBrandingManagerProps {

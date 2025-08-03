@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { invoiceService } from '../../services/invoiceService';
+import { paymentService } from '../../services/paymentService';
 import { EmailService } from '../../services/emailService';
 import { simpleAuth } from '../../utils/simpleAuth';
 import { useToast } from '../ui/ToastProvider';
@@ -35,7 +36,7 @@ import { useConfirmDialog } from '../../hooks/useConfirmDialog';
 import { CreateInvoice } from './CreateInvoice';
 import { EditInvoice } from './EditInvoice';
 import { getTaxLabel, getTaxRegistrationLabel, validateTaxRegistration, getDefaultTaxRate, getClassificationCodeLabel } from '../../utils/taxUtils';
-import type { Invoice, InvoiceFilters, InvoiceStats, Customer, Product, CompanySettings, InvoiceSettings, Country, CreateProductData, CreateCompanySettingsData, CreateInvoiceSettingsData, CreateCustomerData, CreateInvoiceData, UpdateInvoiceData, CreateInvoiceItemData, TermsTemplate } from '../../types/invoice';
+import type { Invoice, InvoiceFilters, InvoiceStats, Customer, Product, CompanySettings, InvoiceSettings, Country, CreateProductData, CreateCompanySettingsData, CreateInvoiceSettingsData, CreateCustomerData, CreateInvoiceData, CreateInvoiceItemData, TermsTemplate } from '../../types/invoice';
 
 interface InvoiceManagementProps {
   onBackToDashboard?: () => void;
@@ -989,37 +990,6 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
     return currencyInfo.symbol + ' ' + formattedNumber;
   };
 
-  // Completely clean number formatting - no Unicode issues
-  const formatPdfNumber = (num: number, decimals: number = 2): string => {
-    // Convert to string and handle manually to avoid ANY Unicode issues
-    const numStr = num.toString();
-    const parts = numStr.split('.');
-    let integerPart = parts[0] || '0';
-    let decimalPart = parts[1] || '';
-    
-    if (decimals === 0) {
-      return integerPart;
-    }
-    
-    // Pad or truncate decimal part
-    if (decimalPart.length < decimals) {
-      decimalPart = decimalPart + '0'.repeat(decimals - decimalPart.length);
-    } else if (decimalPart.length > decimals) {
-      decimalPart = decimalPart.substring(0, decimals);
-    }
-    
-    return integerPart + '.' + decimalPart;
-  };
-
-  // Simple currency formatting
-  const formatPdfCurrency = (amount: number, symbol: string): string => {
-    const numStr = amount.toString();
-    const parts = numStr.split('.');
-    const integerPart = parts[0] || '0';
-    const decimalPart = (parts[1] || '00').padEnd(2, '0').substring(0, 2);
-    return symbol + ' ' + integerPart + '.' + decimalPart;
-  };
-
   const handleSaveInvoice = async () => {
     try {
       setModalLoading(true);
@@ -1706,7 +1676,6 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
       // Extract dimensions for use throughout the function
       const leftMargin = dimensions.leftMargin;
       const rightMargin = dimensions.rightMargin;
-      const pageWidth = dimensions.pageWidth;
       
       // Company and Customer Information Section - Two columns with aligned starting positions
       downloadPdf.setTextColor(0, 0, 0);
@@ -2228,7 +2197,7 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
         downloadPdf.setFont('helvetica', 'bold');
         downloadPdf.text('Banking Details', leftSectionStart, bankingStartY);
         
-        let bankingYPos = bankingStartY + 5;
+        const bankingYPos = bankingStartY + 5;
         downloadPdf.setFillColor(248, 250, 252);
         const bankingBoxHeight = 20;
         const leftColWidth = 85;
@@ -2481,7 +2450,6 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
       // Create PDF using EXACT same format as download function with branding
       const emailPdf = new jsPDF('p', 'mm', 'a4');
       const pageWidth = emailPdf.internal.pageSize.getWidth();
-      const pageHeight = emailPdf.internal.pageSize.getHeight();
       const leftMargin = 10;
       const rightMargin = pageWidth - 10;
       let yPos = 10;
@@ -2510,11 +2478,6 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
         dimensions,
         contentStartY
       );
-      
-      // Extract dimensions for use throughout the function (same as download)
-      const emailLeftMargin = dimensions.leftMargin;
-      const emailRightMargin = dimensions.rightMargin;
-      const emailPageWidth = dimensions.pageWidth;
       
       // Company and Customer Information Section - Two columns with aligned starting positions
       emailPdf.setTextColor(0, 0, 0);
@@ -2917,7 +2880,7 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
         emailPdf.setFont('helvetica', 'bold');
         emailPdf.text('Banking Details', leftSectionStart, bankingStartY);
         
-        let bankingYPos = bankingStartY + 5;
+        const bankingYPos = bankingStartY + 5;
         emailPdf.setFillColor(248, 250, 252);
         const bankingBoxHeight = 20;
         const leftColWidth = 85;
@@ -3073,7 +3036,6 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
 
       // Get PDF as base64 string for email attachment
       const emailPdfBase64 = emailPdf.output('datauristring').split(',')[1]; // Remove data:application/pdf;base64, prefix
-      const emailFilename = `Invoice-${fullInvoice.invoice_number}-${customer.company_name || customer.contact_person || 'Customer'}.pdf`;
 
       // Check PDF size (much smaller now with native PDF generation)
       const emailPdfSizeKB = (emailPdfBase64.length * 3) / 4 / 1024; // Approximate size in KB
@@ -3131,6 +3093,203 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
     } catch (error) {
       console.error('Failed to email invoice:', error);
       showError(`❌ Failed to email invoice: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  };
+
+  const handleCreatePaymentRequest = async (invoice: Invoice) => {
+    try {
+      showInfo('💳 Creating payment request...');
+
+      // Ensure customers are loaded
+      const allCustomers = await ensureCustomersLoaded();
+      
+      // Find the customer for this invoice
+      const customer = allCustomers.find(c => c.id === invoice.customer_id);
+      if (!customer) {
+        showError(`Cannot create payment request: Customer not found (ID: ${invoice.customer_id}). Please refresh the page and try again.`);
+        return;
+      }
+
+      // Validate customer has email
+      if (!customer.email) {
+        showError(`Cannot create payment request: "${customer.company_name || customer.contact_person}" does not have an email address. Please edit the customer profile and add an email address first.`);
+        return;
+      }
+
+      // Validate email format
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(customer.email)) {
+        showError(`Cannot create payment request: Customer email "${customer.email}" is not valid. Please update the customer's email address.`);
+        return;
+      }
+
+      // Check if invoice is eligible for payment request
+      if (invoice.payment_status === 'paid') {
+        showError('Cannot create payment request: This invoice has already been paid.');
+        return;
+      }
+
+      if (invoice.status === 'cancelled') {
+        showError('Cannot create payment request: Cannot create payment request for cancelled invoices.');
+        return;
+      }
+
+      // Get active payment gateways
+      const activeGateways = await paymentService.getActivePaymentGateways();
+      if (activeGateways.length === 0) {
+        showError('No active payment gateways available. Please configure a payment gateway in the Payment Management section first.');
+        return;
+      }
+
+      // Calculate invoice totals for payment amount
+      const selectedCustomer = allCustomers.find(c => c.id === invoice.customer_id);
+      const currencyInfo = getCurrencyInfo(selectedCustomer);
+      
+      // Calculate totals using the invoice items
+      let subtotal = 0;
+      let totalTax = 0;
+      (invoice.invoice_items || []).forEach(item => {
+        const lineTotal = item.quantity * item.unit_price;
+        const taxAmount = (lineTotal * item.tax_rate) / 100;
+        subtotal += lineTotal;
+        totalTax += taxAmount;
+      });
+      const invoiceTotals = {
+        subtotal,
+        taxAmount: totalTax,
+        total: subtotal + totalTax
+      };
+
+      // Use the first active gateway (you can enhance this to let user select)
+      const primaryGateway = activeGateways[0];
+
+      // Create payment request data
+      const paymentRequestData = {
+        invoice_id: invoice.id,
+        gateway_id: primaryGateway.id,
+        amount: invoiceTotals.total,
+        currency: currencyInfo.code,
+        description: `Payment for Invoice ${invoice.invoice_number}`,
+        customer_email: customer.email,
+        customer_name: customer.company_name || customer.contact_person || 'Valued Customer',
+        customer_phone: customer.phone || undefined,
+        expires_in_hours: 72, // 3 days expiry
+        metadata: {
+          invoice_id: invoice.id,
+          invoice_number: invoice.invoice_number,
+          customer_id: customer.id
+        }
+      };
+
+      // Create the payment request
+      const paymentRequest = await paymentService.createPaymentRequest(paymentRequestData);
+
+      // Create payment link for email
+      await paymentService.createPaymentLink(paymentRequest.id, 'email', {
+        payment_request_id: paymentRequest.id,
+        link_type: 'email',
+        recipient_email: customer.email,
+        send_immediately: true
+      });
+
+      // Send email notification with payment link
+      try {
+        await fetch('/.netlify/functions/send-email', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            to: customer.email,
+            from: 'kdadks@outlook.com',
+            subject: `Payment Request - Invoice ${invoice.invoice_number}`,
+            text: `Dear ${customer.company_name || customer.contact_person || 'Valued Customer'},
+
+You have received a payment request for Invoice ${invoice.invoice_number}.
+
+Payment Details:
+- Invoice Number: ${invoice.invoice_number}
+- Amount: ${formatCurrencyAmount(invoiceTotals.total, currencyInfo)}
+- Due Date: ${new Date(invoice.due_date || '').toLocaleDateString() || 'N/A'}
+- Payment Request ID: ${paymentRequest.id}
+
+Click the link below to make your payment securely:
+[Payment Link will be provided by the gateway]
+
+This payment request will expire in 72 hours.
+
+If you have any questions, please contact us.
+
+Best regards,
+KDADKS Service Private Limited`,
+            html: `<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f9fafb; padding: 20px;">
+              <div style="background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                <div style="text-align: center; margin-bottom: 30px;">
+                  <h1 style="color: #2563eb; margin: 0;">Payment Request</h1>
+                  <p style="color: #6b7280; margin: 5px 0 0 0;">KDADKS Service Private Limited</p>
+                </div>
+                
+                <p style="color: #374151;">Dear ${customer.company_name || customer.contact_person || 'Valued Customer'},</p>
+                
+                <p style="color: #374151;">You have received a payment request for the following invoice:</p>
+                
+                <div style="background: #f3f4f6; padding: 20px; border-radius: 8px; margin: 20px 0;">
+                  <table style="width: 100%; border-collapse: collapse;">
+                    <tr>
+                      <td style="padding: 8px 0; border-bottom: 1px solid #e5e7eb;"><strong>Invoice Number:</strong></td>
+                      <td style="padding: 8px 0; border-bottom: 1px solid #e5e7eb; text-align: right;">${invoice.invoice_number}</td>
+                    </tr>
+                    <tr>
+                      <td style="padding: 8px 0; border-bottom: 1px solid #e5e7eb;"><strong>Amount:</strong></td>
+                      <td style="padding: 8px 0; border-bottom: 1px solid #e5e7eb; text-align: right; color: #059669; font-weight: bold;">${formatCurrencyAmount(invoiceTotals.total, currencyInfo)}</td>
+                    </tr>
+                    <tr>
+                      <td style="padding: 8px 0; border-bottom: 1px solid #e5e7eb;"><strong>Due Date:</strong></td>
+                      <td style="padding: 8px 0; border-bottom: 1px solid #e5e7eb; text-align: right;">${new Date(invoice.due_date || '').toLocaleDateString() || 'N/A'}</td>
+                    </tr>
+                    <tr>
+                      <td style="padding: 8px 0;"><strong>Gateway:</strong></td>
+                      <td style="padding: 8px 0; text-align: right;">${primaryGateway.name}</td>
+                    </tr>
+                  </table>
+                </div>
+                
+                <div style="text-align: center; margin: 30px 0;">
+                  <p style="color: #374151; margin-bottom: 15px;">Click the button below to make your payment securely:</p>
+                  <div style="background: #2563eb; color: white; padding: 15px 30px; border-radius: 8px; display: inline-block; text-decoration: none; font-weight: bold;">
+                    🔒 Pay Securely Online
+                  </div>
+                  <p style="color: #6b7280; font-size: 12px; margin-top: 10px;">Payment powered by ${primaryGateway.name}</p>
+                </div>
+                
+                <div style="background: #fef3c7; border: 1px solid #f59e0b; padding: 15px; border-radius: 8px; margin: 20px 0;">
+                  <p style="margin: 0; color: #92400e; font-size: 14px;"><strong>⏰ Important:</strong> This payment request will expire in 72 hours.</p>
+                </div>
+                
+                <p style="color: #374151; font-size: 14px;">If you have any questions about this payment request, please contact us.</p>
+                
+                <div style="border-top: 1px solid #e5e7eb; margin-top: 30px; padding-top: 20px; text-align: center;">
+                  <p style="color: #6b7280; font-size: 12px; margin: 0;">Payment Request ID: ${paymentRequest.id}</p>
+                  <p style="color: #6b7280; font-size: 12px; margin: 5px 0 0 0;">KDADKS Service Private Limited</p>
+                </div>
+              </div>
+            </div>`
+          }),
+        });
+
+        showSuccess(`💳 Payment request created successfully! Email sent to ${customer.email} with secure payment link.`);
+        
+        // Optionally refresh data to show any status changes
+        await loadData();
+
+      } catch (emailError) {
+        console.error('Email sending failed:', emailError);
+        showWarning(`Payment request created but email sending failed. Please send the payment link manually to ${customer.email}.`);
+      }
+
+    } catch (error) {
+      console.error('Failed to create payment request:', error);
+      showError(`❌ Failed to create payment request: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   };
 
@@ -3885,28 +4044,6 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
     }).format(amount);
   };
 
-  // Format currency with specific currency code from invoice
-  const formatInvoiceCurrency = (amount: number, currencyCode: string = 'INR') => {
-    // Get currency symbol based on code
-    const getCurrencySymbol = (code: string) => {
-      switch (code) {
-        case 'USD': return '$';
-        case 'GBP': return '£';
-        case 'EUR': return '€';
-        case 'INR': return '₹';
-        default: return '₹'; // Default to INR
-      }
-    };
-
-    const symbol = getCurrencySymbol(currencyCode);
-    const formattedAmount = new Intl.NumberFormat('en-IN', {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2
-    }).format(amount);
-    
-    return `${symbol}${formattedAmount}`;
-  };
-
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'draft': return 'bg-gray-100 text-gray-800';
@@ -4133,6 +4270,17 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
                     title="Email Invoice"
                   >
                     <Mail className="w-4 h-4" />
+                  </button>
+                )}
+
+                {/* Create Payment Request Button */}
+                {invoice.status !== 'cancelled' && invoice.payment_status !== 'paid' && (
+                  <button 
+                    onClick={() => handleCreatePaymentRequest(invoice)}
+                    className="text-orange-600 hover:text-orange-900"
+                    title="Create Payment Request"
+                  >
+                    <CreditCard className="w-4 h-4" />
                   </button>
                 )}
                 

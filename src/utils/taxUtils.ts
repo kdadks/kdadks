@@ -85,13 +85,14 @@ export const getTaxRegistrationLabel = (customer: Customer | undefined): string 
     case 'NL':
       return 'BTW-nummer';
     
-    default:
+    default: {
       // For EU countries, use VAT Number
       const euCountries = ['AT', 'BE', 'BG', 'HR', 'CY', 'CZ', 'DK', 'EE', 'FI', 'GR', 'HU', 'IE', 'LV', 'LT', 'LU', 'MT', 'PL', 'PT', 'RO', 'SK', 'SI', 'SE'];
       if (euCountries.includes(countryCode || '')) {
         return 'EU VAT Number';
       }
       return 'Tax Registration Number';
+    }
   }
 };
 
@@ -124,13 +125,13 @@ export const validateTaxRegistration = (
     return { isValid: true }; // Empty is valid (optional field)
   }
 
-  const cleanTaxNumber = taxNumber.replace(/[\s\-\.]/g, '').toUpperCase();
+  const cleanTaxNumber = taxNumber.replace(/[\s\-.]/g, '').toUpperCase();
   const countryCode = customer?.country?.code?.toUpperCase();
   
   // Country-specific validation patterns
   switch (countryCode) {
     case 'IND':
-    case 'IN':
+    case 'IN': {
       // Indian GSTIN validation: 22AAAAA0000A1Z5
       const gstinRegex = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
       if (!gstinRegex.test(cleanTaxNumber)) {
@@ -140,9 +141,10 @@ export const validateTaxRegistration = (
         };
       }
       break;
+    }
 
     case 'USA':
-    case 'US':
+    case 'US': {
       // US Federal Tax ID/EIN: XX-XXXXXXX or XXXXXXXXX
       const einRegex = /^[0-9]{2}-?[0-9]{7}$/;
       if (!einRegex.test(cleanTaxNumber)) {
@@ -152,10 +154,11 @@ export const validateTaxRegistration = (
         };
       }
       break;
+    }
 
     case 'GBR':
     case 'GB':
-    case 'UK':
+    case 'UK': {
       // UK VAT: GB999999973 or 999999973
       const ukVatRegex = /^(GB)?[0-9]{9}$/;
       if (!ukVatRegex.test(cleanTaxNumber)) {
@@ -165,9 +168,10 @@ export const validateTaxRegistration = (
         };
       }
       break;
+    }
 
     case 'CAN':
-    case 'CA':
+    case 'CA': {
       // Canada GST/HST: 123456789RT0001
       const canadaGstRegex = /^[0-9]{9}RT[0-9]{4}$/;
       if (!canadaGstRegex.test(cleanTaxNumber)) {
@@ -177,9 +181,10 @@ export const validateTaxRegistration = (
         };
       }
       break;
+    }
 
     case 'AUS':
-    case 'AU':
+    case 'AU': {
       // Australia ABN: 11 digits
       const abnRegex = /^[0-9]{11}$/;
       if (!abnRegex.test(cleanTaxNumber)) {
@@ -189,9 +194,10 @@ export const validateTaxRegistration = (
         };
       }
       break;
+    }
 
     case 'SGP':
-    case 'SG':
+    case 'SG': {
       // Singapore UEN: Various formats, basic validation
       const uenRegex = /^[0-9]{8,10}[A-Z]?$/;
       if (!uenRegex.test(cleanTaxNumber)) {
@@ -201,9 +207,10 @@ export const validateTaxRegistration = (
         };
       }
       break;
+    }
 
     case 'ARE':
-    case 'AE':
+    case 'AE': {
       // UAE TRN: 15 digits
       const trnRegex = /^[0-9]{15}$/;
       if (!trnRegex.test(cleanTaxNumber)) {
@@ -213,9 +220,10 @@ export const validateTaxRegistration = (
         };
       }
       break;
+    }
 
     case 'DEU':
-    case 'DE':
+    case 'DE': {
       // Germany VAT: DE999999999
       const deVatRegex = /^(DE)?[0-9]{9}$/;
       if (!deVatRegex.test(cleanTaxNumber)) {
@@ -225,9 +233,10 @@ export const validateTaxRegistration = (
         };
       }
       break;
+    }
 
     case 'FRA':
-    case 'FR':
+    case 'FR': {
       // France VAT: FR99999999999
       const frVatRegex = /^(FR)?[A-Z0-9]{2}[0-9]{9}$/;
       if (!frVatRegex.test(cleanTaxNumber)) {
@@ -237,9 +246,10 @@ export const validateTaxRegistration = (
         };
       }
       break;
+    }
 
     case 'ESP':
-    case 'ES':
+    case 'ES': {
       // Spain VAT: ES999999999
       const esVatRegex = /^(ES)?[A-Z][0-9]{7}[A-Z]$/;
       if (!esVatRegex.test(cleanTaxNumber)) {
@@ -249,9 +259,10 @@ export const validateTaxRegistration = (
         };
       }
       break;
+    }
 
     case 'ITA':
-    case 'IT':
+    case 'IT': {
       // Italy VAT: IT99999999999
       const itVatRegex = /^(IT)?[0-9]{11}$/;
       if (!itVatRegex.test(cleanTaxNumber)) {
@@ -261,9 +272,10 @@ export const validateTaxRegistration = (
         };
       }
       break;
+    }
 
     case 'NLD':
-    case 'NL':
+    case 'NL': {
       // Netherlands VAT: NL999999999B99
       const nlVatRegex = /^(NL)?[0-9]{9}B[0-9]{2}$/;
       if (!nlVatRegex.test(cleanTaxNumber)) {
@@ -273,8 +285,9 @@ export const validateTaxRegistration = (
         };
       }
       break;
+    }
 
-    default:
+    default: {
       // Generic validation for other countries
       if (cleanTaxNumber.length < 4 || cleanTaxNumber.length > 20) {
         return {
@@ -291,6 +304,7 @@ export const validateTaxRegistration = (
         };
       }
       break;
+    }
   }
   
   return { isValid: true };

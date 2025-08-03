@@ -19,6 +19,10 @@ import AdminLogin from './admin/AdminLogin'
 import SimpleAdminDashboard from './admin/SimpleAdminDashboard'
 import { ToastProvider } from './ui/ToastProvider'
 
+// Payment Gateway Components (Lazy loaded)
+import { CheckoutPage } from './payment/CheckoutPage'
+import { PaymentPage } from './payment/PaymentPage'
+
 // Home page component
 const HomePage = () => (
   <div className="min-h-screen bg-white">
@@ -103,6 +107,12 @@ const Router = () => {
           {/* Admin routes */}
           <Route path="/admin/login" element={<AdminLogin />} />
           <Route path="/admin" element={<SimpleAdminDashboard />} />
+          
+          {/* Payment routes */}
+          <Route path="/payment/checkout/:requestId" element={<CheckoutPage />} />
+          <Route path="/payment/status/:requestId" element={<PaymentPage />} />
+          <Route path="/payment/success/:requestId" element={<PaymentPage />} />
+          <Route path="/payment/failure/:requestId" element={<PaymentPage />} />
           
           {/* Catch all route - redirect to home */}
           <Route path="*" element={<HomePage />} />

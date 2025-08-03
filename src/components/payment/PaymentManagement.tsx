@@ -1,0 +1,1572 @@
+import React, { useState, useEffect } from 'react';
+import { 
+  CreditCard, 
+  Plus, 
+  Search, 
+  Download,
+  Eye,
+  Send,
+  CheckCircle,
+  XCircle,
+  Clock,
+  AlertCircle,
+  BarChart3,
+  TrendingUp,
+  DollarSign,
+  ArrowLeft,
+  LogOut,
+  Settings,
+  EyeOff
+} from 'lucide-react';
+import { paymentService } from '../../services/paymentService';
+import { supabase } from '../../config/supabase';
+import { simpleAuth } from '../../utils/simpleAuth';
+import { useToast } from '../ui/ToastProvider';
+import type { 
+  PaymentRequest, 
+  PaymentGateway, 
+  PaymentFilters,
+  PaymentAnalytics,
+  CreatePaymentRequestData 
+} from '../../types/payment';
+
+interface PaymentManagementProps {
+  invoices?: any[]; // Optional prop to integrate with existing invoice system
+  onBackToDashboard?: () => void; // Optional callback to return to main dashboard
+}
+
+const PaymentManagement: React.FC<PaymentManagementProps> = ({ 
+  invoices = [], 
+  onBackToDashboard 
+}) => {
+  // State management
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'requests' | 'analytics' | 'settings'>('dashboard');
+  const [paymentRequests, setPaymentRequests] = useState<PaymentRequest[]>([]);
+  const [gateways, setGateways] = useState<PaymentGateway[]>([]);
+  const [analytics, setAnalytics] = useState<PaymentAnalytics | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  
+  // Modal states
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showGatewayModal, setShowGatewayModal] = useState(false);
+  const [showDetailsModal, setShowDetailsModal] = useState(false);
+  const [showConfigModal, setShowConfigModal] = useState(false);
+  const [selectedRequest, setSelectedRequest] = useState<PaymentRequest | null>(null);
+  const [selectedGateway, setSelectedGateway] = useState<PaymentGateway | null>(null);
+  
+  const [currentUser, setCurrentUser] = useState<any>(null);
+  const [isAuthenticating, setIsAuthenticating] = useState(false);
+  const [authInitialized, setAuthInitialized] = useState(false);
+  
+  // Toast notifications
+  const { showSuccess, showError, showWarning } = useToast();
+  
+  // Filters and pagination
+  const [filters, setFilters] = useState<PaymentFilters>({});
+  const [searchTerm, setSearchTerm] = useState('');
+  const [currentPage] = useState(1);
+  const [perPage] = useState(20);
+
+  // Authentication check
+  useEffect(() => {
+    const initializeAuth = async () => {
+      setIsAuthenticating(true);
+      try {
+        const user = await simpleAuth.getCurrentUser();
+        console.log('Current auth user:', user);
+        
+        if (user) {
+          setCurrentUser(user);
+          console.log('User authenticated successfully');
+        } else {
+          console.log('No authenticated user found');
+          setError('Authentication required. Please log in to access payment management.');
+        }
+      } catch (error) {
+        console.error('Authentication check failed:', error);
+        setError('Authentication failed. Please log in again.');
+      } finally {
+        setIsAuthenticating(false);
+        setAuthInitialized(true);
+      }
+    };
+
+    initializeAuth();
+  }, []);
+
+  // Load data only after authentication is verified
+  useEffect(() => {
+    if (authInitialized && currentUser) {
+      loadData();
+    }
+  }, [authInitialized, currentUser]);
+
+  useEffect(() => {
+    if (activeTab === 'requests') {
+      loadPaymentRequests();
+    } else if (activeTab === 'analytics') {
+      loadAnalytics();
+    }
+  }, [activeTab, filters, currentPage]);
+
+  // Data loading functions
+  const loadData = async () => {
+    try {
+      setLoading(true);
+      setError(null); // Clear any previous errors
+      
+      const [gatewaysData] = await Promise.all([
+        paymentService.getPaymentGateways() // Load all gateways, not just active ones
+      ]);
+      setGateways(gatewaysData);
+    } catch (err) {
+      console.error('Failed to load data:', err);
+      setError(err instanceof Error ? err.message : 'Failed to load data');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadPaymentRequests = async () => {
+    try {
+      setError(null); // Clear any previous errors
+      const response = await paymentService.getPaymentRequests(filters, currentPage, perPage);
+      setPaymentRequests(response.data);
+    } catch (err) {
+      console.error('Failed to load payment requests:', err);
+      setError(err instanceof Error ? err.message : 'Failed to load payment requests');
+    }
+  };
+
+  const loadAnalytics = async () => {
+    try {
+      const analyticsData = await paymentService.getPaymentAnalytics({
+        dateFrom: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
+        dateTo: new Date().toISOString()
+      });
+      setAnalytics(analyticsData);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load analytics');
+    }
+  };
+
+  // Payment request creation
+  const handleCreatePaymentRequest = async (data: CreatePaymentRequestData) => {
+    try {
+      // Check authentication first
+      const isAuthenticated = await checkAuthentication();
+      if (!isAuthenticated) {
+        return;
+      }
+
+      const request = await paymentService.createPaymentRequest(data);
+      
+      // Send email notification if customer email is provided
+      if (data.customer_email) {
+        try {
+          // Create and send payment link
+          await paymentService.createPaymentLink(request.id, 'email', {
+            payment_request_id: request.id,
+            link_type: 'email',
+            recipient_email: data.customer_email,
+            send_immediately: true
+          });
+
+          // Send payment request email using a generic contact email format
+          await fetch('/.netlify/functions/send-email', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              to: data.customer_email,
+              from: 'kdadks@outlook.com',
+              subject: `Payment Request - ${data.description || 'Payment Required'}`,
+              text: `Dear ${data.customer_name || 'Valued Customer'},
+
+You have a new payment request for ${data.currency} ${data.amount}.
+
+Description: ${data.description || 'Payment Request'}
+Amount: ${data.currency} ${data.amount}
+Request ID: ${request.id}
+
+Please complete your payment at your earliest convenience.
+
+Best regards,
+KDADKS Service Private Limited`,
+              html: `<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                <h2 style="color: #2563eb;">Payment Request</h2>
+                <p>Dear ${data.customer_name || 'Valued Customer'},</p>
+                <p>You have a new payment request:</p>
+                <div style="background: #f3f4f6; padding: 20px; border-radius: 8px; margin: 20px 0;">
+                  <p><strong>Description:</strong> ${data.description || 'Payment Request'}</p>
+                  <p><strong>Amount:</strong> ${data.currency} ${data.amount}</p>
+                  <p><strong>Request ID:</strong> ${request.id}</p>
+                </div>
+                <p>Please complete your payment at your earliest convenience.</p>
+                <p>Best regards,<br>KDADKS Service Private Limited</p>
+              </div>`
+            }),
+          });
+
+          showSuccess('Payment request created and email sent successfully!');
+        } catch (emailError) {
+          console.error('Email sending failed:', emailError);
+          showWarning('Payment request created but email sending failed. Please resend manually.');
+        }
+      } else {
+        showSuccess('Payment request created successfully!');
+      }
+      
+      setShowCreateModal(false);
+      loadPaymentRequests();
+    } catch (err) {
+      console.error('Failed to create payment request:', err);
+      showError(err instanceof Error ? err.message : 'Failed to create payment request');
+    }
+  };
+
+  // Handle logout
+  const handleLogout = async () => {
+    try {
+      await simpleAuth.logout();
+      if (onBackToDashboard) {
+        onBackToDashboard();
+      } else {
+        window.location.href = '/';
+      }
+    } catch (err) {
+      console.error('Logout failed:', err);
+    }
+  };
+
+  // Helper function to check authentication
+  const checkAuthentication = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        setError('Authentication required. Please log in to access payment management.');
+        return false;
+      }
+      return true;
+    } catch (err) {
+      setError('Authentication check failed. Please try logging in again.');
+      return false;
+    }
+  };
+
+  // Helper function to get customer name from payment request
+  const getCustomerName = (request: any): string => {
+    // First try direct customer_name field
+    if (request.customer_name) {
+      return request.customer_name;
+    }
+    
+    // Then try nested invoice->customer->name structure
+    if (request.invoice && typeof request.invoice === 'object') {
+      const invoice = request.invoice;
+      if (invoice.customer && typeof invoice.customer === 'object' && invoice.customer.name) {
+        return invoice.customer.name;
+      }
+    }
+    
+    return 'Unknown';
+  };
+
+  // Utility functions
+  const formatCurrency = (amount: number, currency: string) => {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: currency,
+      minimumFractionDigits: 2
+    }).format(amount);
+  };
+
+  const getStatusIcon = (status: PaymentRequest['status']) => {
+    switch (status) {
+      case 'completed':
+        return <CheckCircle className="w-5 h-5 text-green-600" />;
+      case 'failed':
+      case 'expired':
+        return <XCircle className="w-5 h-5 text-red-600" />;
+      case 'pending':
+        return <Clock className="w-5 h-5 text-yellow-600" />;
+      case 'processing':
+        return <AlertCircle className="w-5 h-5 text-blue-600" />;
+      default:
+        return <Clock className="w-5 h-5 text-gray-600" />;
+    }
+  };
+
+  const getStatusColor = (status: PaymentRequest['status']) => {
+    switch (status) {
+      case 'completed':
+        return 'bg-green-100 text-green-800';
+      case 'failed':
+      case 'expired':
+        return 'bg-red-100 text-red-800';
+      case 'pending':
+        return 'bg-yellow-100 text-yellow-800';
+      case 'processing':
+        return 'bg-blue-100 text-blue-800';
+      default:
+        return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  // Show authentication loading
+  if (isAuthenticating) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+        <span className="ml-2 text-gray-600">Authenticating...</span>
+      </div>
+    );
+  }
+
+  // Show authentication error
+  if (authInitialized && !currentUser) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <div className="text-red-600 mb-2">Authentication Required</div>
+          <p className="text-gray-600 mb-4">Please log in to access payment management.</p>
+          <button
+            onClick={() => window.location.href = '/admin/login'}
+            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+          >
+            Go to Login
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+        <span className="ml-2 text-gray-600">Loading payment data...</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-100">
+      {/* Header */}
+      <header className="bg-white shadow-sm border-b border-gray-200">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between items-center h-16">
+            <div className="flex items-center space-x-4">
+              {onBackToDashboard && (
+                <button
+                  onClick={onBackToDashboard}
+                  className="flex items-center px-3 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 rounded-md hover:bg-gray-100"
+                >
+                  <ArrowLeft className="w-4 h-4 mr-2" />
+                  Back to Dashboard
+                </button>
+              )}
+              <h1 className="text-xl font-semibold text-gray-900">Payment Management</h1>
+            </div>
+            <div className="flex items-center space-x-4">
+              {currentUser && (
+                <span className="text-sm text-gray-600">
+                  Welcome, {currentUser.email}
+                </span>
+              )}
+              <button
+                onClick={handleLogout}
+                className="flex items-center px-3 py-2 text-sm text-gray-600 hover:text-gray-900"
+              >
+                <LogOut className="w-4 h-4 mr-1" />
+                Logout
+              </button>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      {/* Navigation Tabs */}
+      <div className="bg-white shadow-sm border-b border-gray-200">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <nav className="flex space-x-8">
+            {[
+              { key: 'dashboard', label: 'Dashboard', icon: BarChart3 },
+              { key: 'requests', label: 'Payment Requests', icon: CreditCard },
+              { key: 'analytics', label: 'Analytics', icon: TrendingUp },
+              { key: 'settings', label: 'Gateway Settings', icon: Settings }
+            ].map(({ key, label, icon: Icon }) => (
+              <button
+                key={key}
+                onClick={() => setActiveTab(key as typeof activeTab)}
+                className={`flex items-center py-4 px-1 border-b-2 font-medium text-sm ${
+                  activeTab === key
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                <Icon className="w-4 h-4 mr-2" />
+                {label}
+              </button>
+            ))}
+          </nav>
+        </div>
+      </div>
+
+      {/* Error Display */}
+      {error && (
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+            <div className="flex items-center space-x-2">
+              <XCircle className="w-5 h-5 text-red-600" />
+              <span className="text-red-800">{error}</span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Main Content */}
+      <main className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
+        {/* Dashboard Tab */}
+        {activeTab === 'dashboard' && (
+          <div className="space-y-6">
+            {/* Quick Stats */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-600">Active Gateways</p>
+                    <p className="text-3xl font-bold text-gray-900">{gateways.filter(g => g.is_active).length}</p>
+                  </div>
+                  <CreditCard className="w-8 h-8 text-blue-600" />
+                </div>
+              </div>
+              
+              <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-600">Pending Invoices</p>
+                    <p className="text-3xl font-bold text-gray-900">
+                      {invoices.filter(inv => inv.status === 'sent' || inv.status === 'overdue').length}
+                    </p>
+                  </div>
+                  <Clock className="w-8 h-8 text-yellow-600" />
+                </div>
+              </div>
+              
+              <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-600">This Month</p>
+                    <p className="text-3xl font-bold text-gray-900">₹0</p>
+                  </div>
+                  <DollarSign className="w-8 h-8 text-green-600" />
+                </div>
+              </div>
+              
+              <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-600">Success Rate</p>
+                    <p className="text-3xl font-bold text-gray-900">0%</p>
+                  </div>
+                  <TrendingUp className="w-8 h-8 text-purple-600" />
+                </div>
+              </div>
+            </div>
+
+            {/* Available Payment Gateways */}
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-medium text-gray-900">Available Payment Gateways</h2>
+                <span className="text-sm text-gray-500">Total: {gateways.length}</span>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {gateways.map((gateway) => (
+                  <div key={gateway.id} className="border border-slate-200 rounded-lg p-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <h3 className="font-medium text-gray-900 capitalize">{gateway.name}</h3>
+                      <span className={`px-2 py-1 text-xs rounded-full ${
+                        gateway.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
+                      }`}>
+                        {gateway.is_active ? 'Active' : 'Inactive'}
+                      </span>
+                    </div>
+                    <p className="text-sm text-gray-600 capitalize mb-2">{gateway.provider_type}</p>
+                    <div className="text-xs text-gray-500">
+                      Supports: {gateway.currency_support.join(', ')}
+                    </div>
+                    {gateway.transaction_fee_percentage && (
+                      <div className="text-xs text-gray-500 mt-1">
+                        Fee: {gateway.transaction_fee_percentage}%
+                        {gateway.transaction_fee_fixed && ` + ${gateway.transaction_fee_fixed}`}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+              
+              {gateways.length === 0 && (
+                <div className="text-center py-8 text-gray-500">
+                  <CreditCard className="w-12 h-12 mx-auto mb-4 text-gray-300" />
+                  <p>No payment gateways configured</p>
+                  <p className="text-sm">Add payment gateways to start accepting payments</p>
+                </div>
+              )}
+            </div>
+
+            {/* Quick Actions */}
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+              <h2 className="text-lg font-medium text-gray-900 mb-4">Quick Actions</h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <button
+                  onClick={() => setShowCreateModal(true)}
+                  className="flex items-center space-x-3 p-4 border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors"
+                >
+                  <Plus className="w-6 h-6 text-blue-600" />
+                  <div className="text-left">
+                    <p className="font-medium text-gray-900">Create Payment Request</p>
+                    <p className="text-sm text-gray-600">Send payment link to customer</p>
+                  </div>
+                </button>
+                
+                <button
+                  onClick={() => setActiveTab('requests')}
+                  className="flex items-center space-x-3 p-4 border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors"
+                >
+                  <Search className="w-6 h-6 text-green-600" />
+                  <div className="text-left">
+                    <p className="font-medium text-gray-900">View All Requests</p>
+                    <p className="text-sm text-gray-600">Track payment status</p>
+                  </div>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Payment Requests Tab */}
+        {activeTab === 'requests' && (
+          <div className="space-y-6">
+            {/* Filters and Search */}
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between space-y-4 md:space-y-0">
+                <div className="flex items-center space-x-4">
+                  <div className="relative">
+                    <Search className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                    <input
+                      type="text"
+                      placeholder="Search by customer email..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+                  
+                  <select
+                    value={filters.status || ''}
+                    onChange={(e) => setFilters({ ...filters, status: e.target.value as any })}
+                    className="px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    <option value="">All Status</option>
+                    <option value="pending">Pending</option>
+                    <option value="processing">Processing</option>
+                    <option value="completed">Completed</option>
+                    <option value="failed">Failed</option>
+                    <option value="expired">Expired</option>
+                  </select>
+                  
+                  <select
+                    value={filters.currency || ''}
+                    onChange={(e) => setFilters({ ...filters, currency: e.target.value })}
+                    className="px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    <option value="">All Currencies</option>
+                    <option value="INR">INR</option>
+                    <option value="USD">USD</option>
+                    <option value="EUR">EUR</option>
+                    <option value="GBP">GBP</option>
+                  </select>
+                </div>
+                
+                <div className="flex items-center space-x-2">
+                  <button
+                    onClick={() => setShowCreateModal(true)}
+                    className="inline-flex items-center px-4 py-2 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 transition-colors"
+                  >
+                    <Plus className="w-4 h-4 mr-2" />
+                    New Request
+                  </button>
+                  
+                  <button className="inline-flex items-center px-4 py-2 border border-slate-300 rounded-lg shadow-sm text-sm font-medium text-slate-700 bg-white hover:bg-slate-50 transition-colors">
+                    <Download className="w-4 h-4 mr-2" />
+                    Export
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Payment Requests List */}
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+              <div className="px-6 py-4 border-b border-gray-200">
+                <h2 className="text-lg font-medium text-gray-900">Payment Requests</h2>
+              </div>
+              
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Customer
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Amount
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Status
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Created
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Actions
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {paymentRequests.map((request) => (
+                      <tr key={request.id} className="hover:bg-gray-50">
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div>
+                            <div className="text-sm font-medium text-gray-900">
+                              {getCustomerName(request)}
+                            </div>
+                            <div className="text-sm text-gray-500">{request.customer_email}</div>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm font-medium text-gray-900">
+                            {formatCurrency(request.amount, request.currency)}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="flex items-center space-x-2">
+                            {getStatusIcon(request.status)}
+                            <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(request.status)}`}>
+                              {request.status}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {new Date(request.created_at).toLocaleDateString()}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm space-x-2">
+                          <button
+                            onClick={() => {
+                              setSelectedRequest(request);
+                              setShowDetailsModal(true);
+                            }}
+                            className="text-blue-600 hover:text-blue-900"
+                          >
+                            <Eye className="w-4 h-4" />
+                          </button>
+                          {request.status === 'pending' && (
+                            <button className="text-green-600 hover:text-green-900">
+                              <Send className="w-4 h-4" />
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                
+                {paymentRequests.length === 0 && (
+                  <div className="text-center py-8 text-gray-500">
+                    <CreditCard className="w-12 h-12 mx-auto mb-4 text-gray-300" />
+                    <p>No payment requests found</p>
+                    <p className="text-sm">Create your first payment request to get started</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Analytics Tab */}
+        {activeTab === 'analytics' && analytics && (
+          <div className="space-y-6">
+            {/* Analytics Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-600">Total Amount</p>
+                    <p className="text-2xl font-bold text-gray-900">
+                      {formatCurrency(analytics.total_amount, 'INR')}
+                    </p>
+                  </div>
+                  <DollarSign className="w-8 h-8 text-green-600" />
+                </div>
+              </div>
+              
+              <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-600">Success Rate</p>
+                    <p className="text-2xl font-bold text-gray-900">
+                      {analytics.success_rate.toFixed(1)}%
+                    </p>
+                  </div>
+                  <TrendingUp className="w-8 h-8 text-blue-600" />
+                </div>
+              </div>
+              
+              <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-600">Total Requests</p>
+                    <p className="text-2xl font-bold text-gray-900">{analytics.total_count}</p>
+                  </div>
+                  <CreditCard className="w-8 h-8 text-purple-600" />
+                </div>
+              </div>
+              
+              <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-600">Average Amount</p>
+                    <p className="text-2xl font-bold text-gray-900">
+                      {formatCurrency(analytics.average_amount, 'INR')}
+                    </p>
+                  </div>
+                  <BarChart3 className="w-8 h-8 text-orange-600" />
+                </div>
+              </div>
+            </div>
+
+            {/* Gateway Performance */}
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+              <h2 className="text-lg font-medium text-gray-900 mb-4">Gateway Performance</h2>
+              <div className="space-y-4">
+                {Object.entries(analytics.gateway_breakdown).map(([gateway, stats]) => (
+                  <div key={gateway} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                    <div>
+                      <h3 className="font-medium text-gray-900">{gateway}</h3>
+                      <p className="text-sm text-gray-600">
+                        {stats.count} transactions • {formatCurrency(stats.amount, 'INR')}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-lg font-semibold text-gray-900">{stats.success_rate.toFixed(1)}%</p>
+                      <p className="text-sm text-gray-600">Success Rate</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Gateway Settings Tab */}
+        {activeTab === 'settings' && (
+          <div className="space-y-6">
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-lg font-medium text-gray-900">Payment Gateway Configuration</h2>
+                <button
+                  onClick={() => setShowGatewayModal(true)}
+                  className="inline-flex items-center px-4 py-2 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 transition-colors"
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  Add Gateway
+                </button>
+              </div>
+
+              {/* Configured Gateways */}
+              <div className="space-y-4">
+                {gateways.map((gateway) => (
+                  <div key={gateway.id} className="border border-slate-200 rounded-lg p-6">
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center space-x-3">
+                        <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                          <CreditCard className="w-5 h-5 text-blue-600" />
+                        </div>
+                        <div>
+                          <h3 className="text-lg font-medium text-gray-900 capitalize">{gateway.name}</h3>
+                          <p className="text-sm text-gray-600 capitalize">{gateway.provider_type}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <span className={`px-3 py-1 text-sm rounded-full ${
+                          gateway.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
+                        }`}>
+                          {gateway.is_active ? 'Active' : 'Inactive'}
+                        </span>
+                        <button 
+                          onClick={() => {
+                            setSelectedGateway(gateway);
+                            setShowConfigModal(true);
+                          }}
+                          className="p-2 text-gray-400 hover:text-gray-600"
+                        >
+                          <Settings className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                      <div>
+                        <span className="text-gray-600">Supported Currencies:</span>
+                        <p className="font-medium">{gateway.currency_support.join(', ')}</p>
+                      </div>
+                      {gateway.transaction_fee_percentage && (
+                        <div>
+                          <span className="text-gray-600">Transaction Fee:</span>
+                          <p className="font-medium">
+                            {gateway.transaction_fee_percentage}%
+                            {gateway.transaction_fee_fixed && ` + ${gateway.transaction_fee_fixed}`}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+
+                {gateways.length === 0 && (
+                  <div className="text-center py-12">
+                    <CreditCard className="w-16 h-16 mx-auto mb-4 text-gray-300" />
+                    <h3 className="text-lg font-medium text-gray-900 mb-2">No Payment Gateways</h3>
+                    <p className="text-gray-600 mb-6">Configure payment gateways to start accepting payments online.</p>
+                    <button
+                      onClick={() => setShowGatewayModal(true)}
+                      className="inline-flex items-center px-4 py-2 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 transition-colors"
+                    >
+                      <Plus className="w-4 h-4 mr-2" />
+                      Add Your First Gateway
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Gateway Help */}
+            <div className="bg-blue-50 rounded-xl p-6">
+              <h3 className="text-lg font-medium text-blue-900 mb-2">Need Help Setting Up Gateways?</h3>
+              <p className="text-blue-800 mb-4">
+                Payment gateways allow you to accept online payments from customers. Popular options include Razorpay, Stripe, and PayPal.
+              </p>
+              <div className="space-y-2 text-sm text-blue-800">
+                <p>• <strong>Razorpay:</strong> Popular in India, supports UPI, cards, wallets, and net banking</p>
+                <p>• <strong>Stripe:</strong> Global payment processor with excellent developer tools</p>
+                <p>• <strong>PayPal:</strong> Widely trusted international payment solution</p>
+              </div>
+            </div>
+          </div>
+        )}
+      </main>
+
+      {/* Create Payment Request Modal */}
+      {showCreateModal && (
+        <CreatePaymentRequestModal
+          gateways={gateways}
+          invoices={invoices}
+          onClose={() => setShowCreateModal(false)}
+          onSubmit={handleCreatePaymentRequest}
+        />
+      )}
+
+      {/* Payment Details Modal */}
+      {showDetailsModal && selectedRequest && (
+        <PaymentDetailsModal
+          request={selectedRequest}
+          onClose={() => {
+            setShowDetailsModal(false);
+            setSelectedRequest(null);
+          }}
+        />
+      )}
+
+      {/* Gateway Configuration Modal */}
+      {showConfigModal && selectedGateway && (
+        <GatewayConfigModal
+          gateway={selectedGateway}
+          onClose={() => {
+            setShowConfigModal(false);
+            setSelectedGateway(null);
+          }}
+          onSave={(updatedGateway) => {
+            // Update gateway in the list
+            setGateways(prev => prev.map(g => 
+              g.id === updatedGateway.id ? updatedGateway : g
+            ));
+            setShowConfigModal(false);
+            setSelectedGateway(null);
+          }}
+        />
+      )}
+
+      {/* Add Gateway Modal */}
+      {showGatewayModal && (
+        <AddGatewayModal
+          onClose={() => setShowGatewayModal(false)}
+          onSave={(newGateway) => {
+            setGateways(prev => [...prev, newGateway]);
+            setShowGatewayModal(false);
+          }}
+        />
+      )}
+    </div>
+  );
+};
+
+// Modal Components (simplified for brevity)
+interface CreatePaymentRequestModalProps {
+  gateways: PaymentGateway[];
+  invoices: any[];
+  onClose: () => void;
+  onSubmit: (data: CreatePaymentRequestData) => void;
+}
+
+const CreatePaymentRequestModal: React.FC<CreatePaymentRequestModalProps> = ({
+  gateways: _gateways,
+  invoices: _invoices,
+  onClose,
+  onSubmit
+}) => {
+  const [formData, setFormData] = useState<CreatePaymentRequestData>({
+    amount: 0,
+    currency: 'INR',
+    description: '',
+    customer_email: '',
+    customer_name: '',
+    expires_in_hours: 24
+  });
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    onSubmit(formData);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 overflow-y-auto">
+      <div className="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+        <div className="fixed inset-0 transition-opacity">
+          <div className="absolute inset-0 bg-gray-500 opacity-75" onClick={onClose}></div>
+        </div>
+
+        <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+          <form onSubmit={handleSubmit} className="p-6">
+            <h3 className="text-lg font-medium text-gray-900 mb-4">Create Payment Request</h3>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Amount</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  required
+                  value={formData.amount}
+                  onChange={(e) => setFormData({ ...formData, amount: parseFloat(e.target.value) })}
+                  className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Currency</label>
+                <select
+                  value={formData.currency}
+                  onChange={(e) => setFormData({ ...formData, currency: e.target.value })}
+                  className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  <option value="INR">INR</option>
+                  <option value="USD">USD</option>
+                  <option value="EUR">EUR</option>
+                  <option value="GBP">GBP</option>
+                </select>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Customer Email</label>
+                <input
+                  type="email"
+                  required
+                  value={formData.customer_email}
+                  onChange={(e) => setFormData({ ...formData, customer_email: e.target.value })}
+                  className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Customer Name</label>
+                <input
+                  type="text"
+                  value={formData.customer_name}
+                  onChange={(e) => setFormData({ ...formData, customer_name: e.target.value })}
+                  className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Description</label>
+                <textarea
+                  rows={3}
+                  value={formData.description}
+                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                  className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+            </div>
+            
+            <div className="mt-6 flex justify-end space-x-3">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700"
+              >
+                Create & Send
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+interface PaymentDetailsModalProps {
+  request: PaymentRequest;
+  onClose: () => void;
+}
+
+const PaymentDetailsModal: React.FC<PaymentDetailsModalProps> = ({ request, onClose }) => {
+  // Helper function to get customer name
+  const getCustomerName = (req: any): string => {
+    if (req.customer_name) return req.customer_name;
+    if (req.invoice?.customer?.name) return req.invoice.customer.name;
+    return 'Unknown';
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 overflow-y-auto">
+      <div className="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+        <div className="fixed inset-0 transition-opacity">
+          <div className="absolute inset-0 bg-gray-500 opacity-75" onClick={onClose}></div>
+        </div>
+
+        <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+          <div className="p-6">
+            <h3 className="text-lg font-medium text-gray-900 mb-4">Payment Request Details</h3>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Amount</label>
+                <p className="text-lg font-semibold">
+                  {new Intl.NumberFormat('en-US', {
+                    style: 'currency',
+                    currency: request.currency
+                  }).format(request.amount)}
+                </p>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Customer</label>
+                <p>{getCustomerName(request)}</p>
+                <p className="text-sm text-gray-600">{request.customer_email}</p>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Status</label>
+                <p className="capitalize">{request.status}</p>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Description</label>
+                <p>{request.description || 'No description'}</p>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Created</label>
+                <p>{new Date(request.created_at).toLocaleString()}</p>
+              </div>
+            </div>
+            
+            <div className="mt-6 flex justify-end">
+              <button
+                onClick={onClose}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Gateway Configuration Modal
+interface GatewayConfigModalProps {
+  gateway: PaymentGateway;
+  onClose: () => void;
+  onSave: (gateway: PaymentGateway) => void;
+}
+
+const GatewayConfigModal: React.FC<GatewayConfigModalProps> = ({ gateway, onClose, onSave }) => {
+  const [formData, setFormData] = useState({
+    name: gateway.name,
+    is_active: gateway.is_active,
+    is_sandbox: gateway.is_sandbox,
+    transaction_fee_percentage: gateway.transaction_fee_percentage || 0,
+    transaction_fee_fixed: gateway.transaction_fee_fixed || 0,
+    currency_support: gateway.currency_support.join(', '),
+    api_key: gateway.settings?.api_key || '',
+    secret_key: gateway.settings?.secret_key || '',
+    webhook_secret: gateway.settings?.webhook_secret || ''
+  });
+
+  const [saving, setSaving] = useState(false);
+  const [showApiKey, setShowApiKey] = useState(false);
+  const [showSecretKey, setShowSecretKey] = useState(false);
+  const [showWebhookSecret, setShowWebhookSecret] = useState(false);
+  const { showSuccess, showError } = useToast();
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaving(true);
+
+    try {
+      const updatedData = {
+        ...gateway,
+        name: formData.name,
+        is_active: formData.is_active,
+        is_sandbox: formData.is_sandbox,
+        transaction_fee_percentage: formData.transaction_fee_percentage,
+        transaction_fee_fixed: formData.transaction_fee_fixed,
+        currency_support: formData.currency_support.split(',').map(c => c.trim()),
+        settings: {
+          ...gateway.settings,
+          api_key: formData.api_key,
+          secret_key: formData.secret_key,
+          webhook_secret: formData.webhook_secret
+        }
+      };
+
+      // TODO: Implement paymentService.updatePaymentGateway
+      await paymentService.updatePaymentGateway(gateway.id, updatedData);
+      onSave(updatedData);
+      showSuccess('Gateway configuration updated successfully!');
+    } catch (error) {
+      console.error('Failed to update gateway:', error);
+      showError('Failed to update gateway. Please try again.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 overflow-y-auto">
+      <div className="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+        <div className="fixed inset-0 transition-opacity">
+          <div className="absolute inset-0 bg-gray-500 opacity-75" onClick={onClose}></div>
+        </div>
+
+        <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-2xl sm:w-full">
+          <form onSubmit={handleSubmit} className="p-6">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-lg font-medium text-gray-900">Configure {gateway.name}</h3>
+              <div className="flex items-center space-x-4">
+                <label className="flex items-center">
+                  <input
+                    type="checkbox"
+                    checked={formData.is_sandbox}
+                    onChange={(e) => setFormData({ ...formData, is_sandbox: e.target.checked })}
+                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <span className="ml-2 text-sm text-gray-700">Sandbox Mode</span>
+                </label>
+                <label className="flex items-center">
+                  <input
+                    type="checkbox"
+                    checked={formData.is_active}
+                    onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
+                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <span className="ml-2 text-sm text-gray-700">Active</span>
+                </label>
+              </div>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Gateway Name</label>
+                <input
+                  type="text"
+                  required
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  className="block w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Supported Currencies</label>
+                <input
+                  type="text"
+                  placeholder="INR, USD, EUR"
+                  value={formData.currency_support}
+                  onChange={(e) => setFormData({ ...formData, currency_support: e.target.value })}
+                  className="block w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Transaction Fee (%)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  max="100"
+                  value={formData.transaction_fee_percentage}
+                  onChange={(e) => setFormData({ ...formData, transaction_fee_percentage: parseFloat(e.target.value) || 0 })}
+                  className="block w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Fixed Fee</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={formData.transaction_fee_fixed}
+                  onChange={(e) => setFormData({ ...formData, transaction_fee_fixed: parseFloat(e.target.value) || 0 })}
+                  className="block w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">API Key</label>
+                <div className="relative">
+                  <input
+                    type={showApiKey ? "text" : "password"}
+                    value={formData.api_key}
+                    onChange={(e) => setFormData({ ...formData, api_key: e.target.value })}
+                    className="block w-full border border-gray-300 rounded-md px-3 py-2 pr-10 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowApiKey(!showApiKey)}
+                    className="absolute inset-y-0 right-0 flex items-center px-3 text-gray-400 hover:text-gray-600"
+                  >
+                    {showApiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Secret Key</label>
+                <div className="relative">
+                  <input
+                    type={showSecretKey ? "text" : "password"}
+                    value={formData.secret_key}
+                    onChange={(e) => setFormData({ ...formData, secret_key: e.target.value })}
+                    className="block w-full border border-gray-300 rounded-md px-3 py-2 pr-10 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowSecretKey(!showSecretKey)}
+                    className="absolute inset-y-0 right-0 flex items-center px-3 text-gray-400 hover:text-gray-600"
+                  >
+                    {showSecretKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+              
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-2">Webhook Secret</label>
+                <div className="relative">
+                  <input
+                    type={showWebhookSecret ? "text" : "password"}
+                    value={formData.webhook_secret}
+                    onChange={(e) => setFormData({ ...formData, webhook_secret: e.target.value })}
+                    className="block w-full border border-gray-300 rounded-md px-3 py-2 pr-10 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowWebhookSecret(!showWebhookSecret)}
+                    className="absolute inset-y-0 right-0 flex items-center px-3 text-gray-400 hover:text-gray-600"
+                  >
+                    {showWebhookSecret ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+            </div>
+            
+            <div className="mt-6 flex justify-end space-x-3">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={saving}
+                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity-50"
+              >
+                {saving ? 'Saving...' : 'Save Configuration'}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Add Gateway Modal (Simplified for now)
+interface AddGatewayModalProps {
+  onClose: () => void;
+  onSave: (gateway: PaymentGateway) => void;
+}
+
+const AddGatewayModal: React.FC<AddGatewayModalProps> = ({ onClose, onSave }) => {
+  const [formData, setFormData] = useState({
+    name: '',
+    provider_type: 'razorpay' as 'razorpay' | 'stripe' | 'paypal' | 'other',
+    is_active: true,
+    is_sandbox: true,
+    transaction_fee_percentage: 2.5,
+    transaction_fee_fixed: 0,
+    currency_support: 'INR, USD',
+    api_key: '',
+    secret_key: '',
+    webhook_secret: ''
+  });
+
+  const [saving, setSaving] = useState(false);
+  const [showApiKey, setShowApiKey] = useState(false);
+  const [showSecretKey, setShowSecretKey] = useState(false);
+  const [showWebhookSecret, setShowWebhookSecret] = useState(false);
+  const { showSuccess, showError } = useToast();
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaving(true);
+
+    try {
+      const gatewayData = {
+        name: formData.name,
+        provider_type: formData.provider_type,
+        is_active: formData.is_active,
+        is_sandbox: formData.is_sandbox,
+        transaction_fee_percentage: formData.transaction_fee_percentage,
+        transaction_fee_fixed: formData.transaction_fee_fixed,
+        currency_support: formData.currency_support.split(',').map(c => c.trim()),
+        settings: {
+          api_key: formData.api_key,
+          secret_key: formData.secret_key,
+          webhook_secret: formData.webhook_secret
+        }
+      };
+
+      const newGateway = await paymentService.createPaymentGateway(gatewayData);
+      onSave(newGateway);
+      showSuccess('Gateway created successfully!');
+    } catch (error) {
+      console.error('Failed to create gateway:', error);
+      showError('Failed to create gateway. Please try again.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 overflow-y-auto">
+      <div className="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+        <div className="fixed inset-0 transition-opacity">
+          <div className="absolute inset-0 bg-gray-500 opacity-75" onClick={onClose}></div>
+        </div>
+
+        <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-2xl sm:w-full">
+          <form onSubmit={handleSubmit} className="p-6">
+            <h3 className="text-lg font-medium text-gray-900 mb-6">Add Payment Gateway</h3>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Gateway Name</label>
+                <input
+                  type="text"
+                  required
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  className="block w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Provider Type</label>
+                <select
+                  value={formData.provider_type}
+                  onChange={(e) => setFormData({ ...formData, provider_type: e.target.value as any })}
+                  className="block w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  <option value="razorpay">Razorpay</option>
+                  <option value="stripe">Stripe</option>
+                  <option value="paypal">PayPal</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Supported Currencies</label>
+                <input
+                  type="text"
+                  placeholder="INR, USD, EUR"
+                  required
+                  value={formData.currency_support}
+                  onChange={(e) => setFormData({ ...formData, currency_support: e.target.value })}
+                  className="block w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+              
+              <div className="space-y-3">
+                <label className="flex items-center">
+                  <input
+                    type="checkbox"
+                    checked={formData.is_active}
+                    onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
+                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <span className="ml-2 text-sm text-gray-700">Active</span>
+                </label>
+                <label className="flex items-center">
+                  <input
+                    type="checkbox"
+                    checked={formData.is_sandbox}
+                    onChange={(e) => setFormData({ ...formData, is_sandbox: e.target.checked })}
+                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <span className="ml-2 text-sm text-gray-700">Sandbox Mode</span>
+                </label>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Transaction Fee (%)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  max="100"
+                  value={formData.transaction_fee_percentage}
+                  onChange={(e) => setFormData({ ...formData, transaction_fee_percentage: parseFloat(e.target.value) || 0 })}
+                  className="block w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Fixed Fee</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={formData.transaction_fee_fixed}
+                  onChange={(e) => setFormData({ ...formData, transaction_fee_fixed: parseFloat(e.target.value) || 0 })}
+                  className="block w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">API Key</label>
+                <div className="relative">
+                  <input
+                    type={showApiKey ? "text" : "password"}
+                    value={formData.api_key}
+                    onChange={(e) => setFormData({ ...formData, api_key: e.target.value })}
+                    className="block w-full border border-gray-300 rounded-md px-3 py-2 pr-10 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowApiKey(!showApiKey)}
+                    className="absolute inset-y-0 right-0 flex items-center px-3 text-gray-400 hover:text-gray-600"
+                  >
+                    {showApiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Secret Key</label>
+                <div className="relative">
+                  <input
+                    type={showSecretKey ? "text" : "password"}
+                    value={formData.secret_key}
+                    onChange={(e) => setFormData({ ...formData, secret_key: e.target.value })}
+                    className="block w-full border border-gray-300 rounded-md px-3 py-2 pr-10 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowSecretKey(!showSecretKey)}
+                    className="absolute inset-y-0 right-0 flex items-center px-3 text-gray-400 hover:text-gray-600"
+                  >
+                    {showSecretKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+              
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-2">Webhook Secret</label>
+                <div className="relative">
+                  <input
+                    type={showWebhookSecret ? "text" : "password"}
+                    value={formData.webhook_secret}
+                    onChange={(e) => setFormData({ ...formData, webhook_secret: e.target.value })}
+                    className="block w-full border border-gray-300 rounded-md px-3 py-2 pr-10 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowWebhookSecret(!showWebhookSecret)}
+                    className="absolute inset-y-0 right-0 flex items-center px-3 text-gray-400 hover:text-gray-600"
+                  >
+                    {showWebhookSecret ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+            </div>
+            
+            <div className="mt-6 flex justify-end space-x-3">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={saving}
+                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity-50"
+              >
+                {saving ? 'Creating...' : 'Create Gateway'}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export { PaymentManagement };
+export default PaymentManagement;
