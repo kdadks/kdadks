@@ -194,13 +194,13 @@ const PaymentManagement: React.FC<PaymentManagementProps> = ({
             body: JSON.stringify({
               to: data.customer_email,
               from: 'support@kdadks.com',
-              subject: `Payment Request from KDADKS Service - ${data.currency} ${data.amount}`,
+              subject: `Payment Request from KDADKS Service - ${formatCurrency(data.amount, data.currency)}`,
               text: `Dear ${data.customer_name || 'Valued Customer'},
 
-You have a new payment request for ${data.currency} ${data.amount}.
+You have a new payment request for ${formatCurrency(data.amount, data.currency)}.
 
 Description: ${data.description || 'Payment Request'}
-Amount: ${data.currency} ${data.amount}
+Amount: ${formatCurrency(data.amount, data.currency)}
 Request ID: ${request.id}
 
 To complete your payment, please visit: ${paymentUrl}
@@ -247,7 +247,7 @@ KDADKS Service Private Limited`,
                     </tr>
                     <tr>
                         <td style="color: #6b7280; font-size: 14px; padding: 8px 0; border-bottom: 1px solid #e5e7eb;"><strong>Amount:</strong></td>
-                        <td style="color: #111827; font-size: 18px; font-weight: 600; padding: 8px 0; border-bottom: 1px solid #e5e7eb; text-align: right;">${data.currency} ${data.amount}</td>
+                        <td style="color: #111827; font-size: 18px; font-weight: 600; padding: 8px 0; border-bottom: 1px solid #e5e7eb; text-align: right;">${formatCurrency(data.amount, data.currency)}</td>
                     </tr>
                     <tr>
                         <td style="color: #6b7280; font-size: 14px; padding: 8px 0;"><strong>Request ID:</strong></td>
@@ -258,32 +258,53 @@ KDADKS Service Private Limited`,
             
             <!-- Payment Button with Maximum Email Client Compatibility -->
             <div style="text-align: center; margin: 30px 0;">
+                <!-- Universal Button Table-Based Approach for Maximum Compatibility -->
+                <table border="0" cellspacing="0" cellpadding="0" style="margin: 0 auto;">
+                    <tr>
+                        <td align="center" style="border-radius: 8px; background-color: #2563eb;">
+                            <a href="${paymentUrl}" 
+                               target="_blank" 
+                               style="font-size: 16px; 
+                                      font-family: Arial, Helvetica, sans-serif; 
+                                      color: #ffffff; 
+                                      text-decoration: none; 
+                                      border-radius: 8px; 
+                                      padding: 15px 30px; 
+                                      border: 1px solid #2563eb; 
+                                      display: inline-block; 
+                                      font-weight: bold;
+                                      background-color: #2563eb;
+                                      line-height: 20px;">
+                                💳 Pay Securely Online
+                            </a>
+                        </td>
+                    </tr>
+                </table>
+                
+                <!-- Outlook VML Fallback -->
                 <!--[if mso]>
-                <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" href="${paymentUrl}" style="height:50px;v-text-anchor:middle;width:250px;" arcsize="16%" stroke="f" fillcolor="#2563eb">
-                <w:anchorlock/>
-                <center style="color:#ffffff;font-family:Arial,sans-serif;font-size:16px;font-weight:bold;">💳 Pay Securely Online</center>
+                <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" 
+                             href="${paymentUrl}" 
+                             style="height:50px; v-text-anchor:middle; width:250px;" 
+                             arcsize="16%" 
+                             stroke="f" 
+                             fillcolor="#2563eb">
+                    <w:anchorlock/>
+                    <center style="color:#ffffff; font-family:Arial,sans-serif; font-size:16px; font-weight:bold;">
+                        💳 Pay Securely Online
+                    </center>
                 </v:roundrect>
                 <![endif]-->
-                <!--[if !mso]><!-->
-                <a href="${paymentUrl}" 
-                   target="_blank" 
-                   style="background-color: #2563eb !important; 
-                          border: 2px solid #2563eb !important; 
-                          border-radius: 8px !important; 
-                          color: #ffffff !important; 
-                          display: inline-block !important; 
-                          font-family: Arial, Helvetica, sans-serif !important; 
-                          font-size: 16px !important; 
-                          font-weight: bold !important; 
-                          line-height: 50px !important; 
-                          text-align: center !important; 
-                          text-decoration: none !important; 
-                          width: 250px !important; 
-                          -webkit-text-size-adjust: none !important; 
-                          mso-hide: all !important;">
-                    💳 Pay Securely Online
-                </a>
-                <!--<![endif]-->
+                
+                <!-- Plain Text Fallback for maximum compatibility -->
+                <div style="margin-top: 20px; font-size: 14px; color: #666;">
+                    <p>If the button above doesn't work, please copy and paste this link into your browser:</p>
+                    <p style="word-break: break-all; background-color: #f5f5f5; padding: 10px; border-radius: 4px;">
+                        <a href="${paymentUrl}" target="_blank" style="color: #2563eb; text-decoration: underline;">
+                            ${paymentUrl}
+                        </a>
+                    </p>
+                </div>
             </div>
             
             <!-- Backup Text Link -->
@@ -408,11 +429,25 @@ KDADKS Service Private Limited`,
 
   // Utility functions
   const formatCurrency = (amount: number, currency: string) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: currency,
-      minimumFractionDigits: 2
-    }).format(amount);
+    // Enhanced currency symbol mapping
+    const symbols: Record<string, string> = {
+      'INR': '₹',
+      'USD': '$',
+      'EUR': '€',
+      'GBP': '£',
+      'JPY': '¥',
+      'AUD': 'A$',
+      'CAD': 'C$',
+      'SGD': 'S$',
+      'CHF': 'CHF ',
+      'CNY': '¥',
+      'KRW': '₩',
+      'AED': 'د.إ ',
+      'SAR': '﷼ '
+    };
+    
+    const symbol = symbols[currency] || currency + ' ';
+    return `${symbol}${amount.toFixed(2)}`;
   };
 
   const getStatusIcon = (status: PaymentRequest['status']) => {
