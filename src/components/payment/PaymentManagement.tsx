@@ -200,59 +200,84 @@ Please complete your payment at your earliest convenience.
 
 Best regards,
 KDADKS Service Private Limited`,
-              html: `<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #ffffff; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden;">
-                <!-- Header -->
-                <div style="background: #2563eb; padding: 20px; text-align: center;">
-                  <h2 style="color: #ffffff; margin: 0; font-size: 24px; font-weight: 600;">Payment Request</h2>
-                </div>
-                
-                <!-- Body -->
-                <div style="padding: 30px;">
-                  <p style="color: #374151; font-size: 16px; line-height: 1.6; margin: 0 0 20px 0;">Dear ${data.customer_name || 'Valued Customer'},</p>
-                  
-                  <p style="color: #374151; font-size: 16px; line-height: 1.6; margin: 0 0 25px 0;">You have received a new payment request from KDADKS Service Private Limited:</p>
-                  
-                  <!-- Payment Details Card -->
-                  <div style="background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 25px; margin: 25px 0;">
-                    <table style="width: 100%; border-collapse: collapse;">
-                      <tr>
+              html: `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Payment Request</title>
+    <!--[if mso]>
+    <noscript>
+        <xml>
+            <o:OfficeDocumentSettings>
+                <o:PixelsPerInch>96</o:PixelsPerInch>
+            </o:OfficeDocumentSettings>
+        </xml>
+    </noscript>
+    <![endif]-->
+</head>
+<body style="margin: 0; padding: 0; background-color: #f3f4f6; font-family: Arial, sans-serif;">
+    <div style="max-width: 600px; margin: 0 auto; background: #ffffff; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden;">
+        <!-- Header -->
+        <div style="background: #2563eb; padding: 20px; text-align: center;">
+            <h2 style="color: #ffffff; margin: 0; font-size: 24px; font-weight: 600;">Payment Request</h2>
+        </div>
+        
+        <!-- Body -->
+        <div style="padding: 30px;">
+            <p style="color: #374151; font-size: 16px; line-height: 1.6; margin: 0 0 20px 0;">Dear ${data.customer_name || 'Valued Customer'},</p>
+            
+            <p style="color: #374151; font-size: 16px; line-height: 1.6; margin: 0 0 25px 0;">You have received a new payment request from KDADKS Service Private Limited:</p>
+            
+            <!-- Payment Details Card -->
+            <div style="background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 25px; margin: 25px 0;">
+                <table style="width: 100%; border-collapse: collapse;">
+                    <tr>
                         <td style="color: #6b7280; font-size: 14px; padding: 8px 0; border-bottom: 1px solid #e5e7eb;"><strong>Description:</strong></td>
                         <td style="color: #111827; font-size: 14px; padding: 8px 0; border-bottom: 1px solid #e5e7eb; text-align: right;">${data.description || 'Payment Request'}</td>
-                      </tr>
-                      <tr>
+                    </tr>
+                    <tr>
                         <td style="color: #6b7280; font-size: 14px; padding: 8px 0; border-bottom: 1px solid #e5e7eb;"><strong>Amount:</strong></td>
                         <td style="color: #111827; font-size: 18px; font-weight: 600; padding: 8px 0; border-bottom: 1px solid #e5e7eb; text-align: right;">${data.currency} ${data.amount}</td>
-                      </tr>
-                      <tr>
+                    </tr>
+                    <tr>
                         <td style="color: #6b7280; font-size: 14px; padding: 8px 0;"><strong>Request ID:</strong></td>
                         <td style="color: #111827; font-size: 14px; padding: 8px 0; text-align: right; font-family: monospace;">${request.id}</td>
-                      </tr>
-                    </table>
-                  </div>
-                  
-                  <!-- Payment Button -->
-                  <div style="text-align: center; margin: 30px 0;">
-                    <a href="${paymentUrl}" style="display: inline-block; background: #2563eb; color: #ffffff; text-decoration: none; padding: 15px 30px; border-radius: 8px; font-size: 16px; font-weight: 600; transition: background-color 0.3s;">
-                      Complete Payment Now
-                    </a>
-                  </div>
-                  
-                  <!-- Alternative Link -->
-                  <div style="background: #fef3c7; border: 1px solid #f59e0b; border-radius: 6px; padding: 15px; margin: 20px 0;">
-                    <p style="color: #92400e; font-size: 14px; margin: 0 0 8px 0;"><strong>Having trouble with the button above?</strong></p>
-                    <p style="color: #92400e; font-size: 14px; margin: 0;">Copy and paste this link into your browser:</p>
-                    <p style="color: #1d4ed8; font-size: 14px; word-break: break-all; margin: 8px 0 0 0; font-family: monospace;">${paymentUrl}</p>
-                  </div>
-                  
-                  <p style="color: #6b7280; font-size: 14px; line-height: 1.6; margin: 25px 0 0 0;">Please complete your payment at your earliest convenience. If you have any questions, feel free to contact our support team.</p>
-                </div>
-                
-                <!-- Footer -->
-                <div style="background: #f9fafb; padding: 20px; border-top: 1px solid #e5e7eb; text-align: center;">
-                  <p style="color: #6b7280; font-size: 14px; margin: 0 0 10px 0;"><strong>KDADKS Service Private Limited</strong></p>
-                  <p style="color: #6b7280; font-size: 12px; margin: 0;">Lucknow, Uttar Pradesh, India | support@kdadks.com | +91 7982303199</p>
-                </div>
-              </div>`
+                    </tr>
+                </table>
+            </div>
+            
+            <!-- Payment Button with Table Layout for Better Compatibility -->
+            <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin: 30px auto; text-align: center;">
+                <tr>
+                    <td style="border-radius: 8px; background: #2563eb; text-align: center;">
+                        <a href="${paymentUrl}" target="_blank" style="background: #2563eb; border: none; font-family: Arial, sans-serif; font-size: 16px; font-weight: 600; line-height: 1.1; text-decoration: none; padding: 15px 30px; color: #ffffff; display: block; border-radius: 8px; mso-padding-alt: 0; text-underline-color: #2563eb;">
+                            <!--[if mso]>&nbsp;&nbsp;&nbsp;&nbsp;<![endif]-->
+                            Pay Securely Online
+                            <!--[if mso]>&nbsp;&nbsp;&nbsp;&nbsp;<![endif]-->
+                        </a>
+                    </td>
+                </tr>
+            </table>
+            
+            <!-- Alternative Link -->
+            <div style="background: #fef3c7; border: 1px solid #f59e0b; border-radius: 6px; padding: 15px; margin: 20px 0;">
+                <p style="color: #92400e; font-size: 14px; margin: 0 0 8px 0;"><strong>Having trouble with the button above?</strong></p>
+                <p style="color: #92400e; font-size: 14px; margin: 0;">Copy and paste this link into your browser:</p>
+                <p style="color: #1d4ed8; font-size: 14px; word-break: break-all; margin: 8px 0 0 0; font-family: monospace;"><a href="${paymentUrl}" style="color: #1d4ed8; text-decoration: underline;">${paymentUrl}</a></p>
+            </div>
+            
+            <p style="color: #6b7280; font-size: 14px; line-height: 1.6; margin: 25px 0 0 0;">Please complete your payment at your earliest convenience. If you have any questions, feel free to contact our support team.</p>
+        </div>
+        
+        <!-- Footer -->
+        <div style="background: #f9fafb; padding: 20px; border-top: 1px solid #e5e7eb; text-align: center;">
+            <p style="color: #6b7280; font-size: 14px; margin: 0 0 10px 0;"><strong>KDADKS Service Private Limited</strong></p>
+            <p style="color: #6b7280; font-size: 12px; margin: 0;">Lucknow, Uttar Pradesh, India | support@kdadks.com | +91 7982303199</p>
+        </div>
+    </div>
+</body>
+</html>`
             }),
           });
 
