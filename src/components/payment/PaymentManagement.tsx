@@ -340,6 +340,10 @@ KDADKS Service Private Limited`,
 
           console.log('Email response status:', emailResponse.status);
           console.log('Email response headers:', Object.fromEntries(emailResponse.headers.entries()));
+          
+          // Debug: Check if paymentUrl is properly interpolated
+          console.log('Payment URL in email:', paymentUrl);
+          console.log('Template check - paymentUrl should be:', `${window.location.origin}/payment/${paymentLink.link_token}`);
 
           // Check if email was sent successfully
           if (!emailResponse.ok) {
