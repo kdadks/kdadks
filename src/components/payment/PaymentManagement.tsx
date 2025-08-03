@@ -184,7 +184,7 @@ const PaymentManagement: React.FC<PaymentManagementProps> = ({
             },
             body: JSON.stringify({
               to: data.customer_email,
-              from: 'support@kdadks.com',
+              from: 'KDADKS Service <support@kdadks.com>',
               subject: `Payment Request - ${data.description || 'Payment Required'}`,
               text: `Dear ${data.customer_name || 'Valued Customer'},
 
@@ -247,24 +247,39 @@ KDADKS Service Private Limited`,
                 </table>
             </div>
             
-            <!-- Payment Button with Table Layout for Better Compatibility -->
-            <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin: 30px auto; text-align: center;">
-                <tr>
-                    <td style="border-radius: 8px; background: #2563eb; text-align: center;">
-                        <a href="${paymentUrl}" target="_blank" style="background: #2563eb; border: none; font-family: Arial, sans-serif; font-size: 16px; font-weight: 600; line-height: 1.1; text-decoration: none; padding: 15px 30px; color: #ffffff; display: block; border-radius: 8px; mso-padding-alt: 0; text-underline-color: #2563eb;">
-                            <!--[if mso]>&nbsp;&nbsp;&nbsp;&nbsp;<![endif]-->
-                            Pay Securely Online
-                            <!--[if mso]>&nbsp;&nbsp;&nbsp;&nbsp;<![endif]-->
-                        </a>
-                    </td>
-                </tr>
-            </table>
+            <!-- Payment Button with Enhanced Cross-Client Compatibility -->
+            <div style="text-align: center; margin: 30px 0;">
+                <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin: 0 auto;">
+                    <tr>
+                        <td style="background-color: #2563eb; border-radius: 8px; padding: 0;">
+                            <a href="${paymentUrl}" 
+                               target="_blank" 
+                               style="display: inline-block; background-color: #2563eb; color: #ffffff; font-family: Arial, Helvetica, sans-serif; font-size: 16px; font-weight: bold; text-decoration: none; padding: 15px 30px; border-radius: 8px; border: 2px solid #2563eb; min-width: 200px; text-align: center; box-sizing: border-box;"
+                               onfocus="this.style.outline='2px solid #1d4ed8';"
+                               onmouseover="this.style.backgroundColor='#1d4ed8'; this.style.borderColor='#1d4ed8';"
+                               onmouseout="this.style.backgroundColor='#2563eb'; this.style.borderColor='#2563eb';">
+                                <span style="color: #ffffff; font-weight: bold;">💳 Pay Securely Online</span>
+                            </a>
+                        </td>
+                    </tr>
+                </table>
+            </div>
             
-            <!-- Alternative Link -->
-            <div style="background: #fef3c7; border: 1px solid #f59e0b; border-radius: 6px; padding: 15px; margin: 20px 0;">
-                <p style="color: #92400e; font-size: 14px; margin: 0 0 8px 0;"><strong>Having trouble with the button above?</strong></p>
-                <p style="color: #92400e; font-size: 14px; margin: 0;">Copy and paste this link into your browser:</p>
-                <p style="color: #1d4ed8; font-size: 14px; word-break: break-all; margin: 8px 0 0 0; font-family: monospace;"><a href="${paymentUrl}" style="color: #1d4ed8; text-decoration: underline;">${paymentUrl}</a></p>
+            <!-- Fallback Text Link with Enhanced Visibility -->
+            <div style="background: #f0f9ff; border: 2px solid #2563eb; border-radius: 8px; padding: 20px; margin: 25px 0; text-align: center;">
+                <p style="color: #1e40af; font-size: 16px; font-weight: 600; margin: 0 0 10px 0;">
+                    ⚡ Quick Payment Link
+                </p>
+                <p style="color: #374151; font-size: 14px; margin: 0 0 15px 0;">
+                    Click the link below or copy it to your browser:
+                </p>
+                <p style="margin: 0;">
+                    <a href="${paymentUrl}" 
+                       style="color: #1d4ed8; font-size: 14px; font-weight: 600; text-decoration: underline; word-break: break-all; font-family: monospace; background: #ffffff; padding: 8px 12px; border-radius: 4px; border: 1px solid #e5e7eb; display: inline-block;"
+                       target="_blank">
+                        ${paymentUrl}
+                    </a>
+                </p>
             </div>
             
             <p style="color: #6b7280; font-size: 14px; line-height: 1.6; margin: 25px 0 0 0;">Please complete your payment at your earliest convenience. If you have any questions, feel free to contact our support team.</p>
