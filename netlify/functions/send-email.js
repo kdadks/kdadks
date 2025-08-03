@@ -85,15 +85,14 @@ exports.handler = async (event, context) => {
       rateLimit: 5
     });
 
-    // Prepare email options
+    // Prepare email options with Brevo-compatible sender format
     const mailOptions = {
-      from: from || 'support@kdadks.com', // Default sender
+      from: 'KDADKS Service <kdadks@9437208.brevosend.com>', // Use Brevo's sender domain but with business name
+      replyTo: 'support@kdadks.com', // Set proper reply-to for customer responses
       to: to,
       subject: subject,
       text: text,
-      html: html,
-      // Set reply-to if different from sender
-      replyTo: from && from !== 'support@kdadks.com' ? from : undefined
+      html: html
     };
 
     // Add attachment support for invoice PDFs (new array format and legacy single attachment)

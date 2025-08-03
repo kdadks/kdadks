@@ -247,39 +247,51 @@ KDADKS Service Private Limited`,
                 </table>
             </div>
             
-            <!-- Payment Button with Enhanced Cross-Client Compatibility -->
+            <!-- Payment Button with Maximum Email Client Compatibility -->
             <div style="text-align: center; margin: 30px 0;">
-                <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin: 0 auto;">
-                    <tr>
-                        <td style="background-color: #2563eb; border-radius: 8px; padding: 0;">
-                            <a href="${paymentUrl}" 
-                               target="_blank" 
-                               style="display: inline-block; background-color: #2563eb; color: #ffffff; font-family: Arial, Helvetica, sans-serif; font-size: 16px; font-weight: bold; text-decoration: none; padding: 15px 30px; border-radius: 8px; border: 2px solid #2563eb; min-width: 200px; text-align: center; box-sizing: border-box;"
-                               onfocus="this.style.outline='2px solid #1d4ed8';"
-                               onmouseover="this.style.backgroundColor='#1d4ed8'; this.style.borderColor='#1d4ed8';"
-                               onmouseout="this.style.backgroundColor='#2563eb'; this.style.borderColor='#2563eb';">
-                                <span style="color: #ffffff; font-weight: bold;">💳 Pay Securely Online</span>
-                            </a>
-                        </td>
-                    </tr>
-                </table>
+                <!--[if mso]>
+                <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" href="${paymentUrl}" style="height:50px;v-text-anchor:middle;width:250px;" arcsize="16%" stroke="f" fillcolor="#2563eb">
+                <w:anchorlock/>
+                <center style="color:#ffffff;font-family:Arial,sans-serif;font-size:16px;font-weight:bold;">💳 Pay Securely Online</center>
+                </v:roundrect>
+                <![endif]-->
+                <!--[if !mso]><!-->
+                <a href="${paymentUrl}" 
+                   target="_blank" 
+                   style="background-color: #2563eb !important; 
+                          border: 2px solid #2563eb !important; 
+                          border-radius: 8px !important; 
+                          color: #ffffff !important; 
+                          display: inline-block !important; 
+                          font-family: Arial, Helvetica, sans-serif !important; 
+                          font-size: 16px !important; 
+                          font-weight: bold !important; 
+                          line-height: 50px !important; 
+                          text-align: center !important; 
+                          text-decoration: none !important; 
+                          width: 250px !important; 
+                          -webkit-text-size-adjust: none !important; 
+                          mso-hide: all !important;">
+                    💳 Pay Securely Online
+                </a>
+                <!--<![endif]-->
             </div>
             
-            <!-- Fallback Text Link with Enhanced Visibility -->
-            <div style="background: #f0f9ff; border: 2px solid #2563eb; border-radius: 8px; padding: 20px; margin: 25px 0; text-align: center;">
-                <p style="color: #1e40af; font-size: 16px; font-weight: 600; margin: 0 0 10px 0;">
-                    ⚡ Quick Payment Link
+            <!-- Backup Text Link -->
+            <div style="background: #e0f2fe; border: 1px solid #0277bd; border-radius: 6px; padding: 20px; margin: 25px 0; text-align: center;">
+                <p style="color: #01579b; font-size: 16px; font-weight: bold; margin: 0 0 10px 0;">
+                    🔗 Alternative Payment Link
                 </p>
-                <p style="color: #374151; font-size: 14px; margin: 0 0 15px 0;">
-                    Click the link below or copy it to your browser:
+                <p style="color: #424242; font-size: 14px; margin: 0 0 15px 0;">
+                    If the button above doesn't work, copy this link:
                 </p>
-                <p style="margin: 0;">
+                <div style="background: #ffffff; border: 1px solid #e0e0e0; border-radius: 4px; padding: 12px; word-break: break-all;">
                     <a href="${paymentUrl}" 
-                       style="color: #1d4ed8; font-size: 14px; font-weight: 600; text-decoration: underline; word-break: break-all; font-family: monospace; background: #ffffff; padding: 8px 12px; border-radius: 4px; border: 1px solid #e5e7eb; display: inline-block;"
+                       style="color: #1976d2; font-size: 14px; font-weight: 600; text-decoration: none; font-family: monospace;"
                        target="_blank">
                         ${paymentUrl}
                     </a>
-                </p>
+                </div>
             </div>
             
             <p style="color: #6b7280; font-size: 14px; line-height: 1.6; margin: 25px 0 0 0;">Please complete your payment at your earliest convenience. If you have any questions, feel free to contact our support team.</p>
