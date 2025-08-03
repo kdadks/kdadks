@@ -185,26 +185,15 @@ const PaymentManagement: React.FC<PaymentManagementProps> = ({
           const paymentUrl = `${window.location.origin}/payment/${paymentLink.link_token}`;
           console.log('Payment URL generated:', paymentUrl);
 
-          console.log('Sending email to email service...');
-          
-          // Use local email server in development, Netlify function in production
-          const isDevelopment = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-          const emailEndpoint = isDevelopment
-            ? 'http://localhost:3002/send-email'  // Local development
-            : '/.netlify/functions/send-email';    // Production
-          
-          console.log('Email endpoint:', emailEndpoint, 'isDevelopment:', isDevelopment);
-          
-          // Send payment request email using proper business email
-          const emailResponse = await fetch(emailEndpoint, {
+          // Send payment request email
+          const emailResponse = await fetch('/.netlify/functions/send-email', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
             },
             body: JSON.stringify({
               to: data.customer_email,
-              from: 'KDADKS Service <kdadks@9437208.brevosend.com>', // Proper Brevo authenticated format
-              replyTo: 'support@kdadks.com',
+              from: 'support@kdadks.com',
               subject: `Payment Request from KDADKS Service - ${data.currency} ${data.amount}`,
               text: `Dear ${data.customer_name || 'Valued Customer'},
 
