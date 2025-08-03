@@ -184,6 +184,10 @@ const PaymentManagement: React.FC<PaymentManagementProps> = ({
           // Generate the payment URL
           const paymentUrl = `${window.location.origin}/payment/${paymentLink.link_token}`;
           console.log('Payment URL generated:', paymentUrl);
+          
+          // Debug: Log what the email content will contain
+          console.log('Payment URL that will be in email:', paymentUrl);
+          console.log('URL should replace ${paymentUrl} in template');
 
           // Send payment request email
           const emailResponse = await fetch('/.netlify/functions/send-email', {

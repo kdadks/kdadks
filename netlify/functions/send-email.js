@@ -32,6 +32,18 @@ exports.handler = async (event, context) => {
     const body = JSON.parse(event.body);
     const { to, from, subject, text, html, attachments, attachment } = body;
 
+    // Debug: Log email content to see if URLs are present
+    console.log('Email details:');
+    console.log('- To:', to);
+    console.log('- Subject:', subject);
+    console.log('- HTML content length:', html ? html.length : 0);
+    if (html && html.includes('paymentUrl')) {
+      console.log('WARNING: HTML contains literal ${paymentUrl} - template not interpolated!');
+    }
+    if (html && html.includes('http')) {
+      console.log('✓ HTML contains http URLs - likely interpolated correctly');
+    }
+
     // Validate required fields
     if (!to || !subject || (!text && !html)) {
       return {
