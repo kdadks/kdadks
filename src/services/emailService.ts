@@ -2,11 +2,17 @@ import { ContactFormData } from '../config/brevo'
 import type { Invoice, Customer, CompanySettings } from '../types/invoice'
 
 export class EmailService {
-  private static readonly API_ENDPOINT = '/.netlify/functions/send-email'
+  private static getApiEndpoint(): string {
+    // Use local email server in development, Netlify function in production
+    const isDevelopment = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    return isDevelopment
+      ? 'http://localhost:3002/send-email'  // Local development
+      : '/.netlify/functions/send-email';    // Production
+  }
 
   static async sendContactEmail(formData: ContactFormData): Promise<void> {
     try {
-      const response = await fetch(EmailService.API_ENDPOINT, {
+      const response = await fetch(EmailService.getApiEndpoint(), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -46,14 +52,22 @@ export class EmailService {
         ? `Payment Receipt - Invoice #${invoice.invoice_number} [PAID]`
         : `Invoice #${invoice.invoice_number} from ${company.company_name}`;
       
-      const response = await fetch(EmailService.API_ENDPOINT, {
+      const endpoint = EmailService.getApiEndpoint();
+      console.log('🔍 Email Service Debug Info:');
+      console.log('- Hostname:', window.location.hostname);
+      console.log('- Is Development:', window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+      console.log('- Using endpoint:', endpoint);
+      console.log('- Customer email:', customer.email);
+      
+      const response = await fetch(endpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
           to: customer.email,
-          from: company.email || 'kdadks@outlook.com',
+          from: 'support@kdadks.com', // Use original working production format
+          replyTo: 'support@kdadks.com',
           subject,
           text: EmailService.generateInvoiceTextEmail(invoice, customer, company, isPaidInvoice),
           html: EmailService.generateInvoiceHtmlEmail(invoice, customer, company, isPaidInvoice),
@@ -66,9 +80,21 @@ export class EmailService {
         }),
       })
 
+      console.log('Email API response status:', response.status);
+      console.log('Email API endpoint used:', EmailService.getApiEndpoint());
+
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ message: 'Unknown error' }))
-        throw new Error(errorData.message || `HTTP error! status: ${response.status}`)
+        const responseText = await response.text();
+        console.error('Email API error response:', responseText);
+        
+        let errorData;
+        try {
+          errorData = JSON.parse(responseText);
+        } catch {
+          errorData = { message: responseText || 'Unknown error' };
+        }
+        
+        throw new Error(errorData.error || errorData.message || `HTTP error! status: ${response.status}`)
       }
 
       const result = await response.json()

@@ -154,17 +154,24 @@ const PaymentManagement: React.FC<PaymentManagementProps> = ({
   // Payment request creation
   const handleCreatePaymentRequest = async (data: CreatePaymentRequestData) => {
     try {
+      console.log('Starting payment request creation:', data);
+      
       // Check authentication first
       const isAuthenticated = await checkAuthentication();
       if (!isAuthenticated) {
+        console.log('Authentication failed');
         return;
       }
 
+      console.log('Creating payment request...');
       const request = await paymentService.createPaymentRequest(data);
+      console.log('Payment request created:', request);
       
       // Send email notification if customer email is provided
       if (data.customer_email) {
+        console.log('Customer email provided, proceeding with email notification');
         try {
+          console.log('Creating payment link...');
           // Create and send payment link
           const paymentLink = await paymentService.createPaymentLink(request.id, 'email', {
             payment_request_id: request.id,
@@ -172,19 +179,33 @@ const PaymentManagement: React.FC<PaymentManagementProps> = ({
             recipient_email: data.customer_email,
             send_immediately: true
           });
+          console.log('Payment link created:', paymentLink);
 
           // Generate the payment URL
           const paymentUrl = `${window.location.origin}/payment/${paymentLink.link_token}`;
+          console.log('Payment URL generated:', paymentUrl);
 
+          console.log('Sending email to email service...');
+          
+          // Use local email server in development, Netlify function in production
+          const isDevelopment = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+          const emailEndpoint = isDevelopment
+            ? 'http://localhost:3002/send-email'  // Local development
+            : '/.netlify/functions/send-email';    // Production
+          
+          console.log('Email endpoint:', emailEndpoint, 'isDevelopment:', isDevelopment);
+          
           // Send payment request email using proper business email
-          const emailResponse = await fetch('/.netlify/functions/send-email', {
+          const emailResponse = await fetch(emailEndpoint, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
             },
             body: JSON.stringify({
               to: data.customer_email,
-              subject: `Payment Request - ${data.description || 'Payment Required'}`,
+              from: 'KDADKS Service <kdadks@9437208.brevosend.com>', // Proper Brevo authenticated format
+              replyTo: 'support@kdadks.com',
+              subject: `Payment Request from KDADKS Service - ${data.currency} ${data.amount}`,
               text: `Dear ${data.customer_name || 'Valued Customer'},
 
 You have a new payment request for ${data.currency} ${data.amount}.
@@ -307,11 +328,18 @@ KDADKS Service Private Limited`,
             }),
           });
 
+          console.log('Email response status:', emailResponse.status);
+          console.log('Email response headers:', Object.fromEntries(emailResponse.headers.entries()));
+
           // Check if email was sent successfully
           if (!emailResponse.ok) {
-            const errorData = await emailResponse.json();
-            console.error('Email sending failed:', errorData);
-            throw new Error(`Email sending failed: ${errorData.error || 'Unknown error'}`);
+            const errorText = await emailResponse.text();
+            console.error('Email sending failed:', {
+              status: emailResponse.status,
+              statusText: emailResponse.statusText,
+              body: errorText
+            });
+            throw new Error(`Email sending failed: ${emailResponse.status} - ${errorText}`);
           }
 
           const emailResult = await emailResponse.json();

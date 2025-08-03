@@ -32,6 +32,13 @@ exports.handler = async (event, context) => {
     const body = JSON.parse(event.body);
     const { to, from, subject, text, html, attachments, attachment } = body;
 
+    console.log('📧 Netlify function called');
+    console.log('Event method:', event.httpMethod);
+    console.log('Event headers:', JSON.stringify(event.headers, null, 2));
+    console.log('Request body keys:', Object.keys(body || {}));
+    console.log('To:', to);
+    console.log('Subject:', subject);
+
     // Validate required fields
     if (!to || !subject || (!text && !html)) {
       return {
@@ -74,7 +81,7 @@ exports.handler = async (event, context) => {
       port: 587,
       secure: false, // TLS
       auth: {
-        user: '900018001@smtp-brevo.com',
+        user: 'kdadks@9437208.brevosend.com', // Original working configuration
         pass: brevoPassword
       },
       // Additional options for better reliability
@@ -86,10 +93,10 @@ exports.handler = async (event, context) => {
     });
 
     // Prepare email options with Brevo-compliant sender format
-    // Note: Brevo requires the authenticated sender domain but we can set a friendly name
+    // Note: Use the original working configuration that sends from support@kdadks.com
     const mailOptions = {
-      from: 'KDADKS Service <kdadks@9437208.brevosend.com>', // Must use Brevo's authenticated domain
-      replyTo: 'support@kdadks.com', // This is what users will reply to
+      from: from || 'support@kdadks.com', // Use the working production format
+      replyTo: 'support@kdadks.com',
       to: to,
       subject: subject,
       text: text,
