@@ -189,45 +189,13 @@ const PaymentManagement: React.FC<PaymentManagementProps> = ({
           console.log('Payment URL that will be in email:', paymentUrl);
           console.log('URL should replace ${paymentUrl} in template');
 
-          // Send payment request email
-          const emailResponse = await fetch('/.netlify/functions/send-email', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              to: data.customer_email,
-              from: 'support@kdadks.com',
-              subject: `Payment Request from KDADKS Service - ${formatCurrency(data.amount, data.currency)}`,
-              text: `Dear ${data.customer_name || 'Valued Customer'},
-
-You have a new payment request for ${formatCurrency(data.amount, data.currency)}.
-
-Description: ${data.description || 'Payment Request'}
-Amount: ${formatCurrency(data.amount, data.currency)}
-Request ID: ${request.id}
-
-To complete your payment, please visit: ${paymentUrl}
-
-Please complete your payment at your earliest convenience.
-
-Best regards,
-KDADKS Service Private Limited`,
-              html: `<!DOCTYPE html>
+          // Create HTML email template with proper variable interpolation
+          const emailHtmlTemplate = `<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Payment Request</title>
-    <!--[if mso]>
-    <noscript>
-        <xml>
-            <o:OfficeDocumentSettings>
-                <o:PixelsPerInch>96</o:PixelsPerInch>
-            </o:OfficeDocumentSettings>
-        </xml>
-    </noscript>
-    <![endif]-->
 </head>
 <body style="margin: 0; padding: 0; background-color: #f3f4f6; font-family: Arial, sans-serif;">
     <div style="max-width: 600px; margin: 0 auto; background: #ffffff; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden;">
@@ -262,19 +230,18 @@ KDADKS Service Private Limited`,
             
             <!-- Payment Button with Maximum Email Client Compatibility -->
             <div style="text-align: center; margin: 30px 0;">
-                <!-- Universal Button Table-Based Approach for Maximum Compatibility -->
                 <table border="0" cellspacing="0" cellpadding="0" style="margin: 0 auto;">
                     <tr>
-                        <td align="center" style="border-radius: 8px; background-color: #2563eb;">
+                        <td align="center" style="border-radius: 8px; background-color: #2563eb; padding: 0;">
                             <a href="${paymentUrl}" 
                                target="_blank" 
                                style="font-size: 16px; 
                                       font-family: Arial, Helvetica, sans-serif; 
-                                      color: #ffffff; 
-                                      text-decoration: none; 
+                                      color: #ffffff !important; 
+                                      text-decoration: none !important; 
                                       border-radius: 8px; 
                                       padding: 15px 30px; 
-                                      border: 1px solid #2563eb; 
+                                      border: none;
                                       display: inline-block; 
                                       font-weight: bold;
                                       background-color: #2563eb;
@@ -284,61 +251,63 @@ KDADKS Service Private Limited`,
                         </td>
                     </tr>
                 </table>
-                
-                <!-- Outlook VML Fallback -->
-                <!--[if mso]>
-                <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" 
-                             href="${paymentUrl}" 
-                             style="height:50px; v-text-anchor:middle; width:250px;" 
-                             arcsize="16%" 
-                             stroke="f" 
-                             fillcolor="#2563eb">
-                    <w:anchorlock/>
-                    <center style="color:#ffffff; font-family:Arial,sans-serif; font-size:16px; font-weight:bold;">
-                        💳 Pay Securely Online
-                    </center>
-                </v:roundrect>
-                <![endif]-->
-                
-                <!-- Plain Text Fallback for maximum compatibility -->
-                <div style="margin-top: 20px; font-size: 14px; color: #666;">
-                    <p>If the button above doesn't work, please copy and paste this link into your browser:</p>
-                    <p style="word-break: break-all; background-color: #f5f5f5; padding: 10px; border-radius: 4px;">
-                        <a href="${paymentUrl}" target="_blank" style="color: #2563eb; text-decoration: underline;">
-                            ${paymentUrl}
-                        </a>
-                    </p>
-                </div>
             </div>
             
-            <!-- Backup Text Link -->
+            <!-- Fallback URL Section -->
             <div style="background: #e0f2fe; border: 1px solid #0277bd; border-radius: 6px; padding: 20px; margin: 25px 0; text-align: center;">
                 <p style="color: #01579b; font-size: 16px; font-weight: bold; margin: 0 0 10px 0;">
                     🔗 Alternative Payment Link
                 </p>
                 <p style="color: #424242; font-size: 14px; margin: 0 0 15px 0;">
-                    If the button above doesn't work, copy this link:
+                    If the button above doesn't work, copy and paste this link into your browser:
                 </p>
-                <div style="background: #ffffff; border: 1px solid #e0e0e0; border-radius: 4px; padding: 12px; word-break: break-all;">
-                    <a href="${paymentUrl}" 
-                       style="color: #1976d2; font-size: 14px; font-weight: 600; text-decoration: none; font-family: monospace;"
-                       target="_blank">
-                        ${paymentUrl}
-                    </a>
+                <div style="background: #ffffff; border: 1px solid #e0e0e0; border-radius: 4px; padding: 12px; word-break: break-all; font-family: monospace; font-size: 14px; color: #1976d2;">
+                    ${paymentUrl}
                 </div>
+                <p style="margin: 10px 0 0 0;">
+                    <a href="${paymentUrl}" target="_blank" style="color: #1976d2; font-weight: 600; text-decoration: underline;">Click here to pay</a>
+                </p>
             </div>
             
-            <p style="color: #6b7280; font-size: 14px; line-height: 1.6; margin: 25px 0 0 0;">Please complete your payment at your earliest convenience. If you have any questions, feel free to contact our support team.</p>
+            <p style="color: #374151; font-size: 16px; line-height: 1.6; margin: 20px 0 0 0;">Please complete your payment at your earliest convenience. If you have any questions, please contact us.</p>
         </div>
         
         <!-- Footer -->
-        <div style="background: #f9fafb; padding: 20px; border-top: 1px solid #e5e7eb; text-align: center;">
-            <p style="color: #6b7280; font-size: 14px; margin: 0 0 10px 0;"><strong>KDADKS Service Private Limited</strong></p>
-            <p style="color: #6b7280; font-size: 12px; margin: 0;">Lucknow, Uttar Pradesh, India | support@kdadks.com | +91 7982303199</p>
+        <div style="background: #f9fafb; padding: 20px; text-align: center; border-top: 1px solid #e5e7eb;">
+            <p style="color: #6b7280; font-size: 12px; margin: 0;">
+                KDADKS Service Private Limited<br>
+                This is an automated message. Please do not reply to this email.
+            </p>
         </div>
     </div>
 </body>
-</html>`
+</html>`;
+
+          // Send payment request email
+          const emailResponse = await fetch('/.netlify/functions/send-email', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              to: data.customer_email,
+              from: 'support@kdadks.com',
+              subject: `Payment Request from KDADKS Service - ${formatCurrency(data.amount, data.currency)}`,
+              text: `Dear ${data.customer_name || 'Valued Customer'},
+
+You have a new payment request for ${formatCurrency(data.amount, data.currency)}.
+
+Description: ${data.description || 'Payment Request'}
+Amount: ${formatCurrency(data.amount, data.currency)}
+Request ID: ${request.id}
+
+To complete your payment, please visit: ${paymentUrl}
+
+Please complete your payment at your earliest convenience.
+
+Best regards,
+KDADKS Service Private Limited`,
+              html: emailHtmlTemplate
             }),
           });
 
