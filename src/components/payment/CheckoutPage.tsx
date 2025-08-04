@@ -315,8 +315,18 @@ export const CheckoutPage: React.FC = () => {
       console.log('🔍 Payment request currency:', request.currency);
       
       const activeGateways = allGateways.filter(g => {
-        const supportsCurrency = g.currency_support.includes(request.currency);
-        console.log(`🔍 Gateway ${g.name}: supports ${request.currency}=${supportsCurrency}, currencies=${g.currency_support}`);
+        // Handle currency_support as either string or array
+        let currencySupport: string[];
+        if (typeof g.currency_support === 'string') {
+          currencySupport = (g.currency_support as string).split(',').map((c: string) => c.trim());
+        } else if (Array.isArray(g.currency_support)) {
+          currencySupport = g.currency_support;
+        } else {
+          currencySupport = [];
+        }
+        
+        const supportsCurrency = currencySupport.includes(request.currency);
+        console.log(`🔍 Gateway ${g.name}: supports ${request.currency}=${supportsCurrency}, currencies=${g.currency_support} (parsed: ${currencySupport.join(', ')})`);
         return supportsCurrency;
       });
       
