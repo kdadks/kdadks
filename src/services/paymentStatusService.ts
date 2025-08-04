@@ -20,7 +20,11 @@ export class PaymentStatusService {
     try {
       console.log('🔄 Updating payment status in database...', paymentData);
 
-      // Step 1: Update payment_transactions table
+      // Step 1: Update or create payment_transactions table record
+      // Add small delay to ensure processed_at is after created_at
+      const processedAt = new Date(Date.now() + 1000).toISOString(); // 1 second delay
+      
+      // First, try to update existing transaction
       const { data: transactionUpdate, error: transactionError } = await supabase
         .from('payment_transactions')
         .update({
@@ -34,14 +38,43 @@ export class PaymentStatusService {
             email: paymentData.customerEmail,
             contact: paymentData.customerPhone
           },
-          processed_at: new Date().toISOString()
+          processed_at: processedAt
         })
         .eq('payment_request_id', paymentData.paymentRequestId)
+        .eq('status', 'pending') // Only update pending transactions
         .select();
 
       if (transactionError) {
         console.error('❌ Error updating payment_transactions:', transactionError);
-        // Don't fail completely, continue to update payment_requests
+        
+        // If update failed, try to create a new transaction record
+        console.log('🔄 Attempting to create new transaction record...');
+        const { data: newTransaction, error: createError } = await supabase
+          .from('payment_transactions')
+          .insert({
+            payment_request_id: paymentData.paymentRequestId,
+            gateway_transaction_id: paymentData.razorpayPaymentId,
+            amount: paymentData.amount,
+            currency: paymentData.currency,
+            status: 'success',
+            payment_method: 'razorpay',
+            payment_method_details: {
+              razorpay_payment_id: paymentData.razorpayPaymentId,
+              razorpay_order_id: paymentData.razorpayOrderId,
+              method: paymentData.paymentMethod,
+              email: paymentData.customerEmail,
+              contact: paymentData.customerPhone
+            },
+            processed_at: processedAt
+          })
+          .select();
+          
+        if (createError) {
+          console.error('❌ Error creating payment_transactions:', createError);
+          // Don't fail completely, continue to update payment_requests
+        } else {
+          console.log('✅ New payment_transactions record created:', newTransaction);
+        }
       } else {
         console.log('✅ payment_transactions updated successfully:', transactionUpdate);
       }

@@ -337,6 +337,16 @@ export const CheckoutPage: React.FC = () => {
     let isRazorpayModal = false; // Track if we're opening Razorpay modal
 
     try {
+      // Debug gateway data before creating provider
+      console.group('🔍 CHECKOUT PAYMENT DEBUG');
+      console.log('Selected gateway:', selectedGateway);
+      console.log('Gateway settings:', selectedGateway.settings);
+      console.log('Provider type:', selectedGateway.provider_type);
+      console.log('Is active:', selectedGateway.is_active);
+      console.log('Currency support:', selectedGateway.currency_support);
+      console.log('Gateway ID:', selectedGateway.id);
+      console.groupEnd();
+
       // Create payment provider instance
       const provider = PaymentProviderFactory.createProvider(
         selectedGateway.provider_type,
