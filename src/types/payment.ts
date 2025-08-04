@@ -222,6 +222,7 @@ export interface PaymentProviderResponse {
   orderId: string;
   providerOrderId?: string;
   error?: string;
+  providerData?: Record<string, any>; // Provider-specific data for modals, redirects, etc.
 }
 
 export interface PaymentProviderPaymentDetails {

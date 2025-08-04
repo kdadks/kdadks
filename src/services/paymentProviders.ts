@@ -110,14 +110,23 @@ class RazorpayProvider extends BasePaymentProvider {
       // In a real implementation, this would be a server-side API call
       const order = await this.createRazorpayOrder(orderData);
 
-      // Generate payment URL for checkout
-      const paymentUrl = this.generateRazorpayCheckoutUrl(order, request);
-
+      // For Razorpay, we don't redirect to another URL
+      // Instead, we return data for the checkout page to open the Razorpay modal
       return {
         success: true,
-        paymentUrl,
+        paymentUrl: '', // No redirect URL needed
         orderId: request.id,
-        providerOrderId: order.id
+        providerOrderId: order.id,
+        // Include Razorpay-specific data for the modal
+        providerData: {
+          key: this.settings.key_id,
+          order_id: order.id,
+          amount: order.amount,
+          currency: order.currency,
+          name: 'KDADKS Service Private Limited',
+          description: request.description || 'Invoice Payment',
+          modal: true // Indicates this should open a modal, not redirect
+        }
       };
 
     } catch (error) {
@@ -146,23 +155,6 @@ class RazorpayProvider extends BasePaymentProvider {
       notes: orderData.notes || {},
       created_at: Math.floor(Date.now() / 1000)
     };
-  }
-
-  private generateRazorpayCheckoutUrl(order: RazorpayOrderResponse, request: PaymentRequest): string {
-    const baseUrl = window.location.origin;
-    const params = new URLSearchParams({
-      order_id: order.id,
-      amount: order.amount.toString(),
-      currency: order.currency,
-      name: 'KDADKS Service Private Limited',
-      description: request.description || 'Invoice Payment',
-      prefill_email: request.customer_email || '',
-      prefill_contact: request.customer_phone || '',
-      callback_url: `${baseUrl}/payment/${request.id}?gateway=razorpay`,
-      cancel_url: `${baseUrl}/payment/${request.id}?status=cancelled`
-    });
-
-    return `${baseUrl}/payment/razorpay-checkout?${params.toString()}`;
   }
 
   async verifyPayment(paymentId: string, request: PaymentRequest): Promise<PaymentTransaction> {

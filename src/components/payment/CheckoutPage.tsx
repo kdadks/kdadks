@@ -40,6 +40,64 @@ export const CheckoutPage: React.FC = () => {
     address: ''
   });
 
+  // Razorpay modal handler
+  const handleRazorpayModal = async (
+    providerData: Record<string, any>, 
+    customer: typeof customerInfo, 
+    request: PaymentRequest
+  ): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      // Ensure Razorpay script is loaded
+      if (!(window as any).Razorpay) {
+        reject(new Error('Razorpay script not loaded'));
+        return;
+      }
+
+      const options = {
+        key: providerData.key,
+        amount: providerData.amount,
+        currency: providerData.currency,
+        name: providerData.name,
+        description: providerData.description,
+        order_id: providerData.order_id,
+        prefill: {
+          name: customer.name,
+          email: customer.email,
+          contact: customer.phone
+        },
+        theme: {
+          color: '#2563eb' // Blue theme matching the site
+        },
+        handler: (response: any) => {
+          console.log('Razorpay payment success:', response);
+          // Redirect to success page
+          navigate(`/payment/success/${request.id}?payment_id=${response.razorpay_payment_id}`);
+          resolve();
+        },
+        modal: {
+          ondismiss: () => {
+            console.log('Razorpay modal dismissed');
+            setProcessing(false);
+            reject(new Error('Payment cancelled by user'));
+          }
+        }
+      };
+
+      const rzp = new (window as any).Razorpay(options);
+      rzp.open();
+    });
+  };
+
+  useEffect(() => {
+    // Load Razorpay script if not already loaded
+    if (!(window as any).Razorpay) {
+      const script = document.createElement('script');
+      script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+      script.async = true;
+      document.head.appendChild(script);
+    }
+  }, []);
+
   useEffect(() => {
     if (requestId || actualToken) {
       loadPaymentRequest();
@@ -195,9 +253,18 @@ export const CheckoutPage: React.FC = () => {
         gateway_response: paymentData
       });
 
-      // Redirect to payment gateway or handle payment completion
+      // Handle different payment provider responses
       if (paymentData.paymentUrl) {
+        // External redirect (PayPal, Stripe, etc.)
         window.location.href = paymentData.paymentUrl;
+      } else if (paymentData.providerData?.modal && selectedGateway.provider_type === 'razorpay') {
+        // Razorpay modal payment
+        try {
+          await handleRazorpayModal(paymentData.providerData, customerInfo, paymentRequest);
+        } catch (modalError) {
+          console.error('Razorpay modal error:', modalError);
+          setError(modalError instanceof Error ? modalError.message : 'Payment modal failed');
+        }
       } else if (paymentData.success) {
         // Payment completed immediately (rare case)
         navigate(`/payment/success/${paymentRequest.id}`);
