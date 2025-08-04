@@ -16,7 +16,9 @@
     "deploy": "./deploy.sh",
     "deploy:netlify": "npm run build && npx netlify deploy --prod --dir=dist",
     "deploy:preview": "npm run build && npx netlify deploy --dir=dist",
-    "merge-pdf-docs": "node scripts/merge-pdf-docs.js"
+    "merge-pdf-docs": "node scripts/merge-pdf-docs.js",
+    "cleanup": "node scripts/cleanup-project.js",
+    "verify-structure": "node scripts/verify-project-structure.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.52.1",
