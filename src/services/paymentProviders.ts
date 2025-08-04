@@ -107,6 +107,13 @@ class RazorpayProvider extends BasePaymentProvider {
         environment: this.settings.environment || 'not set'
       });
       console.groupEnd();
+      
+      // Add alert for debugging
+      alert(`RazorpayProvider.createPaymentRequest called!
+      Request ID: ${request.id}
+      Amount: ${request.amount}
+      Currency: ${request.currency}
+      Key ID: ${this.settings?.key_id || 'MISSING!'}`);
 
       // Server-side order creation
       const orderData: RazorpayOrderRequest = {
@@ -121,9 +128,12 @@ class RazorpayProvider extends BasePaymentProvider {
       };
 
       console.log('📝 Order data for Razorpay:', orderData);
+      alert(`Order data created: ${JSON.stringify(orderData, null, 2)}`);
 
       // In a real implementation, this would be a server-side API call
       const order = await this.createRazorpayOrder(orderData);
+
+      alert(`Razorpay order created: ${JSON.stringify(order, null, 2)}`);
 
       // For Razorpay, we don't redirect to another URL
       // Instead, we return data for the checkout page to open the Razorpay modal
@@ -155,9 +165,13 @@ class RazorpayProvider extends BasePaymentProvider {
         modal: response.providerData.modal
       });
       
+      alert(`Final response created! Success: ${response.success}, Has providerData: ${!!response.providerData}`);
+      
       return response;
 
     } catch (error) {
+      console.error('❌ RazorpayProvider error:', error);
+      alert(`RazorpayProvider error: ${error instanceof Error ? error.message : 'Unknown error'}`);
       return {
         success: false,
         paymentUrl: '',
