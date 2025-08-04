@@ -21,6 +21,7 @@ import { ToastProvider } from './ui/ToastProvider'
 
 // Payment Gateway Components (Lazy loaded)
 import { CheckoutPage } from './payment/CheckoutPage'
+import { PaymentSuccessPage } from './payment/PaymentSuccessPage'
 import { PaymentPage } from './payment/PaymentPage'
 
 // Home page component
@@ -111,6 +112,7 @@ const Router = () => {
           {/* Payment routes */}
           <Route path="/payment/:token" element={<CheckoutPage />} />
           <Route path="/payment/checkout/:requestId" element={<CheckoutPage />} />
+          <Route path="/payment/success/:requestId" element={<PaymentSuccessPage />} />
           <Route path="/payment/status/:requestId" element={<PaymentPage />} />
           <Route path="/payment/success/:requestId" element={<PaymentPage />} />
           <Route path="/payment/failure/:requestId" element={<PaymentPage />} />

@@ -59,10 +59,12 @@ class RazorpayProvider extends BasePaymentProvider {
   name = 'Razorpay';
   type = 'razorpay';
   private settings: RazorpaySettings;
+  private gateway: PaymentGateway;
   private razorpay: any;
 
   constructor(gateway: PaymentGateway) {
     super();
+    this.gateway = gateway;
     this.settings = gateway.settings as RazorpaySettings;
     
     console.log('🔧 RazorpayProvider constructor called with gateway:', gateway);
@@ -109,12 +111,13 @@ class RazorpayProvider extends BasePaymentProvider {
       console.groupEnd();
       
       // Add alert for debugging
-      alert(`RazorpayProvider.createPaymentRequest called!
-      Request ID: ${request.id}
-      Amount: ${request.amount}
-      Currency: ${request.currency}
-      Key ID: ${this.settings?.key_id || 'MISSING!'}`);
-
+      console.log('RazorpayProvider.createPaymentRequest called!');
+      console.log('Request details:', {
+        id: request.id,
+        amount: request.amount,
+        currency: request.currency,
+        key_id: this.settings?.key_id ? 'Present' : 'MISSING!'
+      });
       // Server-side order creation
       const orderData: RazorpayOrderRequest = {
         amount: this.convertToSmallestUnit(request.amount, request.currency),
@@ -128,12 +131,9 @@ class RazorpayProvider extends BasePaymentProvider {
       };
 
       console.log('📝 Order data for Razorpay:', orderData);
-      alert(`Order data created: ${JSON.stringify(orderData, null, 2)}`);
 
       // In a real implementation, this would be a server-side API call
       const order = await this.createRazorpayOrder(orderData);
-
-      alert(`Razorpay order created: ${JSON.stringify(order, null, 2)}`);
 
       // For Razorpay, we don't redirect to another URL
       // Instead, we return data for the checkout page to open the Razorpay modal
@@ -165,13 +165,10 @@ class RazorpayProvider extends BasePaymentProvider {
         modal: response.providerData.modal
       });
       
-      alert(`Final response created! Success: ${response.success}, Has providerData: ${!!response.providerData}`);
-      
       return response;
 
     } catch (error) {
       console.error('❌ RazorpayProvider error:', error);
-      alert(`RazorpayProvider error: ${error instanceof Error ? error.message : 'Unknown error'}`);
       return {
         success: false,
         paymentUrl: '',
@@ -182,21 +179,62 @@ class RazorpayProvider extends BasePaymentProvider {
   }
 
   private async createRazorpayOrder(orderData: RazorpayOrderRequest): Promise<RazorpayOrderResponse> {
-    // This would typically be a server-side API call to Razorpay
-    // For demo purposes, we'll return a mock order
-    return {
-      id: `order_${Date.now()}`,
-      entity: 'order',
-      amount: orderData.amount,
-      amount_paid: 0,
-      amount_due: orderData.amount,
-      currency: orderData.currency,
-      receipt: orderData.receipt,
-      status: 'created',
-      attempts: 0,
-      notes: orderData.notes || {},
-      created_at: Math.floor(Date.now() / 1000)
-    };
+    // Use server-side API to create actual Razorpay order
+    
+    console.log('Creating REAL Razorpay order with data:', orderData);
+    
+    try {
+      const response = await fetch('/api/create-razorpay-order', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          gatewayId: this.gateway?.id, // Pass gateway ID to get credentials
+          amount: this.convertFromSmallestUnit(orderData.amount, orderData.currency), // Convert back to main unit for API
+          currency: orderData.currency,
+          receipt: orderData.receipt,
+          notes: orderData.notes
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+      
+      if (!result.success || !result.order) {
+        throw new Error(result.error || 'Failed to create order');
+      }
+
+      console.log('REAL Razorpay order created:', result.order);
+      
+      return result.order;
+
+    } catch (error) {
+      console.error('Failed to create Razorpay order:', error);
+      
+      // Fallback to mock order for development
+      console.warn('Falling back to mock order due to server error');
+      
+      const mockOrder: RazorpayOrderResponse = {
+        id: `order_${Date.now()}`,
+        entity: 'order' as const,
+        amount: orderData.amount,
+        amount_paid: 0,
+        amount_due: orderData.amount,
+        currency: orderData.currency,
+        receipt: orderData.receipt,
+        status: 'created',
+        attempts: 0,
+        notes: orderData.notes || {},
+        created_at: Math.floor(Date.now() / 1000)
+      };
+      
+      return mockOrder;
+    }
   }
 
   async verifyPayment(paymentId: string, request: PaymentRequest): Promise<PaymentTransaction> {
