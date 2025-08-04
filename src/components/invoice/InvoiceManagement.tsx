@@ -3205,8 +3205,8 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
           },
           body: JSON.stringify({
             to: customer.email,
-            from: 'kdadks@outlook.com',
-            subject: `Payment Request - Invoice ${invoice.invoice_number}`,
+            from: 'support@kdadks.com',
+            subject: `Payment Request - Invoice ${invoice.invoice_number} - ${formatCurrencyAmount(invoiceTotals.total, currencyInfo)}`,
             text: `Dear ${customer.company_name || customer.contact_person || 'Valued Customer'},
 
 You have received a payment request for Invoice ${invoice.invoice_number}.
