@@ -310,15 +310,26 @@ export const CheckoutPage: React.FC = () => {
       }
 
       // Load available payment gateways
-      const allGateways = await paymentService.getPaymentGateways();
-      const activeGateways = allGateways.filter(g => 
-        g.is_active && g.currency_support.includes(request.currency)
-      );
+      const allGateways = await paymentService.getActivePaymentGateways();
+      console.log('🔍 All active gateways loaded:', allGateways);
+      console.log('🔍 Payment request currency:', request.currency);
+      
+      const activeGateways = allGateways.filter(g => {
+        const supportsCurrency = g.currency_support.includes(request.currency);
+        console.log(`🔍 Gateway ${g.name}: supports ${request.currency}=${supportsCurrency}, currencies=${g.currency_support}`);
+        return supportsCurrency;
+      });
+      
+      console.log('🔍 Filtered gateways for currency:', activeGateways);
       setAvailableGateways(activeGateways);
 
       // Select default gateway
       if (activeGateways.length > 0) {
+        console.log('🔍 Setting selected gateway to:', activeGateways[0]);
         setSelectedGateway(activeGateways[0]);
+      } else {
+        console.log('🚨 No gateways found for currency:', request.currency);
+        setError(`No payment gateways available for ${request.currency}. Please contact support.`);
       }
 
     } catch (err) {
