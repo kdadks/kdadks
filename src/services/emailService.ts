@@ -826,4 +826,194 @@ Lucknow, India
 </html>
     `.trim()
   }
+
+  // Payment Request Email Method
+  static async sendPaymentRequestEmail(
+    recipientEmail: string,
+    details: {
+      customerName: string;
+      invoiceNumber: string;
+      amount: number;
+      currency: string;
+      dueDate: string;
+      paymentUrl: string;
+      paymentRequestId: string;
+      gatewayName: string;
+    }
+  ): Promise<void> {
+    try {
+      const response = await fetch(EmailService.API_ENDPOINT, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          to: recipientEmail,
+          from: 'kdadks@outlook.com',
+          subject: `Payment Request - Invoice ${details.invoiceNumber} - ${this.formatCurrency(details.amount, details.currency)}`,
+          text: this.generatePaymentRequestTextEmail(details),
+          html: this.generatePaymentRequestHtmlEmail(details),
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ message: 'Unknown error' }));
+        throw new Error(errorData.message || `HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      console.log('✅ Payment request email sent successfully to:', recipientEmail);
+    } catch (error) {
+      console.error('❌ Failed to send payment request email:', error);
+      throw error;
+    }
+  }
+
+  private static generatePaymentRequestTextEmail(details: {
+    customerName: string;
+    invoiceNumber: string;
+    amount: number;
+    currency: string;
+    dueDate: string;
+    paymentUrl: string;
+    paymentRequestId: string;
+    gatewayName: string;
+  }): string {
+    return `
+Dear ${details.customerName},
+
+You have received a payment request for Invoice ${details.invoiceNumber}.
+
+Payment Details:
+- Invoice Number: ${details.invoiceNumber}
+- Amount: ${this.formatCurrency(details.amount, details.currency)}
+- Due Date: ${details.dueDate}
+- Payment Gateway: ${details.gatewayName}
+- Payment Request ID: ${details.paymentRequestId}
+
+Click the link below to make your payment securely:
+${details.paymentUrl}
+
+This payment request will expire in 72 hours.
+
+If you have any questions, please contact us at kdadks@outlook.com or +91 7982303199.
+
+Best regards,
+KDADKS Service Private Limited
+Lucknow, India
+www.kdadks.com
+    `.trim();
+  }
+
+  private static generatePaymentRequestHtmlEmail(details: {
+    customerName: string;
+    invoiceNumber: string;
+    amount: number;
+    currency: string;
+    dueDate: string;
+    paymentUrl: string;
+    paymentRequestId: string;
+    gatewayName: string;
+  }): string {
+    return `
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Payment Request - ${details.invoiceNumber}</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 20px; background-color: #f9fafb; }
+        .container { max-width: 600px; margin: 0 auto; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); }
+        .header { background: linear-gradient(135deg, #2563eb, #1d4ed8); color: white; padding: 30px; text-align: center; }
+        .header h1 { margin: 0; font-size: 28px; font-weight: 600; }
+        .header p { margin: 8px 0 0 0; opacity: 0.9; font-size: 16px; }
+        .content { padding: 40px 30px; }
+        .greeting { font-size: 18px; color: #374151; margin-bottom: 20px; }
+        .invoice-details { background: #f8fafc; border-radius: 8px; padding: 25px; margin: 25px 0; border-left: 4px solid #2563eb; }
+        .detail-row { display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid #e5e7eb; }
+        .detail-row:last-child { border-bottom: none; }
+        .detail-label { font-weight: 600; color: #4b5563; }
+        .detail-value { font-weight: 500; color: #1f2937; }
+        .amount { color: #059669; font-weight: 700; font-size: 18px; }
+        .payment-button { text-align: center; margin: 35px 0; }
+        .payment-button a { display: inline-block; background: linear-gradient(135deg, #2563eb, #1d4ed8); color: white !important; text-decoration: none !important; padding: 16px 32px; border-radius: 8px; font-weight: 600; font-size: 16px; transition: all 0.3s ease; }
+        .payment-button a:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(37, 99, 235, 0.4); }
+        .fallback-url { background: #e0f2fe; border: 1px solid #0277bd; border-radius: 8px; padding: 20px; margin: 25px 0; text-align: center; }
+        .fallback-url h3 { color: #01579b; margin: 0 0 10px 0; }
+        .fallback-url .url { background: white; border: 1px solid #ccc; border-radius: 4px; padding: 12px; word-break: break-all; font-family: monospace; font-size: 14px; color: #1976d2; margin: 10px 0; }
+        .warning { background: #fef3c7; border: 1px solid #f59e0b; border-radius: 8px; padding: 15px; margin: 20px 0; color: #92400e; }
+        .warning strong { color: #78350f; }
+        .footer { border-top: 1px solid #e5e7eb; padding-top: 25px; text-align: center; color: #6b7280; font-size: 14px; }
+        .contact-info { margin: 15px 0; }
+        .contact-info strong { color: #374151; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>💳 Payment Request</h1>
+            <p>KDADKS Service Private Limited</p>
+        </div>
+        
+        <div class="content">
+            <p class="greeting">Dear ${details.customerName},</p>
+            
+            <p>You have received a payment request for the following invoice:</p>
+            
+            <div class="invoice-details">
+                <div class="detail-row">
+                    <span class="detail-label">Invoice Number:</span>
+                    <span class="detail-value">${details.invoiceNumber}</span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">Amount:</span>
+                    <span class="detail-value amount">${this.formatCurrency(details.amount, details.currency)}</span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">Due Date:</span>
+                    <span class="detail-value">${details.dueDate}</span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">Payment Gateway:</span>
+                    <span class="detail-value">${details.gatewayName}</span>
+                </div>
+            </div>
+            
+            <div class="payment-button">
+                <p style="margin-bottom: 20px; color: #374151;">Click the button below to make your payment securely:</p>
+                <a href="${details.paymentUrl}" target="_blank">🔒 Pay Securely Online</a>
+                <p style="margin-top: 15px; font-size: 12px; color: #6b7280;">Payment powered by ${details.gatewayName}</p>
+            </div>
+            
+            <div class="fallback-url">
+                <h3>🔗 Alternative Payment Link</h3>
+                <p style="margin: 10px 0;">If the button above doesn't work, copy and paste this link into your browser:</p>
+                <div class="url">${details.paymentUrl}</div>
+                <p><a href="${details.paymentUrl}" target="_blank" style="color: #1976d2; font-weight: 600;">Click here to pay</a></p>
+            </div>
+            
+            <div class="warning">
+                <strong>⏰ Important:</strong> This payment request will expire in 72 hours.
+            </div>
+            
+            <p>If you have any questions about this payment request, please don't hesitate to contact us.</p>
+            
+            <div class="contact-info">
+                <strong>Contact Information:</strong><br>
+                Email: kdadks@outlook.com<br>
+                Phone: +91 7982303199
+            </div>
+        </div>
+        
+        <div class="footer">
+            <p><strong>Payment Request ID:</strong> ${details.paymentRequestId}</p>
+            <p><strong>KDADKS Service Private Limited</strong><br>
+            Lucknow, India<br>
+            <a href="https://kdadks.com" style="color: #2563eb;">www.kdadks.com</a></p>
+        </div>
+    </div>
+</body>
+</html>
+    `.trim();
+  }
 }

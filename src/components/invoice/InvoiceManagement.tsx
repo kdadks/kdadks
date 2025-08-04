@@ -3196,123 +3196,17 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
       const paymentUrl = `${window.location.origin}/payment/${paymentLink.link_token}`;
       console.log('Payment URL generated for invoice system:', paymentUrl);
 
-      // Send email notification with payment link
+      // Send email notification with payment link using EmailService
       try {
-        await fetch('/.netlify/functions/send-email', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            to: customer.email,
-            from: 'support@kdadks.com',
-            subject: `Payment Request - Invoice ${invoice.invoice_number} - ${formatCurrencyAmount(invoiceTotals.total, currencyInfo)}`,
-            text: `Dear ${customer.company_name || customer.contact_person || 'Valued Customer'},
-
-You have received a payment request for Invoice ${invoice.invoice_number}.
-
-Payment Details:
-- Invoice Number: ${invoice.invoice_number}
-- Amount: ${formatCurrencyAmount(invoiceTotals.total, currencyInfo)}
-- Due Date: ${new Date(invoice.due_date || '').toLocaleDateString() || 'N/A'}
-- Payment Request ID: ${paymentRequest.id}
-
-Click the link below to make your payment securely:
-${paymentUrl}
-
-This payment request will expire in 72 hours.
-
-If you have any questions, please contact us.
-
-Best regards,
-KDADKS Service Private Limited`,
-            html: `<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f9fafb; padding: 20px;">
-              <div style="background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
-                <div style="text-align: center; margin-bottom: 30px;">
-                  <h1 style="color: #2563eb; margin: 0;">Payment Request</h1>
-                  <p style="color: #6b7280; margin: 5px 0 0 0;">KDADKS Service Private Limited</p>
-                </div>
-                
-                <p style="color: #374151;">Dear ${customer.company_name || customer.contact_person || 'Valued Customer'},</p>
-                
-                <p style="color: #374151;">You have received a payment request for the following invoice:</p>
-                
-                <div style="background: #f3f4f6; padding: 20px; border-radius: 8px; margin: 20px 0;">
-                  <table style="width: 100%; border-collapse: collapse;">
-                    <tr>
-                      <td style="padding: 8px 0; border-bottom: 1px solid #e5e7eb;"><strong>Invoice Number:</strong></td>
-                      <td style="padding: 8px 0; border-bottom: 1px solid #e5e7eb; text-align: right;">${invoice.invoice_number}</td>
-                    </tr>
-                    <tr>
-                      <td style="padding: 8px 0; border-bottom: 1px solid #e5e7eb;"><strong>Amount:</strong></td>
-                      <td style="padding: 8px 0; border-bottom: 1px solid #e5e7eb; text-align: right; color: #059669; font-weight: bold;">${formatCurrencyAmount(invoiceTotals.total, currencyInfo)}</td>
-                    </tr>
-                    <tr>
-                      <td style="padding: 8px 0; border-bottom: 1px solid #e5e7eb;"><strong>Due Date:</strong></td>
-                      <td style="padding: 8px 0; border-bottom: 1px solid #e5e7eb; text-align: right;">${new Date(invoice.due_date || '').toLocaleDateString() || 'N/A'}</td>
-                    </tr>
-                    <tr>
-                      <td style="padding: 8px 0;"><strong>Gateway:</strong></td>
-                      <td style="padding: 8px 0; text-align: right;">${primaryGateway.name}</td>
-                    </tr>
-                  </table>
-                </div>
-                
-                <div style="text-align: center; margin: 30px 0;">
-                  <p style="color: #374151; margin-bottom: 15px;">Click the button below to make your payment securely:</p>
-                  <table border="0" cellspacing="0" cellpadding="0" style="margin: 0 auto;">
-                    <tr>
-                      <td align="center" style="border-radius: 8px; background-color: #2563eb; padding: 0;">
-                        <a href="${paymentUrl}" 
-                           target="_blank" 
-                           style="font-size: 16px; 
-                                  font-family: Arial, Helvetica, sans-serif; 
-                                  color: #ffffff !important; 
-                                  text-decoration: none !important; 
-                                  border-radius: 8px; 
-                                  padding: 15px 30px; 
-                                  border: none;
-                                  display: inline-block; 
-                                  font-weight: bold;
-                                  background-color: #2563eb;
-                                  line-height: 20px;">
-                          🔒 Pay Securely Online
-                        </a>
-                      </td>
-                    </tr>
-                  </table>
-                  <p style="color: #6b7280; font-size: 12px; margin-top: 10px;">Payment powered by ${primaryGateway.name}</p>
-                </div>
-                
-                <!-- Fallback URL Section -->
-                <div style="background: #e0f2fe; border: 1px solid #0277bd; border-radius: 6px; padding: 20px; margin: 25px 0; text-align: center;">
-                  <p style="color: #01579b; font-size: 16px; font-weight: bold; margin: 0 0 10px 0;">
-                    🔗 Alternative Payment Link
-                  </p>
-                  <p style="color: #424242; font-size: 14px; margin: 0 0 15px 0;">
-                    If the button above doesn't work, copy and paste this link into your browser:
-                  </p>
-                  <div style="background: #ffffff; border: 1px solid #e0e0e0; border-radius: 4px; padding: 12px; word-break: break-all; font-family: monospace; font-size: 14px; color: #1976d2;">
-                    ${paymentUrl}
-                  </div>
-                  <p style="margin: 10px 0 0 0;">
-                    <a href="${paymentUrl}" target="_blank" style="color: #1976d2; font-weight: 600; text-decoration: underline;">Click here to pay</a>
-                  </p>
-                </div>
-                
-                <div style="background: #fef3c7; border: 1px solid #f59e0b; padding: 15px; border-radius: 8px; margin: 20px 0;">
-                  <p style="margin: 0; color: #92400e; font-size: 14px;"><strong>⏰ Important:</strong> This payment request will expire in 72 hours.</p>
-                </div>
-                
-                <p style="color: #374151; font-size: 14px;">If you have any questions about this payment request, please contact us.</p>
-                
-                <div style="border-top: 1px solid #e5e7eb; margin-top: 30px; padding-top: 20px; text-align: center;">
-                  <p style="color: #6b7280; font-size: 12px; margin: 0;">Payment Request ID: ${paymentRequest.id}</p>
-                  <p style="color: #6b7280; font-size: 12px; margin: 5px 0 0 0;">KDADKS Service Private Limited</p>
-                </div>
-              </div>
-            </div>`
-          }),
+        await EmailService.sendPaymentRequestEmail(customer.email, {
+          customerName: customer.company_name || customer.contact_person || 'Valued Customer',
+          invoiceNumber: invoice.invoice_number,
+          amount: invoiceTotals.total,
+          currency: currencyInfo.code,
+          dueDate: new Date(invoice.due_date || '').toLocaleDateString() || 'N/A',
+          paymentUrl: paymentUrl,
+          paymentRequestId: paymentRequest.id,
+          gatewayName: primaryGateway.name
         });
 
         showSuccess(`💳 Payment request created successfully! Email sent to ${customer.email} with secure payment link.`);
