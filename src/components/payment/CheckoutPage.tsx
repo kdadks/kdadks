@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { paymentService } from '../../services/paymentService';
 import { PaymentProviderFactory } from '../../services/paymentProviders';
+import { EmailService } from '../../services/emailService';
 import type { PaymentRequest, PaymentGateway } from '../../types/payment';
 import type { Invoice } from '../../types/invoice';
 
@@ -97,9 +98,30 @@ export const CheckoutPage: React.FC = () => {
         theme: {
           color: '#2563eb' // Blue theme matching the site
         },
-        handler: (response: any) => {
+        handler: async (response: any) => {
           console.log('✅ Razorpay payment success:', response);
           setProcessing(false); // Stop processing on success
+          
+          // Send payment confirmation email
+          try {
+            if (customer.email && paymentRequest) {
+              await EmailService.sendPaymentConfirmationEmail(customer.email, {
+                customerName: customer.name,
+                paymentId: response.razorpay_payment_id,
+                orderId: response.razorpay_order_id,
+                amount: paymentRequest.amount,
+                currency: paymentRequest.currency,
+                paymentMethod: 'Razorpay',
+                transactionDate: new Date().toLocaleDateString('en-IN'),
+                invoiceId: paymentRequest.invoice_id
+              });
+              console.log('✅ Payment confirmation email sent');
+            }
+          } catch (emailError) {
+            console.error('❌ Failed to send confirmation email:', emailError);
+            // Don't block the success flow if email fails
+          }
+          
           // Redirect to success page
           navigate(`/payment/success/${request.id}?payment_id=${response.razorpay_payment_id}`);
           resolve();

@@ -667,4 +667,163 @@ Sent from KDADKS Contact Form
 </html>
     `.trim()
   }
+
+  // Send payment confirmation email
+  static async sendPaymentConfirmationEmail(
+    customerEmail: string,
+    paymentDetails: {
+      customerName: string;
+      paymentId: string;
+      orderId: string;
+      amount: number;
+      currency: string;
+      paymentMethod: string;
+      transactionDate: string;
+      invoiceId?: string;
+    }
+  ): Promise<void> {
+    try {
+      const subject = `Payment Confirmation - KDADKS Service Private Limited`;
+      
+      const response = await fetch(EmailService.API_ENDPOINT, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          to: customerEmail,
+          from: 'support@kdadks.com',
+          subject,
+          text: EmailService.generatePaymentConfirmationTextEmail(paymentDetails),
+          html: EmailService.generatePaymentConfirmationHtmlEmail(paymentDetails),
+        }),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ message: 'Unknown error' }))
+        throw new Error(errorData.message || `HTTP error! status: ${response.status}`)
+      }
+
+      const result = await response.json()
+      console.log('Payment confirmation email sent successfully:', result)
+    } catch (error) {
+      console.error('Payment confirmation email failed:', error)
+      throw error
+    }
+  }
+
+  // Generate text version of payment confirmation email
+  private static generatePaymentConfirmationTextEmail(details: any): string {
+    const currencySymbol = this.getCurrencySymbol(details.currency);
+    
+    return `
+Dear ${details.customerName},
+
+We have successfully received your payment. Here are the details:
+
+Payment Details:
+- Payment ID: ${details.paymentId}
+- Order ID: ${details.orderId}
+- Amount: ${currencySymbol}${details.amount.toFixed(2)}
+- Payment Method: ${details.paymentMethod.toUpperCase()}
+- Transaction Date: ${details.transactionDate}
+${details.invoiceId ? `- Invoice ID: ${details.invoiceId}` : ''}
+
+Thank you for choosing KDADKS Service Private Limited.
+
+If you have any questions, please contact us at kdadks@outlook.com or call +91 7982303199.
+
+Best regards,
+KDADKS Service Private Limited
+Lucknow, India
+    `.trim()
+  }
+
+  // Generate HTML version of payment confirmation email
+  private static generatePaymentConfirmationHtmlEmail(details: any): string {
+    const currencySymbol = this.getCurrencySymbol(details.currency);
+    
+    return `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Payment Confirmation</title>
+    <style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; }
+        .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }
+        .content { background: #f9f9f9; padding: 30px; border-radius: 0 0 8px 8px; }
+        .success-icon { font-size: 48px; color: #4CAF50; text-align: center; margin-bottom: 20px; }
+        .details-box { background: white; padding: 20px; border-radius: 8px; margin: 20px 0; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .detail-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #eee; }
+        .detail-row:last-child { border-bottom: none; }
+        .label { font-weight: bold; color: #555; }
+        .value { color: #333; }
+        .amount { font-size: 18px; font-weight: bold; color: #4CAF50; }
+        .footer { text-align: center; margin-top: 30px; color: #666; font-size: 14px; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Payment Confirmation</h1>
+        <p>KDADKS Service Private Limited</p>
+    </div>
+    
+    <div class="content">
+        <div class="success-icon">✅</div>
+        
+        <h2 style="text-align: center; color: #4CAF50;">Payment Successful!</h2>
+        
+        <p>Dear ${details.customerName},</p>
+        
+        <p>We have successfully received your payment. Here are the transaction details:</p>
+        
+        <div class="details-box">
+            <div class="detail-row">
+                <span class="label">Payment ID:</span>
+                <span class="value">${details.paymentId}</span>
+            </div>
+            <div class="detail-row">
+                <span class="label">Order ID:</span>
+                <span class="value">${details.orderId}</span>
+            </div>
+            <div class="detail-row">
+                <span class="label">Amount:</span>
+                <span class="value amount">${currencySymbol}${details.amount.toFixed(2)}</span>
+            </div>
+            <div class="detail-row">
+                <span class="label">Payment Method:</span>
+                <span class="value">${details.paymentMethod.toUpperCase()}</span>
+            </div>
+            <div class="detail-row">
+                <span class="label">Transaction Date:</span>
+                <span class="value">${details.transactionDate}</span>
+            </div>
+            ${details.invoiceId ? `
+            <div class="detail-row">
+                <span class="label">Invoice ID:</span>
+                <span class="value">${details.invoiceId}</span>
+            </div>
+            ` : ''}
+        </div>
+        
+        <p>Thank you for choosing KDADKS Service Private Limited. Your payment has been processed successfully.</p>
+        
+        <p>If you have any questions about this transaction, please don't hesitate to contact us:</p>
+        <ul>
+            <li>Email: kdadks@outlook.com</li>
+            <li>Phone: +91 7982303199</li>
+        </ul>
+        
+        <div class="footer">
+            <p><strong>KDADKS Service Private Limited</strong><br>
+            Lucknow, India<br>
+            <a href="https://kdadks.com">www.kdadks.com</a></p>
+        </div>
+    </div>
+</body>
+</html>
+    `.trim()
+  }
 }

@@ -87,7 +87,7 @@ async function handleRazorpayWebhook(body, headers) {
       const payment = event.payload.payment.entity;
       
       // Update transaction with payment method details
-      await supabase
+      const { data: updatedTransaction } = await supabase
         .from('payment_transactions')
         .update({
           status: 'success',
@@ -104,7 +104,9 @@ async function handleRazorpayWebhook(body, headers) {
           gateway_fee: payment.fee ? payment.fee / 100 : null,
           processed_at: new Date().toISOString()
         })
-        .eq('gateway_transaction_id', payment.order_id);
+        .eq('gateway_transaction_id', payment.order_id)
+        .select()
+        .single();
 
       // Update payment request status
       const { data: transaction } = await supabase
@@ -114,14 +116,53 @@ async function handleRazorpayWebhook(body, headers) {
         .single();
 
       if (transaction) {
-        await supabase
+        const { data: updatedRequest } = await supabase
           .from('payment_requests')
           .update({
             status: 'completed',
             completed_at: new Date().toISOString(),
             gateway_payment_id: payment.id
           })
-          .eq('id', transaction.payment_request_id);
+          .eq('id', transaction.payment_request_id)
+          .select('*, invoice_id, customer_email, customer_name, amount, currency')
+          .single();
+
+        // Send payment confirmation email
+        if (updatedRequest && payment.email) {
+          try {
+            const emailData = {
+              to: payment.email,
+              subject: 'Payment Confirmation - KDADKS Service Private Limited',
+              template: 'payment_confirmation',
+              templateData: {
+                customerName: payment.contact || updatedRequest.customer_name || 'Valued Customer',
+                paymentId: payment.id,
+                orderId: payment.order_id,
+                amount: payment.amount / 100, // Convert from paise to rupees
+                currency: payment.currency,
+                paymentMethod: payment.method,
+                transactionDate: new Date().toLocaleDateString('en-IN'),
+                invoiceId: updatedRequest.invoice_id,
+                companyName: 'KDADKS Service Private Limited'
+              }
+            };
+
+            // Send email via the email service
+            const emailResponse = await fetch(process.env.URL + '/.netlify/functions/send-email', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(emailData)
+            });
+
+            if (emailResponse.ok) {
+              console.log('Payment confirmation email sent successfully');
+            } else {
+              console.error('Failed to send payment confirmation email');
+            }
+          } catch (emailError) {
+            console.error('Error sending payment confirmation email:', emailError);
+          }
+        }
       }
 
     } else if (event.event === 'payment.failed') {
