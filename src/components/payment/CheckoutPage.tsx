@@ -15,6 +15,7 @@ import {
 import { paymentService } from '../../services/paymentService';
 import { PaymentProviderFactory } from '../../services/paymentProviders';
 import { EmailService } from '../../services/emailService';
+import { PaymentStatusService } from '../../services/paymentStatusService';
 import type { PaymentRequest, PaymentGateway } from '../../types/payment';
 import type { Invoice } from '../../types/invoice';
 
@@ -101,6 +102,26 @@ export const CheckoutPage: React.FC = () => {
         handler: async (response: any) => {
           console.log('✅ Razorpay payment success:', response);
           setProcessing(false); // Stop processing on success
+          
+          // Verify and update payment status in database
+          try {
+            console.log('🔄 Verifying payment and updating database...');
+            const verified = await PaymentStatusService.verifyAndUpdatePayment(
+              response.razorpay_payment_id,
+              response.razorpay_order_id,
+              response.razorpay_signature,
+              request.id
+            );
+            
+            if (verified) {
+              console.log('✅ Payment verified and database updated');
+            } else {
+              console.warn('⚠️ Payment verification failed, but continuing...');
+            }
+          } catch (statusError) {
+            console.error('❌ Failed to update payment status:', statusError);
+            // Don't block the success flow if database update fails
+          }
           
           // Send payment confirmation email
           try {
