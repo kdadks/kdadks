@@ -542,7 +542,7 @@ class PaymentService {
 
   private generateCheckoutUrl(paymentRequestId: string, linkToken: string): string {
     const baseUrl = window.location.origin;
-    return `${baseUrl}/checkout/${paymentRequestId}?token=${linkToken}`;
+    return `${baseUrl}/payment/checkout/${paymentRequestId}?token=${linkToken}`;
   }
 
   // =====================================================

@@ -96,3 +96,22 @@
 #   for = "/contact"
 #   [headers.values]
 #     X-Frame-Options = "SAMEORIGIN"
+
+# Payment webhook routes
+[[redirects]]
+  from = "/api/webhooks/razorpay"
+  to = "/.netlify/functions/payment-webhook"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/api/webhooks/stripe"  
+  to = "/.netlify/functions/payment-webhook"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/api/webhooks/paypal"
+  to = "/.netlify/functions/payment-webhook"
+  status = 200
+  force = true
