@@ -183,8 +183,39 @@ class RazorpayProvider extends BasePaymentProvider {
     
     console.log('Creating REAL Razorpay order with data:', orderData);
     
+    // Check if we're in development mode
+    const isDevelopment = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    
+    if (isDevelopment) {
+      console.warn('Development mode detected - using mock order creation');
+      // Create a mock order for development
+      const mockOrder: RazorpayOrderResponse = {
+        id: `order_${Date.now()}`,
+        entity: 'order' as const,
+        amount: orderData.amount,
+        amount_paid: 0,
+        amount_due: orderData.amount,
+        currency: orderData.currency,
+        receipt: orderData.receipt,
+        status: 'created',
+        attempts: 0,
+        notes: orderData.notes || {},
+        created_at: Math.floor(Date.now() / 1000)
+      };
+      
+      console.log('Mock order created for development:', mockOrder);
+      return mockOrder;
+    }
+
     try {
-      const response = await fetch('/api/create-razorpay-order', {
+      // Determine the correct API endpoint
+      const apiEndpoint = isDevelopment 
+        ? 'http://localhost:3005/api/create-razorpay-order'
+        : '/.netlify/functions/create-razorpay-order';
+        
+      console.log('Using API endpoint:', apiEndpoint);
+      
+      const response = await fetch(apiEndpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
