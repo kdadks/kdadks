@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { 
   CreditCard, 
   Lock, 
@@ -19,7 +19,12 @@ import type { Invoice } from '../../types/invoice';
 
 export const CheckoutPage: React.FC = () => {
   const { requestId, token } = useParams<{ requestId?: string; token?: string }>();
+  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+  
+  // Get token from query parameters if not in URL params
+  const queryToken = searchParams.get('token');
+  const actualToken = token || queryToken;
   
   const [paymentRequest, setPaymentRequest] = useState<PaymentRequest | null>(null);
   const [invoice] = useState<Invoice | null>(null);
@@ -36,39 +41,54 @@ export const CheckoutPage: React.FC = () => {
   });
 
   useEffect(() => {
-    if (requestId || token) {
+    if (requestId || actualToken) {
       loadPaymentRequest();
     } else {
       setError('Payment request ID or token is required');
       setLoading(false);
     }
-  }, [requestId, token]);
+  }, [requestId, actualToken]);
 
   const loadPaymentRequest = async () => {
     try {
       setLoading(true);
       setError(null);
 
+      console.group('🔍 CHECKOUT PAGE DEBUG');
+      console.log('requestId from URL params:', requestId);
+      console.log('token from URL params:', token);
+      console.log('queryToken from search params:', queryToken);
+      console.log('actualToken being used:', actualToken);
+      console.log('Current URL:', window.location.href);
+      console.groupEnd();
+
       let request: PaymentRequest | null = null;
 
       // Load payment request either by ID or by token
-      if (token) {
+      if (actualToken) {
+        console.log('Loading payment request by token:', actualToken);
         // If we have a token, get the payment link first and then the request
-        const paymentLink = await paymentService.getPaymentLinkByToken(token);
+        const paymentLink = await paymentService.getPaymentLinkByToken(actualToken);
+        console.log('Payment link lookup result:', paymentLink);
+        
         if (!paymentLink) {
           throw new Error('Payment link not found or expired');
         }
         
         // Get the actual payment request using the payment_request_id
         if (paymentLink.payment_request_id) {
+          console.log('Loading payment request by ID:', paymentLink.payment_request_id);
           request = await paymentService.getPaymentRequestById(paymentLink.payment_request_id);
         } else {
           throw new Error('Payment request not found for this link');
         }
       } else if (requestId) {
+        console.log('Loading payment request by request ID:', requestId);
         // Load payment request by ID directly
         request = await paymentService.getPaymentRequestById(requestId);
       }
+
+      console.log('Final payment request loaded:', request);
 
       if (!request) {
         throw new Error('Payment request not found');

@@ -204,15 +204,16 @@ const PaymentManagement: React.FC<PaymentManagementProps> = ({
           });
           console.log('Payment link created:', paymentLink);
 
-          // Generate the payment URL
-          const paymentUrl = `${window.location.origin}/payment/${paymentLink.link_token}`;
-          console.log('Payment URL generated:', paymentUrl);
+          // Use the checkout URL from the payment link instead of manually generating it
+          const paymentUrl = paymentLink.checkout_url;
+          console.log('Payment URL from service:', paymentUrl);
           
           // DEBUG: Test if payment URL is accessible
           console.group('🔗 PAYMENT URL ACCESSIBILITY TEST');
           console.log('Payment URL:', paymentUrl);
           console.log('Click this to test:', paymentUrl);
           console.log('Link token:', paymentLink.link_token);
+          console.log('Checkout URL from service:', paymentLink.checkout_url);
           console.groupEnd();
           
           // Debug: Log what the email content will contain
