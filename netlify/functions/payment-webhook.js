@@ -1,4 +1,5 @@
 const crypto = require('crypto');
+const { validateWebhookSignature } = require('razorpay/dist/utils/razorpay-utils');
 const { supabase } = require('./lib/supabase');
 
 // This is a Netlify function to handle payment gateway webhooks
@@ -59,16 +60,24 @@ async function handleRazorpayWebhook(body, headers) {
       return { statusCode: 400, body: JSON.stringify({ error: 'Gateway not configured' }) };
     }
 
-    // Verify webhook signature
+    // Verify webhook signature using official Razorpay SDK
     const webhookSecret = gateway.settings.webhook_secret;
-    const expectedSignature = crypto
-      .createHmac('sha256', webhookSecret)
-      .update(body)
-      .digest('hex');
-
-    if (signature !== expectedSignature) {
-      return { statusCode: 400, body: JSON.stringify({ error: 'Invalid signature' }) };
+    
+    // Use Razorpay's official signature validation
+    // This method returns true/false rather than throwing exceptions
+    const isValidSignature = validateWebhookSignature(body, signature, webhookSecret);
+    
+    if (!isValidSignature) {
+      console.error('❌ Invalid Razorpay webhook signature');
+      return {
+        statusCode: 400,
+        body: JSON.stringify({ 
+          error: 'Invalid webhook signature' 
+        })
+      };
     }
+    
+    console.log('✅ Razorpay webhook signature verified successfully');
 
     const event = JSON.parse(body);
     console.log('Razorpay webhook event:', event.event);

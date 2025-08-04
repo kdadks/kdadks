@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const { createClient } = require('@supabase/supabase-js');
 const Razorpay = require('razorpay');
+const { validateWebhookSignature } = require('razorpay/dist/utils/razorpay-utils');
 require('dotenv').config();
 
 const app = express();
@@ -160,6 +161,113 @@ app.post('/api/create-razorpay-order', async (req, res) => {
   }
 });
 
+// Razorpay webhook endpoint for development testing
+app.post('/api/razorpay-webhook', async (req, res) => {
+  try {
+    const signature = req.headers['x-razorpay-signature'];
+    const body = JSON.stringify(req.body);
+    
+    console.log('🔔 Webhook received:', {
+      signature: signature ? 'Present' : 'Missing',
+      event: req.body?.event || 'Unknown',
+      bodyLength: body.length
+    });
+
+    if (!signature) {
+      return res.status(400).json({ error: 'Missing x-razorpay-signature header' });
+    }
+
+    // Get webhook secret from the first active Razorpay gateway
+    const { data: gateway, error: gatewayError } = await supabase
+      .from('payment_gateways')
+      .select('settings')
+      .eq('provider_type', 'razorpay')
+      .eq('is_active', true)
+      .single();
+
+    if (gatewayError || !gateway) {
+      console.error('❌ Could not get gateway webhook secret:', gatewayError);
+      return res.status(500).json({ error: 'Webhook configuration error' });
+    }
+
+    const webhookSecret = gateway.settings.webhook_secret;
+    if (!webhookSecret) {
+      return res.status(500).json({ error: 'Webhook secret not configured' });
+    }
+
+    // Verify webhook signature using Razorpay SDK
+    const isValidSignature = validateWebhookSignature(body, signature, webhookSecret);
+    
+    if (!isValidSignature) {
+      console.error('❌ Invalid webhook signature');
+      return res.status(400).json({ 
+        error: 'Invalid webhook signature' 
+      });
+    }
+    
+    console.log('✅ Webhook signature verified successfully');
+
+    // Log webhook event to database
+    const webhookEvent = req.body;
+    const { error: logError } = await supabase
+      .from('payment_webhooks')
+      .insert({
+        gateway_type: 'razorpay',
+        event_type: webhookEvent.event,
+        payload: webhookEvent,
+        signature: signature,
+        status: 'processed'
+      });
+
+    if (logError) {
+      console.warn('⚠️ Could not log webhook to database:', logError);
+    }
+
+    // Process different webhook events
+    if (webhookEvent.event === 'payment.captured') {
+      const payment = webhookEvent.payload.payment.entity;
+      console.log('💰 Payment captured:', {
+        id: payment.id,
+        amount: payment.amount,
+        currency: payment.currency,
+        method: payment.method
+      });
+
+      // Update payment transaction status
+      const { error: updateError } = await supabase
+        .from('payment_transactions')
+        .update({
+          status: 'success',
+          payment_method: payment.method,
+          payment_method_details: {
+            method: payment.method,
+            bank: payment.bank,
+            wallet: payment.wallet,
+            vpa: payment.vpa
+          },
+          processed_at: new Date().toISOString()
+        })
+        .eq('gateway_transaction_id', payment.id);
+
+      if (updateError) {
+        console.error('❌ Could not update transaction:', updateError);
+      } else {
+        console.log('✅ Transaction updated successfully');
+      }
+    }
+
+    res.json({ 
+      success: true, 
+      message: 'Webhook processed successfully',
+      event: webhookEvent.event 
+    });
+
+  } catch (error) {
+    console.error('💥 Webhook processing error:', error);
+    res.status(500).json({ error: 'Webhook processing failed' });
+  }
+});
+
 // Health check endpoint
 app.get('/health', (req, res) => {
   res.json({ status: 'OK', message: 'Development Razorpay server is running' });
@@ -169,10 +277,13 @@ app.listen(PORT, () => {
   console.log(`🚀 Development Razorpay server running on http://localhost:${PORT}`);
   console.log(`📋 Available endpoints:`);
   console.log(`   POST http://localhost:${PORT}/api/create-razorpay-order`);
+  console.log(`   POST http://localhost:${PORT}/api/razorpay-webhook`);
   console.log(`   GET  http://localhost:${PORT}/health`);
   console.log(`\n⚠️  Make sure to set these environment variables:`);
   console.log(`   VITE_SUPABASE_URL`);
   console.log(`   VITE_SUPABASE_ANON_KEY`);
+  console.log(`\n🔐 For webhook testing, configure Razorpay webhook URL:`);
+  console.log(`   http://your-ngrok-url.ngrok.io/api/razorpay-webhook`);
 });
 
 module.exports = app;
