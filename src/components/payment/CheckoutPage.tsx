@@ -47,10 +47,28 @@ export const CheckoutPage: React.FC = () => {
     request: PaymentRequest
   ): Promise<void> => {
     return new Promise((resolve, reject) => {
+      console.group('🔍 RAZORPAY MODAL DEBUG');
+      console.log('Provider data received:', providerData);
+      console.log('Customer info:', customer);
+      console.log('Payment request:', request);
+      console.log('Razorpay script available:', !!(window as any).Razorpay);
+      console.groupEnd();
+
       // Ensure Razorpay script is loaded
       if (!(window as any).Razorpay) {
         console.error('Razorpay script not loaded');
         reject(new Error('Payment system not initialized. Please refresh and try again.'));
+        return;
+      }
+
+      // Validate required provider data
+      if (!providerData.key || !providerData.order_id || !providerData.amount) {
+        console.error('Missing required Razorpay data:', {
+          key: !!providerData.key,
+          order_id: !!providerData.order_id,
+          amount: !!providerData.amount
+        });
+        reject(new Error('Payment configuration incomplete. Please try again.'));
         return;
       }
 
@@ -93,7 +111,11 @@ export const CheckoutPage: React.FC = () => {
       };
 
       try {
+        console.log('Creating Razorpay instance...');
         const rzp = new (window as any).Razorpay(options);
+        console.log('Razorpay instance created successfully');
+        
+        console.log('Opening Razorpay modal...');
         rzp.open();
         console.log('Razorpay modal opened successfully');
       } catch (razorpayError) {

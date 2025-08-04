@@ -65,6 +65,10 @@ class RazorpayProvider extends BasePaymentProvider {
     super();
     this.settings = gateway.settings as RazorpaySettings;
     
+    console.log('🔧 RazorpayProvider constructor called with gateway:', gateway);
+    console.log('🔧 Extracted settings:', this.settings);
+    console.log('🔧 Key ID:', this.settings?.key_id);
+    
     // Initialize Razorpay (client-side)
     if (typeof window !== 'undefined') {
       this.initializeRazorpay();
@@ -95,6 +99,15 @@ class RazorpayProvider extends BasePaymentProvider {
 
   async createPaymentRequest(request: PaymentRequest): Promise<PaymentProviderResponse> {
     try {
+      console.group('🔍 RAZORPAY PROVIDER DEBUG');
+      console.log('Request received:', request);
+      console.log('Gateway settings available:', {
+        key_id: this.settings.key_id,
+        has_key_secret: !!this.settings.key_secret,
+        environment: this.settings.environment || 'not set'
+      });
+      console.groupEnd();
+
       // Server-side order creation
       const orderData: RazorpayOrderRequest = {
         amount: this.convertToSmallestUnit(request.amount, request.currency),
@@ -107,12 +120,17 @@ class RazorpayProvider extends BasePaymentProvider {
         }
       };
 
+      console.log('📝 Order data for Razorpay:', orderData);
+
       // In a real implementation, this would be a server-side API call
       const order = await this.createRazorpayOrder(orderData);
 
       // For Razorpay, we don't redirect to another URL
       // Instead, we return data for the checkout page to open the Razorpay modal
-      return {
+      console.log('🎯 Creating Razorpay payment response with order:', order);
+      console.log('🎯 Settings key_id:', this.settings.key_id);
+      
+      const response = {
         success: true,
         paymentUrl: '', // No redirect URL needed
         orderId: request.id,
@@ -128,6 +146,16 @@ class RazorpayProvider extends BasePaymentProvider {
           modal: true // Indicates this should open a modal, not redirect
         }
       };
+      
+      console.log('🎯 Final payment response:', response);
+      console.log('🎯 Provider data validation:', {
+        hasKey: !!response.providerData.key,
+        hasOrderId: !!response.providerData.order_id,
+        hasAmount: !!response.providerData.amount,
+        modal: response.providerData.modal
+      });
+      
+      return response;
 
     } catch (error) {
       return {
