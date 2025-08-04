@@ -103,20 +103,29 @@ export const CheckoutPage: React.FC = () => {
           console.log('✅ Razorpay payment success:', response);
           setProcessing(false); // Stop processing on success
           
-          // Verify and update payment status in database
+          // Update payment status directly in database
           try {
-            console.log('🔄 Verifying payment and updating database...');
-            const verified = await PaymentStatusService.verifyAndUpdatePayment(
-              response.razorpay_payment_id,
-              response.razorpay_order_id,
-              response.razorpay_signature,
-              request.id
-            );
+            console.log('🔄 Updating payment status in database...');
             
-            if (verified) {
-              console.log('✅ Payment verified and database updated');
+            // Create payment status update data
+            const paymentUpdateData = {
+              paymentRequestId: request.id,
+              razorpayPaymentId: response.razorpay_payment_id,
+              razorpayOrderId: response.razorpay_order_id,
+              amount: request.amount,
+              currency: request.currency,
+              paymentMethod: 'card', // Default, will be updated by webhook
+              customerEmail: customer.email,
+              customerPhone: customer.phone
+            };
+
+            // Update database directly
+            const updateSuccess = await PaymentStatusService.updatePaymentStatus(paymentUpdateData);
+            
+            if (updateSuccess) {
+              console.log('✅ Payment status updated in database');
             } else {
-              console.warn('⚠️ Payment verification failed, but continuing...');
+              console.warn('⚠️ Payment status update failed, but continuing...');
             }
           } catch (statusError) {
             console.error('❌ Failed to update payment status:', statusError);
@@ -377,10 +386,20 @@ export const CheckoutPage: React.FC = () => {
 
       console.log('Payment provider response:', paymentData);
 
+      // Update payment request with gateway order ID (critical for Razorpay)  
+      if (paymentData.providerOrderId) {
+        console.log('🔄 Updating payment request with gateway_order_id:', paymentData.providerOrderId);
+        await paymentService.updatePaymentRequestStatus(
+          paymentRequest.id,
+          'pending',
+          { gateway_order_id: paymentData.providerOrderId }
+        );
+      }
+
       // Record payment attempt in database
       await paymentService.createPaymentTransaction({
         payment_request_id: paymentRequest.id,
-        gateway_transaction_id: paymentData.orderId,
+        gateway_transaction_id: paymentData.providerOrderId || paymentData.orderId, // Use provider order ID first
         amount: paymentRequest.amount,
         currency: paymentRequest.currency,
         status: 'pending',

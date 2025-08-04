@@ -234,7 +234,7 @@ app.post('/api/razorpay-webhook', async (req, res) => {
       });
 
       // Update payment transaction status
-      const { error: updateError } = await supabase
+      const { data: transactionUpdate, error: updateError } = await supabase
         .from('payment_transactions')
         .update({
           status: 'success',
@@ -247,12 +247,32 @@ app.post('/api/razorpay-webhook', async (req, res) => {
           },
           processed_at: new Date().toISOString()
         })
-        .eq('gateway_transaction_id', payment.id);
+        .eq('gateway_transaction_id', payment.id)
+        .select();
 
       if (updateError) {
         console.error('❌ Could not update transaction:', updateError);
       } else {
-        console.log('✅ Transaction updated successfully');
+        console.log('✅ Transaction updated successfully:', transactionUpdate?.length || 0, 'records');
+        
+        // Also update payment_requests table
+        if (transactionUpdate && transactionUpdate.length > 0) {
+          const transaction = transactionUpdate[0];
+          const { error: requestError } = await supabase
+            .from('payment_requests')
+            .update({
+              status: 'completed',
+              gateway_payment_id: payment.id,
+              completed_at: new Date().toISOString()
+            })
+            .eq('id', transaction.payment_request_id);
+            
+          if (requestError) {
+            console.error('❌ Could not update payment request:', requestError);
+          } else {
+            console.log('✅ Payment request updated successfully');
+          }
+        }
       }
     }
 
