@@ -679,7 +679,7 @@ Sent from KDADKS Contact Form
       currency: string;
       paymentMethod: string;
       transactionDate: string;
-      invoiceId?: string;
+      invoiceNumber?: string;
     }
   ): Promise<void> {
     try {
@@ -800,10 +800,10 @@ Lucknow, India
                 <span class="label">Transaction Date:</span>
                 <span class="value">${details.transactionDate}</span>
             </div>
-            ${details.invoiceId ? `
+            ${details.invoiceNumber ? `
             <div class="detail-row">
-                <span class="label">Invoice ID:</span>
-                <span class="value">${details.invoiceId}</span>
+                <span class="label">Invoice Number:</span>
+                <span class="value">${details.invoiceNumber}</span>
             </div>
             ` : ''}
         </div>
@@ -812,7 +812,7 @@ Lucknow, India
         
         <p>If you have any questions about this transaction, please don't hesitate to contact us:</p>
         <ul>
-            <li>Email: kdadks@outlook.com</li>
+            <li>Email: support@kdadks.com</li>
             <li>Phone: +91 7982303199</li>
         </ul>
         
@@ -849,7 +849,7 @@ Lucknow, India
         },
         body: JSON.stringify({
           to: recipientEmail,
-          from: 'kdadks@outlook.com',
+          from: 'support@kdadks.com',
           subject: `Payment Request - Invoice ${details.invoiceNumber} - ${this.formatCurrency(details.amount, details.currency)}`,
           text: this.generatePaymentRequestTextEmail(details),
           html: this.generatePaymentRequestHtmlEmail(details),
@@ -895,7 +895,7 @@ ${details.paymentUrl}
 
 This payment request will expire in 72 hours.
 
-If you have any questions, please contact us at kdadks@outlook.com or +91 7982303199.
+If you have any questions, please contact us at support@kdadks.com or +91 7982303199.
 
 Best regards,
 KDADKS Service Private Limited
@@ -1000,7 +1000,7 @@ www.kdadks.com
             
             <div class="contact-info">
                 <strong>Contact Information:</strong><br>
-                Email: kdadks@outlook.com<br>
+                Email: support@kdadks.com<br>
                 Phone: +91 7982303199
             </div>
         </div>

@@ -51,6 +51,14 @@ export interface PaymentRequest {
   invoice_id?: string;
   gateway_id?: string;
   gateway?: PaymentGateway;
+  invoice?: {
+    id: string;
+    invoice_number: string;
+    invoice_date: string;
+    due_date: string;
+    status: string;
+    payment_status: string;
+  };
   amount: number;
   currency: string;
   description?: string;

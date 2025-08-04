@@ -230,7 +230,15 @@ class PaymentService {
       .from('payment_requests')
       .select(`
         *,
-        gateway:payment_gateways(*)
+        gateway:payment_gateways(*),
+        invoice:invoices(
+          id,
+          invoice_number,
+          invoice_date,
+          due_date,
+          status,
+          payment_status
+        )
       `)
       .eq('id', id)
       .single();

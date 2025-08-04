@@ -143,7 +143,7 @@ export const CheckoutPage: React.FC = () => {
                 currency: paymentRequest.currency,
                 paymentMethod: 'Razorpay',
                 transactionDate: new Date().toLocaleDateString('en-IN'),
-                invoiceId: paymentRequest.invoice_id
+                invoiceNumber: paymentRequest.invoice?.invoice_number || paymentRequest.invoice_id
               });
               console.log('✅ Payment confirmation email sent');
             }

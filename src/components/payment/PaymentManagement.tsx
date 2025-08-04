@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import * as XLSX from 'xlsx';
 import { 
   CreditCard, 
   Plus, 
@@ -16,7 +17,8 @@ import {
   ArrowLeft,
   LogOut,
   Settings,
-  EyeOff
+  EyeOff,
+  RefreshCw
 } from 'lucide-react';
 import { paymentService } from '../../services/paymentService';
 import { supabase } from '../../config/supabase';
@@ -45,6 +47,7 @@ const PaymentManagement: React.FC<PaymentManagementProps> = ({
   const [gateways, setGateways] = useState<PaymentGateway[]>([]);
   const [analytics, setAnalytics] = useState<PaymentAnalytics | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
   // Modal states
@@ -128,14 +131,28 @@ const PaymentManagement: React.FC<PaymentManagementProps> = ({
     }
   };
 
-  const loadPaymentRequests = async () => {
+  const loadPaymentRequests = async (isManualRefresh = false) => {
     try {
+      if (isManualRefresh) {
+        setRefreshing(true);
+      }
       setError(null); // Clear any previous errors
       const response = await paymentService.getPaymentRequests(filters, currentPage, perPage);
       setPaymentRequests(response.data);
+      
+      if (isManualRefresh) {
+        showSuccess('Payment requests refreshed successfully!');
+      }
     } catch (err) {
       console.error('Failed to load payment requests:', err);
       setError(err instanceof Error ? err.message : 'Failed to load payment requests');
+      if (isManualRefresh) {
+        showError('Failed to refresh payment requests. Please try again.');
+      }
+    } finally {
+      if (isManualRefresh) {
+        setRefreshing(false);
+      }
     }
   };
 
@@ -461,10 +478,220 @@ KDADKS Service Private Limited`,
       }
       
       setShowCreateModal(false);
-      loadPaymentRequests();
+      loadPaymentRequests(true); // Refresh with success message
     } catch (err) {
       console.error('Failed to create payment request:', err);
       showError(err instanceof Error ? err.message : 'Failed to create payment request');
+    }
+  };
+
+  // Handle resending payment request
+  const handleResendPaymentRequest = async (request: PaymentRequest) => {
+    try {
+      if (!request.customer_email) {
+        showError('Cannot resend: No customer email found for this payment request.');
+        return;
+      }
+
+      // Get the payment links for this request
+      const paymentLinks = await paymentService.getPaymentLinksByRequest(request.id);
+
+      let paymentUrl = '';
+      if (paymentLinks.length > 0) {
+        // Use existing payment link
+        const existingLink = paymentLinks[0];
+        paymentUrl = existingLink.checkout_url || `${window.location.origin}/payment/${existingLink.link_token}`;
+      } else {
+        // Create new payment link
+        const paymentLink = await paymentService.createPaymentLink(request.id, 'email', {
+          payment_request_id: request.id,
+          link_type: 'email',
+          recipient_email: request.customer_email,
+          send_immediately: false
+        });
+        paymentUrl = paymentLink.checkout_url || `${window.location.origin}/payment/${paymentLink.link_token}`;
+      }
+
+      // Send email using the same template as create
+      const emailHtmlTemplate = `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Payment Request Reminder</title>
+</head>
+<body style="margin: 0; padding: 0; background-color: #f3f4f6; font-family: Arial, sans-serif;">
+    <div style="max-width: 600px; margin: 0 auto; background: #ffffff; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden;">
+        <!-- Header -->
+        <div style="background: #2563eb; padding: 20px; text-align: center;">
+            <h2 style="color: #ffffff; margin: 0; font-size: 24px; font-weight: 600;">Payment Request Reminder</h2>
+        </div>
+        
+        <!-- Body -->
+        <div style="padding: 30px;">
+            <p style="color: #374151; font-size: 16px; line-height: 1.6; margin: 0 0 20px 0;">Dear ${request.customer_name || 'Valued Customer'},</p>
+            
+            <p style="color: #374151; font-size: 16px; line-height: 1.6; margin: 0 0 25px 0;">This is a friendly reminder for your pending payment request from KDADKS Service Private Limited:</p>
+            
+            <!-- Payment Details Card -->
+            <div style="background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 25px; margin: 25px 0;">
+                <table style="width: 100%; border-collapse: collapse;">
+                    <tr>
+                        <td style="color: #6b7280; font-size: 14px; padding: 8px 0; border-bottom: 1px solid #e5e7eb;"><strong>Description:</strong></td>
+                        <td style="color: #111827; font-size: 14px; padding: 8px 0; border-bottom: 1px solid #e5e7eb; text-align: right;">${request.description || 'Payment Request'}</td>
+                    </tr>
+                    <tr>
+                        <td style="color: #6b7280; font-size: 14px; padding: 8px 0; border-bottom: 1px solid #e5e7eb;"><strong>Amount:</strong></td>
+                        <td style="color: #111827; font-size: 18px; font-weight: 600; padding: 8px 0; border-bottom: 1px solid #e5e7eb; text-align: right;">${formatCurrency(request.amount, request.currency)}</td>
+                    </tr>
+                    <tr>
+                        <td style="color: #6b7280; font-size: 14px; padding: 8px 0;"><strong>Request ID:</strong></td>
+                        <td style="color: #111827; font-size: 14px; padding: 8px 0; text-align: right; font-family: monospace;">${request.id}</td>
+                    </tr>
+                </table>
+            </div>
+            
+            <!-- Payment Button -->
+            <div style="text-align: center; margin: 30px 0;">
+                <table border="0" cellspacing="0" cellpadding="0" style="margin: 0 auto;">
+                    <tr>
+                        <td align="center" style="border-radius: 8px; background-color: #2563eb; padding: 0;">
+                            <a href="${paymentUrl}" 
+                               target="_blank" 
+                               style="font-size: 16px; 
+                                      font-family: Arial, Helvetica, sans-serif; 
+                                      color: #ffffff !important; 
+                                      text-decoration: none !important; 
+                                      border-radius: 8px; 
+                                      padding: 15px 30px; 
+                                      border: none;
+                                      display: inline-block; 
+                                      font-weight: bold;
+                                      background-color: #2563eb;
+                                      line-height: 20px;">
+                                💳 Pay Now
+                            </a>
+                        </td>
+                    </tr>
+                </table>
+            </div>
+            
+            <p style="color: #374151; font-size: 16px; line-height: 1.6; margin: 20px 0 0 0;">Please complete your payment at your earliest convenience. If you have any questions, please contact us.</p>
+        </div>
+        
+        <!-- Footer -->
+        <div style="background: #f9fafb; padding: 20px; text-align: center; border-top: 1px solid #e5e7eb;">
+            <p style="color: #6b7280; font-size: 12px; margin: 0;">
+                KDADKS Service Private Limited<br>
+                This is an automated reminder. Please do not reply to this email.
+            </p>
+        </div>
+    </div>
+</body>
+</html>`;
+
+      // Send reminder email
+      const emailResponse = await fetch('/.netlify/functions/send-email', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          to: request.customer_email,
+          from: 'support@kdadks.com',
+          subject: `Payment Reminder - ${formatCurrency(request.amount, request.currency)}`,
+          text: `Dear ${request.customer_name || 'Valued Customer'},
+
+This is a reminder for your pending payment request: ${formatCurrency(request.amount, request.currency)}
+
+Description: ${request.description || 'Payment Request'}
+Request ID: ${request.id}
+
+To complete your payment, please visit: ${paymentUrl}
+
+Best regards,
+KDADKS Service Private Limited`,
+          html: emailHtmlTemplate
+        }),
+      });
+
+      if (!emailResponse.ok) {
+        throw new Error(`Email sending failed: ${emailResponse.status}`);
+      }
+
+      showSuccess(`Payment request reminder sent to ${request.customer_email}`);
+    } catch (err) {
+      console.error('Failed to resend payment request:', err);
+      showError(err instanceof Error ? err.message : 'Failed to resend payment request');
+    }
+  };
+
+  // Handle export to Excel
+  const handleExportToExcel = () => {
+    try {
+      // Use filtered results if there's a search term, otherwise use all results
+      const dataToExport = searchTerm.trim() ? filteredPaymentRequests : paymentRequests;
+      
+      if (dataToExport.length === 0) {
+        showError('No payment requests to export');
+        return;
+      }
+
+      // Prepare data for export
+      const exportData = dataToExport.map(request => ({
+        'Request ID': request.id,
+        'Customer Name': request.customer_name || 'N/A',
+        'Customer Email': request.customer_email || 'N/A',
+        'Customer Phone': request.customer_phone || 'N/A',
+        'Amount': request.amount,
+        'Currency': request.currency,
+        'Description': request.description || 'N/A',
+        'Status': request.status.toUpperCase(),
+        'Created Date': new Date(request.created_at).toLocaleDateString(),
+        'Created Time': new Date(request.created_at).toLocaleTimeString(),
+        'Expires At': request.expires_at ? new Date(request.expires_at).toLocaleString() : 'No Expiry',
+        'Metadata': request.metadata ? JSON.stringify(request.metadata) : 'N/A'
+      }));
+
+      // Create a new workbook
+      const wb = XLSX.utils.book_new();
+      
+      // Create worksheet
+      const ws = XLSX.utils.json_to_sheet(exportData);
+      
+      // Auto-size columns
+      const cols = [
+        { wch: 10 }, // Request ID
+        { wch: 20 }, // Customer Name
+        { wch: 25 }, // Customer Email
+        { wch: 15 }, // Customer Phone
+        { wch: 12 }, // Amount
+        { wch: 8 },  // Currency
+        { wch: 30 }, // Description
+        { wch: 10 }, // Status
+        { wch: 12 }, // Created Date
+        { wch: 12 }, // Created Time
+        { wch: 18 }, // Expires At
+        { wch: 20 }  // Metadata
+      ];
+      ws['!cols'] = cols;
+
+      // Add worksheet to workbook
+      XLSX.utils.book_append_sheet(wb, ws, 'Payment Requests');
+      
+      // Generate filename with current date
+      const now = new Date();
+      const dateStr = now.toISOString().split('T')[0]; // YYYY-MM-DD format
+      const isFiltered = searchTerm.trim() ? '-filtered' : '';
+      const filename = `payment-requests${isFiltered}-${dateStr}.xlsx`;
+      
+      // Save file
+      XLSX.writeFile(wb, filename);
+      
+      showSuccess(`Payment requests exported to ${filename}`);
+    } catch (err) {
+      console.error('Export failed:', err);
+      showError('Failed to export payment requests');
     }
   };
 
@@ -472,15 +699,35 @@ KDADKS Service Private Limited`,
   const handleLogout = async () => {
     try {
       await simpleAuth.logout();
-      if (onBackToDashboard) {
-        onBackToDashboard();
-      } else {
-        window.location.href = '/';
-      }
+      // Always redirect to login page after logout, don't use onBackToDashboard
+      window.location.href = '/admin/login';
     } catch (err) {
       console.error('Logout failed:', err);
+      showError('Logout failed. Please try again.');
     }
   };
+
+  // Handle manual refresh of payment requests
+  const handleRefreshPaymentRequests = () => {
+    loadPaymentRequests(true);
+  };
+
+  // Filter payment requests based on search term
+  const filteredPaymentRequests = paymentRequests.filter(request => {
+    if (!searchTerm.trim()) return true;
+    
+    const searchLower = searchTerm.toLowerCase();
+    return (
+      request.customer_email?.toLowerCase().includes(searchLower) ||
+      request.customer_name?.toLowerCase().includes(searchLower) ||
+      request.customer_phone?.toLowerCase().includes(searchLower) ||
+      request.description?.toLowerCase().includes(searchLower) ||
+      request.id.toLowerCase().includes(searchLower) ||
+      request.status.toLowerCase().includes(searchLower) ||
+      request.currency.toLowerCase().includes(searchLower) ||
+      request.amount.toString().includes(searchTerm)
+    );
+  });
 
   // Helper function to check authentication
   const checkAuthentication = async () => {
@@ -813,7 +1060,7 @@ KDADKS Service Private Limited`,
                     <Search className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
                     <input
                       type="text"
-                      placeholder="Search by customer email..."
+                      placeholder="Search by email, name, phone, description, ID, status..."
                       value={searchTerm}
                       onChange={(e) => setSearchTerm(e.target.value)}
                       className="pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -855,7 +1102,19 @@ KDADKS Service Private Limited`,
                     New Request
                   </button>
                   
-                  <button className="inline-flex items-center px-4 py-2 border border-slate-300 rounded-lg shadow-sm text-sm font-medium text-slate-700 bg-white hover:bg-slate-50 transition-colors">
+                  <button 
+                    onClick={handleRefreshPaymentRequests}
+                    disabled={refreshing}
+                    className="inline-flex items-center px-4 py-2 border border-slate-300 rounded-lg shadow-sm text-sm font-medium text-slate-700 bg-white hover:bg-slate-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <RefreshCw className={`w-4 h-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
+                    {refreshing ? 'Refreshing...' : 'Refresh'}
+                  </button>
+                  
+                  <button 
+                    onClick={handleExportToExcel}
+                    className="inline-flex items-center px-4 py-2 border border-slate-300 rounded-lg shadow-sm text-sm font-medium text-slate-700 bg-white hover:bg-slate-50 transition-colors"
+                  >
                     <Download className="w-4 h-4 mr-2" />
                     Export
                   </button>
@@ -865,8 +1124,17 @@ KDADKS Service Private Limited`,
 
             {/* Payment Requests List */}
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-              <div className="px-6 py-4 border-b border-gray-200">
-                <h2 className="text-lg font-medium text-gray-900">Payment Requests</h2>
+              <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+                <div>
+                  <h2 className="text-lg font-medium text-gray-900">Payment Requests</h2>
+                  <p className="text-sm text-gray-500 mt-1">
+                    {searchTerm.trim() ? (
+                      <>Showing {filteredPaymentRequests.length} of {paymentRequests.length} requests</>
+                    ) : (
+                      <>{paymentRequests.length} total requests</>
+                    )}
+                  </p>
+                </div>
               </div>
               
               <div className="overflow-x-auto">
@@ -891,7 +1159,7 @@ KDADKS Service Private Limited`,
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {paymentRequests.map((request) => (
+                    {filteredPaymentRequests.map((request) => (
                       <tr key={request.id} className="hover:bg-gray-50">
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div>
@@ -928,7 +1196,11 @@ KDADKS Service Private Limited`,
                             <Eye className="w-4 h-4" />
                           </button>
                           {request.status === 'pending' && (
-                            <button className="text-green-600 hover:text-green-900">
+                            <button 
+                              onClick={() => handleResendPaymentRequest(request)}
+                              className="text-green-600 hover:text-green-900"
+                              title="Resend payment request email"
+                            >
                               <Send className="w-4 h-4" />
                             </button>
                           )}
@@ -1192,6 +1464,7 @@ const CreatePaymentRequestModal: React.FC<CreatePaymentRequestModalProps> = ({
   onSubmit
 }) => {
   // Note: _gateways and _invoices are prefixed with _ to indicate they're intentionally unused for now
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState<CreatePaymentRequestData>({
     amount: 0,
     currency: 'INR',
@@ -1202,9 +1475,18 @@ const CreatePaymentRequestModal: React.FC<CreatePaymentRequestModalProps> = ({
     expires_in_hours: 24
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    onSubmit(formData);
+    setIsSubmitting(true);
+    try {
+      await onSubmit(formData);
+      // onSubmit should handle closing the modal on success
+    } catch (error) {
+      // Error handling is done in the parent component
+      console.error('Form submission error:', error);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -1291,15 +1573,23 @@ const CreatePaymentRequestModal: React.FC<CreatePaymentRequestModalProps> = ({
               <button
                 type="button"
                 onClick={onClose}
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
+                disabled={isSubmitting}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Cancel
               </button>
               <button
                 type="submit"
-                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700"
+                disabled={isSubmitting}
+                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
               >
-                Create & Send
+                {isSubmitting && (
+                  <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                )}
+                {isSubmitting ? 'Creating...' : 'Create & Send'}
               </button>
             </div>
           </form>
