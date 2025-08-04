@@ -37,6 +37,8 @@ app.post('/api/create-razorpay-order', async (req, res) => {
     }
 
     // Get Razorpay gateway settings from database
+    console.log('Fetching gateway with ID:', gatewayId);
+    
     const { data: gateway, error: gatewayError } = await supabase
       .from('payment_gateways')
       .select('*')
@@ -45,14 +47,65 @@ app.post('/api/create-razorpay-order', async (req, res) => {
       .eq('is_active', true)
       .single();
 
+    console.log('Gateway query result:', { gateway, gatewayError });
+
     if (gatewayError || !gateway) {
       console.error('Gateway fetch error:', gatewayError);
-      return res.status(404).json({ error: 'Payment gateway not found' });
+      console.error('Available gateways check...');
+      
+      // Try to get all gateways for debugging
+      const { data: allGateways, error: allError } = await supabase
+        .from('payment_gateways')
+        .select('id, name, provider_type, is_active');
+        
+      console.log('All gateways:', allGateways);
+      console.log('All gateways error:', allError);
+      
+      // Fallback: Use mock gateway for development
+      if (allError || !allGateways || allGateways.length === 0) {
+        console.log('🔄 Using mock gateway for development testing...');
+        
+        const mockGateway = {
+          id: '550e8400-e29b-41d4-a716-446655440000',
+          name: 'Razorpay India (Test)',
+          provider_type: 'razorpay',
+          settings: {
+            key_id: 'rzp_test_9WVjBCTiCyayCR',
+            key_secret: 'REPLACE_WITH_YOUR_ACTUAL_SECRET',
+            webhook_secret: 'REPLACE_WITH_WEBHOOK_SECRET',
+            environment: 'test'
+          },
+          is_active: true,
+          is_sandbox: true
+        };
+        
+        console.log('Using mock gateway:', mockGateway.name);
+        console.log('Mock key_id:', mockGateway.settings.key_id);
+        
+        // Use mock gateway settings
+        gateway = mockGateway;
+      } else {
+        return res.status(404).json({ 
+          error: 'Payment gateway not found',
+          debug: {
+            gatewayId,
+            gatewayError: gatewayError?.message,
+            availableGateways: allGateways?.length || 0
+          }
+        });
+      }
     }
 
     const settings = gateway.settings;
     if (!settings.key_id || !settings.key_secret) {
       return res.status(500).json({ error: 'Payment gateway not properly configured' });
+    }
+
+    // Check if using mock credentials
+    if (settings.key_secret === 'REPLACE_WITH_YOUR_ACTUAL_SECRET') {
+      console.warn('⚠️  WARNING: Using mock credentials! Replace with actual Razorpay secret key.');
+      console.warn('⚠️  This will fail with real Razorpay API calls.');
+      console.warn('⚠️  Get your test credentials from: https://dashboard.razorpay.com/app/keys');
     }
 
     console.log('Using Razorpay credentials:', { key_id: settings.key_id });
