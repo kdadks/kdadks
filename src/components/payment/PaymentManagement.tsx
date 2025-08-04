@@ -1190,6 +1190,7 @@ const CreatePaymentRequestModal: React.FC<CreatePaymentRequestModalProps> = ({
   onClose,
   onSubmit
 }) => {
+  // Note: _gateways and _invoices are prefixed with _ to indicate they're intentionally unused for now
   const [formData, setFormData] = useState<CreatePaymentRequestData>({
     amount: 0,
     currency: 'INR',

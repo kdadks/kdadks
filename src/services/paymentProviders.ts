@@ -336,7 +336,7 @@ class RazorpayProvider extends BasePaymentProvider {
     };
   }
 
-  private async handleRefundCreated(refund: any): Promise<PaymentWebhookResult> {
+  private async handleRefundCreated(_refund: any): Promise<PaymentWebhookResult> {
     return {
       processed: true,
       action_taken: 'refund_created'
@@ -687,7 +687,7 @@ class PayPalProvider extends BasePaymentProvider {
     }
   }
 
-  private async createPayPalOrder(orderData: PayPalOrderRequest): Promise<PayPalOrderResponse> {
+  private async createPayPalOrder(_orderData: PayPalOrderRequest): Promise<PayPalOrderResponse> {
     // This would be a server-side API call to PayPal
     // Mock response for demo
     return {
@@ -777,7 +777,7 @@ class PayPalProvider extends BasePaymentProvider {
     }
   }
 
-  private async createPayPalRefund(captureId: string, amount: number, reason?: string): Promise<any> {
+  private async createPayPalRefund(captureId: string, amount: number, _reason?: string): Promise<any> {
     // Mock refund response
     return {
       id: `REFUND_${Date.now()}`,

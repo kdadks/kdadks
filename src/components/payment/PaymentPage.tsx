@@ -6,10 +6,8 @@ import {
   Clock, 
   AlertTriangle,
   ArrowLeft,
-  Receipt,
   Download,
   RefreshCw,
-  Eye,
   CreditCard
 } from 'lucide-react';
 import { paymentService } from '../../services/paymentService';

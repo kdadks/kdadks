@@ -3,7 +3,6 @@ import {
   FileText, 
   Download, 
   Mail, 
-  Printer,
   Calendar
 } from 'lucide-react';
 import type { Invoice } from '../../types/invoice';
@@ -45,10 +44,6 @@ const InvoiceGenerator: React.FC<InvoiceGeneratorProps> = ({
     }
   };
 
-  const handlePrintInvoice = () => {
-    window.print();
-  };
-
   if (!invoice) {
     return (
       <div className="text-center py-12">
@@ -82,13 +77,6 @@ const InvoiceGenerator: React.FC<InvoiceGeneratorProps> = ({
           >
             <Mail className="w-4 h-4 mr-2" />
             Email
-          </button>
-          <button
-            onClick={handlePrintInvoice}
-            className="flex items-center px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700"
-          >
-            <Printer className="w-4 h-4 mr-2" />
-            Print
           </button>
         </div>
       </div>

@@ -8,7 +8,6 @@ import {
   X, 
   Eye, 
   EyeOff,
-  Check,
   AlertCircle,
   CreditCard,
   Globe,

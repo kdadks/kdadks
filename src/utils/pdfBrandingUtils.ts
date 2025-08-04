@@ -169,7 +169,7 @@ export class PDFBrandingUtils {
     position: 'top-left' | 'top-right' | 'header' = 'top-right'
   ): Promise<void> {
     try {
-      const { pageWidth, leftMargin, rightMargin } = dimensions;
+      const { pageWidth: _pageWidth, leftMargin, rightMargin } = dimensions;
       
       // Create image element to get natural dimensions
       const img = new Image();

@@ -18,7 +18,6 @@ import type {
   PaymentFilters,
   PaymentAnalytics,
   PaginatedResponse,
-  PaymentServiceResponse,
   InvoicePaymentData
 } from '../types/payment';
 
@@ -138,7 +137,7 @@ class PaymentService {
     };
 
     // Remove expires_in_hours as it's not a database field
-    const { expires_in_hours, ...dbData } = paymentRequest;
+    const { expires_in_hours: _expires_in_hours, ...dbData } = paymentRequest;
 
     const { data: result, error } = await supabase
       .from('payment_requests')

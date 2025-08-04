@@ -18,7 +18,7 @@ export const ExchangeRateDisplay: React.FC<ExchangeRateDisplayProps> = ({
   const [currentRate, setCurrentRate] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [updating, setUpdating] = useState(false);
-  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [_lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [error, setError] = useState<string | null>(null);
   const { showSuccess, showError } = useToast();
 

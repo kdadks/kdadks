@@ -115,7 +115,7 @@ export class PDFBrandingService {
       const fileName = `${companyId}/${imageType}-${timestamp}.${extension}`;
 
       // Upload to Supabase Storage
-      const { data: uploadData, error: uploadError } = await supabase.storage
+      const { data: _uploadData, error: uploadError } = await supabase.storage
         .from('company-branding')
         .upload(fileName, file, {
           cacheControl: '3600',
