@@ -49,9 +49,17 @@ export const CheckoutPage: React.FC = () => {
     return new Promise((resolve, reject) => {
       // Ensure Razorpay script is loaded
       if (!(window as any).Razorpay) {
-        reject(new Error('Razorpay script not loaded'));
+        console.error('Razorpay script not loaded');
+        reject(new Error('Payment system not initialized. Please refresh and try again.'));
         return;
       }
+
+      console.log('Opening Razorpay modal with options:', {
+        key: providerData.key,
+        amount: providerData.amount,
+        currency: providerData.currency,
+        order_id: providerData.order_id
+      });
 
       const options = {
         key: providerData.key,
@@ -70,21 +78,29 @@ export const CheckoutPage: React.FC = () => {
         },
         handler: (response: any) => {
           console.log('Razorpay payment success:', response);
+          setProcessing(false); // Stop processing on success
           // Redirect to success page
           navigate(`/payment/success/${request.id}?payment_id=${response.razorpay_payment_id}`);
           resolve();
         },
         modal: {
           ondismiss: () => {
-            console.log('Razorpay modal dismissed');
-            setProcessing(false);
+            console.log('Razorpay modal dismissed by user');
+            setProcessing(false); // Stop processing on dismiss
             reject(new Error('Payment cancelled by user'));
           }
         }
       };
 
-      const rzp = new (window as any).Razorpay(options);
-      rzp.open();
+      try {
+        const rzp = new (window as any).Razorpay(options);
+        rzp.open();
+        console.log('Razorpay modal opened successfully');
+      } catch (razorpayError) {
+        console.error('Error opening Razorpay modal:', razorpayError);
+        setProcessing(false);
+        reject(new Error('Failed to open payment window. Please try again.'));
+      }
     });
   };
 
@@ -94,7 +110,16 @@ export const CheckoutPage: React.FC = () => {
       const script = document.createElement('script');
       script.src = 'https://checkout.razorpay.com/v1/checkout.js';
       script.async = true;
+      script.onload = () => {
+        console.log('Razorpay script loaded successfully');
+      };
+      script.onerror = () => {
+        console.error('Failed to load Razorpay script');
+        setError('Payment system failed to initialize. Please refresh the page and try again.');
+      };
       document.head.appendChild(script);
+    } else {
+      console.log('Razorpay script already loaded');
     }
   }, []);
 
@@ -213,6 +238,7 @@ export const CheckoutPage: React.FC = () => {
 
     setProcessing(true);
     setError(null);
+    let isRazorpayModal = false; // Track if we're opening Razorpay modal
 
     try {
       // Create payment provider instance
@@ -243,6 +269,10 @@ export const CheckoutPage: React.FC = () => {
         }
       } as PaymentRequest);
 
+      console.log('Payment provider response:', paymentData);
+      console.log('Selected gateway type:', selectedGateway.provider_type);
+      console.log('Provider data modal flag:', paymentData.providerData?.modal);
+
       // Record payment attempt in database
       await paymentService.createPaymentTransaction({
         payment_request_id: paymentRequest.id,
@@ -259,11 +289,16 @@ export const CheckoutPage: React.FC = () => {
         window.location.href = paymentData.paymentUrl;
       } else if (paymentData.providerData?.modal && selectedGateway.provider_type === 'razorpay') {
         // Razorpay modal payment
+        isRazorpayModal = true;
         try {
           await handleRazorpayModal(paymentData.providerData, customerInfo, paymentRequest);
+          // Note: setProcessing(false) is handled inside handleRazorpayModal
+          return; // Don't call setProcessing(false) in finally block
         } catch (modalError) {
           console.error('Razorpay modal error:', modalError);
           setError(modalError instanceof Error ? modalError.message : 'Payment modal failed');
+          setProcessing(false);
+          return;
         }
       } else if (paymentData.success) {
         // Payment completed immediately (rare case)
@@ -277,7 +312,10 @@ export const CheckoutPage: React.FC = () => {
       console.error('Payment processing error:', err);
       setError(err instanceof Error ? err.message : 'Payment processing failed');
     } finally {
-      setProcessing(false);
+      // Only set processing to false if we're not opening a Razorpay modal
+      if (!isRazorpayModal) {
+        setProcessing(false);
+      }
     }
   };
 
