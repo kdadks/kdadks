@@ -3725,8 +3725,8 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
                   </button>
                 )}
 
-                {/* Create Payment Request Button */}
-                {invoice.status !== 'cancelled' && invoice.payment_status !== 'paid' && (
+                {/* Create Payment Request Button - Only show for sent invoices that are unpaid */}
+                {invoice.status !== 'draft' && invoice.status !== 'cancelled' && invoice.payment_status !== 'paid' && (
                   <button 
                     onClick={() => handleCreatePaymentRequest(invoice)}
                     className="text-orange-600 hover:text-orange-900"
@@ -6237,6 +6237,11 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
                     CANCELLED
                   </span>
                 )}
+                {selectedInvoice?.payment_status === 'paid' && selectedInvoice?.status !== 'cancelled' && (
+                  <span className="ml-3 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                    PAID
+                  </span>
+                )}
               </h3>
               <button
                 onClick={() => setShowInvoicePreview(false)}
@@ -6259,8 +6264,19 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
                 </div>
               )}
               
+              {/* Paid Watermark Overlay */}
+              {selectedInvoice?.payment_status === 'paid' && selectedInvoice?.status !== 'cancelled' && (
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
+                  <div className="transform rotate-45 opacity-10">
+                    <div className="text-8xl font-bold text-green-600 select-none">
+                      PAID
+                    </div>
+                  </div>
+                </div>
+              )}
+              
               {/* Invoice Content */}
-              <div className={selectedInvoice?.status === 'cancelled' ? 'relative z-0' : ''}>
+              <div className={selectedInvoice?.status === 'cancelled' || selectedInvoice?.payment_status === 'paid' ? 'relative z-0' : ''}>
                 {renderInvoicePreviewContent()}
               </div>
             </div>
