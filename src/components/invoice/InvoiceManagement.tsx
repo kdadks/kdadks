@@ -23,6 +23,7 @@ import {
   Settings
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { supabase } from '../../config/supabase';
 import { invoiceService } from '../../services/invoiceService';
 import { paymentService } from '../../services/paymentService';
 import { EmailService } from '../../services/emailService';
@@ -3250,6 +3251,44 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
     }
   };
 
+  // Sync invoice status with completed payments
+  const handleSyncPaymentStatus = async (invoice: Invoice) => {
+    try {
+      setLoading(true);
+      showInfo('🔄 Checking payment status for this invoice...');
+
+      // Check if there are any completed payments for this invoice
+      const { data: payments, error } = await supabase
+        .from('payment_requests')
+        .select(`
+          *,
+          payment_transactions (*)
+        `)
+        .eq('invoice_id', invoice.id)
+        .eq('status', 'completed');
+
+      if (error) {
+        throw new Error(`Failed to check payment status: ${error.message}`);
+      }
+
+      if (payments && payments.length > 0) {
+        const completedPayment = payments[0];
+        showInfo('💳 Found completed payment - updating invoice status...');
+
+        // Update invoice status to paid
+        await handleUpdateInvoiceStatus(invoice, 'paid', 'paid');
+        showSuccess(`✅ Invoice ${invoice.invoice_number} has been synced and marked as paid!`);
+      } else {
+        showInfo('ℹ️ No completed payments found for this invoice.');
+      }
+    } catch (error) {
+      console.error('Failed to sync payment status:', error);
+      showError(`Failed to sync payment status: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Main tab render function
   // Main tab render function
   const openInvoiceSettingsModal = (mode: 'view' | 'edit' | 'add', settings?: InvoiceSettings) => {
@@ -3744,6 +3783,17 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
                     title="Mark as Paid"
                   >
                     <CheckCircle className="w-4 h-4" />
+                  </button>
+                )}
+
+                {/* Sync Payment Status Button - Only show for sent invoices that are pending */}
+                {invoice.status === 'sent' && invoice.payment_status === 'pending' && (
+                  <button 
+                    onClick={() => handleSyncPaymentStatus(invoice)}
+                    className="text-blue-600 hover:text-blue-900"
+                    title="Sync Payment Status"
+                  >
+                    <RefreshCw className="w-4 h-4" />
                   </button>
                 )}
                 
