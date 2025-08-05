@@ -1,5 +1,6 @@
 // Payment Status Update Service
 import { supabase } from '../config/supabase';
+import { paymentService } from './paymentService';
 
 export interface PaymentStatusUpdate {
   paymentRequestId: string;
@@ -97,7 +98,29 @@ export class PaymentStatusService {
 
       console.log('✅ payment_requests updated successfully:', requestUpdate);
 
-      // Step 3: Log the payment event
+      // Step 3: Update invoice status if there's an associated invoice
+      if (requestUpdate && requestUpdate.length > 0 && requestUpdate[0].invoice_id) {
+        try {
+          console.log('🔄 Updating invoice status to paid...');
+          
+          await paymentService.markInvoiceAsPaid(requestUpdate[0].invoice_id, {
+            amount: paymentData.amount,
+            currency: paymentData.currency,
+            paymentMethod: paymentData.paymentMethod,
+            referenceNumber: paymentData.razorpayPaymentId,
+            paymentDate: new Date().toISOString(),
+            gateway: 'razorpay',
+            transaction_id: paymentData.razorpayPaymentId
+          });
+          
+          console.log('✅ Invoice status updated to paid');
+        } catch (invoiceError) {
+          console.error('❌ Error updating invoice status:', invoiceError);
+          // Don't fail the payment update if invoice update fails
+        }
+      }
+
+      // Step 4: Log the payment event
       const { error: logError } = await supabase
         .from('payment_logs')
         .insert({
