@@ -741,6 +741,8 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
   };
 
   const handleShowPreview = () => {
+    // Clear any existing selected invoice to ensure we're in "creation preview" mode
+    setSelectedInvoice(null);
     setShowInvoicePreview(true);
   };
 
@@ -6282,12 +6284,13 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
             <div className="flex items-center justify-between mb-6">
               <h3 className="text-xl font-semibold text-slate-900">
                 Invoice Preview
-                {selectedInvoice?.status === 'cancelled' && (
+                {/* Only show status badges for saved invoices (when selectedInvoice exists and has an ID) */}
+                {selectedInvoice?.id && selectedInvoice?.status === 'cancelled' && (
                   <span className="ml-3 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
                     CANCELLED
                   </span>
                 )}
-                {selectedInvoice?.payment_status === 'paid' && selectedInvoice?.status !== 'cancelled' && (
+                {selectedInvoice?.id && selectedInvoice?.payment_status === 'paid' && selectedInvoice?.status !== 'cancelled' && (
                   <span className="ml-3 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
                     PAID
                   </span>
@@ -6303,8 +6306,9 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
 
             {/* Preview Content with Watermark */}
             <div className="max-h-[80vh] overflow-y-auto relative">
+              {/* Only show watermarks for saved invoices (when selectedInvoice exists and has an ID) */}
               {/* Cancelled Watermark Overlay */}
-              {selectedInvoice?.status === 'cancelled' && (
+              {selectedInvoice?.id && selectedInvoice?.status === 'cancelled' && (
                 <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
                   <div className="transform rotate-45 opacity-10">
                     <div className="text-8xl font-bold text-red-600 select-none">
@@ -6315,7 +6319,7 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
               )}
               
               {/* Paid Watermark Overlay */}
-              {selectedInvoice?.payment_status === 'paid' && selectedInvoice?.status !== 'cancelled' && (
+              {selectedInvoice?.id && selectedInvoice?.payment_status === 'paid' && selectedInvoice?.status !== 'cancelled' && (
                 <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
                   <div className="transform rotate-45 opacity-10">
                     <div className="text-8xl font-bold text-green-600 select-none">
@@ -6326,7 +6330,7 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
               )}
               
               {/* Invoice Content */}
-              <div className={selectedInvoice?.status === 'cancelled' || selectedInvoice?.payment_status === 'paid' ? 'relative z-0' : ''}>
+              <div className={selectedInvoice?.id && (selectedInvoice?.status === 'cancelled' || selectedInvoice?.payment_status === 'paid') ? 'relative z-0' : ''}>
                 {renderInvoicePreviewContent()}
               </div>
             </div>
