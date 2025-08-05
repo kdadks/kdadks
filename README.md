@@ -82,26 +82,26 @@ The website includes a comprehensive admin console with a full invoice managemen
   - Recent activity and pending payments
 
 - **Invoice Generation**: 
-  - Professional GST-compliant invoices
+  - Professional IGST-compliant invoices
   - Automatic invoice numbering (format: `INV/YYYY/MM/###`)
   - Multi-currency support based on customer country
   - Line item management with HSN/SAC codes
 
 - **Customer Management**:
-  - Complete customer database with GST details
+  - Complete customer database with IGST details
   - Address and contact information
   - Payment terms and credit limits
   - Country-specific settings
 
 - **Product/Service Catalog**:
   - Product database with descriptions
-  - HSN/SAC codes for GST compliance
+  - HSN/SAC codes for IGST compliance
   - Pricing and tax configuration
   - Active/inactive status management
 
 - **Business Settings**:
   - Company profile with branding
-  - GST/Tax configuration
+  - IGST/Tax configuration
   - Invoice templates and numbering
   - Terms and conditions templates
 

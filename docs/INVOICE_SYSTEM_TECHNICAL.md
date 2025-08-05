@@ -74,7 +74,7 @@ The Invoice Management System follows a layered architecture:
 
 ### Supporting Tables
 
-- **`customers`**: Customer information with GST details
+- **`customers`**: Customer information with IGST details
 - **`products`**: Products/services with HSN codes and pricing
 - **`company_settings`**: Company profiles with branding
 - **`invoice_settings`**: Invoice numbering and format settings
@@ -132,7 +132,7 @@ async generateInvoiceNumber(): Promise<string> {
 ### Tax Calculation
 
 ```typescript
-// Calculate taxes based on India's GST system
+// Calculate taxes based on India's IGST system
 calculateTaxes(item: InvoiceItem, customerState: string, companyState: string): {
   cgst: number;
   sgst: number;
@@ -141,7 +141,7 @@ calculateTaxes(item: InvoiceItem, customerState: string, companyState: string): 
   const baseAmount = item.quantity * item.unit_price;
   const taxRate = item.tax_rate / 100;
   
-  // Inter-state GST (IGST only)
+  // Inter-state IGST (IGST only)
   if (customerState !== companyState) {
     return {
       cgst: 0,
@@ -150,7 +150,7 @@ calculateTaxes(item: InvoiceItem, customerState: string, companyState: string): 
     };
   }
   
-  // Intra-state GST (CGST + SGST)
+  // Intra-state IGST (CGST + SGST)
   return {
     cgst: baseAmount * (taxRate / 2),
     sgst: baseAmount * (taxRate / 2),

@@ -1,7 +1,7 @@
 # Global HSN Code Implementation
 
 ## Overview
-Implemented global HSN code functionality for GST compliance in the invoice creation system. When a default product is selected from the top dropdown, its HSN code is automatically applied to all line items in the invoice.
+Implemented global HSN code functionality for IGST compliance in the invoice creation system. When a default product is selected from the top dropdown, its HSN code is automatically applied to all line items in the invoice.
 
 ## Features Implemented
 
@@ -78,18 +78,18 @@ Implemented global HSN code functionality for GST compliance in the invoice crea
 1. **Select Default Product**: Choose a product from the top dropdown
 2. **Automatic HSN Application**: HSN code is automatically applied to all line items
 3. **Add Line Items**: New items automatically inherit the global HSN code
-4. **Consistent GST Compliance**: All items in the invoice have the same HSN code for proper tax calculation
+4. **Consistent IGST Compliance**: All items in the invoice have the same HSN code for proper tax calculation
 
 ## Benefits
 
 - **Simplified UX**: Single point of HSN code selection
-- **GST Compliance**: Ensures consistent HSN codes across invoice items
+- **IGST Compliance**: Ensures consistent HSN codes across invoice items
 - **Error Reduction**: Eliminates need to manually set HSN code for each line item
 - **Efficiency**: Faster invoice creation with automatic HSN code propagation
 
 ## Notes
 
-- HSN code is applied globally to maintain GST compliance
+- HSN code is applied globally to maintain IGST compliance
 - Individual line item HSN codes are overridden by the global setting
 - Default product selection remains in the top section as requested
 - System maintains backward compatibility for invoices without default products

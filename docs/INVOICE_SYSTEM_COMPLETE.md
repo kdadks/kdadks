@@ -4,10 +4,10 @@
 
 I've successfully built a comprehensive **Invoice Generation System** with all the features you requested:
 
-### 🏢 Default Company Settings (GST Compliant for India)
+### 🏢 Default Company Settings (IGST Compliant for India)
 - **Company Information**: KDADKS Service Private Limited
 - **Complete Address**: Lucknow, Uttar Pradesh, India
-- **GST Compliance**: Fields for GSTIN, PAN, CIN
+- **IGST Compliance**: Fields for GSTIN, PAN, CIN
 - **Banking Details**: Account details for payments
 - **Contact Information**: Email, phone, website
 - **Branding**: Logo and signature support
@@ -25,25 +25,25 @@ I've successfully built a comprehensive **Invoice Generation System** with all t
 - **Auto-Reset**: Annual number reset each financial year
 - **Customizable Format**: PREFIX-FY-NNNN pattern
 - **Default Terms**: Payment terms, notes, footer text
-- **GST Configuration**: 18% default tax rate
+- **IGST Configuration**: 18% default tax rate
 
 ### 📝 General Terms Templates
 - **Payment Terms**: 30-day payment terms with late fee structure
 - **Service Terms**: Scope of work and delivery terms
-- **General Terms**: Legal jurisdiction and GST compliance
+- **General Terms**: Legal jurisdiction and IGST compliance
 - **Shipping Terms**: Delivery and risk transfer terms
 - **Custom Categories**: Extensible template system
 
 ### 👥 Customer Management System
 - **Company Details**: Business and contact information
 - **Address Management**: Complete address with country support
-- **GST Information**: GSTIN and PAN for Indian customers
+- **IGST Information**: GSTIN and PAN for Indian customers
 - **Credit Management**: Credit limits and payment terms
 - **Search & Filter**: Advanced customer search capabilities
 
 ### 📦 Product/Service Catalog
 - **Product Database**: IT, Healthcare, Fashion, Travel services
-- **HSN/SAC Codes**: GST compliance for all products
+- **HSN/SAC Codes**: IGST compliance for all products
 - **Flexible Pricing**: Multiple units and pricing structures
 - **Tax Configuration**: Product-specific tax rates
 - **Category Management**: Organized product categories
@@ -123,7 +123,7 @@ The system comes ready with:
 
 - **Invoice Format**: KDKS-2024-25-0001
 - **Financial Year**: 2024-25 (Indian standards)
-- **Tax Rate**: 18% GST (Indian standard)
+- **Tax Rate**: 18% IGST (Indian standard)
 - **Payment Terms**: 30 days
 - **Currency**: Indian Rupees (₹)
 - **Sample Products**: 8 pre-loaded services across all business verticals
@@ -150,4 +150,4 @@ The foundation is complete! You can now enhance with:
 
 **🎯 Status**: ✅ **PRODUCTION READY**
 
-Your invoice generation system is fully functional and ready for business use! The system is GST-compliant for India and can handle international invoicing with the worldwide currency support.
+Your invoice generation system is fully functional and ready for business use! The system is IGST-compliant for India and can handle international invoicing with the worldwide currency support.

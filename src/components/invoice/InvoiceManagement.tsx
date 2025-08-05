@@ -6060,7 +6060,7 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
                     const selectedCountry = countries.find(c => c.id === customerFormData.country_id);
                     const customerWithCountry = { country: selectedCountry } as Customer;
                     const taxRegLabel = getTaxRegistrationLabel(customerWithCountry);
-                    const isGST = getTaxLabel(customerWithCountry) === 'GST';
+                    const isIGST = getTaxLabel(customerWithCountry) === 'IGST';
                     
                     return (
                       <>
@@ -6073,9 +6073,9 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
                           onChange={(e) => handleCustomerFormChange('gstin', e.target.value.toUpperCase())}
                           disabled={customerModalMode === 'view'}
                           className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50"
-                          placeholder={isGST ? "e.g., 22AAAAA0000A1Z5" : "e.g., VAT123456789"}
-                          pattern={isGST ? "[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}" : undefined}
-                          maxLength={isGST ? 15 : 20}
+                          placeholder={isIGST ? "e.g., 22AAAAA0000A1Z5" : "e.g., VAT123456789"}
+                          pattern={isIGST ? "[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}" : undefined}
+                          maxLength={isIGST ? 15 : 20}
                         />
                       </>
                     );
@@ -6142,11 +6142,11 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
                   <ul className="text-xs text-blue-800 space-y-1">
                     <li>• <strong>Required Fields:</strong> Either Company Name or Contact Person is mandatory</li>
                     <li>• <strong>Email Validation:</strong> Valid email format required if provided</li>
-                    <li>• <strong>India (GST):</strong> GSTIN: 15 chars (e.g., 22AAAAA0000A1Z5), PAN: 10 chars (e.g., ABCDE1234F)</li>
+                    <li>• <strong>India (IGST):</strong> GSTIN: 15 chars (e.g., 22AAAAA0000A1Z5), PAN: 10 chars (e.g., ABCDE1234F)</li>
                     <li>• <strong>USA:</strong> Federal Tax ID/EIN format required for business customers</li>
                     <li>• <strong>UK:</strong> VAT number format validation for VAT-registered entities</li>
                     <li>• <strong>EU:</strong> EU VAT ID format compliance for cross-border transactions</li>
-                    <li>• <strong>Canada:</strong> GST/HST number format validation for registered businesses</li>
+                    <li>• <strong>Canada:</strong> IGST/HST number format validation for registered businesses</li>
                     <li>• <strong>Australia:</strong> ABN (Australian Business Number) format verification</li>
                     <li>• <strong>Singapore:</strong> UEN (Unique Entity Number) format for business registration</li>
                     <li>• <strong>UAE:</strong> TRN (Tax Registration Number) format for VAT compliance</li>

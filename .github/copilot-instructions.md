@@ -1,7 +1,7 @@
 # GitHub Copilot Instructions
 
 ## Project Overview
-This is a React/TypeScript business website for KDADKS Service Private Limited with a comprehensive invoice management system. The project combines a public marketing website with a secure admin dashboard featuring a full GST-compliant invoicing system.
+This is a React/TypeScript business website for KDADKS Service Private Limited with a comprehensive invoice management system. The project combines a public marketing website with a secure admin dashboard featuring a full IGST-compliant invoicing system.
 
 ## Architecture & Key Patterns
 
@@ -127,7 +127,7 @@ const currencyInfo = getCurrencyInfo(selectedCustomer);
 const formatted = formatCurrencyAmount(amount, currencyInfo);
 ```
 
-**GST Compliance**: Built for Indian tax requirements
+**IGST Compliance**: Built for Indian tax requirements
 - HSN/SAC codes on products
 - 18% default tax rate
 - GSTIN/PAN fields on customers/company
@@ -190,4 +190,4 @@ try {
 }
 ```
 
-This codebase prioritizes type safety, centralized data access, and clean separation between public marketing features and private admin functionality. The invoice system is production-ready with Indian GST compliance but can be extended for international use.
+This codebase prioritizes type safety, centralized data access, and clean separation between public marketing features and private admin functionality. The invoice system is production-ready with Indian IGST compliance but can be extended for international use.

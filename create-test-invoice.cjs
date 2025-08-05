@@ -73,7 +73,7 @@ async function createTestInvoice() {
         currency_code: 'INR',
         exchange_rate: 1.0,
         subtotal: 1000.00,
-        tax_amount: 180.00, // 18% GST
+        tax_amount: 180.00, // 18% IGST
         total_amount: 1180.00,
         inr_total_amount: 1180.00,
         status: 'sent', // Set to sent so it can receive payment requests

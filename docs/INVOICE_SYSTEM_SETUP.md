@@ -7,11 +7,11 @@ This guide will help you set up the comprehensive Invoice Generation System with
 ### ✅ Core Features Implemented
 
 1. **Database Schema** - Complete PostgreSQL/Supabase schema for invoicing
-2. **Company Settings** - GST-compliant biller settings for India
+2. **Company Settings** - IGST-compliant biller settings for India
 3. **Countries & Currencies** - Worldwide countries with their specific currencies
 4. **Invoice Settings** - Auto-generation of invoice formats based on financial year
 5. **Terms & Conditions** - General terms templates for invoices
-6. **Customer Management** - Customer database with GST details
+6. **Customer Management** - Customer database with IGST details
 7. **Product/Service Management** - Product catalog with HSN codes
 8. **Invoice Management** - Full invoice creation and management system
 
@@ -59,10 +59,10 @@ VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
 
 ## Features Overview
 
-### 🏢 Company Settings (GST Compliant for India)
+### 🏢 Company Settings (IGST Compliant for India)
 - Company name and legal details
 - Complete address information
-- GST Information (GSTIN, PAN, CIN)
+- IGST Information (GSTIN, PAN, CIN)
 - Banking details for payments
 - Logo and signature support
 
@@ -77,7 +77,7 @@ VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
 - **Customizable Formats**: PREFIX-FY-NNNN pattern
 - **Annual Reset**: Automatic number reset each financial year
 - **Default Terms**: Payment terms, notes, footer text
-- **GST Configuration**: Default tax rates and GST compliance
+- **IGST Configuration**: Default tax rates and IGST compliance
 
 ### 📝 Terms & Conditions Templates
 - Payment Terms
@@ -89,13 +89,13 @@ VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
 ### 👥 Customer Management
 - Company and contact information
 - Complete address with country support
-- GST details (GSTIN, PAN for Indian customers)
+- IGST details (GSTIN, PAN for Indian customers)
 - Credit limits and payment terms
 - Customer search and filtering
 
 ### 📦 Product/Service Management
 - Product catalog with descriptions
-- HSN/SAC codes for GST compliance
+- HSN/SAC codes for IGST compliance
 - Flexible pricing and units
 - Tax rate configuration per product
 - Category-wise organization
@@ -125,7 +125,7 @@ The system comes pre-configured with:
 - **Prefix**: KDKS
 - **Format**: KDKS-2024-25-0001
 - **Financial Year**: 2024-25 (Indian FY)
-- **GST Rate**: 18% (standard Indian rate)
+- **IGST Rate**: 18% (standard Indian rate)
 - **Payment Terms**: 30 days
 - **Currency**: Indian Rupees (₹)
 
@@ -167,4 +167,4 @@ For any issues or enhancements:
 
 ---
 
-**Note**: This is a production-ready invoice system with all necessary features for Indian GST compliance. The system is designed to be scalable and can be extended with additional features as needed.
+**Note**: This is a production-ready invoice system with all necessary features for Indian IGST compliance. The system is designed to be scalable and can be extended with additional features as needed.

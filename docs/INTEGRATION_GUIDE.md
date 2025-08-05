@@ -4,7 +4,7 @@ This guide explains how to integrate the KDADKS Invoice Management System into o
 
 ## Overview
 
-The KDADKS Invoice Management System is built as a modular component that can be integrated into any TypeScript project. It provides a full-featured GST-compliant invoice management system with customer management, product catalog, and business settings.
+The KDADKS Invoice Management System is built as a modular component that can be integrated into any TypeScript project. It provides a full-featured IGST-compliant invoice management system with customer management, product catalog, and business settings.
 
 ## Prerequisites
 
@@ -177,7 +177,7 @@ Update the company settings in Supabase:
 
 1. Upload your logo to a cloud storage service
 2. Update the `company_settings` table with your logo URL
-3. Update company information like name, address, and GST details
+3. Update company information like name, address, and IGST details
 
 ### Invoice Templates
 

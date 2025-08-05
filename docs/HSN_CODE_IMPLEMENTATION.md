@@ -73,17 +73,17 @@ Added HSN (Harmonized System of Nomenclature) code display to both the create in
 
 ## Benefits
 
-- **Compliance**: Ensures HSN codes are visible for GST compliance in India
+- **Compliance**: Ensures HSN codes are visible for IGST compliance in India
 - **Data Integrity**: Read-only field prevents accidental modification
 - **User Experience**: Automatic population reduces manual data entry
 - **Professional Look**: HSN codes are clearly displayed in invoice previews
 - **Validation**: Users are notified when products lack HSN codes
 
-## GST Compliance Features
+## IGST Compliance Features
 
 - **Mandatory Display**: HSN codes are now visible on invoice forms and previews
 - **Accurate Tracking**: Links to product master data for consistency
-- **Tax Documentation**: Supports proper GST filing and compliance
+- **Tax Documentation**: Supports proper IGST filing and compliance
 - **Audit Trail**: HSN codes are preserved in invoice records
 
 ## Future Enhancements
@@ -97,4 +97,4 @@ Added HSN (Harmonized System of Nomenclature) code display to both the create in
 
 **Implementation Date**: January 31, 2025
 **System**: KDADKS Invoice Management System
-**Compliance**: Indian GST Requirements
+**Compliance**: Indian IGST Requirements

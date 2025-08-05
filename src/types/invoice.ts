@@ -23,7 +23,7 @@ export interface CompanySettings {
   postal_code: string;
   country_id: string;
   
-  // GST Information (India specific)
+  // IGST Information (India specific)
   gstin?: string;
   pan?: string;
   cin?: string;
@@ -123,7 +123,7 @@ export interface Customer {
   postal_code?: string;
   country_id?: string;
   
-  // GST Information (if applicable)
+  // IGST Information (if applicable)
   gstin?: string;
   pan?: string;
   
@@ -184,7 +184,7 @@ export interface InvoiceItem {
   inr_line_total?: number;
   inr_tax_amount?: number;
   
-  // HSN/SAC for India GST
+  // HSN/SAC for India IGST
   hsn_code?: string;
   
   created_at: string;

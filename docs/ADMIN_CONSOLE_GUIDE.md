@@ -5,7 +5,7 @@ This guide provides comprehensive details about the KDADKS admin console with fo
 ## Overview
 
 The KDADKS admin console is a secure, feature-rich management interface that includes:
-- Complete invoice generation system (GST-compliant)
+- Complete invoice generation system (IGST-compliant)
 - Customer and product management
 - Business settings configuration
 - Real-time analytics and reporting
@@ -30,7 +30,7 @@ The dashboard provides an overview of key metrics:
 
 #### Features
 - Create, view, edit, and delete invoices
-- Professional GST-compliant invoice generation
+- Professional IGST-compliant invoice generation
 - Automatic invoice numbering (INV/YYYY/MM/###)
 - Multiple payment statuses and tracking
 - Bulk operations for efficient management
@@ -48,14 +48,14 @@ The dashboard provides an overview of key metrics:
 
 - Complete customer database with search and filter
 - Contact information and address management
-- GST details for Indian customers (GSTIN/PAN)
+- IGST details for Indian customers (GSTIN/PAN)
 - Payment terms and credit limits
 - Activity history and invoice tracking
 
 ### 4. Product/Service Catalog
 
 - Comprehensive product management
-- HSN/SAC codes for GST compliance
+- HSN/SAC codes for IGST compliance
 - Pricing and tax configuration
 - Units and descriptions
 - Active/inactive status management
@@ -63,7 +63,7 @@ The dashboard provides an overview of key metrics:
 ### 5. Company Settings
 
 - Business profile configuration
-- GST/Tax settings
+- IGST/Tax settings
 - Logo and branding elements
 - Bank account details
 - Contact information
@@ -93,9 +93,9 @@ The dashboard provides an overview of key metrics:
 - **Error Handling**: Comprehensive error management
 - **Session Management**: Secure session handling
 
-## GST Compliance
+## IGST Compliance
 
-The invoice system is fully GST compliant for Indian businesses:
+The invoice system is fully IGST compliant for Indian businesses:
 - HSN/SAC codes on products and services
 - GSTIN and PAN information for company and customers
 - Proper tax calculations (CGST/SGST/IGST)
@@ -122,7 +122,7 @@ The invoice system integrates with:
 ## Advanced Features
 
 - **Multi-currency Support**: Invoice in different currencies
-- **Tax Calculation**: Automatic GST/tax calculations
+- **Tax Calculation**: Automatic IGST/tax calculations
 - **Financial Year Logic**: Indian April-March financial year
 - **Automatic Numbering**: Smart invoice number generation
 - **Data Validation**: Comprehensive input validation

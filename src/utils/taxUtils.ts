@@ -7,19 +7,19 @@ import type { Customer, Country } from '../types/invoice';
 /**
  * Get the appropriate tax label based on customer's country
  * @param customer - The customer object with country information
- * @returns The tax label to display (GST for India, VAT for others)
+ * @returns The tax label to display (IGST for India, VAT for others)
  */
 export const getTaxLabel = (customer: Customer | undefined): string => {
-  // If no customer or no country information, default to GST
+  // If no customer or no country information, default to IGST
   if (!customer || !customer.country) {
-    return 'GST';
+    return 'IGST';
   }
 
   // Check if customer is from India (using country code)
   const countryCode = customer.country.code?.toUpperCase();
   
   if (countryCode === 'IND' || countryCode === 'IN') {
-    return 'GST';
+    return 'IGST';
   }
   
   // For all other countries, use VAT
@@ -46,7 +46,7 @@ export const getTaxRegistrationLabel = (customer: Customer | undefined): string 
     
     case 'CAN':
     case 'CA':
-      return 'GST/HST Number';
+      return 'IGST/HST Number';
     
     case 'AUS':
     case 'AU':
@@ -104,7 +104,7 @@ export const getTaxRegistrationLabel = (customer: Customer | undefined): string 
 export const getClassificationCodeLabel = (customer: Customer | undefined): string => {
   const taxLabel = getTaxLabel(customer);
   
-  if (taxLabel === 'GST') {
+  if (taxLabel === 'IGST') {
     return 'HSN Code';
   }
   
@@ -172,12 +172,12 @@ export const validateTaxRegistration = (
 
     case 'CAN':
     case 'CA': {
-      // Canada GST/HST: 123456789RT0001
+      // Canada IGST/HST: 123456789RT0001
       const canadaGstRegex = /^[0-9]{9}RT[0-9]{4}$/;
       if (!canadaGstRegex.test(cleanTaxNumber)) {
         return {
           isValid: false,
-          error: 'Please enter a valid Canadian GST/HST number (123456789RT0001)'
+          error: 'Please enter a valid Canadian IGST/HST number (123456789RT0001)'
         };
       }
       break;
@@ -311,12 +311,12 @@ export const validateTaxRegistration = (
 };
 
 /**
- * Check if country uses GST system
+ * Check if country uses IGST system
  * @param country - The country object
- * @returns True if country uses GST, false otherwise
+ * @returns True if country uses IGST, false otherwise
  */
 export const isGSTCountry = (country: Country | undefined): boolean => {
-  if (!country) return true; // Default to GST if no country
+  if (!country) return true; // Default to IGST if no country
   
   const countryCode = country.code?.toUpperCase();
   return countryCode === 'IND' || countryCode === 'IN';
@@ -334,7 +334,7 @@ export const getDefaultTaxRate = (customer: Customer | undefined): number => {
   switch (countryCode) {
     case 'IND':
     case 'IN':
-      return 18; // India GST standard rate
+      return 18; // India IGST standard rate
     
     case 'USA':
     case 'US':
@@ -342,15 +342,15 @@ export const getDefaultTaxRate = (customer: Customer | undefined): number => {
     
     case 'CAN':
     case 'CA':
-      return 13; // Canada average GST/HST
+      return 13; // Canada average IGST/HST
     
     case 'AUS':
     case 'AU':
-      return 10; // Australia GST
+      return 10; // Australia IGST
     
     case 'SGP':
     case 'SG':
-      return 7; // Singapore GST
+      return 7; // Singapore IGST
     
     case 'ARE':
     case 'AE':
