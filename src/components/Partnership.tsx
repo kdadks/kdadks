@@ -1,5 +1,6 @@
-import React, { useState } from 'react'
-import { Building, Target, Globe, ArrowLeft, Send, CheckCircle, TrendingUp, Users, Award } from 'lucide-react'
+import React, { useState, useRef } from 'react'
+import { Building, Target, Globe, ArrowLeft, Send, CheckCircle, TrendingUp, Users, Award, Shield } from 'lucide-react'
+import ReCaptcha, { ReCaptchaRef } from './ui/ReCaptcha'
 
 const Partnership = () => {
   const [selectedPartnership, setSelectedPartnership] = useState('')
@@ -18,6 +19,17 @@ const Partnership = () => {
     goals: ''
   })
   const [isSubmitted, setIsSubmitted] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [recaptchaToken, setRecaptchaToken] = useState<string | null>(null)
+  const recaptchaRef = useRef<ReCaptchaRef>(null)
+
+  const handleRecaptchaChange = (token: string | null) => {
+    setRecaptchaToken(token)
+  }
+
+  const handleRecaptchaExpired = () => {
+    setRecaptchaToken(null)
+  }
 
   const partnershipTypes = [
     {
@@ -106,28 +118,171 @@ const Partnership = () => {
     'Dedicated resources for partnership activities'
   ]
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    setIsSubmitted(true)
-    // Reset form after 3 seconds
-    setTimeout(() => {
-      setIsSubmitted(false)
-      setFormData({
-        name: '',
-        email: '',
-        phone: '',
-        company: '',
-        website: '',
-        industry: '',
-        partnershipType: '',
-        companySize: '',
-        revenue: '',
-        experience: '',
-        proposal: '',
-        goals: ''
+    
+    // Validate reCAPTCHA
+    if (!recaptchaToken) {
+      alert('Please complete the reCAPTCHA verification')
+      return
+    }
+
+    setIsSubmitting(true)
+    
+    try {
+      // Prepare email data
+      const emailData = {
+        to: 'support@kdadks.com',
+        subject: `Partnership Application - ${formData.partnershipType} - ${formData.company}`,
+        html: generateEmailHTML(),
+        recaptchaToken: recaptchaToken
+      }
+
+      // Send email
+      const response = await fetch('/api/send-email', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(emailData)
       })
-      setSelectedPartnership('')
-    }, 3000)
+
+      if (response.ok) {
+        setIsSubmitted(true)
+        // Reset form after 3 seconds
+        setTimeout(() => {
+          setIsSubmitted(false)
+          setFormData({
+            name: '',
+            email: '',
+            phone: '',
+            company: '',
+            website: '',
+            industry: '',
+            partnershipType: '',
+            companySize: '',
+            revenue: '',
+            experience: '',
+            proposal: '',
+            goals: ''
+          })
+          setSelectedPartnership('')
+          setRecaptchaToken(null)
+          recaptchaRef.current?.reset()
+        }, 3000)
+      } else {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Failed to send email')
+      }
+    } catch (error) {
+      console.error('Error sending email:', error)
+      alert(`Failed to send message: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      // Reset reCAPTCHA on error
+      setRecaptchaToken(null)
+      recaptchaRef.current?.reset()
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  const generateEmailHTML = () => {
+    const partnershipTypeNames = {
+      'technology': 'Technology Partnership',
+      'channel': 'Channel Partnership',
+      'strategic': 'Strategic Alliance',
+      'healthcare': 'Healthcare Partnership'
+    }
+    
+    return `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f9fafb;">
+        <div style="background-color: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
+          <div style="text-align: center; margin-bottom: 30px;">
+            <h1 style="color: #1f2937; margin: 0; font-size: 24px;">Partnership Application</h1>
+            <p style="color: #6b7280; margin: 10px 0 0 0;">New partnership application from Kdadks website</p>
+          </div>
+          
+          <div style="background-color: #ddd6fe; padding: 20px; border-radius: 6px; margin-bottom: 25px; border-left: 4px solid #8b5cf6;">
+            <h2 style="color: #374151; margin: 0 0 10px 0; font-size: 18px;">Partnership Type</h2>
+            <p style="color: #1f2937; margin: 0; font-size: 16px; font-weight: bold;">${partnershipTypeNames[formData.partnershipType as keyof typeof partnershipTypeNames] || formData.partnershipType}</p>
+          </div>
+
+          <div style="background-color: #f3f4f6; padding: 20px; border-radius: 6px; margin-bottom: 25px;">
+            <h2 style="color: #374151; margin: 0 0 15px 0; font-size: 18px;">Contact Information</h2>
+            <table style="width: 100%; border-collapse: collapse;">
+              <tr>
+                <td style="padding: 8px 0; font-weight: bold; color: #4b5563; width: 120px;">Name:</td>
+                <td style="padding: 8px 0; color: #1f2937;">${formData.name}</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px 0; font-weight: bold; color: #4b5563;">Email:</td>
+                <td style="padding: 8px 0; color: #1f2937;">${formData.email}</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px 0; font-weight: bold; color: #4b5563;">Phone:</td>
+                <td style="padding: 8px 0; color: #1f2937;">${formData.phone}</td>
+              </tr>
+              ${formData.website ? `
+              <tr>
+                <td style="padding: 8px 0; font-weight: bold; color: #4b5563;">Website:</td>
+                <td style="padding: 8px 0; color: #1f2937;"><a href="${formData.website}" style="color: #3b82f6;">${formData.website}</a></td>
+              </tr>
+              ` : ''}
+            </table>
+          </div>
+
+          <div style="background-color: #eff6ff; padding: 20px; border-radius: 6px; margin-bottom: 25px;">
+            <h2 style="color: #374151; margin: 0 0 15px 0; font-size: 18px;">Company Information</h2>
+            <table style="width: 100%; border-collapse: collapse;">
+              <tr>
+                <td style="padding: 8px 0; font-weight: bold; color: #4b5563; width: 120px;">Company:</td>
+                <td style="padding: 8px 0; color: #1f2937;">${formData.company}</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px 0; font-weight: bold; color: #4b5563;">Industry:</td>
+                <td style="padding: 8px 0; color: #1f2937;">${formData.industry}</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px 0; font-weight: bold; color: #4b5563;">Company Size:</td>
+                <td style="padding: 8px 0; color: #1f2937;">${formData.companySize}</td>
+              </tr>
+              ${formData.revenue ? `
+              <tr>
+                <td style="padding: 8px 0; font-weight: bold; color: #4b5563;">Revenue:</td>
+                <td style="padding: 8px 0; color: #1f2937;">${formData.revenue}</td>
+              </tr>
+              ` : ''}
+              <tr>
+                <td style="padding: 8px 0; font-weight: bold; color: #4b5563;">Experience:</td>
+                <td style="padding: 8px 0; color: #1f2937;">${formData.experience}</td>
+              </tr>
+            </table>
+          </div>
+
+          <div style="background-color: #f0fdf4; padding: 20px; border-radius: 6px; margin-bottom: 25px;">
+            <h2 style="color: #374151; margin: 0 0 15px 0; font-size: 18px;">Partnership Proposal</h2>
+            <div style="margin-bottom: 15px;">
+              <h3 style="color: #4b5563; margin: 0 0 8px 0; font-size: 14px; font-weight: bold;">Proposal:</h3>
+              <p style="color: #1f2937; margin: 0; line-height: 1.6; white-space: pre-wrap;">${formData.proposal}</p>
+            </div>
+            <div>
+              <h3 style="color: #4b5563; margin: 0 0 8px 0; font-size: 14px; font-weight: bold;">Goals:</h3>
+              <p style="color: #1f2937; margin: 0; line-height: 1.6; white-space: pre-wrap;">${formData.goals}</p>
+            </div>
+          </div>
+
+          <div style="background-color: #fef3c7; padding: 15px; border-radius: 6px; border-left: 4px solid #f59e0b;">
+            <p style="margin: 0; color: #92400e; font-size: 14px;">
+              <strong>Next Steps:</strong> Partnership team should review this application and schedule an initial discussion within 5-7 business days.
+            </p>
+          </div>
+
+          <div style="margin-top: 30px; text-align: center; color: #6b7280; font-size: 12px;">
+            <p style="margin: 0;">This email was sent from the Kdadks Partnership Application form</p>
+            <p style="margin: 5px 0 0 0;">Submitted on ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}</p>
+          </div>
+        </div>
+      </div>
+    `
   }
 
   const selectedPartnershipData = partnershipTypes.find(p => p.id === selectedPartnership)
@@ -453,12 +608,26 @@ const Partnership = () => {
                     </div>
                   </div>
 
+                  {/* reCAPTCHA */}
+                  <div className="flex flex-col items-center">
+                    <div className="flex items-center mb-2">
+                      <Shield className="w-4 h-4 text-gray-600 mr-2" />
+                      <span className="text-sm text-gray-600">Security Verification</span>
+                    </div>
+                    <ReCaptcha
+                      ref={recaptchaRef}
+                      onVerify={handleRecaptchaChange}
+                      onExpired={handleRecaptchaExpired}
+                    />
+                  </div>
+
                   <button
                     type="submit"
-                    className="w-full bg-primary-600 text-white py-3 px-4 rounded-md hover:bg-primary-700 transition-colors duration-200 flex items-center justify-center"
+                    disabled={!recaptchaToken || isSubmitting}
+                    className="w-full bg-primary-600 text-white py-3 px-4 rounded-md hover:bg-primary-700 transition-colors duration-200 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <Send className="w-4 h-4 mr-2" />
-                    Submit Partnership Application
+                    {isSubmitting ? 'Submitting...' : 'Submit Partnership Application'}
                   </button>
                 </form>
               </div>

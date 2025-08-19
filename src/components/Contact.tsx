@@ -1,7 +1,8 @@
-import React, { useState } from 'react'
-import { Mail, Phone, MapPin, Send, Clock, CheckCircle } from 'lucide-react'
+import React, { useState, useRef } from 'react'
+import { Mail, Phone, MapPin, Send, Clock, CheckCircle, Shield } from 'lucide-react'
 import { EmailService } from '../services/emailService'
 import { ContactFormData } from '../config/brevo'
+import ReCaptcha, { ReCaptchaRef } from './ui/ReCaptcha'
 
 const Contact = () => {
   const [formData, setFormData] = useState({
@@ -13,6 +14,16 @@ const Contact = () => {
   const [isSubmitted, setIsSubmitted] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState('')
+  const [recaptchaToken, setRecaptchaToken] = useState<string | null>(null)
+  const recaptchaRef = useRef<ReCaptchaRef>(null)
+
+  const handleRecaptchaChange = (token: string | null) => {
+    setRecaptchaToken(token)
+  }
+
+  const handleRecaptchaExpired = () => {
+    setRecaptchaToken(null)
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -20,6 +31,11 @@ const Contact = () => {
     setSubmitError('')
 
     try {
+      // Validate reCAPTCHA
+      if (!recaptchaToken) {
+        throw new Error('Please complete the reCAPTCHA verification')
+      }
+
       // Validate form data
       if (!formData.name.trim() || !formData.email.trim() || !formData.message.trim()) {
         throw new Error('Please fill in all required fields.')
@@ -37,6 +53,7 @@ const Contact = () => {
         email: formData.email.trim(),
         company: formData.company?.trim(),
         message: formData.message.trim(),
+        recaptchaToken: recaptchaToken
       }
 
       // Send email using Brevo service
@@ -49,6 +66,8 @@ const Contact = () => {
         company: '',
         message: '',
       })
+      setRecaptchaToken(null)
+      recaptchaRef.current?.reset()
       setIsSubmitted(true)
       setTimeout(() => setIsSubmitted(false), 5000)
     } catch (error) {
@@ -58,6 +77,9 @@ const Contact = () => {
           ? error.message
           : 'Failed to send message. Please try again or contact us directly at kdadks@outlook.com'
       )
+      // Reset reCAPTCHA on error
+      setRecaptchaToken(null)
+      recaptchaRef.current?.reset()
     } finally {
       setIsSubmitting(false)
     }
@@ -271,6 +293,19 @@ const Contact = () => {
                   />
                 </div>
 
+                {/* reCAPTCHA */}
+                <div className="flex flex-col items-center">
+                  <div className="flex items-center mb-2">
+                    <Shield className="w-4 h-4 text-gray-600 mr-2" />
+                    <span className="text-sm text-gray-600">Security Verification</span>
+                  </div>
+                  <ReCaptcha
+                    ref={recaptchaRef}
+                    onVerify={handleRecaptchaChange}
+                    onExpired={handleRecaptchaExpired}
+                  />
+                </div>
+
                 {submitError && (
                   <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
                     <p className="text-red-600 text-sm">{submitError}</p>
@@ -279,7 +314,7 @@ const Contact = () => {
 
                 <button
                   type="submit"
-                  disabled={isSubmitting}
+                  disabled={!recaptchaToken || isSubmitting}
                   className="w-full btn-primary flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isSubmitting ? (

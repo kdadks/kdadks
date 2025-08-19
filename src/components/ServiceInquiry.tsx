@@ -1,5 +1,6 @@
-import React, { useState } from 'react'
-import { Search, Laptop, Heart, Shirt, Car, ArrowLeft, Send, CheckCircle, Star } from 'lucide-react'
+import React, { useState, useRef } from 'react'
+import { Search, Laptop, Heart, Shirt, Car, ArrowLeft, Send, CheckCircle, Star, Shield } from 'lucide-react'
+import ReCaptcha, { ReCaptchaRef } from './ui/ReCaptcha'
 
 const ServiceInquiry = () => {
   const [selectedService, setSelectedService] = useState('')
@@ -15,6 +16,17 @@ const ServiceInquiry = () => {
     requirements: ''
   })
   const [isSubmitted, setIsSubmitted] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [recaptchaToken, setRecaptchaToken] = useState<string | null>(null)
+  const recaptchaRef = useRef<ReCaptchaRef>(null)
+
+  const handleRecaptchaChange = (token: string | null) => {
+    setRecaptchaToken(token)
+  }
+
+  const handleRecaptchaExpired = () => {
+    setRecaptchaToken(null)
+  }
 
   const services = [
     {
@@ -33,7 +45,6 @@ const ServiceInquiry = () => {
         'System Integration',
         'Database Management'
       ],
-      pricing: 'Starting from ₹50,000/project',
       timeline: '2-12 weeks depending on complexity'
     },
     {
@@ -52,7 +63,6 @@ const ServiceInquiry = () => {
         'Telemedicine',
         'Health Monitoring'
       ],
-      pricing: 'Consultation from ₹500',
       timeline: 'Same day to 1 week for appointments'
     },
     {
@@ -71,7 +81,6 @@ const ServiceInquiry = () => {
         'Western Wear',
         'Accessories'
       ],
-      pricing: 'Starting from ₹2,000/outfit',
       timeline: '1-3 weeks for custom orders'
     },
     {
@@ -90,30 +99,158 @@ const ServiceInquiry = () => {
         'Driver Services',
         'Travel Planning'
       ],
-      pricing: 'Starting from ₹15/km',
       timeline: 'Immediate to advance booking'
     }
   ]
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    setIsSubmitted(true)
-    // Reset form after 3 seconds
-    setTimeout(() => {
-      setIsSubmitted(false)
-      setFormData({
-        name: '',
-        email: '',
-        phone: '',
-        company: '',
-        serviceType: '',
-        budget: '',
-        timeline: '',
-        description: '',
-        requirements: ''
+    
+    // Validate reCAPTCHA
+    if (!recaptchaToken) {
+      alert('Please complete the reCAPTCHA verification')
+      return
+    }
+
+    setIsSubmitting(true)
+    
+    try {
+      // Prepare email data
+      const emailData = {
+        to: 'support@kdadks.com',
+        subject: `Service Inquiry - ${formData.serviceType || 'General'} - ${formData.name}`,
+        html: generateEmailHTML(),
+        recaptchaToken: recaptchaToken
+      }
+
+      // Send email
+      const response = await fetch('/api/send-email', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(emailData)
       })
-      setSelectedService('')
-    }, 3000)
+
+      if (response.ok) {
+        setIsSubmitted(true)
+        // Reset form after 3 seconds
+        setTimeout(() => {
+          setIsSubmitted(false)
+          setFormData({
+            name: '',
+            email: '',
+            phone: '',
+            company: '',
+            serviceType: '',
+            budget: '',
+            timeline: '',
+            description: '',
+            requirements: ''
+          })
+          setSelectedService('')
+          setRecaptchaToken(null)
+          recaptchaRef.current?.reset()
+        }, 3000)
+      } else {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Failed to send email')
+      }
+    } catch (error) {
+      console.error('Error sending email:', error)
+      alert(`Failed to send message: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      // Reset reCAPTCHA on error
+      setRecaptchaToken(null)
+      recaptchaRef.current?.reset()
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  const generateEmailHTML = () => {
+    const selectedServiceData = services.find(s => s.id === formData.serviceType)
+    
+    return `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f9fafb;">
+        <div style="background-color: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
+          <div style="text-align: center; margin-bottom: 30px;">
+            <h1 style="color: #1f2937; margin: 0; font-size: 24px;">Service Inquiry Submission</h1>
+            <p style="color: #6b7280; margin: 10px 0 0 0;">New service inquiry from Kdadks website</p>
+          </div>
+          
+          <div style="background-color: #f3f4f6; padding: 20px; border-radius: 6px; margin-bottom: 25px;">
+            <h2 style="color: #374151; margin: 0 0 15px 0; font-size: 18px;">Contact Information</h2>
+            <table style="width: 100%; border-collapse: collapse;">
+              <tr>
+                <td style="padding: 8px 0; font-weight: bold; color: #4b5563; width: 120px;">Name:</td>
+                <td style="padding: 8px 0; color: #1f2937;">${formData.name}</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px 0; font-weight: bold; color: #4b5563;">Email:</td>
+                <td style="padding: 8px 0; color: #1f2937;">${formData.email}</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px 0; font-weight: bold; color: #4b5563;">Phone:</td>
+                <td style="padding: 8px 0; color: #1f2937;">${formData.phone}</td>
+              </tr>
+              ${formData.company ? `
+              <tr>
+                <td style="padding: 8px 0; font-weight: bold; color: #4b5563;">Company:</td>
+                <td style="padding: 8px 0; color: #1f2937;">${formData.company}</td>
+              </tr>
+              ` : ''}
+            </table>
+          </div>
+
+          <div style="background-color: #eff6ff; padding: 20px; border-radius: 6px; margin-bottom: 25px;">
+            <h2 style="color: #374151; margin: 0 0 15px 0; font-size: 18px;">Service Details</h2>
+            <table style="width: 100%; border-collapse: collapse;">
+              <tr>
+                <td style="padding: 8px 0; font-weight: bold; color: #4b5563; width: 120px;">Service Type:</td>
+                <td style="padding: 8px 0; color: #1f2937;">${selectedServiceData?.title || formData.serviceType} (${selectedServiceData?.brand || ''})</td>
+              </tr>
+              ${formData.budget ? `
+              <tr>
+                <td style="padding: 8px 0; font-weight: bold; color: #4b5563;">Budget:</td>
+                <td style="padding: 8px 0; color: #1f2937;">${formData.budget}</td>
+              </tr>
+              ` : ''}
+              ${formData.timeline ? `
+              <tr>
+                <td style="padding: 8px 0; font-weight: bold; color: #4b5563;">Timeline:</td>
+                <td style="padding: 8px 0; color: #1f2937;">${formData.timeline}</td>
+              </tr>
+              ` : ''}
+            </table>
+          </div>
+
+          <div style="background-color: #f0fdf4; padding: 20px; border-radius: 6px; margin-bottom: 25px;">
+            <h2 style="color: #374151; margin: 0 0 15px 0; font-size: 18px;">Project Details</h2>
+            <div style="margin-bottom: 15px;">
+              <h3 style="color: #4b5563; margin: 0 0 8px 0; font-size: 14px; font-weight: bold;">Description:</h3>
+              <p style="color: #1f2937; margin: 0; line-height: 1.6; white-space: pre-wrap;">${formData.description}</p>
+            </div>
+            ${formData.requirements ? `
+            <div>
+              <h3 style="color: #4b5563; margin: 0 0 8px 0; font-size: 14px; font-weight: bold;">Specific Requirements:</h3>
+              <p style="color: #1f2937; margin: 0; line-height: 1.6; white-space: pre-wrap;">${formData.requirements}</p>
+            </div>
+            ` : ''}
+          </div>
+
+          <div style="background-color: #fef3c7; padding: 15px; border-radius: 6px; border-left: 4px solid #f59e0b;">
+            <p style="margin: 0; color: #92400e; font-size: 14px;">
+              <strong>Next Steps:</strong> Please follow up with the customer within 24 hours to discuss their requirements and provide a detailed proposal.
+            </p>
+          </div>
+
+          <div style="margin-top: 30px; text-align: center; color: #6b7280; font-size: 12px;">
+            <p style="margin: 0;">This email was sent from the Kdadks Service Inquiry form</p>
+            <p style="margin: 5px 0 0 0;">Submitted on ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}</p>
+          </div>
+        </div>
+      </div>
+    `
   }
 
   const selectedServiceData = services.find(s => s.id === selectedService)
@@ -205,15 +342,9 @@ const ServiceInquiry = () => {
                   </div>
                 </div>
 
-                <div className="grid md:grid-cols-2 gap-4">
-                  <div className="bg-green-50 p-4 rounded-lg">
-                    <h5 className="font-semibold text-green-800 mb-1">Pricing</h5>
-                    <p className="text-green-700 text-sm">{selectedServiceData.pricing}</p>
-                  </div>
-                  <div className="bg-blue-50 p-4 rounded-lg">
-                    <h5 className="font-semibold text-blue-800 mb-1">Timeline</h5>
-                    <p className="text-blue-700 text-sm">{selectedServiceData.timeline}</p>
-                  </div>
+                <div className="bg-blue-50 p-4 rounded-lg">
+                  <h5 className="font-semibold text-blue-800 mb-1">Timeline</h5>
+                  <p className="text-blue-700 text-sm">{selectedServiceData.timeline}</p>
                 </div>
               </div>
             </div>
@@ -369,12 +500,26 @@ const ServiceInquiry = () => {
                   />
                 </div>
 
+                {/* reCAPTCHA */}
+                <div className="flex flex-col items-center">
+                  <div className="flex items-center mb-2">
+                    <Shield className="w-4 h-4 text-gray-600 mr-2" />
+                    <span className="text-sm text-gray-600">Security Verification</span>
+                  </div>
+                  <ReCaptcha
+                    ref={recaptchaRef}
+                    onVerify={handleRecaptchaChange}
+                    onExpired={handleRecaptchaExpired}
+                  />
+                </div>
+
                 <button
                   type="submit"
-                  className="w-full bg-primary-600 text-white py-3 px-4 rounded-md hover:bg-primary-700 transition-colors duration-200 flex items-center justify-center"
+                  disabled={!recaptchaToken || isSubmitting}
+                  className="w-full bg-primary-600 text-white py-3 px-4 rounded-md hover:bg-primary-700 transition-colors duration-200 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <Send className="w-4 h-4 mr-2" />
-                  Submit Service Inquiry
+                  {isSubmitting ? 'Submitting...' : 'Submit Service Inquiry'}
                 </button>
               </form>
             )}

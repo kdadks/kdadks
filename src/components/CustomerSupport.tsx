@@ -1,5 +1,6 @@
-import React, { useState } from 'react'
-import { Headphones, Mail, Phone, MessageCircle, Clock, ArrowLeft, Send, CheckCircle } from 'lucide-react'
+import React, { useState, useRef } from 'react'
+import { Headphones, Mail, Phone, MessageCircle, Clock, ArrowLeft, Send, CheckCircle, Shield } from 'lucide-react'
+import ReCaptcha, { ReCaptchaRef } from './ui/ReCaptcha'
 
 const CustomerSupport = () => {
   const [formData, setFormData] = useState({
@@ -12,24 +13,159 @@ const CustomerSupport = () => {
     message: ''
   })
   const [isSubmitted, setIsSubmitted] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [recaptchaToken, setRecaptchaToken] = useState<string | null>(null)
+  const recaptchaRef = useRef<ReCaptchaRef>(null)
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleRecaptchaChange = (token: string | null) => {
+    setRecaptchaToken(token)
+  }
+
+  const handleRecaptchaExpired = () => {
+    setRecaptchaToken(null)
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    // Simulate form submission
-    setIsSubmitted(true)
-    // Reset form after 3 seconds
-    setTimeout(() => {
-      setIsSubmitted(false)
-      setFormData({
-        name: '',
-        email: '',
-        phone: '',
-        serviceType: '',
-        priority: 'medium',
-        subject: '',
-        message: ''
+    
+    // Validate reCAPTCHA
+    if (!recaptchaToken) {
+      alert('Please complete the reCAPTCHA verification')
+      return
+    }
+
+    setIsSubmitting(true)
+    
+    try {
+      // Prepare email data
+      const emailData = {
+        to: 'support@kdadks.com',
+        subject: `Customer Support Request - ${formData.priority.toUpperCase()} - ${formData.subject}`,
+        html: generateEmailHTML(),
+        recaptchaToken: recaptchaToken
+      }
+
+      // Send email
+      const response = await fetch('/api/send-email', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(emailData)
       })
-    }, 3000)
+
+      if (response.ok) {
+        setIsSubmitted(true)
+        // Reset form after 3 seconds
+        setTimeout(() => {
+          setIsSubmitted(false)
+          setFormData({
+            name: '',
+            email: '',
+            phone: '',
+            serviceType: '',
+            priority: 'medium',
+            subject: '',
+            message: ''
+          })
+          setRecaptchaToken(null)
+          recaptchaRef.current?.reset()
+        }, 3000)
+      } else {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Failed to send email')
+      }
+    } catch (error) {
+      console.error('Error sending email:', error)
+      alert(`Failed to send message: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      // Reset reCAPTCHA on error
+      setRecaptchaToken(null)
+      recaptchaRef.current?.reset()
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  const generateEmailHTML = () => {
+    const priorityColors = {
+      low: '#10b981',
+      medium: '#f59e0b', 
+      high: '#ef4444',
+      critical: '#dc2626'
+    }
+    
+    const serviceTypeNames = {
+      'it-consulting': 'IT Consulting (IT Wala)',
+      'healthcare': 'Healthcare (Ayuh Clinic)',
+      'fashion': 'Fashion (Nirchal)',
+      'travel': 'Travel (Raahirides)',
+      'general': 'General Inquiry'
+    }
+    
+    return `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f9fafb;">
+        <div style="background-color: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
+          <div style="text-align: center; margin-bottom: 30px;">
+            <h1 style="color: #1f2937; margin: 0; font-size: 24px;">Customer Support Request</h1>
+            <p style="color: #6b7280; margin: 10px 0 0 0;">New support request from Kdadks website</p>
+          </div>
+          
+          <div style="background-color: ${priorityColors[formData.priority as keyof typeof priorityColors]}; color: white; padding: 15px; border-radius: 6px; margin-bottom: 25px; text-align: center;">
+            <h2 style="margin: 0; font-size: 18px;">Priority: ${formData.priority.toUpperCase()}</h2>
+          </div>
+
+          <div style="background-color: #f3f4f6; padding: 20px; border-radius: 6px; margin-bottom: 25px;">
+            <h2 style="color: #374151; margin: 0 0 15px 0; font-size: 18px;">Contact Information</h2>
+            <table style="width: 100%; border-collapse: collapse;">
+              <tr>
+                <td style="padding: 8px 0; font-weight: bold; color: #4b5563; width: 120px;">Name:</td>
+                <td style="padding: 8px 0; color: #1f2937;">${formData.name}</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px 0; font-weight: bold; color: #4b5563;">Email:</td>
+                <td style="padding: 8px 0; color: #1f2937;">${formData.email}</td>
+              </tr>
+              ${formData.phone ? `
+              <tr>
+                <td style="padding: 8px 0; font-weight: bold; color: #4b5563;">Phone:</td>
+                <td style="padding: 8px 0; color: #1f2937;">${formData.phone}</td>
+              </tr>
+              ` : ''}
+            </table>
+          </div>
+
+          <div style="background-color: #eff6ff; padding: 20px; border-radius: 6px; margin-bottom: 25px;">
+            <h2 style="color: #374151; margin: 0 0 15px 0; font-size: 18px;">Support Request Details</h2>
+            <table style="width: 100%; border-collapse: collapse;">
+              <tr>
+                <td style="padding: 8px 0; font-weight: bold; color: #4b5563; width: 120px;">Service Type:</td>
+                <td style="padding: 8px 0; color: #1f2937;">${serviceTypeNames[formData.serviceType as keyof typeof serviceTypeNames] || formData.serviceType}</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px 0; font-weight: bold; color: #4b5563;">Subject:</td>
+                <td style="padding: 8px 0; color: #1f2937;">${formData.subject}</td>
+              </tr>
+            </table>
+          </div>
+
+          <div style="background-color: #f0fdf4; padding: 20px; border-radius: 6px; margin-bottom: 25px;">
+            <h2 style="color: #374151; margin: 0 0 15px 0; font-size: 18px;">Message</h2>
+            <p style="color: #1f2937; margin: 0; line-height: 1.6; white-space: pre-wrap;">${formData.message}</p>
+          </div>
+
+          <div style="background-color: #fef3c7; padding: 15px; border-radius: 6px; border-left: 4px solid #f59e0b;">
+            <p style="margin: 0; color: #92400e; font-size: 14px;">
+              <strong>Response Required:</strong> Please respond to this ${formData.priority} priority request within ${formData.priority === 'critical' ? '2 hours' : formData.priority === 'high' ? '8 hours' : '24 hours'}.
+            </p>
+          </div>
+
+          <div style="margin-top: 30px; text-align: center; color: #6b7280; font-size: 12px;">
+            <p style="margin: 0;">This email was sent from the Kdadks Customer Support form</p>
+            <p style="margin: 5px 0 0 0;">Submitted on ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}</p>
+          </div>
+        </div>
+      </div>
+    `
   }
 
   const supportChannels = [
@@ -279,12 +415,26 @@ const CustomerSupport = () => {
                   />
                 </div>
 
+                {/* reCAPTCHA */}
+                <div className="flex flex-col items-center">
+                  <div className="flex items-center mb-2">
+                    <Shield className="w-4 h-4 text-gray-600 mr-2" />
+                    <span className="text-sm text-gray-600">Security Verification</span>
+                  </div>
+                  <ReCaptcha
+                    ref={recaptchaRef}
+                    onVerify={handleRecaptchaChange}
+                    onExpired={handleRecaptchaExpired}
+                  />
+                </div>
+
                 <button
                   type="submit"
-                  className="w-full bg-primary-600 text-white py-3 px-4 rounded-md hover:bg-primary-700 transition-colors duration-200 flex items-center justify-center"
+                  disabled={!recaptchaToken || isSubmitting}
+                  className="w-full bg-primary-600 text-white py-3 px-4 rounded-md hover:bg-primary-700 transition-colors duration-200 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <Send className="w-4 h-4 mr-2" />
-                  Submit Support Request
+                  {isSubmitting ? 'Submitting...' : 'Submit Support Request'}
                 </button>
               </form>
             )}

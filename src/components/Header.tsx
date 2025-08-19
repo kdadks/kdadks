@@ -1,9 +1,12 @@
 import React, { useState, useEffect } from 'react'
 import { Menu, X } from 'lucide-react'
+import { useNavigate, useLocation } from 'react-router-dom'
 
 const Header = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [isScrolled, setIsScrolled] = useState(false)
+  const navigate = useNavigate()
+  const location = useLocation()
 
   useEffect(() => {
     const handleScroll = () => {
@@ -13,18 +16,56 @@ const Header = () => {
     return () => window.removeEventListener('scroll', handleScroll)
   }, [])
 
-  const handleNavLinkClick = (e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
-    if (href === '#team') {
-      window.scrollTo(0, 0); // Scroll to top for the Team page
+  // Handle scrolling to sections when the hash changes
+  useEffect(() => {
+    if (location.hash && location.pathname === '/') {
+      const element = document.querySelector(location.hash)
+      if (element) {
+        setTimeout(() => {
+          element.scrollIntoView({ behavior: 'smooth' })
+        }, 100)
+      }
     }
-    setIsMenuOpen(false); // Close mobile menu on click
-  };
+  }, [location.hash, location.pathname])
+
+  // Scroll to top when navigating to a new page (without hash)
+  useEffect(() => {
+    if (!location.hash) {
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+    }
+  }, [location.pathname])
+
+  const handleNavLinkClick = (e: React.MouseEvent<HTMLElement>, href: string) => {
+    e.preventDefault()
+    setIsMenuOpen(false) // Close mobile menu on click
+    
+    if (href === '/' || href === '#home') {
+      // Go to home page
+      navigate('/')
+    } else if (href === '/team') {
+      // Navigate to team page
+      navigate('/team')
+    } else if (href.startsWith('#')) {
+      // Handle hash links for sections on home page
+      if (location.pathname !== '/') {
+        // If not on home page, go to home page with hash
+        navigate('/' + href)
+      } else {
+        // If on home page, scroll to section
+        navigate(href)
+        const element = document.querySelector(href)
+        if (element) {
+          element.scrollIntoView({ behavior: 'smooth' })
+        }
+      }
+    }
+  }
 
   const navigation = [
-    { name: 'Home', href: '#home' },
+    { name: 'Home', href: '/' },
     { name: 'About', href: '#about' },
     { name: 'Services', href: '#services' },
-    { name: 'Team', href: '#team' },
+    { name: 'Team', href: '/team' },
     { name: 'Contact', href: '#contact' },
   ]
 
@@ -42,8 +83,8 @@ const Header = () => {
         <div className="flex items-center justify-between h-16 md:h-20">
           {/* Logo */}
           <div className="flex-shrink-0">
-            <a
-              href="#home"
+            <button
+              onClick={() => navigate('/')}
               className="flex items-center space-x-2 hover:scale-105 transition-transform duration-200"
               aria-label="Kdadks Home"
             >
@@ -55,7 +96,7 @@ const Header = () => {
               <span className={`text-2xl font-bold ${isScrolled ? 'text-gradient' : 'text-white drop-shadow-sm'}`}>
                 Kdadks
               </span>
-            </a>
+            </button>
           </div>
 
           {/* Desktop Navigation */}
@@ -80,13 +121,13 @@ const Header = () => {
 
           {/* CTA Button */}
           <div className="hidden md:block">
-            <a
-              href="#contact"
+            <button
+              onClick={(e) => handleNavLinkClick(e, '#contact')}
               className="btn-primary"
               aria-label="Get started with Kdadks services - Contact us"
             >
               Get Started
-            </a>
+            </button>
           </div>
 
           {/* Mobile menu button */}
@@ -128,15 +169,14 @@ const Header = () => {
                 </a>
               ))}
               <div className="pt-2" role="none">
-                <a
-                  href="#contact"
+                <button
+                  onClick={(e) => handleNavLinkClick(e, '#contact')}
                   className="block w-full text-center btn-primary"
-                  onClick={() => setIsMenuOpen(false)}
                   role="menuitem"
                   aria-label="Get started with Kdadks services - Contact us"
                 >
                   Get Started
-                </a>
+                </button>
               </div>
             </nav>
           </div>

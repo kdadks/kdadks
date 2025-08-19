@@ -19,6 +19,7 @@ import BookConsultation from './BookConsultation'
 import Partnership from './Partnership'
 import SEO from './SEO'
 import SEOContent from './SEOContent'
+import ScrollToTop from './ScrollToTop'
 import AdminLogin from './admin/AdminLogin'
 import SimpleAdminDashboard from './admin/SimpleAdminDashboard'
 import { ToastProvider } from './ui/ToastProvider'
@@ -139,6 +140,7 @@ const PartnershipPage = () => (
 const Router = () => {
   return (
     <BrowserRouter>
+      <ScrollToTop />
       <ToastProvider>
         <Routes>
           {/* Main site routes */}

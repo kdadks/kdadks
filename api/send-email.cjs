@@ -1,4 +1,47 @@
 const nodemailer = require('nodemailer');
+const fetch = require('node-fetch');
+
+// Function to verify reCAPTCHA token
+async function verifyRecaptcha(token) {
+  const secretKey = process.env.VITE_RECAPTCHA_SECRET_KEY;
+  
+  if (!secretKey) {
+    console.warn('⚠️ reCAPTCHA secret key not configured - skipping verification');
+    return { success: true, bypass: true }; // Allow in development
+  }
+
+  if (!token) {
+    return { success: false, error: 'reCAPTCHA token is required' };
+  }
+
+  try {
+    const response = await fetch('https://www.google.com/recaptcha/api/siteverify', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: `secret=${secretKey}&response=${token}`
+    });
+
+    const data = await response.json();
+    
+    if (data.success) {
+      return { success: true, score: data.score };
+    } else {
+      return { 
+        success: false, 
+        error: 'reCAPTCHA verification failed',
+        details: data['error-codes'] 
+      };
+    }
+  } catch (error) {
+    console.error('reCAPTCHA verification error:', error);
+    return { 
+      success: false, 
+      error: 'reCAPTCHA verification service unavailable' 
+    };
+  }
+}
 
 // For local development - this will be used when running on localhost:3001
 module.exports = async (req, res) => {
@@ -20,7 +63,24 @@ module.exports = async (req, res) => {
   }
 
   try {
-    const { to, from, subject, text, html } = req.body;
+    const { to, from, subject, text, html, recaptchaToken } = req.body;
+
+    // Verify reCAPTCHA first
+    const recaptchaResult = await verifyRecaptcha(recaptchaToken);
+    if (!recaptchaResult.success) {
+      console.error('❌ reCAPTCHA verification failed:', recaptchaResult.error);
+      res.status(400).json({ 
+        error: recaptchaResult.error || 'reCAPTCHA verification failed',
+        details: recaptchaResult.details
+      });
+      return;
+    }
+
+    if (recaptchaResult.bypass) {
+      console.log('⚠️ reCAPTCHA verification bypassed for development');
+    } else {
+      console.log('✅ reCAPTCHA verification successful');
+    }
 
     // Validate required fields
     if (!to || !subject || (!text && !html)) {
