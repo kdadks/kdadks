@@ -39,37 +39,87 @@ const ReCaptchaEnterprise = forwardRef<ReCaptchaEnterpriseRef, ReCaptchaEnterpri
   // Get reCAPTCHA site key from environment variables
   const siteKey = import.meta.env.VITE_RECAPTCHA_SITE_KEY
 
+  // Debug: Log the site key to console
+  console.log('🔍 ReCAPTCHA Debug:', {
+    siteKey: siteKey,
+    hasKey: !!siteKey,
+    env: import.meta.env.MODE
+  });
+
   useEffect(() => {
     // Wait for grecaptcha to be available
     const checkRecaptcha = () => {
-      if (window.grecaptcha && window.grecaptcha.enterprise) {
-        window.grecaptcha.enterprise.ready(() => {
-          setIsReady(true)
-        })
+      console.log('🔍 Checking reCAPTCHA availability:', {
+        grecaptcha: !!window.grecaptcha,
+        enterprise: !!window.grecaptcha?.enterprise,
+        ready: !!window.grecaptcha?.enterprise?.ready,
+        siteKey: siteKey
+      });
+      
+      if (window.grecaptcha && window.grecaptcha.enterprise && siteKey) {
+        console.log('✅ reCAPTCHA Enterprise found, calling ready...');
+        
+        try {
+          // Try to render the recaptcha explicitly first (this might help with the site key issue)
+          window.grecaptcha.enterprise.ready(() => {
+            console.log('✅ reCAPTCHA Enterprise ready callback executed');
+            
+            // Test if we can call execute immediately to check for site key issues
+            console.log('🧪 Testing site key by attempting execute...');
+            window.grecaptcha.enterprise.execute(siteKey, { action: 'test' })
+              .then(() => {
+                console.log('✅ Site key test successful');
+                setIsReady(true);
+              })
+              .catch((testError) => {
+                console.error('❌ Site key test failed:', testError);
+                console.log('🔄 Setting ready anyway for fallback handling');
+                setIsReady(true);
+              });
+          })
+        } catch (error) {
+          console.error('❌ Error in grecaptcha.enterprise.ready:', error);
+          // Fallback - just set ready to true
+          setTimeout(() => {
+            console.log('🔄 Fallback: Setting ready to true after delay');
+            setIsReady(true);
+          }, 2000);
+        }
       } else {
-        // Retry after a short delay
-        setTimeout(checkRecaptcha, 100)
+        console.log('⏳ reCAPTCHA not ready yet, retrying in 500ms...');
+        setTimeout(checkRecaptcha, 500)
       }
     }
-    
+
     checkRecaptcha()
-  }, [])
+  }, [siteKey])
 
   const executeRecaptcha = async (): Promise<string | null> => {
+    console.log('🚀 executeRecaptcha called:', { siteKey, action, isReady });
+    
     if (!siteKey) {
       const error = 'reCAPTCHA site key not configured'
+      console.log('❌ No site key:', error);
       onError?.(error)
       return null
     }
 
     if (!isReady) {
       const error = 'reCAPTCHA not ready yet'
+      console.log('❌ Not ready:', error, { 
+        grecaptchaExists: !!window.grecaptcha,
+        enterpriseExists: !!window.grecaptcha?.enterprise 
+      });
       onError?.(error)
       return null
     }
 
     if (!window.grecaptcha?.enterprise) {
       const error = 'reCAPTCHA Enterprise not loaded'
+      console.log('❌ Enterprise not loaded:', error, {
+        grecaptcha: !!window.grecaptcha,
+        enterprise: !!window.grecaptcha?.enterprise
+      });
       onError?.(error)
       return null
     }
@@ -77,10 +127,13 @@ const ReCaptchaEnterprise = forwardRef<ReCaptchaEnterpriseRef, ReCaptchaEnterpri
     setIsExecuting(true)
     
     try {
+      console.log('🔄 Calling grecaptcha.enterprise.execute...', { siteKey, action });
       const token = await window.grecaptcha.enterprise.execute(siteKey, { action })
+      console.log('✅ Token received:', { tokenLength: token?.length, tokenPreview: token?.substring(0, 20) + '...' });
       onVerify(token)
       return token
     } catch (error) {
+      console.log('❌ Execute error:', error);
       const errorMessage = error instanceof Error ? error.message : 'reCAPTCHA execution failed'
       onError?.(errorMessage)
       return null

@@ -14,6 +14,15 @@ build/
 .env.development.local
 .env.test.local
 .env.production.local
+.env.development.backup
+
+# Google Cloud Credentials
+etc/credentials/
+*.json
+!package.json
+!package-lock.json
+!tsconfig.json
+!tsconfig.node.json
 
 # IDE
 .vscode/
@@ -26,15 +35,44 @@ Thumbs.db
 # Logs
 *.log
 
-# Prevent documentation and test files in root
-/*.md
-!README.md
+# Development, Testing, and Debug Files
 /test-*
 /check-*
 /debug-*
 /fix-*
 /investigate-*
 /manual-*
-/server.*
+/setup-*
+/quick-*
+/create-*
+/verify-*
 /validate-*
-/*.sql
+*.cjs
+!vite.config.ts
+!postcss.config.js
+!tailwind.config.js
+*.ps1
+
+# Temporary Documentation and Status Files
+/*.md
+!README.md
+!CONTRIBUTING.md
+!CHANGELOG.md
+/PAYMENT_*.md
+/RECAPTCHA_*.md
+/WEBHOOK_*.md
+/WINDOWS_*.md
+/FIND_*.md
+/GOOGLE_*.md
+/PRODUCTION_*.md
+
+# SQL Files
+*.sql
+
+# Deployment Scripts (keep production ones)
+deploy.sh
+!deploy-production.sh
+!deploy-production.bat
+
+# Development Server
+dev-server.cjs
