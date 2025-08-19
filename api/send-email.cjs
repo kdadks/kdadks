@@ -26,19 +26,36 @@ async function verifyRecaptcha(token) {
     const data = await response.json();
     
     if (data.success) {
+      console.log('✅ reCAPTCHA verification successful');
       return { success: true, score: data.score };
     } else {
+      console.error('❌ reCAPTCHA verification failed:', data['error-codes']);
+      
+      // Handle specific error codes
+      const errorCodes = data['error-codes'] || [];
+      let errorMessage = 'reCAPTCHA verification failed';
+      
+      if (errorCodes.includes('invalid-input-secret')) {
+        errorMessage = 'Invalid reCAPTCHA secret key - please check your configuration';
+      } else if (errorCodes.includes('invalid-input-response')) {
+        errorMessage = 'Invalid reCAPTCHA token - please try again';
+      } else if (errorCodes.includes('bad-request')) {
+        errorMessage = 'reCAPTCHA request malformed - please check configuration';
+      } else if (errorCodes.includes('timeout-or-duplicate')) {
+        errorMessage = 'reCAPTCHA token expired or already used - please try again';
+      }
+      
       return { 
         success: false, 
-        error: 'reCAPTCHA verification failed',
-        details: data['error-codes'] 
+        error: errorMessage,
+        details: errorCodes 
       };
     }
   } catch (error) {
-    console.error('reCAPTCHA verification error:', error);
+    console.error('🚨 reCAPTCHA verification service error:', error);
     return { 
       success: false, 
-      error: 'reCAPTCHA verification service unavailable' 
+      error: 'reCAPTCHA verification service unavailable - please try again later' 
     };
   }
 }

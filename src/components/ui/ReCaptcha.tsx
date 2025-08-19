@@ -7,6 +7,8 @@ interface ReCaptchaProps {
   onError?: () => void
   theme?: 'light' | 'dark'
   size?: 'compact' | 'normal'
+  version?: 'v2' | 'v3'
+  action?: string // For v3
 }
 
 export interface ReCaptchaRef {
@@ -19,12 +21,15 @@ const ReCaptcha = forwardRef<ReCaptchaRef, ReCaptchaProps>(({
   onExpired,
   onError,
   theme = 'light',
-  size = 'normal'
+  size = 'normal',
+  version = 'v2',
+  action = 'submit'
 }, ref) => {
   const recaptchaRef = useRef<ReCAPTCHA>(null)
 
   // Get reCAPTCHA site key from environment variables
   const siteKey = import.meta.env.VITE_RECAPTCHA_SITE_KEY
+  const recaptchaVersion = import.meta.env.VITE_RECAPTCHA_VERSION || version
 
   useImperativeHandle(ref, () => ({
     reset: () => {
@@ -53,6 +58,9 @@ const ReCaptcha = forwardRef<ReCaptchaRef, ReCaptchaProps>(({
               <p>
                 Please configure VITE_RECAPTCHA_SITE_KEY in your environment variables to enable reCAPTCHA protection.
               </p>
+              <p className="mt-1">
+                <strong>For production:</strong> Ensure you're using the correct reCAPTCHA v2 (checkbox) keys, not v3 keys.
+              </p>
             </div>
           </div>
         </div>
@@ -60,6 +68,29 @@ const ReCaptcha = forwardRef<ReCaptchaRef, ReCaptchaProps>(({
     )
   }
 
+  // For v3, use invisible reCAPTCHA
+  if (recaptchaVersion === 'v3') {
+    return (
+      <div className="flex justify-center my-4">
+        <div className="text-center">
+          <div className="text-sm text-gray-600 mb-2">
+            Protected by reCAPTCHA v3
+          </div>
+          <ReCAPTCHA
+            ref={recaptchaRef}
+            sitekey={siteKey}
+            onChange={onVerify}
+            onExpired={onExpired}
+            onError={onError}
+            size="invisible"
+            theme={theme}
+          />
+        </div>
+      </div>
+    )
+  }
+
+  // Default v2 implementation
   return (
     <div className="flex justify-center my-4">
       <ReCAPTCHA
