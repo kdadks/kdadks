@@ -22,16 +22,16 @@ const Footer = () => {
       { name: 'Travel Solutions', href: '#services' },
     ],
     support: [
-      { name: 'Customer Support', href: '#contact' },
-      { name: 'Service Inquiry', href: '#contact' },
-      { name: 'Book Consultation', href: '#contact' },
-      { name: 'Partnership', href: '#contact' },
+      { name: 'Customer Support', href: '/support' },
+      { name: 'Service Inquiry', href: '/service-inquiry' },
+      { name: 'Book Consultation', href: '/consultation' },
+      { name: 'Partnership', href: '/partnership' },
     ],
     legal: [
-      { name: 'Privacy Policy', href: '#privacy' },
-      { name: 'Terms & Conditions', href: '#terms' },
-      { name: 'Shipping Policy', href: '#shipping' },
-      { name: 'Cancellation & Refund', href: '#refund' },
+      { name: 'Privacy Policy', href: '/privacy' },
+      { name: 'Terms & Conditions', href: '/terms' },
+      { name: 'Shipping Policy', href: '/shipping' },
+      { name: 'Cancellation & Refund', href: '/refund' },
     ],
   }
 
@@ -138,8 +138,8 @@ const Footer = () => {
 
           {/* Legal & Support */}
           <div>
-            <h4 className="font-semibold text-white mb-3 text-sm uppercase tracking-wide">Legal & Support</h4>
-            <ul className="space-y-2">
+            <h4 className="font-semibold text-white mb-3 text-sm uppercase tracking-wide">Legal</h4>
+            <ul className="space-y-2 mb-6">
               {footerLinks.legal.map((link) => (
                 <li key={link.name}>
                   <a
@@ -150,14 +150,20 @@ const Footer = () => {
                   </a>
                 </li>
               ))}
-              <li>
-                <a
-                  href="#contact"
-                  className="text-gray-400 hover:text-white transition-colors duration-200 text-sm"
-                >
-                  Contact Support
-                </a>
-              </li>
+            </ul>
+            
+            <h4 className="font-semibold text-white mb-3 text-sm uppercase tracking-wide">Support</h4>
+            <ul className="space-y-2">
+              {footerLinks.support.map((link) => (
+                <li key={link.name}>
+                  <a
+                    href={link.href}
+                    className="text-gray-400 hover:text-white transition-colors duration-200 text-sm"
+                  >
+                    {link.name}
+                  </a>
+                </li>
+              ))}
             </ul>
           </div>
         </div>

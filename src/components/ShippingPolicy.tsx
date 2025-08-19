@@ -8,7 +8,7 @@ const ShippingPolicy = () => {
         {/* Back Button */}
         <div className="mb-8">
           <a
-            href="#"
+            href="/"
             className="inline-flex items-center text-primary-600 hover:text-primary-700 transition-colors duration-200"
           >
             <ArrowLeft className="w-4 h-4 mr-2" />

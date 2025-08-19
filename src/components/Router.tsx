@@ -13,6 +13,10 @@ import PrivacyPolicy from './PrivacyPolicy'
 import TermsConditions from './TermsConditions'
 import ShippingPolicy from './ShippingPolicy'
 import CancellationRefund from './CancellationRefund'
+import CustomerSupport from './CustomerSupport'
+import ServiceInquiry from './ServiceInquiry'
+import BookConsultation from './BookConsultation'
+import Partnership from './Partnership'
 import SEO from './SEO'
 import SEOContent from './SEOContent'
 import AdminLogin from './admin/AdminLogin'
@@ -92,6 +96,46 @@ const TeamPage = () => (
   </div>
 )
 
+// Customer Support page
+const CustomerSupportPage = () => (
+  <div className="min-h-screen bg-white">
+    <SEO customData={{ title: "Customer Support - Kdadks Service Private Limited", description: "Get comprehensive customer support for all Kdadks services including IT Wala, Ayuh Clinic, Nirchal, and Raahirides." }} />
+    <Header />
+    <CustomerSupport />
+    <Footer />
+  </div>
+)
+
+// Service Inquiry page
+const ServiceInquiryPage = () => (
+  <div className="min-h-screen bg-white">
+    <SEO customData={{ title: "Service Inquiry - Kdadks Service Private Limited", description: "Explore our comprehensive services across IT, healthcare, fashion, and travel. Get detailed information and request quotes." }} />
+    <Header />
+    <ServiceInquiry />
+    <Footer />
+  </div>
+)
+
+// Book Consultation page
+const BookConsultationPage = () => (
+  <div className="min-h-screen bg-white">
+    <SEO customData={{ title: "Book Consultation - Kdadks Service Private Limited", description: "Schedule consultations with our experts across IT, healthcare, fashion, and travel services." }} />
+    <Header />
+    <BookConsultation />
+    <Footer />
+  </div>
+)
+
+// Partnership page
+const PartnershipPage = () => (
+  <div className="min-h-screen bg-white">
+    <SEO customData={{ title: "Partnership Opportunities - Kdadks Service Private Limited", description: "Explore partnership opportunities with Kdadks across technology, healthcare, fashion, and travel sectors." }} />
+    <Header />
+    <Partnership />
+    <Footer />
+  </div>
+)
+
 const Router = () => {
   return (
     <BrowserRouter>
@@ -104,6 +148,12 @@ const Router = () => {
           <Route path="/shipping" element={<ShippingPage />} />
           <Route path="/refund" element={<RefundPage />} />
           <Route path="/team" element={<TeamPage />} />
+          
+          {/* Support routes */}
+          <Route path="/support" element={<CustomerSupportPage />} />
+          <Route path="/service-inquiry" element={<ServiceInquiryPage />} />
+          <Route path="/consultation" element={<BookConsultationPage />} />
+          <Route path="/partnership" element={<PartnershipPage />} />
           
           {/* Admin routes */}
           <Route path="/admin/login" element={<AdminLogin />} />
