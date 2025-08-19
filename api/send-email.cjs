@@ -11,12 +11,21 @@ const {RecaptchaEnterpriseServiceClient} = require('@google-cloud/recaptcha-ente
   * recaptchaAction: Action name corresponding to the token.
   */
 async function createAssessment({
-  // TODO: Replace the token and reCAPTCHA action variables before running the sample.
+  // Default values for KDADKS reCAPTCHA Enterprise configuration
   projectID = "kdadks-service-p-1755602644470",
   recaptchaKey = "6LdQV6srAAAAADPSVG-sDb2o2Mv3pJqYhr6QZa9r",
-  token = "action-token",
-  recaptchaAction = "action-name",
+  token = null, // Will be provided by form submission
+  recaptchaAction = "submit", // Will be provided by form (contact_form, book_consultation, etc.)
 }) {
+  // Validate required parameters
+  if (!token) {
+    throw new Error('reCAPTCHA token is required for assessment');
+  }
+  
+  if (!recaptchaAction) {
+    throw new Error('reCAPTCHA action is required for assessment');
+  }
+
   // Create the reCAPTCHA client.
   // TODO: Cache the client generation code (recommended) or call client.close() before exiting the method.
   const client = new RecaptchaEnterpriseServiceClient();
