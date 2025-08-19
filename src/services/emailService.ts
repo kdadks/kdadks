@@ -13,6 +13,46 @@ export class EmailService {
     }
   }
 
+  // Enhanced error handling for API calls
+  private static async makeApiCall(url: string, options: RequestInit): Promise<Response> {
+    try {
+      console.log('🔍 Making API call to:', url);
+      console.log('🔍 Environment:', import.meta.env.MODE, 'Production:', import.meta.env.PROD);
+      
+      const response = await fetch(url, options);
+      
+      console.log('🔍 Response status:', response.status);
+      console.log('🔍 Response headers:', Object.fromEntries(response.headers.entries()));
+      
+      // Check if response is HTML (404 page) instead of JSON
+      const contentType = response.headers.get('content-type');
+      if (contentType && contentType.includes('text/html')) {
+        console.error('❌ API endpoint returned HTML instead of JSON. This usually means the function is not deployed or the path is incorrect.');
+        console.error('Expected JSON but received HTML content type:', contentType);
+        
+        // Try to get the actual HTML content for debugging
+        const text = await response.text();
+        console.error('HTML response preview:', text.substring(0, 200) + '...');
+        
+        throw new Error(`Netlify Function not available. Status: ${response.status}. Check deployment and function configuration.`);
+      }
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('❌ API call failed with status:', response.status, errorText);
+        throw new Error(`API call failed: ${response.status} - ${errorText}`);
+      }
+      
+      return response;
+    } catch (error) {
+      console.error('❌ API call failed:', error);
+      if (error instanceof TypeError && error.message.includes('fetch')) {
+        throw new Error('Network error: Unable to connect to email service. Please check your internet connection.');
+      }
+      throw error;
+    }
+  }
+
   // Enhanced currency symbol mapping for better display
   private static getCurrencySymbol(currencyCode: string): string {
     const symbols: Record<string, string> = {
@@ -41,7 +81,7 @@ export class EmailService {
 
   static async sendContactEmail(formData: ContactFormData): Promise<void> {
     try {
-      const response = await fetch(EmailService.getApiEndpoint(), {
+      const response = await EmailService.makeApiCall(EmailService.getApiEndpoint(), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -83,7 +123,7 @@ export class EmailService {
         ? `Payment Receipt - Invoice #${invoice.invoice_number} [PAID]`
         : `Invoice #${invoice.invoice_number} from ${company.company_name}`;
       
-      const response = await fetch(EmailService.getApiEndpoint(), {
+      const response = await EmailService.makeApiCall(EmailService.getApiEndpoint(), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -696,7 +736,7 @@ Sent from KDADKS Contact Form
     try {
       const subject = `Payment Confirmation - KDADKS Service Private Limited`;
       
-      const response = await fetch(EmailService.getApiEndpoint(), {
+      const response = await EmailService.makeApiCall(EmailService.getApiEndpoint(), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -853,7 +893,7 @@ Lucknow, India
     }
   ): Promise<void> {
     try {
-      const response = await fetch(EmailService.getApiEndpoint(), {
+      const response = await EmailService.makeApiCall(EmailService.getApiEndpoint(), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
