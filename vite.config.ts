@@ -38,9 +38,13 @@ export default defineConfig({
     port: 3000,
     open: true,
     host: true,
-    // For SPA routing, consider using the 'base' option or configure a custom middleware if needed.
-    // Example: base: '/admin/', (uncomment and adjust if your app is served from /admin/)
-    // base: '/admin/',
+    // Proxy API requests to development server
+    proxy: {
+      '/api': {
+        target: 'http://localhost:3005',
+        changeOrigin: true
+      }
+    }
   },
   preview: {
     port: 4173,

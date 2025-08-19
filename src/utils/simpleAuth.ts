@@ -30,16 +30,44 @@ const debugSupabase = () => {
 }
 
 export const simpleAuth = {
+  // Clear authentication state (useful for handling token errors)
+  async clearAuthState(): Promise<void> {
+    try {
+      await supabase.auth.signOut()
+      // Also clear any potential stored session data
+      localStorage.removeItem('supabase.auth.token')
+      sessionStorage.removeItem('supabase.auth.token')
+      console.log('✅ Authentication state cleared')
+    } catch (error) {
+      console.error('Error clearing auth state:', error)
+    }
+  },
+
   // Check if user is currently authenticated
   async isAuthenticated(): Promise<boolean> {
     debugSupabase() // Debug Supabase config
     
     try {
       const { data: { session }, error } = await supabase.auth.getSession()
+      
+      // Handle invalid refresh token error
+      if (error && error.message.includes('Invalid Refresh Token')) {
+        console.warn('⚠️ Invalid refresh token detected, clearing auth state...')
+        await this.clearAuthState()
+        return false
+      }
+      
       console.log('Auth check result:', { session: !!session, error })
       return !error && !!session
     } catch (error) {
       console.error('Auth check error:', error)
+      
+      // If it's a refresh token error, clear the state
+      if (error instanceof Error && error.message.includes('Invalid Refresh Token')) {
+        console.warn('⚠️ Clearing corrupted auth state...')
+        await this.clearAuthState()
+      }
+      
       return false
     }
   },

@@ -2,7 +2,7 @@ import { ContactFormData } from '../config/brevo'
 import type { Invoice, Customer, CompanySettings } from '../types/invoice'
 
 export class EmailService {
-  private static readonly API_ENDPOINT = '/.netlify/functions/send-email'
+  private static readonly API_ENDPOINT = '/api/send-email'
 
   // Enhanced currency symbol mapping for better display
   private static getCurrencySymbol(currencyCode: string): string {
@@ -43,6 +43,8 @@ export class EmailService {
           subject: `New Contact Form Submission from ${formData.name}`,
           text: EmailService.generateTextEmail(formData),
           html: EmailService.generateHtmlEmail(formData),
+          recaptchaToken: formData.recaptchaToken,
+          recaptchaAction: formData.recaptchaAction || 'contact_form'
         }),
       })
 

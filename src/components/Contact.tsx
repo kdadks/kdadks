@@ -39,18 +39,69 @@ const Contact = () => {
         throw new Error('Please enter a valid email address.')
       }
 
-      // Prepare contact data
-      const contactData: ContactFormData = {
-        name: formData.name.trim(),
-        email: formData.email.trim(),
-        company: formData.company?.trim(),
-        message: formData.message.trim(),
+      // Prepare contact data for direct API call
+      const emailData = {
+        to: 'kdadks@outlook.com',
+        from: formData.email.trim(),
+        subject: `New Contact Form Submission from ${formData.name}`,
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f9fafb;">
+            <div style="background-color: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
+              <div style="text-align: center; margin-bottom: 30px;">
+                <h1 style="color: #1f2937; margin: 0; font-size: 24px;">New Contact Form Submission</h1>
+                <p style="color: #6b7280; margin: 10px 0 0 0;">From KDADKS website contact form</p>
+              </div>
+              
+              <div style="background-color: #f8fafc; padding: 20px; border-radius: 6px; margin-bottom: 20px;">
+                <h2 style="color: #374151; margin: 0 0 15px 0; font-size: 18px;">Contact Details</h2>
+                <p style="margin: 5px 0;"><strong>Name:</strong> ${formData.name}</p>
+                <p style="margin: 5px 0;"><strong>Email:</strong> ${formData.email}</p>
+                ${formData.company ? `<p style="margin: 5px 0;"><strong>Company:</strong> ${formData.company}</p>` : ''}
+              </div>
+              
+              <div style="background-color: #f8fafc; padding: 20px; border-radius: 6px;">
+                <h2 style="color: #374151; margin: 0 0 15px 0; font-size: 18px;">Message</h2>
+                <p style="margin: 0; line-height: 1.6; color: #4b5563;">${formData.message.replace(/\n/g, '<br>')}</p>
+              </div>
+              
+              <div style="text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #e5e7eb;">
+                <p style="color: #9ca3af; font-size: 14px; margin: 0;">This email was sent from the KDADKS website contact form</p>
+                <p style="color: #9ca3af; font-size: 14px; margin: 5px 0 0 0;">Please respond to: ${formData.email}</p>
+              </div>
+            </div>
+          </div>
+        `,
+        text: `
+          New Contact Form Submission
+          
+          Name: ${formData.name}
+          Email: ${formData.email}
+          ${formData.company ? `Company: ${formData.company}` : ''}
+          
+          Message:
+          ${formData.message}
+          
+          ---
+          This email was sent from the KDADKS website contact form.
+          Please respond to: ${formData.email}
+        `,
         recaptchaToken: token,
         recaptchaAction: 'contact_form'
       }
 
-      // Send email using Brevo service
-      await EmailService.sendContactEmail(contactData)
+      // Send email using direct API call
+      const response = await fetch('/api/send-email', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(emailData)
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Failed to send email')
+      }
 
       // Reset form and show success message
       setFormData({

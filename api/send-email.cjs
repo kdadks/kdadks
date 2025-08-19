@@ -61,20 +61,32 @@ async function createAssessment({
 
 // Function to verify reCAPTCHA Enterprise token using Google Cloud client
 async function verifyRecaptcha(token, action = 'submit') {
+  console.log('🔍 verifyRecaptcha called with:', { token: !!token, action });
+  console.log('🔍 Environment check:', {
+    NODE_ENV: process.env.NODE_ENV,
+    RECAPTCHA_DEVELOPMENT_BYPASS: process.env.RECAPTCHA_DEVELOPMENT_BYPASS,
+    GOOGLE_APPLICATION_CREDENTIALS: !!process.env.GOOGLE_APPLICATION_CREDENTIALS,
+    GOOGLE_CLOUD_PROJECT_ID: !!process.env.GOOGLE_CLOUD_PROJECT_ID
+  });
+  
   const projectID = process.env.GOOGLE_CLOUD_PROJECT_ID || "kdadks-service-p-1755602644470";
   const recaptchaKey = process.env.VITE_RECAPTCHA_SITE_KEY || "6LdQV6srAAAAADPSVG-sDb2o2Mv3pJqYhr6QZa9r";
   
   if (!token) {
+    console.log('❌ No token provided');
     return { success: false, error: 'reCAPTCHA token is required' };
   }
 
   // Check if we're in development environment
   const isProduction = process.env.NODE_ENV === 'production';
-  const hasGoogleCredentials = process.env.GOOGLE_APPLICATION_CREDENTIALS || process.env.GOOGLE_CLOUD_PROJECT_ID;
+  const hasGoogleCredentials = process.env.GOOGLE_APPLICATION_CREDENTIALS;
+  const isDevelopmentBypass = process.env.RECAPTCHA_DEVELOPMENT_BYPASS === 'true';
   
-  // In development without proper Google Cloud setup, allow with warning
-  if (!isProduction && !hasGoogleCredentials) {
-    console.log('⚠️ Development mode: reCAPTCHA verification bypassed (no Google Cloud credentials)');
+  console.log('🔍 Bypass check:', { isProduction, hasGoogleCredentials: !!hasGoogleCredentials, isDevelopmentBypass });
+  
+  // In development without proper Google Cloud authentication, allow with warning
+  if (!isProduction && (!hasGoogleCredentials || isDevelopmentBypass)) {
+    console.log('⚠️ Development mode: reCAPTCHA verification bypassed (no Google Cloud authentication)');
     return { success: true, bypass: true, score: 0.9 };
   }
 

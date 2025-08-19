@@ -24,6 +24,12 @@ if (!supabaseUrl || !supabaseKey) {
 
 const supabase = createClient(supabaseUrl, supabaseKey);
 
+// Import email handler
+const sendEmailHandler = require('./api/send-email.cjs');
+
+// Email endpoint
+app.post('/api/send-email', sendEmailHandler);
+
 // Razorpay order creation endpoint
 app.post('/api/create-razorpay-order', async (req, res) => {
   try {
@@ -294,10 +300,12 @@ app.get('/health', (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`🚀 Development Razorpay server running on http://localhost:${PORT}`);
+  console.log(`🚀 Development API server running on http://localhost:${PORT}`);
   console.log(`📋 Available endpoints:`);
+  console.log(`   POST http://localhost:${PORT}/api/send-email`);
   console.log(`   POST http://localhost:${PORT}/api/create-razorpay-order`);
   console.log(`   POST http://localhost:${PORT}/api/razorpay-webhook`);
+  console.log(`   GET  http://localhost:${PORT}/health`);
   console.log(`   GET  http://localhost:${PORT}/health`);
   console.log(`\n⚠️  Make sure to set these environment variables:`);
   console.log(`   VITE_SUPABASE_URL`);

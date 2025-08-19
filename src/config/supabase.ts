@@ -21,6 +21,26 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     persistSession: true,
     autoRefreshToken: true,
     detectSessionInUrl: false, // Disabled - not using OAuth
+    debug: false, // Set to true for auth debugging
+  },
+  global: {
+    headers: {
+      'x-application-name': 'kdadks-website'
+    }
+  }
+})
+
+// Handle auth state changes and errors
+supabase.auth.onAuthStateChange((event, session) => {
+  console.log('Auth state change:', event, session ? 'Session exists' : 'No session')
+  
+  if (event === 'TOKEN_REFRESHED') {
+    console.log('✅ Token refreshed successfully')
+  } else if (event === 'SIGNED_OUT') {
+    console.log('🚪 User signed out')
+    // Clear any cached data
+    localStorage.removeItem('supabase.auth.token')
+    sessionStorage.removeItem('supabase.auth.token')
   }
 })
 
