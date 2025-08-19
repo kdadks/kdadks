@@ -1,12 +1,12 @@
 const nodemailer = require('nodemailer');
 const fetch = require('node-fetch');
 
-// Function to verify reCAPTCHA token
+// Function to verify reCAPTCHA Enterprise token
 async function verifyRecaptcha(token) {
   const secretKey = process.env.VITE_RECAPTCHA_SECRET_KEY;
   
   if (!secretKey) {
-    console.warn('⚠️ reCAPTCHA secret key not configured - skipping verification');
+    console.warn('⚠️ reCAPTCHA Enterprise secret key not configured - skipping verification');
     return { success: true, bypass: true }; // Allow in development
   }
 
@@ -15,48 +15,80 @@ async function verifyRecaptcha(token) {
   }
 
   try {
-    const response = await fetch('https://www.google.com/recaptcha/api/siteverify', {
+    // For Enterprise, use the enterprise endpoint
+    const response = await fetch('https://recaptchaenterprise.googleapis.com/v1/projects/YOUR_PROJECT_ID/assessments?key=' + secretKey, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
+        'Content-Type': 'application/json',
       },
-      body: `secret=${secretKey}&response=${token}`
+      body: JSON.stringify({
+        event: {
+          token: token,
+          siteKey: process.env.VITE_RECAPTCHA_SITE_KEY,
+          expectedAction: 'submit'
+        }
+      })
     });
 
     const data = await response.json();
     
-    if (data.success) {
-      console.log('✅ reCAPTCHA verification successful');
-      return { success: true, score: data.score };
-    } else {
-      console.error('❌ reCAPTCHA verification failed:', data['error-codes']);
+    if (data.tokenProperties && data.tokenProperties.valid) {
+      const score = data.riskAnalysis?.score || 0.5;
+      console.log('✅ reCAPTCHA Enterprise verification successful, score:', score);
       
-      // Handle specific error codes
-      const errorCodes = data['error-codes'] || [];
-      let errorMessage = 'reCAPTCHA verification failed';
-      
-      if (errorCodes.includes('invalid-input-secret')) {
-        errorMessage = 'Invalid reCAPTCHA secret key - please check your configuration';
-      } else if (errorCodes.includes('invalid-input-response')) {
-        errorMessage = 'Invalid reCAPTCHA token - please try again';
-      } else if (errorCodes.includes('bad-request')) {
-        errorMessage = 'reCAPTCHA request malformed - please check configuration';
-      } else if (errorCodes.includes('timeout-or-duplicate')) {
-        errorMessage = 'reCAPTCHA token expired or already used - please try again';
+      // For Enterprise, you typically check the score (0.0 to 1.0)
+      // Higher scores indicate lower risk
+      if (score >= 0.3) { // Adjust threshold as needed
+        return { success: true, score: score };
+      } else {
+        return { 
+          success: false, 
+          error: 'reCAPTCHA score too low - suspected bot activity',
+          score: score
+        };
       }
+    } else {
+      console.error('❌ reCAPTCHA Enterprise verification failed:', data);
       
       return { 
         success: false, 
-        error: errorMessage,
-        details: errorCodes 
+        error: 'reCAPTCHA Enterprise verification failed',
+        details: data.tokenProperties?.invalidReason || 'Unknown error'
       };
     }
   } catch (error) {
-    console.error('🚨 reCAPTCHA verification service error:', error);
-    return { 
-      success: false, 
-      error: 'reCAPTCHA verification service unavailable - please try again later' 
-    };
+    console.error('🚨 reCAPTCHA Enterprise verification service error:', error);
+    
+    // Fallback to standard reCAPTCHA verification if Enterprise fails
+    try {
+      console.log('📋 Falling back to standard reCAPTCHA verification...');
+      const response = await fetch('https://www.google.com/recaptcha/api/siteverify', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: `secret=${secretKey}&response=${token}`
+      });
+
+      const data = await response.json();
+      
+      if (data.success) {
+        console.log('✅ Standard reCAPTCHA verification successful');
+        return { success: true, score: data.score };
+      } else {
+        return { 
+          success: false, 
+          error: 'reCAPTCHA verification failed',
+          details: data['error-codes']
+        };
+      }
+    } catch (fallbackError) {
+      console.error('🚨 Both Enterprise and standard reCAPTCHA verification failed:', fallbackError);
+      return { 
+        success: false, 
+        error: 'reCAPTCHA verification service unavailable - please try again later' 
+      };
+    }
   }
 }
 

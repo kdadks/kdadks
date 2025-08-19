@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react'
 import { Headphones, Mail, Phone, MessageCircle, Clock, ArrowLeft, Send, CheckCircle, Shield } from 'lucide-react'
-import ReCaptcha, { ReCaptchaRef } from './ui/ReCaptcha'
+import ReCaptchaEnterprise, { ReCaptchaEnterpriseRef } from './ui/ReCaptchaEnterprise'
 
 const CustomerSupport = () => {
   const [formData, setFormData] = useState({
@@ -15,34 +15,36 @@ const CustomerSupport = () => {
   const [isSubmitted, setIsSubmitted] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [recaptchaToken, setRecaptchaToken] = useState<string | null>(null)
-  const recaptchaRef = useRef<ReCaptchaRef>(null)
+  const recaptchaRef = useRef<ReCaptchaEnterpriseRef>(null)
 
-  const handleRecaptchaChange = (token: string | null) => {
+  const handleRecaptchaVerify = (token: string | null) => {
     setRecaptchaToken(token)
   }
 
-  const handleRecaptchaExpired = () => {
+  const handleRecaptchaError = (error: string) => {
+    console.error('reCAPTCHA error:', error)
     setRecaptchaToken(null)
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
-    // Validate reCAPTCHA
-    if (!recaptchaToken) {
-      alert('Please complete the reCAPTCHA verification')
-      return
-    }
-
     setIsSubmitting(true)
     
     try {
+      // Execute reCAPTCHA Enterprise
+      const token = await recaptchaRef.current?.execute()
+      
+      if (!token) {
+        throw new Error('reCAPTCHA verification failed. Please try again.')
+      }
+
       // Prepare email data
       const emailData = {
         to: 'support@kdadks.com',
         subject: `Customer Support Request - ${formData.priority.toUpperCase()} - ${formData.subject}`,
         html: generateEmailHTML(),
-        recaptchaToken: recaptchaToken
+        recaptchaToken: token
       }
 
       // Send email
@@ -415,22 +417,19 @@ const CustomerSupport = () => {
                   />
                 </div>
 
-                {/* reCAPTCHA */}
+                {/* reCAPTCHA Enterprise */}
                 <div className="flex flex-col items-center">
-                  <div className="flex items-center mb-2">
-                    <Shield className="w-4 h-4 text-gray-600 mr-2" />
-                    <span className="text-sm text-gray-600">Security Verification</span>
-                  </div>
-                  <ReCaptcha
+                  <ReCaptchaEnterprise
                     ref={recaptchaRef}
-                    onVerify={handleRecaptchaChange}
-                    onExpired={handleRecaptchaExpired}
+                    onVerify={handleRecaptchaVerify}
+                    onError={handleRecaptchaError}
+                    action="customer_support"
                   />
                 </div>
 
                 <button
                   type="submit"
-                  disabled={!recaptchaToken || isSubmitting}
+                  disabled={isSubmitting}
                   className="w-full bg-primary-600 text-white py-3 px-4 rounded-md hover:bg-primary-700 transition-colors duration-200 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <Send className="w-4 h-4 mr-2" />
