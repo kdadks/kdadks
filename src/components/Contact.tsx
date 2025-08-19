@@ -2,7 +2,7 @@ import React, { useState, useRef } from 'react'
 import { Mail, Phone, MapPin, Send, Clock, CheckCircle, Shield } from 'lucide-react'
 import { EmailService } from '../services/emailService'
 import { ContactFormData } from '../config/brevo'
-import ReCaptcha, { ReCaptchaRef } from './ui/ReCaptcha'
+import ReCaptchaEnterprise, { ReCaptchaEnterpriseRef } from './ui/ReCaptchaEnterprise'
 
 const Contact = () => {
   const [formData, setFormData] = useState({
@@ -14,16 +14,7 @@ const Contact = () => {
   const [isSubmitted, setIsSubmitted] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState('')
-  const [recaptchaToken, setRecaptchaToken] = useState<string | null>(null)
-  const recaptchaRef = useRef<ReCaptchaRef>(null)
-
-  const handleRecaptchaChange = (token: string | null) => {
-    setRecaptchaToken(token)
-  }
-
-  const handleRecaptchaExpired = () => {
-    setRecaptchaToken(null)
-  }
+  const recaptchaRef = useRef<ReCaptchaEnterpriseRef>(null)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -31,9 +22,10 @@ const Contact = () => {
     setSubmitError('')
 
     try {
-      // Validate reCAPTCHA
-      if (!recaptchaToken) {
-        throw new Error('Please complete the reCAPTCHA verification')
+      // Execute reCAPTCHA Enterprise verification
+      const token = await recaptchaRef.current?.execute()
+      if (!token) {
+        throw new Error('reCAPTCHA verification failed')
       }
 
       // Validate form data
@@ -53,7 +45,8 @@ const Contact = () => {
         email: formData.email.trim(),
         company: formData.company?.trim(),
         message: formData.message.trim(),
-        recaptchaToken: recaptchaToken
+        recaptchaToken: token,
+        recaptchaAction: 'contact_form'
       }
 
       // Send email using Brevo service
@@ -66,8 +59,6 @@ const Contact = () => {
         company: '',
         message: '',
       })
-      setRecaptchaToken(null)
-      recaptchaRef.current?.reset()
       setIsSubmitted(true)
       setTimeout(() => setIsSubmitted(false), 5000)
     } catch (error) {
@@ -77,9 +68,6 @@ const Contact = () => {
           ? error.message
           : 'Failed to send message. Please try again or contact us directly at kdadks@outlook.com'
       )
-      // Reset reCAPTCHA on error
-      setRecaptchaToken(null)
-      recaptchaRef.current?.reset()
     } finally {
       setIsSubmitting(false)
     }
@@ -299,10 +287,10 @@ const Contact = () => {
                     <Shield className="w-4 h-4 text-gray-600 mr-2" />
                     <span className="text-sm text-gray-600">Security Verification</span>
                   </div>
-                  <ReCaptcha
+                  <ReCaptchaEnterprise
                     ref={recaptchaRef}
-                    onVerify={handleRecaptchaChange}
-                    onExpired={handleRecaptchaExpired}
+                    action="contact_form"
+                    onVerify={() => {}} // Invisible reCAPTCHA doesn't need this
                   />
                 </div>
 
@@ -314,7 +302,7 @@ const Contact = () => {
 
                 <button
                   type="submit"
-                  disabled={!recaptchaToken || isSubmitting}
+                  disabled={isSubmitting}
                   className="w-full btn-primary flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isSubmitting ? (

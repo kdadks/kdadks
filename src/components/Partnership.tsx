@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react'
 import { Building, Target, Globe, ArrowLeft, Send, CheckCircle, TrendingUp, Users, Award, Shield } from 'lucide-react'
-import ReCaptcha, { ReCaptchaRef } from './ui/ReCaptcha'
+import ReCaptchaEnterprise, { ReCaptchaEnterpriseRef } from './ui/ReCaptchaEnterprise'
 
 const Partnership = () => {
   const [selectedPartnership, setSelectedPartnership] = useState('')
@@ -20,16 +20,7 @@ const Partnership = () => {
   })
   const [isSubmitted, setIsSubmitted] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [recaptchaToken, setRecaptchaToken] = useState<string | null>(null)
-  const recaptchaRef = useRef<ReCaptchaRef>(null)
-
-  const handleRecaptchaChange = (token: string | null) => {
-    setRecaptchaToken(token)
-  }
-
-  const handleRecaptchaExpired = () => {
-    setRecaptchaToken(null)
-  }
+  const recaptchaRef = useRef<ReCaptchaEnterpriseRef>(null)
 
   const partnershipTypes = [
     {
@@ -120,22 +111,22 @@ const Partnership = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    
-    // Validate reCAPTCHA
-    if (!recaptchaToken) {
-      alert('Please complete the reCAPTCHA verification')
-      return
-    }
-
     setIsSubmitting(true)
     
     try {
+      // Execute reCAPTCHA Enterprise verification
+      const token = await recaptchaRef.current?.execute()
+      if (!token) {
+        throw new Error('reCAPTCHA verification failed')
+      }
+
       // Prepare email data
       const emailData = {
         to: 'support@kdadks.com',
         subject: `Partnership Application - ${formData.partnershipType} - ${formData.company}`,
         html: generateEmailHTML(),
-        recaptchaToken: recaptchaToken
+        recaptchaToken: token,
+        recaptchaAction: 'partnership_application'
       }
 
       // Send email
@@ -167,8 +158,6 @@ const Partnership = () => {
             goals: ''
           })
           setSelectedPartnership('')
-          setRecaptchaToken(null)
-          recaptchaRef.current?.reset()
         }, 3000)
       } else {
         const errorData = await response.json()
@@ -177,9 +166,6 @@ const Partnership = () => {
     } catch (error) {
       console.error('Error sending email:', error)
       alert(`Failed to send message: ${error instanceof Error ? error.message : 'Unknown error'}`)
-      // Reset reCAPTCHA on error
-      setRecaptchaToken(null)
-      recaptchaRef.current?.reset()
     } finally {
       setIsSubmitting(false)
     }
@@ -614,16 +600,16 @@ const Partnership = () => {
                       <Shield className="w-4 h-4 text-gray-600 mr-2" />
                       <span className="text-sm text-gray-600">Security Verification</span>
                     </div>
-                    <ReCaptcha
+                    <ReCaptchaEnterprise
                       ref={recaptchaRef}
-                      onVerify={handleRecaptchaChange}
-                      onExpired={handleRecaptchaExpired}
+                      action="partnership_application"
+                      onVerify={() => {}} // Invisible reCAPTCHA doesn't need this
                     />
                   </div>
 
                   <button
                     type="submit"
-                    disabled={!recaptchaToken || isSubmitting}
+                    disabled={isSubmitting}
                     className="w-full bg-primary-600 text-white py-3 px-4 rounded-md hover:bg-primary-700 transition-colors duration-200 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <Send className="w-4 h-4 mr-2" />

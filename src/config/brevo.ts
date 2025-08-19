@@ -23,4 +23,5 @@ export interface ContactFormData {
   company?: string
   message: string
   recaptchaToken?: string
+  recaptchaAction?: string
 }
