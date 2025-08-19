@@ -68,6 +68,16 @@ async function verifyRecaptcha(token, action = 'submit') {
     return { success: false, error: 'reCAPTCHA token is required' };
   }
 
+  // Check if we're in development environment
+  const isProduction = process.env.NODE_ENV === 'production';
+  const hasGoogleCredentials = process.env.GOOGLE_APPLICATION_CREDENTIALS || process.env.GOOGLE_CLOUD_PROJECT_ID;
+  
+  // In development without proper Google Cloud setup, allow with warning
+  if (!isProduction && !hasGoogleCredentials) {
+    console.log('⚠️ Development mode: reCAPTCHA verification bypassed (no Google Cloud credentials)');
+    return { success: true, bypass: true, score: 0.9 };
+  }
+
   try {
     console.log('🔍 Attempting reCAPTCHA Enterprise verification with Google Cloud client...');
     
