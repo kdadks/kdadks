@@ -115,7 +115,8 @@ const ServiceInquiry = () => {
       }
 
       // Send email
-      const response = await fetch('/api/send-email', {
+      const apiEndpoint = import.meta.env.PROD ? '/.netlify/functions/send-email' : '/api/send-email';
+      const response = await fetch(apiEndpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
