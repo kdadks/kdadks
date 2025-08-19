@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "Netlify Functions for KDADKS website",
   "dependencies": {
-    "nodemailer": "^6.9.8"
+    "nodemailer": "^6.9.8",
+    "@google-cloud/recaptcha-enterprise": "^5.6.0"
   }
 }

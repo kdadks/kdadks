@@ -1,5 +1,59 @@
 const nodemailer = require('nodemailer');
 
+// Import Google Cloud reCAPTCHA Enterprise (optional in serverless environment)
+let RecaptchaEnterpriseServiceClient;
+try {
+  const recaptcha = require('@google-cloud/recaptcha-enterprise');
+  RecaptchaEnterpriseServiceClient = recaptcha.RecaptchaEnterpriseServiceClient;
+} catch (error) {
+  console.log('reCAPTCHA Enterprise not available (install @google-cloud/recaptcha-enterprise if needed)');
+}
+
+// Verify reCAPTCHA Enterprise token
+async function verifyRecaptcha(token, action, expectedAction) {
+  if (!RecaptchaEnterpriseServiceClient) {
+    console.log('⚠️ reCAPTCHA Enterprise not available, skipping verification');
+    return { success: true, score: 0.9, reason: 'Library not available' };
+  }
+
+  try {
+    const client = new RecaptchaEnterpriseServiceClient({
+      projectId: process.env.GOOGLE_CLOUD_PROJECT_ID || 'kdadks-service-p-1755602644470'
+    });
+    
+    const projectPath = client.projectPath(process.env.GOOGLE_CLOUD_PROJECT_ID || 'kdadks-service-p-1755602644470');
+    
+    const request = {
+      assessment: {
+        event: {
+          token: token,
+          siteKey: process.env.VITE_RECAPTCHA_SITE_KEY || '6LdQV6srAAAAADPSVG-sDb2o2Mv3pJqYhr6QZa9r',
+          expectedAction: expectedAction || action
+        },
+      },
+      parent: projectPath,
+    };
+
+    const [response] = await client.createAssessment(request);
+    
+    const score = response.riskAnalysis.score;
+    console.log(`✅ reCAPTCHA Enterprise verification successful, score: ${score}`);
+    
+    return {
+      success: response.tokenProperties.valid && score >= 0.5,
+      score: score,
+      reason: response.tokenProperties.invalidReason || 'Valid'
+    };
+  } catch (error) {
+    console.error('❌ reCAPTCHA verification error:', error);
+    return {
+      success: false,
+      score: 0,
+      reason: error.message
+    };
+  }
+}
+
 exports.handler = async (event, context) => {
   // Enable CORS for all origins
   const headers = {
@@ -30,7 +84,27 @@ exports.handler = async (event, context) => {
   try {
     // Parse request body
     const body = JSON.parse(event.body);
-    const { to, from, subject, text, html, attachments, attachment } = body;
+    const { to, from, subject, text, html, attachments, attachment, recaptchaToken, recaptchaAction } = body;
+
+    // Verify reCAPTCHA if token is provided
+    if (recaptchaToken) {
+      console.log('🔍 Verifying reCAPTCHA token...');
+      const verification = await verifyRecaptcha(recaptchaToken, recaptchaAction, recaptchaAction);
+      
+      if (!verification.success) {
+        console.error('❌ reCAPTCHA verification failed:', verification.reason);
+        return {
+          statusCode: 400,
+          headers,
+          body: JSON.stringify({ 
+            error: 'reCAPTCHA verification failed',
+            details: verification.reason
+          })
+        };
+      }
+      
+      console.log(`✅ reCAPTCHA verified successfully (score: ${verification.score})`);
+    }
 
     // Debug: Log email content to see if URLs are present
     console.log('=== EMAIL CONTENT ANALYSIS ===');
@@ -158,6 +232,7 @@ exports.handler = async (event, context) => {
         success: true,
         message: 'Email sent successfully',
         messageId: info.messageId,
+        recaptchaScore: recaptchaToken ? verification?.score : undefined,
         debug: debugInfo // Include debugging information
       })
     };

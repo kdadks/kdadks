@@ -2,7 +2,16 @@ import { ContactFormData } from '../config/brevo'
 import type { Invoice, Customer, CompanySettings } from '../types/invoice'
 
 export class EmailService {
-  private static readonly API_ENDPOINT = '/api/send-email'
+  // Get API endpoint based on environment
+  private static getApiEndpoint(): string {
+    if (import.meta.env.PROD) {
+      // Production: Use Netlify Functions
+      return '/.netlify/functions/send-email'
+    } else {
+      // Development: Use local proxy
+      return '/api/send-email'
+    }
+  }
 
   // Enhanced currency symbol mapping for better display
   private static getCurrencySymbol(currencyCode: string): string {
@@ -32,7 +41,7 @@ export class EmailService {
 
   static async sendContactEmail(formData: ContactFormData): Promise<void> {
     try {
-      const response = await fetch(EmailService.API_ENDPOINT, {
+      const response = await fetch(EmailService.getApiEndpoint(), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -74,7 +83,7 @@ export class EmailService {
         ? `Payment Receipt - Invoice #${invoice.invoice_number} [PAID]`
         : `Invoice #${invoice.invoice_number} from ${company.company_name}`;
       
-      const response = await fetch(EmailService.API_ENDPOINT, {
+      const response = await fetch(EmailService.getApiEndpoint(), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -687,7 +696,7 @@ Sent from KDADKS Contact Form
     try {
       const subject = `Payment Confirmation - KDADKS Service Private Limited`;
       
-      const response = await fetch(EmailService.API_ENDPOINT, {
+      const response = await fetch(EmailService.getApiEndpoint(), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -844,7 +853,7 @@ Lucknow, India
     }
   ): Promise<void> {
     try {
-      const response = await fetch(EmailService.API_ENDPOINT, {
+      const response = await fetch(EmailService.getApiEndpoint(), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
