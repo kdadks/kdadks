@@ -28,13 +28,13 @@ async function verifyRecaptcha(token, action, expectedAction) {
         projectId: process.env.GOOGLE_CLOUD_PROJECT_ID || 'kdadks-service-p-1755602644470'
       });
       
-      const projectPath = client.projectPath(process.env.GOOGLE_CLOUD_PROJECT_ID || 'kdadks-service-p-1755602644470');
+      const projectPath = client.projectPath(process.env.GOOGLE_CLOUD_PROJECT_ID || process.env.RECAPTCHA_PROJECT_ID || process.env.VITE_RECAPTCHA_PROJECT_ID || 'kdadks-service-p-1755602644470');
       
       const request = {
         assessment: {
           event: {
             token: token,
-            siteKey: process.env.VITE_RECAPTCHA_SITE_KEY || '6LdQV6srAAAAADPSVG-sDb2o2Mv3pJqYhr6QZa9r',
+            siteKey: process.env.RECAPTCHA_SITE_KEY || process.env.VITE_RECAPTCHA_SITE_KEY || '6LdQV6srAAAAADPSVG-sDb2o2Mv3pJqYhr6QZa9r',
             expectedAction: expectedAction || action
           },
         },

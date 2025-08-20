@@ -53,11 +53,17 @@ Thumbs.db
 !tailwind.config.js
 *.ps1
 
+# Test and Debug Files in any directory
+**/test-*.html
+**/debug.js
+netlify/functions/debug.js
+
 # Temporary Documentation and Status Files
 /*.md
 !README.md
 !CONTRIBUTING.md
 !CHANGELOG.md
+!ENVIRONMENT_VARIABLES_FIX.md
 /PAYMENT_*.md
 /RECAPTCHA_*.md
 /WEBHOOK_*.md
