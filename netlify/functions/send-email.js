@@ -127,6 +127,14 @@ async function verifyRecaptcha(token, action, expectedAction) {
 }
 
 exports.handler = async (event, context) => {
+  console.log('🚀 Send-email function called - Version 2.1');
+  console.log('🔍 Function environment:', {
+    timestamp: new Date().toISOString(),
+    method: event.httpMethod,
+    headers: event.headers,
+    hasBody: !!event.body
+  });
+
   // Enable CORS for all origins
   const headers = {
     'Access-Control-Allow-Origin': '*',
@@ -269,13 +277,26 @@ exports.handler = async (event, context) => {
 
     // Get Brevo SMTP password from environment
     const brevoPassword = process.env.BREVO_PASSWORD;
+    console.log('🔍 Environment check:', {
+      hasBrevoPassword: !!brevoPassword,
+      NODE_ENV: process.env.NODE_ENV,
+      allEnvVars: Object.keys(process.env).filter(key => key.includes('BREVO') || key.includes('RECAPTCHA'))
+    });
+    
     if (!brevoPassword) {
-      console.error('BREVO_PASSWORD environment variable is not set');
+      console.error('❌ BREVO_PASSWORD environment variable is not set');
+      console.log('📧 Creating test response to verify if this is the issue...');
+      
+      // TEMPORARY: Return a test response to confirm this is the issue
       return {
-        statusCode: 500,
+        statusCode: 200,
         headers,
         body: JSON.stringify({ 
-          error: 'Email service configuration error' 
+          success: false,
+          error: 'BREVO_PASSWORD not configured in Netlify environment variables',
+          message: 'This confirms the issue - you need to add BREVO_PASSWORD to your Netlify site settings',
+          helpUrl: 'https://app.netlify.com/sites/YOUR_SITE/settings/env-vars',
+          timestamp: new Date().toISOString()
         })
       };
     }
@@ -333,14 +354,40 @@ exports.handler = async (event, context) => {
     };
 
   } catch (error) {
-    console.error('Email sending failed:', error);
+    console.error('❌ Email sending failed:', error);
+    console.error('❌ Error stack:', error.stack);
+    console.error('❌ Error details:', {
+      name: error.name,
+      message: error.message,
+      code: error.code
+    });
+
+    // Determine more specific error information
+    let errorMessage = 'Failed to send email';
+    let statusCode = 500;
+
+    if (error.code === 'EAUTH') {
+      errorMessage = 'Email authentication failed - check BREVO_PASSWORD';
+      statusCode = 401;
+    } else if (error.code === 'ECONNECTION') {
+      errorMessage = 'Failed to connect to email server';
+      statusCode = 503;
+    } else if (error.message.includes('JSON')) {
+      errorMessage = 'Invalid request format';
+      statusCode = 400;
+    } else if (error.message) {
+      errorMessage = error.message;
+    }
 
     return {
-      statusCode: 500,
+      statusCode: statusCode,
       headers,
       body: JSON.stringify({
-        error: 'Failed to send email',
-        details: error.message
+        error: errorMessage,
+        details: error.message,
+        code: error.code,
+        timestamp: new Date().toISOString(),
+        functionVersion: '2.1'
       })
     };
   }
