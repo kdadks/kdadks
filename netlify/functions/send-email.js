@@ -127,12 +127,27 @@ async function verifyRecaptcha(token, action, expectedAction) {
 }
 
 exports.handler = async (event, context) => {
-  console.log('🚀 Send-email function called - Version 2.2 - Variable scope fixed');
+  console.log('🚀 Send-email function called - Version 2.3 - Environment debug');
   console.log('🔍 Function environment:', {
     timestamp: new Date().toISOString(),
     method: event.httpMethod,
     headers: event.headers,
-    hasBody: !!event.body
+    hasBody: !!event.body,
+    context: {
+      functionName: context.functionName,
+      functionVersion: context.functionVersion,
+      awsRequestId: context.awsRequestId
+    }
+  });
+
+  // Log all available environment variables for debugging
+  const envKeys = Object.keys(process.env);
+  console.log('🔍 Available environment variables:', {
+    total: envKeys.length,
+    brevoRelated: envKeys.filter(key => key.toLowerCase().includes('brevo')),
+    recaptchaRelated: envKeys.filter(key => key.toLowerCase().includes('recaptcha')),
+    nodeEnv: process.env.NODE_ENV,
+    port: process.env.PORT
   });
 
   // Enable CORS for all origins
@@ -282,24 +297,25 @@ exports.handler = async (event, context) => {
     const brevoPassword = process.env.BREVO_PASSWORD;
     console.log('🔍 Environment check:', {
       hasBrevoPassword: !!brevoPassword,
+      brevoPasswordLength: brevoPassword ? brevoPassword.length : 0,
       NODE_ENV: process.env.NODE_ENV,
-      allEnvVars: Object.keys(process.env).filter(key => key.includes('BREVO') || key.includes('RECAPTCHA'))
+      allEnvVars: Object.keys(process.env).filter(key => key.includes('BREVO') || key.includes('RECAPTCHA')),
+      totalEnvVars: Object.keys(process.env).length
     });
     
     if (!brevoPassword) {
-      console.error('❌ BREVO_PASSWORD environment variable is not set');
-      console.log('📧 Creating test response to verify if this is the issue...');
+      console.error('❌ BREVO_PASSWORD environment variable is not accessible to function');
+      console.log('� This might be a deployment sync issue - triggering new deployment might help');
       
-      // TEMPORARY: Return a test response to confirm this is the issue
       return {
-        statusCode: 200,
+        statusCode: 500,
         headers,
         body: JSON.stringify({ 
-          success: false,
-          error: 'BREVO_PASSWORD not configured in Netlify environment variables',
-          message: 'This confirms the issue - you need to add BREVO_PASSWORD to your Netlify site settings',
-          helpUrl: 'https://app.netlify.com/sites/YOUR_SITE/settings/env-vars',
-          timestamp: new Date().toISOString()
+          error: 'Email service configuration error - BREVO_PASSWORD not accessible',
+          debug: {
+            environmentVariablesFound: Object.keys(process.env).filter(key => key.includes('BREVO') || key.includes('RECAPTCHA')),
+            suggestion: 'Try triggering a new deployment after adding environment variables'
+          }
         })
       };
     }
