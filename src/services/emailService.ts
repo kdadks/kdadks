@@ -104,7 +104,13 @@ export class EmailService {
       }
 
       const result = await response.json()
-      console.log('Email sent successfully:', result)
+      console.log('🔍 API Response:', result)
+      
+      if (!result.success) {
+        throw new Error(result.error || result.message || 'Email sending failed')
+      }
+      
+      console.log('✅ Email sent successfully:', result)
     } catch (error) {
       console.error('Email sending failed:', error)
       throw error

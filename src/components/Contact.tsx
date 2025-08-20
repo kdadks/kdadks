@@ -99,6 +99,7 @@ const Contact = () => {
         apiEndpoint 
       });
       console.log('🔍 Attempting to send email to:', apiEndpoint);
+      console.log('🔍 Email data being sent:', emailData);
       
       const response = await fetch(apiEndpoint, {
         method: 'POST',
@@ -126,6 +127,16 @@ const Contact = () => {
         const errorData = await response.json()
         throw new Error(errorData.error || 'Failed to send email')
       }
+
+      // Check if the response was actually successful
+      const result = await response.json()
+      console.log('🔍 API Response:', result);
+      
+      if (!result.success) {
+        throw new Error(result.error || result.message || 'Email sending failed')
+      }
+
+      console.log('✅ Email sent successfully:', result.messageId);
 
       // Reset form and show success message
       setFormData({
