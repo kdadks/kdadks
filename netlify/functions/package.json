@@ -4,6 +4,7 @@
   "description": "Netlify Functions for KDADKS website",
   "dependencies": {
     "nodemailer": "^6.9.8",
-    "@google-cloud/recaptcha-enterprise": "^5.6.0"
+    "@google-cloud/recaptcha-enterprise": "^5.6.0",
+    "node-fetch": "^2.6.7"
   }
 }

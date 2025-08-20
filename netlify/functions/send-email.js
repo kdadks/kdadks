@@ -1,5 +1,14 @@
 const nodemailer = require('nodemailer');
 
+// Try to import fetch for Node.js environments that don't have it built-in
+let fetch;
+try {
+  fetch = require('node-fetch');
+} catch {
+  // Use global fetch if available (newer Node.js or browser environment)
+  fetch = globalThis.fetch;
+}
+
 // Import Google Cloud reCAPTCHA Enterprise (optional in serverless environment)
 let RecaptchaEnterpriseServiceClient;
 try {
@@ -11,41 +20,104 @@ try {
 
 // Verify reCAPTCHA Enterprise token
 async function verifyRecaptcha(token, action, expectedAction) {
-  if (!RecaptchaEnterpriseServiceClient) {
-    console.log('⚠️ reCAPTCHA Enterprise not available, skipping verification');
-    return { success: true, score: 0.9, reason: 'Library not available' };
+  // First try reCAPTCHA Enterprise if available
+  if (RecaptchaEnterpriseServiceClient && process.env.GOOGLE_APPLICATION_CREDENTIALS) {
+    try {
+      console.log('🔍 Attempting reCAPTCHA Enterprise verification...');
+      const client = new RecaptchaEnterpriseServiceClient({
+        projectId: process.env.GOOGLE_CLOUD_PROJECT_ID || 'kdadks-service-p-1755602644470'
+      });
+      
+      const projectPath = client.projectPath(process.env.GOOGLE_CLOUD_PROJECT_ID || 'kdadks-service-p-1755602644470');
+      
+      const request = {
+        assessment: {
+          event: {
+            token: token,
+            siteKey: process.env.VITE_RECAPTCHA_SITE_KEY || '6LdQV6srAAAAADPSVG-sDb2o2Mv3pJqYhr6QZa9r',
+            expectedAction: expectedAction || action
+          },
+        },
+        parent: projectPath,
+      };
+
+      const [response] = await client.createAssessment(request);
+      
+      const score = response.riskAnalysis.score;
+      console.log(`✅ reCAPTCHA Enterprise verification successful, score: ${score}`);
+      
+      return {
+        success: response.tokenProperties.valid && score >= 0.5,
+        score: score,
+        reason: response.tokenProperties.invalidReason || 'Valid'
+      };
+    } catch (error) {
+      console.error('❌ reCAPTCHA Enterprise failed, falling back to standard verification:', error.message);
+    }
+  } else {
+    console.log('⚠️ reCAPTCHA Enterprise not configured, using standard verification');
   }
 
+  // Fallback to standard reCAPTCHA verification
   try {
-    const client = new RecaptchaEnterpriseServiceClient({
-      projectId: process.env.GOOGLE_CLOUD_PROJECT_ID || 'kdadks-service-p-1755602644470'
-    });
+    console.log('🔍 Attempting standard reCAPTCHA verification...');
     
-    const projectPath = client.projectPath(process.env.GOOGLE_CLOUD_PROJECT_ID || 'kdadks-service-p-1755602644470');
-    
-    const request = {
-      assessment: {
-        event: {
-          token: token,
-          siteKey: process.env.VITE_RECAPTCHA_SITE_KEY || '6LdQV6srAAAAADPSVG-sDb2o2Mv3pJqYhr6QZa9r',
-          expectedAction: expectedAction || action
-        },
-      },
-      parent: projectPath,
-    };
+    // Use the secret key from environment or fallback
+    const secretKey = process.env.RECAPTCHA_SECRET_KEY || process.env.VITE_RECAPTCHA_SECRET_KEY;
+    if (!secretKey) {
+      console.error('❌ No reCAPTCHA secret key found in environment variables');
+      return { success: false, reason: 'No secret key configured' };
+    }
 
-    const [response] = await client.createAssessment(request);
-    
-    const score = response.riskAnalysis.score;
-    console.log(`✅ reCAPTCHA Enterprise verification successful, score: ${score}`);
-    
-    return {
-      success: response.tokenProperties.valid && score >= 0.5,
-      score: score,
-      reason: response.tokenProperties.invalidReason || 'Valid'
-    };
+    const verifyUrl = 'https://www.google.com/recaptcha/api/siteverify';
+    const params = new URLSearchParams({
+      secret: secretKey,
+      response: token
+    });
+
+    const response = await fetch(verifyUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: params
+    });
+
+    const data = await response.json();
+    console.log('🔍 Standard reCAPTCHA response:', data);
+
+    if (data.success) {
+      console.log('✅ Standard reCAPTCHA verification successful');
+      return {
+        success: true,
+        score: data.score || 0.7,
+        reason: 'Standard verification passed'
+      };
+    } else {
+      console.error('❌ Standard reCAPTCHA verification failed:', data['error-codes']);
+      return {
+        success: false,
+        reason: `Standard verification failed: ${data['error-codes']?.join(', ') || 'Unknown error'}`,
+        details: data['error-codes']
+      };
+    }
   } catch (error) {
-    console.error('❌ reCAPTCHA verification error:', error);
+    console.error('❌ All reCAPTCHA verification methods failed:', error);
+    
+    // Check if we should bypass for production testing
+    const allowBypass = process.env.RECAPTCHA_BYPASS === 'true' || 
+                       (!process.env.RECAPTCHA_SECRET_KEY && !process.env.GOOGLE_APPLICATION_CREDENTIALS);
+    
+    if (allowBypass) {
+      console.log('⚠️ reCAPTCHA bypass enabled - no proper credentials configured');
+      return { 
+        success: true, 
+        score: 0.7, 
+        reason: 'Bypass: No credentials configured',
+        bypass: true 
+      };
+    }
+    
     return {
       success: false,
       score: 0,
@@ -88,8 +160,19 @@ exports.handler = async (event, context) => {
 
     // Verify reCAPTCHA if token is provided
     if (recaptchaToken) {
-      console.log('🔍 Verifying reCAPTCHA token...');
+      console.log('🔍 Verifying reCAPTCHA token...', {
+        tokenLength: recaptchaToken.length,
+        action: recaptchaAction,
+        hasEnterpriseClient: !!RecaptchaEnterpriseServiceClient,
+        env: {
+          GOOGLE_CLOUD_PROJECT_ID: !!process.env.GOOGLE_CLOUD_PROJECT_ID,
+          VITE_RECAPTCHA_SITE_KEY: !!process.env.VITE_RECAPTCHA_SITE_KEY,
+          GOOGLE_APPLICATION_CREDENTIALS: !!process.env.GOOGLE_APPLICATION_CREDENTIALS
+        }
+      });
+      
       const verification = await verifyRecaptcha(recaptchaToken, recaptchaAction, recaptchaAction);
+      console.log('🔍 reCAPTCHA verification result:', verification);
       
       if (!verification.success) {
         console.error('❌ reCAPTCHA verification failed:', verification.reason);
