@@ -25,9 +25,21 @@ exports.handler = async (event, context) => {
       method: event.httpMethod,
       path: event.path,
       queryParams: event.queryStringParameters,
-      hasBrevoPassword: !!process.env.BREVO_PASSWORD,
-      hasRecaptchaKey: !!process.env.VITE_RECAPTCHA_SITE_KEY,
-      functionVersion: '1.0.0'
+      availableEnvVars: {
+        hasBrevoPassword: !!process.env.BREVO_PASSWORD,
+        hasRecaptchaSecretKey: !!process.env.RECAPTCHA_SECRET_KEY,
+        hasViteRecaptchaSecretKey: !!process.env.VITE_RECAPTCHA_SECRET_KEY,
+        hasRecaptchaSiteKey: !!process.env.VITE_RECAPTCHA_SITE_KEY,
+        hasGoogleAppCredentials: !!process.env.GOOGLE_APPLICATION_CREDENTIALS,
+        hasGoogleProjectId: !!process.env.GOOGLE_CLOUD_PROJECT_ID,
+        recaptchaBypass: process.env.RECAPTCHA_BYPASS
+      },
+      netlifyContext: {
+        deployId: context.awsRequestId,
+        functionName: context.functionName,
+        functionVersion: context.functionVersion
+      },
+      functionVersion: '2.0.0'
     })
   };
 };
