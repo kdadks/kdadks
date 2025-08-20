@@ -41,7 +41,7 @@ const Contact = () => {
 
       // Prepare contact data for direct API call
       const emailData = {
-        to: 'support@kdadks.com',
+        to: 'amit.ranjan78@gmail.com', // Temporary: Use your personal email to test
         from: formData.email.trim(),
         subject: `New Contact Form Submission from ${formData.name}`,
         html: `
