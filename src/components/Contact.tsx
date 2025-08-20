@@ -89,8 +89,10 @@ const Contact = () => {
         recaptchaAction: 'contact_form'
       }
 
-      // Send email using direct API call
+      // Send email using direct API call with enhanced error handling
       const apiEndpoint = import.meta.env.PROD ? '/.netlify/functions/send-email' : '/api/send-email';
+      console.log('🔍 Attempting to send email to:', apiEndpoint);
+      
       const response = await fetch(apiEndpoint, {
         method: 'POST',
         headers: {
@@ -98,6 +100,20 @@ const Contact = () => {
         },
         body: JSON.stringify(emailData)
       })
+
+      console.log('🔍 Response status:', response.status);
+      console.log('🔍 Response headers:', Object.fromEntries(response.headers.entries()));
+
+      // Check if response is HTML (404/error page) instead of JSON
+      const contentType = response.headers.get('content-type');
+      if (contentType && contentType.includes('text/html')) {
+        console.error('❌ API returned HTML instead of JSON - likely 404');
+        const htmlContent = await response.text();
+        console.log('HTML Response preview:', htmlContent.substring(0, 200));
+        
+        // Try alternative email method
+        throw new Error('Email service temporarily unavailable. Please try again later or contact us directly at support@kdadks.com');
+      }
 
       if (!response.ok) {
         const errorData = await response.json()
@@ -114,12 +130,38 @@ const Contact = () => {
       setIsSubmitted(true)
       setTimeout(() => setIsSubmitted(false), 5000)
     } catch (error) {
-      console.error('Email sending failed:', error)
-      setSubmitError(
-        error instanceof Error
-          ? error.message
-          : 'Failed to send message. Please try again or contact us directly at kdadks@outlook.com'
-      )
+      console.error('Primary email sending failed:', error)
+      
+      // Try backup email method
+      try {
+        console.log('🔄 Attempting backup email method...');
+        
+        // Fallback 1: Try alternative endpoint
+        const backupEndpoint = '/.netlify/functions/debug'; // Test if functions work at all
+        const debugResponse = await fetch(backupEndpoint);
+        
+        if (debugResponse.ok) {
+          console.log('✅ Netlify Functions are working, but send-email function has issues');
+          // Functions work, but send-email is broken
+          setSubmitError('Email service is temporarily unavailable. Please contact us directly at support@kdadks.com or try again later.');
+        } else {
+          console.log('❌ Netlify Functions are not working');
+          // Functions are completely down
+          setSubmitError('Email service is currently offline. Please contact us directly at support@kdadks.com');
+        }
+        
+      } catch (backupError) {
+        console.error('Backup method also failed:', backupError);
+        
+        // Ultimate fallback - mailto
+        const mailtoSubject = `Contact Form - ${formData.name}`;
+        const mailtoBody = `Name: ${formData.name}\nEmail: ${formData.email}\nCompany: ${formData.company}\n\nMessage:\n${formData.message}`;
+        const mailtoUrl = `mailto:support@kdadks.com?subject=${encodeURIComponent(mailtoSubject)}&body=${encodeURIComponent(mailtoBody)}`;
+        
+        setSubmitError(
+          `Email service is temporarily unavailable. We've prepared an email for you - click here to send it manually: <a href="${mailtoUrl}" target="_blank" style="color: #3b82f6; text-decoration: underline;">Open Email Client</a>`
+        );
+      }
     } finally {
       setIsSubmitting(false)
     }
@@ -348,7 +390,10 @@ const Contact = () => {
 
                 {submitError && (
                   <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
-                    <p className="text-red-600 text-sm">{submitError}</p>
+                    <div 
+                      className="text-red-600 text-sm" 
+                      dangerouslySetInnerHTML={{ __html: submitError }}
+                    />
                   </div>
                 )}
 
