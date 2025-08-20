@@ -127,7 +127,7 @@ async function verifyRecaptcha(token, action, expectedAction) {
 }
 
 exports.handler = async (event, context) => {
-  console.log('🚀 Send-email function called - Version 2.1');
+  console.log('🚀 Send-email function called - Version 2.2 - Variable scope fixed');
   console.log('🔍 Function environment:', {
     timestamp: new Date().toISOString(),
     method: event.httpMethod,
