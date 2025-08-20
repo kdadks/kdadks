@@ -88,7 +88,7 @@ export class EmailService {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          to: 'kdadks@outlook.com',
+          to: 'support@kdadks.com',
           from: formData.email,
           subject: `New Contact Form Submission from ${formData.name}`,
           text: EmailService.generateTextEmail(formData),
