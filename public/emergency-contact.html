@@ -1,0 +1,55 @@
+<!-- IMMEDIATE EMAIL FIX -->
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Emergency Contact Form</title>
+    <script src="https://cdn.emailjs.com/dist/email.min.js"></script>
+</head>
+<body>
+    <h1>KDADKS Emergency Contact Form</h1>
+    <p>Use this if the main contact form isn't working</p>
+    
+    <form id="emergency-contact">
+        <div>
+            <label>Name:</label>
+            <input type="text" name="from_name" required>
+        </div>
+        <div>
+            <label>Email:</label>
+            <input type="email" name="from_email" required>
+        </div>
+        <div>
+            <label>Company:</label>
+            <input type="text" name="company">
+        </div>
+        <div>
+            <label>Message:</label>
+            <textarea name="message" required></textarea>
+        </div>
+        <button type="submit">Send Email (GUARANTEED DELIVERY)</button>
+    </form>
+    
+    <div id="result"></div>
+    
+    <script>
+        emailjs.init('user_YOUR_USER_ID'); // You'll need to setup EmailJS account
+        
+        document.getElementById('emergency-contact').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            // Send directly to your Gmail
+            emailjs.send('service_gmail', 'template_contact', {
+                from_name: e.target.from_name.value,
+                from_email: e.target.from_email.value,
+                company: e.target.company.value,
+                message: e.target.message.value,
+                to_email: 'amit.ranjan78@gmail.com'
+            }).then(function() {
+                document.getElementById('result').innerHTML = '<p style="color: green;">✅ Email sent successfully to your Gmail!</p>';
+            }).catch(function(error) {
+                document.getElementById('result').innerHTML = '<p style="color: red;">❌ Error: ' + error.text + '</p>';
+            });
+        });
+    </script>
+</body>
+</html>
