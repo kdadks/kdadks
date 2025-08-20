@@ -109,11 +109,11 @@ async function verifyRecaptcha(token, action, expectedAction) {
                        (!process.env.RECAPTCHA_SECRET_KEY && !process.env.GOOGLE_APPLICATION_CREDENTIALS);
     
     if (allowBypass) {
-      console.log('⚠️ reCAPTCHA bypass enabled - no proper credentials configured');
+      console.log('⚠️ reCAPTCHA bypass enabled - testing mode or no credentials configured');
       return { 
         success: true, 
         score: 0.7, 
-        reason: 'Bypass: No credentials configured',
+        reason: process.env.RECAPTCHA_BYPASS === 'true' ? 'Bypass: Testing mode enabled' : 'Bypass: No credentials configured',
         bypass: true 
       };
     }
@@ -186,18 +186,28 @@ exports.handler = async (event, context) => {
 
     // Verify reCAPTCHA if token is provided
     if (recaptchaToken) {
-      console.log('🔍 Verifying reCAPTCHA token...', {
-        tokenLength: recaptchaToken.length,
-        action: recaptchaAction,
-        hasEnterpriseClient: !!RecaptchaEnterpriseServiceClient,
-        env: {
-          GOOGLE_CLOUD_PROJECT_ID: !!process.env.GOOGLE_CLOUD_PROJECT_ID,
-          VITE_RECAPTCHA_SITE_KEY: !!process.env.VITE_RECAPTCHA_SITE_KEY,
-          GOOGLE_APPLICATION_CREDENTIALS: !!process.env.GOOGLE_APPLICATION_CREDENTIALS,
-          RECAPTCHA_SECRET_KEY: !!process.env.RECAPTCHA_SECRET_KEY,
-          NODE_ENV: process.env.NODE_ENV
-        }
-      });
+      // Check for bypass first
+      if (process.env.RECAPTCHA_BYPASS === 'true') {
+        console.log('⚠️ reCAPTCHA bypass enabled - skipping verification');
+        verification = { 
+          success: true, 
+          score: 0.7, 
+          reason: 'Bypass: Testing mode enabled',
+          bypass: true 
+        };
+      } else {
+        console.log('🔍 Verifying reCAPTCHA token...', {
+          tokenLength: recaptchaToken.length,
+          action: recaptchaAction,
+          hasEnterpriseClient: !!RecaptchaEnterpriseServiceClient,
+          env: {
+            GOOGLE_CLOUD_PROJECT_ID: !!process.env.GOOGLE_CLOUD_PROJECT_ID,
+            VITE_RECAPTCHA_SITE_KEY: !!process.env.VITE_RECAPTCHA_SITE_KEY,
+            GOOGLE_APPLICATION_CREDENTIALS: !!process.env.GOOGLE_APPLICATION_CREDENTIALS,
+            RECAPTCHA_SECRET_KEY: !!process.env.RECAPTCHA_SECRET_KEY,
+            NODE_ENV: process.env.NODE_ENV
+          }
+        });
       
       verification = await verifyRecaptcha(recaptchaToken, recaptchaAction, recaptchaAction);
       console.log('🔍 reCAPTCHA verification result:', verification);
@@ -225,6 +235,7 @@ exports.handler = async (event, context) => {
       }
       
       console.log(`✅ reCAPTCHA verified successfully (score: ${verification.score})`);
+      }
     }
 
     // Debug: Log email content to see if URLs are present
