@@ -166,6 +166,9 @@ exports.handler = async (event, context) => {
     const body = JSON.parse(event.body);
     const { to, from, subject, text, html, attachments, attachment, recaptchaToken, recaptchaAction } = body;
 
+    // Initialize verification result
+    let verification = null;
+
     // Verify reCAPTCHA if token is provided
     if (recaptchaToken) {
       console.log('🔍 Verifying reCAPTCHA token...', {
@@ -181,7 +184,7 @@ exports.handler = async (event, context) => {
         }
       });
       
-      const verification = await verifyRecaptcha(recaptchaToken, recaptchaAction, recaptchaAction);
+      verification = await verifyRecaptcha(recaptchaToken, recaptchaAction, recaptchaAction);
       console.log('🔍 reCAPTCHA verification result:', verification);
       
       // TEMPORARY: Allow bypass if verification fails but we have a valid token structure
