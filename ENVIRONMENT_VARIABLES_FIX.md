@@ -4,12 +4,12 @@
 
 The debug function revealed that Netlify Functions cannot access environment variables with the `VITE_` prefix. These prefixed variables are only available during the Vite build process, not in the serverless functions runtime.
 
-## Current Status
+## Current Status (Updated: August 20, 2025)
 
 ✅ **BREVO_PASSWORD** - Available in production  
-❌ **RECAPTCHA_SECRET_KEY** - Missing in production  
-❌ **RECAPTCHA_SITE_KEY** - Missing in production  
-❌ **RECAPTCHA_PROJECT_ID** - Missing in production  
+⏳ **RECAPTCHA_SECRET_KEY** - Added to Netlify, deployment needed  
+⏳ **RECAPTCHA_SITE_KEY** - Added to Netlify, deployment needed  
+⏳ **RECAPTCHA_PROJECT_ID** - Added to Netlify, deployment needed  
 
 ## Required Action: Add Environment Variables to Netlify Dashboard
 
