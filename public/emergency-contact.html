@@ -82,6 +82,7 @@
                     body: JSON.stringify({
                         to: 'support@kdadks.com',
                         from: formData.email,
+                        customerName: formData.name, // Pass customer name for display
                         subject: `Emergency Contact from ${formData.name}`,
                         text: `Emergency Contact Form Submission\n\nName: ${formData.name}\nEmail: ${formData.email}\nCompany: ${formData.company}\n\nMessage:\n${formData.message}`,
                         html: `

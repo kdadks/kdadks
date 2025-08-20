@@ -179,7 +179,7 @@ exports.handler = async (event, context) => {
   try {
     // Parse request body
     const body = JSON.parse(event.body);
-    const { to, from, subject, text, html, attachments, attachment, recaptchaToken, recaptchaAction } = body;
+    const { to, from, subject, text, html, attachments, attachment, recaptchaToken, recaptchaAction, customerName } = body;
 
     // Initialize verification result
     let verification = null;
@@ -342,10 +342,11 @@ exports.handler = async (event, context) => {
       }
     });
 
-    // Prepare email options with ORIGINAL working format
+    // Prepare email options with customer-friendly sender display
+    const displayName = customerName || (from ? from.split('@')[0] : 'Customer');
     const mailOptions = {
-      from: 'support@kdadks.com',  // Always use verified sender for Brevo
-      replyTo: from,  // Set reply-to to the original sender
+      from: `"${displayName} (via KDADKS Contact Form)" <support@kdadks.com>`,  // Show customer name in sender
+      replyTo: from,  // Set reply-to to the customer's email for easy replies
       to: to,
       subject: subject,
       text: text,

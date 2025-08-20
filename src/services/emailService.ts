@@ -90,6 +90,7 @@ export class EmailService {
         body: JSON.stringify({
           to: 'support@kdadks.com',
           from: formData.email,
+          customerName: formData.name, // Pass customer name for display
           subject: `New Contact Form Submission from ${formData.name}`,
           text: EmailService.generateTextEmail(formData),
           html: EmailService.generateHtmlEmail(formData),
@@ -138,6 +139,7 @@ export class EmailService {
         body: JSON.stringify({
           to: customer.email,
           from: company.email || 'support@kdadks.com',
+          customerName: company.company_name, // Pass company name for display
           subject,
           text: EmailService.generateInvoiceTextEmail(invoice, customer, company, isPaidInvoice),
           html: EmailService.generateInvoiceHtmlEmail(invoice, customer, company, isPaidInvoice),

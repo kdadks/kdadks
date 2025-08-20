@@ -43,6 +43,7 @@ const Contact = () => {
       const emailData = {
         to: 'support@kdadks.com', // All contact form emails go to support
         from: formData.email.trim(),
+        customerName: formData.name.trim(), // Pass customer name for display
         subject: `New Contact Form Submission from ${formData.name}`,
         html: `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f9fafb;">
