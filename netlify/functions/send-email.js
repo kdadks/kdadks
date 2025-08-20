@@ -344,7 +344,8 @@ exports.handler = async (event, context) => {
 
     // Prepare email options with ORIGINAL working format
     const mailOptions = {
-      from: from || 'support@kdadks.com',  // ORIGINAL working sender
+      from: 'support@kdadks.com',  // Always use verified sender for Brevo
+      replyTo: from,  // Set reply-to to the original sender
       to: to,
       subject: subject,
       text: text,
@@ -367,8 +368,27 @@ exports.handler = async (event, context) => {
       }];
     }
 
+    // Enhanced logging before sending
+    console.log('📧 Attempting to send email via Brevo SMTP...', {
+      from: mailOptions.from,
+      replyTo: mailOptions.replyTo,
+      to: mailOptions.to,
+      subject: mailOptions.subject,
+      hasHtml: !!mailOptions.html,
+      hasText: !!mailOptions.text,
+      hasAttachments: !!mailOptions.attachments
+    });
+
     // Send email
     const info = await transporter.sendMail(mailOptions);
+    
+    console.log('✅ Brevo SMTP response:', {
+      messageId: info.messageId,
+      accepted: info.accepted,
+      rejected: info.rejected,
+      pending: info.pending,
+      response: info.response
+    });
 
     // Return success response with debugging info
     return {
