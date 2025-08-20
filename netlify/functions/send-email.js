@@ -184,7 +184,7 @@ exports.handler = async (event, context) => {
     // Initialize verification result
     let verification = null;
 
-    // Verify reCAPTCHA if token is provided
+    // Verify reCAPTCHA if token is provided (optional now)
     if (recaptchaToken) {
       // Check for bypass first
       if (process.env.RECAPTCHA_BYPASS === 'true') {
@@ -209,33 +209,41 @@ exports.handler = async (event, context) => {
           }
         });
       
-      verification = await verifyRecaptcha(recaptchaToken, recaptchaAction, recaptchaAction);
-      console.log('🔍 reCAPTCHA verification result:', verification);
-      
-      // TEMPORARY: Allow bypass if verification fails but we have a valid token structure
-      if (!verification.success) {
-        console.error('❌ reCAPTCHA verification failed:', verification.reason);
+        verification = await verifyRecaptcha(recaptchaToken, recaptchaAction, recaptchaAction);
+        console.log('🔍 reCAPTCHA verification result:', verification);
         
-        // Check if token looks valid (right length and structure) for temporary bypass
-        const tokenLooksValid = recaptchaToken && recaptchaToken.length > 1000;
-        const allowTemporaryBypass = true; // Set to false once reCAPTCHA is properly configured
-        
-        if (tokenLooksValid && allowTemporaryBypass) {
-          console.log('⚠️ TEMPORARY BYPASS: Token structure looks valid, proceeding with email');
-        } else {
-          return {
-            statusCode: 400,
-            headers,
-            body: JSON.stringify({ 
-              error: 'reCAPTCHA verification failed',
-              details: verification.reason
-            })
-          };
+        // TEMPORARY: Allow bypass if verification fails but we have a valid token structure
+        if (!verification.success) {
+          console.error('❌ reCAPTCHA verification failed:', verification.reason);
+          
+          // Check if token looks valid (right length and structure) for temporary bypass
+          const tokenLooksValid = recaptchaToken && recaptchaToken.length > 1000;
+          const allowTemporaryBypass = true; // Set to false once reCAPTCHA is properly configured
+          
+          if (tokenLooksValid && allowTemporaryBypass) {
+            console.log('⚠️ TEMPORARY BYPASS: Token structure looks valid, proceeding with email');
+          } else {
+            return {
+              statusCode: 400,
+              headers,
+              body: JSON.stringify({ 
+                error: 'reCAPTCHA verification failed',
+                details: verification.reason
+              })
+            };
+          }
         }
+        
+        console.log(`✅ reCAPTCHA verified successfully (score: ${verification.score})`);
       }
-      
-      console.log(`✅ reCAPTCHA verified successfully (score: ${verification.score})`);
-      }
+    } else {
+      console.log('ℹ️ No reCAPTCHA token provided - proceeding without verification');
+      verification = { 
+        success: true, 
+        score: 0.7, 
+        reason: 'No reCAPTCHA required',
+        bypass: true 
+      };
     }
 
     // Debug: Log email content to see if URLs are present
