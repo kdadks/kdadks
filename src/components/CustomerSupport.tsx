@@ -48,7 +48,8 @@ const CustomerSupport = () => {
       }
 
       // Send email
-      const apiEndpoint = import.meta.env.PROD ? '/.netlify/functions/send-email' : '/api/send-email';
+      const isProduction = import.meta.env.MODE === 'production' || window.location.hostname !== 'localhost';
+      const apiEndpoint = isProduction ? '/.netlify/functions/send-email' : '/api/send-email';
       const response = await fetch(apiEndpoint, {
         method: 'POST',
         headers: {

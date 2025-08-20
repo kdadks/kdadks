@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KDADKS - Email Service Debug Tool</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
+        .test-button { background: #3b82f6; color: white; padding: 10px 20px; border: none; border-radius: 5px; margin: 10px; cursor: pointer; }
+        .test-button:hover { background: #2563eb; }
+        .result { padding: 15px; margin: 10px 0; border-radius: 5px; border: 1px solid #ccc; }
+        .success { background: #dcfce7; border-color: #16a34a; color: #15803d; }
+        .error { background: #fef2f2; border-color: #dc2626; color: #b91c1c; }
+        .info { background: #eff6ff; border-color: #3b82f6; color: #1d4ed8; }
+        pre { background: #f3f4f6; padding: 10px; border-radius: 3px; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <h1>KDADKS Email Service Debug Tool</h1>
+    <p>Use this tool to test and debug email service issues on production.</p>
+    
+    <div>
+        <button class="test-button" onclick="testDebugFunction()">Test Debug Function</button>
+        <button class="test-button" onclick="testEmailFunction()">Test Email Function</button>
+        <button class="test-button" onclick="clearResults()">Clear Results</button>
+    </div>
+    
+    <div id="results"></div>
+
+    <script>
+        function addResult(type, title, content) {
+            const resultsDiv = document.getElementById('results');
+            const resultDiv = document.createElement('div');
+            resultDiv.className = `result ${type}`;
+            resultDiv.innerHTML = `
+                <h3>${title}</h3>
+                <pre>${typeof content === 'string' ? content : JSON.stringify(content, null, 2)}</pre>
+            `;
+            resultsDiv.appendChild(resultDiv);
+        }
+
+        function clearResults() {
+            document.getElementById('results').innerHTML = '';
+        }
+
+        async function testDebugFunction() {
+            addResult('info', 'Testing Debug Function', 'Calling /.netlify/functions/debug...');
+            
+            try {
+                const response = await fetch('/.netlify/functions/debug', {
+                    method: 'GET'
+                });
+                
+                const result = {
+                    status: response.status,
+                    statusText: response.statusText,
+                    headers: Object.fromEntries(response.headers.entries()),
+                    data: null
+                };
+
+                if (response.ok) {
+                    result.data = await response.json();
+                    addResult('success', 'Debug Function Success', result);
+                } else {
+                    result.data = await response.text();
+                    addResult('error', 'Debug Function Failed', result);
+                }
+            } catch (error) {
+                addResult('error', 'Debug Function Error', {
+                    error: error.message,
+                    stack: error.stack
+                });
+            }
+        }
+
+        async function testEmailFunction() {
+            addResult('info', 'Testing Email Function', 'Calling /.netlify/functions/send-email...');
+            
+            try {
+                const emailData = {
+                    to: 'test@example.com',
+                    subject: 'Test Email from Debug Tool',
+                    text: 'This is a test email sent from the debug tool.',
+                    html: '<p>This is a <strong>test email</strong> sent from the debug tool.</p>'
+                };
+
+                const response = await fetch('/.netlify/functions/send-email', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(emailData)
+                });
+                
+                const result = {
+                    status: response.status,
+                    statusText: response.statusText,
+                    headers: Object.fromEntries(response.headers.entries()),
+                    data: null
+                };
+
+                const contentType = response.headers.get('content-type');
+                if (contentType && contentType.includes('application/json')) {
+                    result.data = await response.json();
+                    if (response.ok) {
+                        addResult('success', 'Email Function Success', result);
+                    } else {
+                        addResult('error', 'Email Function Failed', result);
+                    }
+                } else {
+                    result.data = await response.text();
+                    addResult('error', 'Email Function Returned HTML (Not JSON)', {
+                        ...result,
+                        htmlPreview: result.data.substring(0, 500) + '...'
+                    });
+                }
+            } catch (error) {
+                addResult('error', 'Email Function Error', {
+                    error: error.message,
+                    stack: error.stack
+                });
+            }
+        }
+    </script>
+</body>
+</html>

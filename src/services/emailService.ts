@@ -4,7 +4,8 @@ import type { Invoice, Customer, CompanySettings } from '../types/invoice'
 export class EmailService {
   // Get API endpoint based on environment
   private static getApiEndpoint(): string {
-    if (import.meta.env.PROD) {
+    const isProduction = import.meta.env.MODE === 'production' || window.location.hostname !== 'localhost';
+    if (isProduction) {
       // Production: Use Netlify Functions
       return '/.netlify/functions/send-email'
     } else {

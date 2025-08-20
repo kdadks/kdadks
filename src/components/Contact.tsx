@@ -90,7 +90,14 @@ const Contact = () => {
       }
 
       // Send email using direct API call with enhanced error handling
-      const apiEndpoint = import.meta.env.PROD ? '/.netlify/functions/send-email' : '/api/send-email';
+      const isProduction = import.meta.env.MODE === 'production' || window.location.hostname !== 'localhost';
+      const apiEndpoint = isProduction ? '/.netlify/functions/send-email' : '/api/send-email';
+      console.log('🔍 Environment detection:', { 
+        mode: import.meta.env.MODE, 
+        hostname: window.location.hostname, 
+        isProduction, 
+        apiEndpoint 
+      });
       console.log('🔍 Attempting to send email to:', apiEndpoint);
       
       const response = await fetch(apiEndpoint, {
