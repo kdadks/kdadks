@@ -159,13 +159,13 @@ const Contact = () => {
     {
       icon: Phone,
       title: 'Call Us',
-      details: '+91-XXX-XXX-XXXX',
-      link: 'tel:+91XXXXXXXXXX',
+      details: '+91-7982303199',
+      link: 'tel:+91-7982303199',
     },
     {
       icon: MapPin,
       title: 'Visit Us',
-      details: 'Business Address, City, State',
+      details: 'Lucknow, Uttar Pradesh, India',
       link: '#',
     },
   ]
