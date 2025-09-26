@@ -14,13 +14,23 @@ interface TeamMember {
 
 const Team = () => {
   const teamMembers: TeamMember[] = [
+    
     {
-      name: 'Deepti Sharma',
+      name: 'Mrs. Sharma',
       role: 'Founder',
-      description: 'Deepti Sharma is a seasoned Healthcare professional and visionary founder. Her career reflects a rare blend of clinical expertise, research leadership, and unwavering dedication to patient-centered care. Specializing in multispecialty clinical trials, Deepti has led complex studies across critical care disciplines including ICU, respiratory, nephrology, neurology, diabetes, and oncology.Her ability to balance scientific precision with compassionate care sets her apart as a visionary leader.',
+      description: 'Mrs. Sharma is a seasoned Healthcare professional and visionary founder. Her career reflects a rare blend of clinical expertise, research leadership, and unwavering dedication to patient-centered care. Specializing in multispecialty clinical trials, Mrs. Sharma has led complex projects across critical care disciplines including ICU, respiratory, nephrology, neurology, diabetes, and oncology.Her ability to balance scientific precision with compassionate care sets her apart as a visionary leader.',
       experience: '21 years',
       specialties: ['Clinical Research', 'Patient Care Management', 'ICU', 'Respiratory Care', 'Nephrology', 'Neurology', 'Diabetic Care', 'Oncology Research'],
-      background: 'As a dual-registered nurse (India & Ireland), Deepti combines deep clinical knowledge with a strong commitment to patient safety, ethical research, and holistic care. Their background as a Retired Army Officer further reinforces their discipline, adaptability, and crisis management skills—key strengths in fast-paced medical environments.'
+      background: 'As a registered nurse, Mrs Sharma combines deep clinical knowledge with a strong commitment to patient safety, ethical research, and holistic care. Her background as a Retired Army Officer further reinforces her discipline, adaptability, and crisis management skills—key strengths in fast-paced medical environments.'
+    },
+    
+    {
+      name: 'K P Srivastav',
+      role: 'Co-Founder',
+      description: 'K P Srivastav is a distinguished Co-Founder with over 25 years of experience in the Information Technology industry. A veteran leader bridging traditional technology with cutting-edge innovations, K P has pioneered advancements in AI, Machine Learning, Agentic systems, and Digital Twin technologies. His expertise spans enterprise solutions, digital transformation, and strategic technology implementation across diverse sectors. He also possesses vast experience in CRM platforms such as Salesforce and Siebel, as well as Oracle Supply Chain and Field Service Management application stacks.',
+      experience: '25+ years',
+      specialties: ['Information Technology', 'AI', 'Machine Learning', 'Agentic Systems', 'Digital Twin', 'Enterprise Solutions', 'Digital Transformation', 'CRM (Salesforce, Siebel)', 'Oracle Supply Chain', 'Field Service Management'],
+      background: 'With a career spanning traditional IT infrastructure to next-generation technologies, Kumar has led numerous successful projects in AI, ML, and digital twin implementations. His expertise extends to CRM systems like Salesforce and Siebel, and comprehensive knowledge of Oracle\'s supply chain and field service management solutions. His strategic vision and technical acumen have positioned him as a key figure in driving technological innovation and business growth.'
     },
     {
       name: 'Amit Ranjan',
