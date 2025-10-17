@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { Mail, Phone, MapPin, Send, Clock, CheckCircle } from 'lucide-react'
-import { ContactFormData } from '../config/brevo'
+import { ContactFormData } from '../config/hostinger'
 
 const Contact = () => {
   const [formData, setFormData] = useState({

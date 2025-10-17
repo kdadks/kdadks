@@ -1,4 +1,4 @@
-import { ContactFormData } from '../config/brevo'
+import { ContactFormData } from '../config/hostinger'
 import type { Invoice, Customer, CompanySettings } from '../types/invoice'
 
 export class EmailService {
@@ -138,7 +138,7 @@ export class EmailService {
         },
         body: JSON.stringify({
           to: customer.email,
-          from: company.email || 'support@kdadks.com',
+          from: '"KDADKS Service Private Limited" <support@kdadks.com>',
           customerName: company.company_name, // Pass company name for display
           subject,
           text: EmailService.generateInvoiceTextEmail(invoice, customer, company, isPaidInvoice),
@@ -752,7 +752,7 @@ Sent from KDADKS Contact Form
         },
         body: JSON.stringify({
           to: customerEmail,
-          from: 'support@kdadks.com',
+          from: '"KDADKS Service Private Limited" <support@kdadks.com>',
           subject,
           text: EmailService.generatePaymentConfirmationTextEmail(paymentDetails),
           html: EmailService.generatePaymentConfirmationHtmlEmail(paymentDetails),
@@ -909,7 +909,7 @@ Lucknow, India
         },
         body: JSON.stringify({
           to: recipientEmail,
-          from: 'support@kdadks.com',
+          from: '"KDADKS Service Private Limited" <support@kdadks.com>',
           subject: `Payment Request - Invoice ${details.invoiceNumber} - ${this.formatCurrency(details.amount, details.currency)}`,
           text: this.generatePaymentRequestTextEmail(details),
           html: this.generatePaymentRequestHtmlEmail(details),

@@ -39,24 +39,26 @@ module.exports = async (req, res) => {
       return;
     }
 
-    // Get Brevo SMTP password from environment
-    const brevoPassword = process.env.BREVO_PASSWORD;
-    if (!brevoPassword) {
-      console.error('BREVO_PASSWORD environment variable is not set');
+    // Get Hostinger SMTP credentials from environment
+    const hostingerUser = process.env.HOSTINGER_SMTP_USER;
+    const hostingerPassword = process.env.HOSTINGER_SMTP_PASSWORD;
+    
+    if (!hostingerUser || !hostingerPassword) {
+      console.error('HOSTINGER_SMTP_USER or HOSTINGER_SMTP_PASSWORD environment variable is not set');
       res.status(500).json({ 
-        error: 'Email service configuration error - BREVO_PASSWORD not set' 
+        error: 'Email service configuration error - Hostinger SMTP credentials not set' 
       });
       return;
     }
 
-    // Configure Brevo SMTP transporter
+    // Configure Hostinger SMTP transporter
     const transporter = nodemailer.createTransporter({
-      host: 'smtp-relay.brevo.com',
-      port: 587,
-      secure: false, // TLS
+      host: 'smtp.hostinger.com',
+      port: 465,
+      secure: true, // SSL
       auth: {
-        user: '900018001@smtp-brevo.com',
-        pass: brevoPassword
+        user: hostingerUser,
+        pass: hostingerPassword
       },
       // Additional options for better reliability
       pool: true,
@@ -68,13 +70,13 @@ module.exports = async (req, res) => {
 
     // Prepare email options
     const mailOptions = {
-      from: from || 'support@kdadks.com', // Default sender
+      from: '"KDADKS Service Private Limited" <support@kdadks.com>', // Official sender
       to: to,
       subject: subject,
       text: text,
       html: html,
       // Set reply-to if different from sender
-      replyTo: from && from !== 'support@kdadks.com' ? from : undefined
+      replyTo: from || undefined
     };
 
     // Add attachment support for invoice PDFs (if provided)
@@ -86,7 +88,7 @@ module.exports = async (req, res) => {
       }];
     }
 
-    console.log('📧 [LOCAL DEV] Sending email via Brevo SMTP...');
+    console.log('📧 [LOCAL DEV] Sending email via Hostinger SMTP...');
     console.log('To:', to);
     console.log('Subject:', subject);
     console.log('From:', mailOptions.from);

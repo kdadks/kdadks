@@ -6,7 +6,8 @@ The debug function revealed that Netlify Functions cannot access environment var
 
 ## Current Status (Updated: August 20, 2025)
 
-✅ **BREVO_PASSWORD** - Available in production  
+✅ **HOSTINGER_SMTP_USER** - Available in production  
+✅ **HOSTINGER_SMTP_PASSWORD** - Available in production  
 ⏳ **RECAPTCHA_SECRET_KEY** - Added to Netlify, deployment needed  
 ⏳ **RECAPTCHA_SITE_KEY** - Added to Netlify, deployment needed  
 ⏳ **RECAPTCHA_PROJECT_ID** - Added to Netlify, deployment needed  

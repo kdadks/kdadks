@@ -4,9 +4,10 @@
 
 Set these environment variables in your Netlify dashboard under Site Settings > Environment Variables:
 
-### Email Service (Brevo)
-```
-BREVO_PASSWORD=your_brevo_smtp_password
+### Email Service (Hostinger SMTP)
+```bash
+HOSTINGER_SMTP_USER=your_email@yourdomain.com
+HOSTINGER_SMTP_PASSWORD=your_hostinger_email_password
 ```
 
 ### reCAPTCHA Enterprise (Google Cloud)

@@ -138,7 +138,7 @@ const formatted = formatCurrencyAmount(amount, currencyInfo);
 ### 🔌 External Services
 - **Supabase**: Database, authentication, real-time subscriptions
 - **Netlify**: Hosting, CI/CD, environment variables
-- **Brevo**: Email service (mentioned in docs, not currently implemented in invoice system)
+- **Hostinger SMTP**: Email service for contact forms and invoicing
 
 ### 🔗 Internal Service Communication
 - **Router → Components**: Route-based component loading

@@ -144,7 +144,7 @@ exports.handler = async (event, context) => {
   const envKeys = Object.keys(process.env);
   console.log('🔍 Available environment variables:', {
     total: envKeys.length,
-    brevoRelated: envKeys.filter(key => key.toLowerCase().includes('brevo')),
+    hostingerRelated: envKeys.filter(key => key.toLowerCase().includes('hostinger')),
     recaptchaRelated: envKeys.filter(key => key.toLowerCase().includes('recaptcha')),
     nodeEnv: process.env.NODE_ENV,
     port: process.env.PORT
@@ -312,48 +312,51 @@ exports.handler = async (event, context) => {
       };
     }
 
-    // Get Brevo SMTP password from environment
-    const brevoPassword = process.env.BREVO_PASSWORD;
+    // Get Hostinger SMTP credentials from environment
+    const hostingerUser = process.env.HOSTINGER_SMTP_USER;
+    const hostingerPassword = process.env.HOSTINGER_SMTP_PASSWORD;
     console.log('🔍 Environment check:', {
-      hasBrevoPassword: !!brevoPassword,
-      brevoPasswordLength: brevoPassword ? brevoPassword.length : 0,
+      hasHostingerUser: !!hostingerUser,
+      hasHostingerPassword: !!hostingerPassword,
+      hostingerUserLength: hostingerUser ? hostingerUser.length : 0,
+      hostingerPasswordLength: hostingerPassword ? hostingerPassword.length : 0,
       NODE_ENV: process.env.NODE_ENV,
-      allEnvVars: Object.keys(process.env).filter(key => key.includes('BREVO') || key.includes('RECAPTCHA')),
+      allEnvVars: Object.keys(process.env).filter(key => key.includes('HOSTINGER') || key.includes('RECAPTCHA')),
       totalEnvVars: Object.keys(process.env).length
     });
     
-    if (!brevoPassword) {
-      console.error('❌ BREVO_PASSWORD environment variable is not accessible to function');
+    if (!hostingerUser || !hostingerPassword) {
+      console.error('❌ HOSTINGER_SMTP_USER or HOSTINGER_SMTP_PASSWORD environment variable is not accessible to function');
       console.log('� This might be a deployment sync issue - triggering new deployment might help');
       
       return {
         statusCode: 500,
         headers,
         body: JSON.stringify({ 
-          error: 'Email service configuration error - BREVO_PASSWORD not accessible',
+          error: 'Email service configuration error - Hostinger SMTP credentials not accessible',
           debug: {
-            environmentVariablesFound: Object.keys(process.env).filter(key => key.includes('BREVO') || key.includes('RECAPTCHA')),
+            environmentVariablesFound: Object.keys(process.env).filter(key => key.includes('HOSTINGER') || key.includes('RECAPTCHA')),
             suggestion: 'Try triggering a new deployment after adding environment variables'
           }
         })
       };
     }
 
-    // Configure Brevo SMTP transporter with ORIGINAL working settings
+    // Configure Hostinger SMTP transporter
     const transporter = nodemailer.createTransport({
-      host: 'smtp-relay.brevo.com',
-      port: 587,
-      secure: false,
+      host: 'smtp.hostinger.com',
+      port: 465,
+      secure: true, // SSL
       auth: {
-        user: '900018001@smtp-brevo.com',  // ORIGINAL working username
-        pass: brevoPassword
+        user: hostingerUser,
+        pass: hostingerPassword
       }
     });
 
     // Prepare email options with customer-friendly sender display
     const displayName = customerName || (from ? from.split('@')[0] : 'Customer');
     const mailOptions = {
-      from: `"${displayName} (via KDADKS Contact Form)" <support@kdadks.com>`,  // Show customer name in sender
+      from: '"KDADKS Service Private Limited" <support@kdadks.com>',  // Official company sender
       replyTo: from,  // Set reply-to to the customer's email for easy replies
       to: to,
       subject: subject,
@@ -378,7 +381,7 @@ exports.handler = async (event, context) => {
     }
 
     // Enhanced logging before sending
-    console.log('📧 Attempting to send email via Brevo SMTP...', {
+    console.log('📧 Attempting to send email via Hostinger SMTP...', {
       from: mailOptions.from,
       replyTo: mailOptions.replyTo,
       to: mailOptions.to,
@@ -391,7 +394,7 @@ exports.handler = async (event, context) => {
     // Send email
     const info = await transporter.sendMail(mailOptions);
     
-    console.log('✅ Brevo SMTP response:', {
+    console.log('✅ Hostinger SMTP response:', {
       messageId: info.messageId,
       accepted: info.accepted,
       rejected: info.rejected,
@@ -426,7 +429,7 @@ exports.handler = async (event, context) => {
     let statusCode = 500;
 
     if (error.code === 'EAUTH') {
-      errorMessage = 'Email authentication failed - check BREVO_PASSWORD';
+      errorMessage = 'Email authentication failed - check Hostinger SMTP credentials';
       statusCode = 401;
     } else if (error.code === 'ECONNECTION') {
       errorMessage = 'Failed to connect to email server';

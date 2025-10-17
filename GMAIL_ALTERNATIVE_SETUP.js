@@ -1,7 +1,10 @@
 // Alternative Gmail SMTP configuration for immediate setup
-// Replace the Brevo configuration in send-email.js with this
+// Replace the Hostinger SMTP configuration in send-email.js with this
 
-// Gmail SMTP Configuration (if you prefer Gmail over Brevo)
+// Alternative Email Setup Options
+// Replace the Hostinger SMTP configuration in send-email.js with this
+
+// Gmail SMTP Configuration (if you prefer Gmail over Hostinger)
 const transporter = nodemailer.createTransporter({
   service: 'gmail',
   auth: {
