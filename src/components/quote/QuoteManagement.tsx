@@ -553,9 +553,30 @@ const QuoteManagement: React.FC<QuoteManagementProps> = ({ onBackToDashboard }) 
 
   const handleViewQuote = async (quote: Quote) => {
     try {
-      const fullQuote = await quoteService.getQuoteById(quote.id);
+      // Load necessary data for viewing
+      const [fullQuote, customersData] = await Promise.all([
+        quoteService.getQuoteById(quote.id),
+        customers.length === 0 ? invoiceService.getCustomers({}, 1, 1000) : Promise.resolve({ data: customers })
+      ]);
+      
+      if (customersData.data && customersData.data.length > 0 && customers.length === 0) {
+        setCustomers(customersData.data);
+      }
+      
       if (fullQuote) {
         setSelectedQuote(fullQuote);
+        
+        const mappedItems = fullQuote.quote_items?.map(item => ({
+          product_id: item.product_id,
+          item_name: item.item_name,
+          description: item.description,
+          quantity: item.quantity,
+          unit: item.unit,
+          unit_price: item.unit_price,
+          tax_rate: item.tax_rate,
+          hsn_code: item.hsn_code
+        })) || [];
+        
         setQuoteFormData({
           customer_id: fullQuote.customer_id,
           quote_date: fullQuote.quote_date,
@@ -566,22 +587,26 @@ const QuoteManagement: React.FC<QuoteManagementProps> = ({ onBackToDashboard }) 
           company_contact_name: fullQuote.company_contact_name || '',
           company_contact_email: fullQuote.company_contact_email || '',
           company_contact_phone: fullQuote.company_contact_phone || '',
+          // Discount
+          discount_type: fullQuote.discount_type,
+          discount_value: fullQuote.discount_value || 0,
           // Additional info
           notes: fullQuote.notes || '',
           terms_conditions: fullQuote.terms_conditions || '',
-          items: fullQuote.quote_items?.map(item => ({
-            product_id: item.product_id,
-            item_name: item.item_name,
-            description: item.description,
-            quantity: item.quantity,
-            unit: item.unit,
-            unit_price: item.unit_price,
-            tax_rate: item.tax_rate,
-            hsn_code: item.hsn_code
-          })) || []
+          items: mappedItems.length > 0 ? mappedItems : [{
+            product_id: undefined,
+            item_name: '',
+            description: '',
+            quantity: 1,
+            unit: 'pcs',
+            unit_price: 0,
+            tax_rate: 18,
+            hsn_code: undefined
+          }]
         });
         setGeneratedQuoteNumber(fullQuote.quote_number);
         setQuoteModalMode('view');
+        setShowQuoteModal(true);
         setShowQuotePreview(true);
       }
     } catch (error) {
@@ -709,11 +734,21 @@ const QuoteManagement: React.FC<QuoteManagementProps> = ({ onBackToDashboard }) 
 
   const handleDownloadQuote = async (quote: Quote) => {
     try {
-      // Load full quote details
-      const fullQuote = await quoteService.getQuoteById(quote.id);
+      // Load full quote details and customer data if needed
+      const [fullQuote, customersData] = await Promise.all([
+        quoteService.getQuoteById(quote.id),
+        customers.length === 0 ? invoiceService.getCustomers({}, 1, 1000) : Promise.resolve({ data: customers })
+      ]);
+      
       if (!fullQuote) {
         showError('Quote not found');
         return;
+      }
+      
+      // Update customers if needed
+      const customersList = customersData.data && customersData.data.length > 0 ? customersData.data : customers;
+      if (customers.length === 0 && customersList.length > 0) {
+        setCustomers(customersList);
       }
 
       // Get company settings
@@ -723,8 +758,8 @@ const QuoteManagement: React.FC<QuoteManagementProps> = ({ onBackToDashboard }) 
         return;
       }
 
-      // Get customer details
-      const customer = customers.find(c => c.id === fullQuote.customer_id);
+      // Get customer details - use fullQuote.customer if available
+      const customer = fullQuote.customer || customersList.find(c => c.id === fullQuote.customer_id);
       if (!customer) {
         showError('Customer details not found');
         return;
@@ -765,322 +800,363 @@ const QuoteManagement: React.FC<QuoteManagementProps> = ({ onBackToDashboard }) 
       
       // Get PDF dimensions
       const dimensions = PDFBrandingUtils.getStandardDimensions();
+      const pageWidth = 210; // A4 width in mm
+      const rightMargin = 10;
+      const contentWidth = pageWidth - dimensions.leftMargin - rightMargin;
       
       // Apply branding
       const { contentStartY } = await PDFBrandingUtils.applyBranding(pdf, company, dimensions);
       
-      let yPos = contentStartY + 10;
+      let yPos = contentStartY + 8;
       const leftMargin = dimensions.leftMargin;
       
       // Title
-      pdf.setFontSize(22);
+      pdf.setFontSize(20);
       pdf.setFont('helvetica', 'bold');
       pdf.setTextColor(5, 150, 105); // Emerald color
-      pdf.text('QUOTATION', 105, yPos, { align: 'center' });
+      pdf.text('QUOTATION', pageWidth / 2, yPos, { align: 'center' });
       
-      yPos += 10;
+      yPos += 8;
       
       // Quote Number
       pdf.setFontSize(10);
       pdf.setFont('helvetica', 'normal');
       pdf.setTextColor(100, 100, 100);
-      pdf.text(`Quote #: ${fullQuote.quote_number}`, 105, yPos, { align: 'center' });
+      pdf.text(`Quote #: ${fullQuote.quote_number}`, pageWidth / 2, yPos, { align: 'center' });
       
       // Project Title if exists
       if (fullQuote.project_title) {
-        yPos += 8;
-        pdf.setFontSize(14);
+        yPos += 7;
+        pdf.setFontSize(12);
         pdf.setFont('helvetica', 'bold');
         pdf.setTextColor(0, 0, 0);
-        pdf.text(fullQuote.project_title, 105, yPos, { align: 'center' });
+        pdf.text(fullQuote.project_title, pageWidth / 2, yPos, { align: 'center' });
         
         if (fullQuote.estimated_time) {
           yPos += 5;
-          pdf.setFontSize(10);
+          pdf.setFontSize(9);
           pdf.setFont('helvetica', 'normal');
           pdf.setTextColor(100, 100, 100);
-          pdf.text(`Estimated Duration: ${fullQuote.estimated_time}`, 105, yPos, { align: 'center' });
+          pdf.text(`Estimated Duration: ${fullQuote.estimated_time}`, pageWidth / 2, yPos, { align: 'center' });
         }
       }
       
-      yPos += 15;
+      yPos += 12;
       
       // Two column layout for From/To
-      const colWidth = 85;
       const col1X = leftMargin;
-      const col2X = 110;
+      const col2X = pageWidth / 2 + 5;
+      const colWidth = (pageWidth - leftMargin - rightMargin - 10) / 2;
       let fromY = yPos;
       let toY = yPos;
       
       // FROM Section
-      pdf.setFontSize(9);
+      pdf.setFontSize(8);
       pdf.setFont('helvetica', 'bold');
       pdf.setTextColor(100, 100, 100);
       pdf.text('FROM:', col1X, fromY);
       
       fromY += 5;
-      pdf.setFontSize(11);
+      pdf.setFontSize(10);
       pdf.setFont('helvetica', 'bold');
       pdf.setTextColor(0, 0, 0);
-      pdf.text(company.company_name, col1X, fromY);
+      const companyNameLines = pdf.splitTextToSize(company.company_name, colWidth);
+      pdf.text(companyNameLines, col1X, fromY);
+      fromY += companyNameLines.length * 4;
       
-      fromY += 5;
-      pdf.setFontSize(9);
+      pdf.setFontSize(8);
       pdf.setFont('helvetica', 'normal');
       pdf.setTextColor(60, 60, 60);
       
       if (company.address_line1) {
-        pdf.text(company.address_line1, col1X, fromY);
-        fromY += 4;
+        const addrLines = pdf.splitTextToSize(company.address_line1, colWidth);
+        pdf.text(addrLines, col1X, fromY);
+        fromY += addrLines.length * 3.5;
       }
       
       const companyLocation = [company.city, company.state, company.postal_code].filter(Boolean).join(', ');
       if (companyLocation) {
         pdf.text(companyLocation, col1X, fromY);
-        fromY += 4;
+        fromY += 3.5;
       }
       
       if (company.email) {
         pdf.text(`Email: ${company.email}`, col1X, fromY);
-        fromY += 4;
+        fromY += 3.5;
       }
       
       // Contact person for this quote
       if (fullQuote.company_contact_name || fullQuote.company_contact_email || fullQuote.company_contact_phone) {
-        fromY += 3;
+        fromY += 2;
         pdf.setFont('helvetica', 'bold');
         pdf.text('Contact Person:', col1X, fromY);
-        fromY += 4;
+        fromY += 3.5;
         pdf.setFont('helvetica', 'normal');
         
         if (fullQuote.company_contact_name) {
           pdf.text(fullQuote.company_contact_name, col1X, fromY);
-          fromY += 4;
+          fromY += 3.5;
         }
         if (fullQuote.company_contact_email) {
           pdf.text(fullQuote.company_contact_email, col1X, fromY);
-          fromY += 4;
+          fromY += 3.5;
         }
         if (fullQuote.company_contact_phone) {
           pdf.text(fullQuote.company_contact_phone, col1X, fromY);
-          fromY += 4;
+          fromY += 3.5;
         }
       }
       
       // TO Section
-      pdf.setFontSize(9);
+      pdf.setFontSize(8);
       pdf.setFont('helvetica', 'bold');
       pdf.setTextColor(100, 100, 100);
       pdf.text('TO:', col2X, toY);
       
       toY += 5;
-      pdf.setFontSize(11);
+      pdf.setFontSize(10);
       pdf.setFont('helvetica', 'bold');
       pdf.setTextColor(0, 0, 0);
-      pdf.text(customer.company_name || customer.contact_person || 'Customer', col2X, toY);
+      const customerName = customer.company_name || customer.contact_person || 'Customer';
+      const customerNameLines = pdf.splitTextToSize(customerName, colWidth);
+      pdf.text(customerNameLines, col2X, toY);
+      toY += customerNameLines.length * 4;
       
-      toY += 5;
-      pdf.setFontSize(9);
+      pdf.setFontSize(8);
       pdf.setFont('helvetica', 'normal');
       pdf.setTextColor(60, 60, 60);
       
       if (customer.address_line1) {
         const addressLines = pdf.splitTextToSize(customer.address_line1, colWidth);
         pdf.text(addressLines, col2X, toY);
-        toY += addressLines.length * 4;
+        toY += addressLines.length * 3.5;
       }
       if (customer.address_line2) {
-        pdf.text(customer.address_line2, col2X, toY);
-        toY += 4;
+        const addr2Lines = pdf.splitTextToSize(customer.address_line2, colWidth);
+        pdf.text(addr2Lines, col2X, toY);
+        toY += addr2Lines.length * 3.5;
       }
       
       const customerLocation = [customer.city, customer.state, customer.postal_code].filter(Boolean).join(', ');
       if (customerLocation) {
         pdf.text(customerLocation, col2X, toY);
-        toY += 4;
+        toY += 3.5;
       }
       
       if (customer.email) {
         pdf.text(`Email: ${customer.email}`, col2X, toY);
-        toY += 4;
+        toY += 3.5;
       }
       
       // Date info
-      toY += 3;
+      toY += 2;
       pdf.setFont('helvetica', 'bold');
       pdf.text('Quote Details:', col2X, toY);
-      toY += 4;
+      toY += 3.5;
       pdf.setFont('helvetica', 'normal');
       pdf.text(`Date: ${new Date(fullQuote.quote_date).toLocaleDateString()}`, col2X, toY);
-      toY += 4;
+      toY += 3.5;
       if (fullQuote.valid_until) {
         pdf.text(`Valid Until: ${new Date(fullQuote.valid_until).toLocaleDateString()}`, col2X, toY);
-        toY += 4;
+        toY += 3.5;
       }
       
-      yPos = Math.max(fromY, toY) + 10;
+      yPos = Math.max(fromY, toY) + 8;
       
-      // Items Table
+      // Items Table - Fixed column widths for proper alignment
       const tableStartY = yPos;
-      const tableWidth = 190 - leftMargin - 10;
-      const colWidths = [10, 70, 20, 30, 25, 35];
-      const colX = [leftMargin];
+      const tableLeftMargin = leftMargin;
+      const tableRightEdge = pageWidth - rightMargin;
+      const tableWidth = tableRightEdge - tableLeftMargin;
+      
+      // Column widths: #(8), Description(75), Qty(22), Rate(32), Tax(22), Amount(31)
+      const colWidths = [8, 75, 22, 32, 22, 31];
+      const colX: number[] = [tableLeftMargin];
       for (let i = 1; i < colWidths.length; i++) {
         colX.push(colX[i-1] + colWidths[i-1]);
       }
       
       // Table header
       pdf.setFillColor(5, 150, 105); // Emerald
-      pdf.rect(leftMargin, tableStartY, tableWidth, 8, 'F');
+      pdf.rect(tableLeftMargin, tableStartY, tableWidth, 7, 'F');
       
-      pdf.setFontSize(8);
+      pdf.setFontSize(7);
       pdf.setFont('helvetica', 'bold');
       pdf.setTextColor(255, 255, 255);
       
       const headers = ['#', 'Description', 'Qty', 'Rate', taxLabel, 'Amount'];
       headers.forEach((header, i) => {
-        const align = i >= 2 ? 'right' : 'left';
-        const xPos = i >= 2 ? colX[i] + colWidths[i] - 2 : colX[i] + 2;
-        if (align === 'right') {
-          pdf.text(header, xPos, tableStartY + 5.5, { align: 'right' });
+        if (i === 0) {
+          pdf.text(header, colX[i] + 2, tableStartY + 4.5);
+        } else if (i === 1) {
+          pdf.text(header, colX[i] + 2, tableStartY + 4.5);
         } else {
-          pdf.text(header, xPos, tableStartY + 5.5);
+          // Right align numeric columns
+          pdf.text(header, colX[i] + colWidths[i] - 2, tableStartY + 4.5, { align: 'right' });
         }
       });
       
-      yPos = tableStartY + 8;
+      yPos = tableStartY + 7;
       
       // Table rows
       pdf.setTextColor(0, 0, 0);
       pdf.setFont('helvetica', 'normal');
       
       fullQuote.quote_items?.forEach((item, index) => {
-        const lineTax = (item.quantity * item.unit_price * item.tax_rate) / 100;
-        const lineTotal = (item.quantity * item.unit_price) + lineTax;
+        const lineSubtotal = item.quantity * item.unit_price;
+        const lineTax = (lineSubtotal * item.tax_rate) / 100;
+        const lineTotal = lineSubtotal + lineTax;
         
         // Process description for bullet points
         const descriptionLines = item.description ? item.description.split('\n') : [];
         const formattedDescLines: string[] = [];
+        
+        // Add item name as first line
+        const itemNameLines = pdf.splitTextToSize(item.item_name, colWidths[1] - 4);
+        
         descriptionLines.forEach(line => {
-          // Convert bullet markers to proper format
-          const cleanLine = line.replace(/^[•\-\*]\s*/, '  • ').trim();
-          if (cleanLine) {
-            const wrapped = pdf.splitTextToSize(cleanLine, colWidths[1] - 8);
+          const trimmedLine = line.trim();
+          if (trimmedLine) {
+            // Convert bullet markers to proper format
+            const cleanLine = trimmedLine.replace(/^[•\-\*]\s*/, '• ');
+            const wrapped = pdf.splitTextToSize(cleanLine, colWidths[1] - 6);
             formattedDescLines.push(...wrapped);
           }
         });
         
-        // Calculate row height based on description content
-        const baseRowHeight = 12;
-        const descRowHeight = formattedDescLines.length > 0 ? Math.max(baseRowHeight, 6 + (formattedDescLines.length * 3.5)) : baseRowHeight;
+        // Calculate row height based on content
+        const nameHeight = itemNameLines.length * 3.5;
+        const descHeight = formattedDescLines.length * 3;
+        const minRowHeight = 8;
+        const rowHeight = Math.max(minRowHeight, nameHeight + descHeight + 4);
         
         // Alternate row background
         if (index % 2 === 0) {
           pdf.setFillColor(249, 250, 251);
-          pdf.rect(leftMargin, yPos, tableWidth, descRowHeight, 'F');
+          pdf.rect(tableLeftMargin, yPos, tableWidth, rowHeight, 'F');
         }
         
-        pdf.setFontSize(8);
+        // Draw row borders
+        pdf.setDrawColor(230, 230, 230);
+        pdf.line(tableLeftMargin, yPos + rowHeight, tableRightEdge, yPos + rowHeight);
         
-        // Row data
-        pdf.text(String(index + 1), colX[0] + 2, yPos + 4);
+        const textY = yPos + 4;
         
-        // Item name
+        // Row number
+        pdf.setFontSize(7);
+        pdf.setFont('helvetica', 'normal');
+        pdf.text(String(index + 1), colX[0] + 2, textY);
+        
+        // Item name (bold)
         pdf.setFont('helvetica', 'bold');
-        const itemName = pdf.splitTextToSize(item.item_name, colWidths[1] - 4);
-        pdf.text(itemName[0], colX[1] + 2, yPos + 4);
+        pdf.setFontSize(7);
+        let currentY = textY;
+        itemNameLines.forEach((nameLine: string) => {
+          pdf.text(nameLine, colX[1] + 2, currentY);
+          currentY += 3.5;
+        });
         
-        // Description with bullet points
+        // Description with bullet points (smaller, gray)
         if (formattedDescLines.length > 0) {
           pdf.setFont('helvetica', 'normal');
-          pdf.setFontSize(7);
+          pdf.setFontSize(6);
           pdf.setTextColor(80, 80, 80);
-          let descY = yPos + 8;
-          formattedDescLines.slice(0, 6).forEach((line) => { // Limit to 6 lines
-            pdf.text(line, colX[1] + 2, descY);
-            descY += 3.5;
+          currentY += 0.5;
+          const maxDescLines = 5;
+          formattedDescLines.slice(0, maxDescLines).forEach((line) => {
+            pdf.text(line, colX[1] + 3, currentY);
+            currentY += 3;
           });
-          if (formattedDescLines.length > 6) {
-            pdf.text('...', colX[1] + 2, descY);
+          if (formattedDescLines.length > maxDescLines) {
+            pdf.text('...', colX[1] + 3, currentY);
           }
           pdf.setTextColor(0, 0, 0);
         }
         
-        pdf.setFontSize(8);
+        // Numeric columns - all right aligned
+        pdf.setFontSize(7);
         pdf.setFont('helvetica', 'normal');
-        pdf.text(`${item.quantity} ${item.unit}`, colX[2] + colWidths[2] - 2, yPos + 4, { align: 'right' });
-        pdf.text(formatCurrencyAmount(item.unit_price, currencyInfo), colX[3] + colWidths[3] - 2, yPos + 4, { align: 'right' });
-        pdf.text(`${item.tax_rate}%`, colX[4] + colWidths[4] - 2, yPos + 4, { align: 'right' });
+        pdf.text(`${item.quantity} ${item.unit}`, colX[2] + colWidths[2] - 2, textY, { align: 'right' });
+        pdf.text(formatCurrencyAmount(item.unit_price, currencyInfo), colX[3] + colWidths[3] - 2, textY, { align: 'right' });
+        pdf.text(`${item.tax_rate}%`, colX[4] + colWidths[4] - 2, textY, { align: 'right' });
         pdf.setFont('helvetica', 'bold');
-        pdf.text(formatCurrencyAmount(lineTotal, currencyInfo), colX[5] + colWidths[5] - 2, yPos + 4, { align: 'right' });
+        pdf.text(formatCurrencyAmount(lineTotal, currencyInfo), colX[5] + colWidths[5] - 2, textY, { align: 'right' });
         
-        yPos += descRowHeight;
+        yPos += rowHeight;
       });
       
-      // Totals
+      // Totals Section - aligned to the right
       yPos += 5;
-      const totalsX = colX[4];
-      const totalsValX = colX[5] + colWidths[5] - 2;
+      const totalsLabelX = colX[4];
+      const totalsValueX = tableRightEdge - 2;
+      const totalsWidth = colWidths[4] + colWidths[5];
       
+      // Subtotal
       pdf.setFont('helvetica', 'normal');
-      pdf.setFontSize(9);
-      pdf.text('Subtotal:', totalsX, yPos);
-      pdf.text(formatCurrencyAmount(subtotal, currencyInfo), totalsValX, yPos, { align: 'right' });
+      pdf.setFontSize(8);
+      pdf.text('Subtotal:', totalsLabelX, yPos);
+      pdf.text(formatCurrencyAmount(subtotal, currencyInfo), totalsValueX, yPos, { align: 'right' });
       
       // Discount line (if applicable)
       if (discountAmount > 0) {
-        yPos += 5;
+        yPos += 4;
         pdf.setTextColor(220, 38, 38); // Red color for discount
         const discountLabel = fullQuote.discount_type === 'percentage' 
           ? `Discount (${fullQuote.discount_value}%):` 
           : 'Discount:';
-        pdf.text(discountLabel, totalsX, yPos);
-        pdf.text(`-${formatCurrencyAmount(discountAmount, currencyInfo)}`, totalsValX, yPos, { align: 'right' });
+        pdf.text(discountLabel, totalsLabelX, yPos);
+        pdf.text(`-${formatCurrencyAmount(discountAmount, currencyInfo)}`, totalsValueX, yPos, { align: 'right' });
         pdf.setTextColor(0, 0, 0); // Reset color
       }
       
-      yPos += 5;
-      pdf.text(`${taxLabel}:`, totalsX, yPos);
-      pdf.text(formatCurrencyAmount(adjustedTotalTax, currencyInfo), totalsValX, yPos, { align: 'right' });
+      // Tax
+      yPos += 4;
+      pdf.text(`${taxLabel}:`, totalsLabelX, yPos);
+      pdf.text(formatCurrencyAmount(adjustedTotalTax, currencyInfo), totalsValueX, yPos, { align: 'right' });
       
-      yPos += 6;
+      // Total with background
+      yPos += 5;
+      pdf.setFillColor(5, 150, 105);
+      pdf.rect(totalsLabelX - 2, yPos - 4, totalsWidth + 4, 7, 'F');
       pdf.setFont('helvetica', 'bold');
-      pdf.setFontSize(11);
-      pdf.text('Total:', totalsX, yPos);
-      pdf.setTextColor(5, 150, 105);
-      pdf.text(formatCurrencyAmount(total, currencyInfo), totalsValX, yPos, { align: 'right' });
+      pdf.setFontSize(9);
+      pdf.setTextColor(255, 255, 255);
+      pdf.text('TOTAL:', totalsLabelX, yPos);
+      pdf.text(formatCurrencyAmount(total, currencyInfo), totalsValueX, yPos, { align: 'right' });
       
       // Amount in words
-      yPos += 6;
-      pdf.setFontSize(8);
+      yPos += 8;
+      pdf.setFontSize(7);
       pdf.setFont('helvetica', 'italic');
       pdf.setTextColor(100, 100, 100);
-      pdf.text(formatAmountInWords(total, currencyInfo.name), leftMargin, yPos);
+      const amountWords = formatAmountInWords(total, currencyInfo.name);
+      const wordLines = pdf.splitTextToSize(amountWords, contentWidth);
+      pdf.text(wordLines, leftMargin, yPos);
+      yPos += wordLines.length * 3 + 5;
       
       // Notes and Terms
-      yPos += 12;
       pdf.setTextColor(0, 0, 0);
       
       if (fullQuote.notes) {
         pdf.setFont('helvetica', 'bold');
-        pdf.setFontSize(9);
+        pdf.setFontSize(8);
         pdf.text('Notes:', leftMargin, yPos);
         yPos += 4;
         pdf.setFont('helvetica', 'normal');
-        pdf.setFontSize(8);
-        const notesLines = pdf.splitTextToSize(fullQuote.notes, 180);
+        pdf.setFontSize(7);
+        const notesLines = pdf.splitTextToSize(fullQuote.notes, contentWidth);
         pdf.text(notesLines, leftMargin, yPos);
-        yPos += notesLines.length * 4 + 5;
+        yPos += notesLines.length * 3 + 4;
       }
       
       if (fullQuote.terms_conditions) {
         pdf.setFont('helvetica', 'bold');
-        pdf.setFontSize(9);
+        pdf.setFontSize(8);
         pdf.text('Terms & Conditions:', leftMargin, yPos);
         yPos += 4;
         pdf.setFont('helvetica', 'normal');
-        pdf.setFontSize(8);
-        const termsLines = pdf.splitTextToSize(fullQuote.terms_conditions, 180);
+        pdf.setFontSize(7);
+        const termsLines = pdf.splitTextToSize(fullQuote.terms_conditions, contentWidth);
         pdf.text(termsLines, leftMargin, yPos);
       }
       
@@ -1856,6 +1932,285 @@ const QuoteManagement: React.FC<QuoteManagementProps> = ({ onBackToDashboard }) 
         {activeTab === 'dashboard' && renderDashboard()}
         {activeTab === 'quotes' && renderQuotesList()}
       </main>
+      
+      {/* View Quote Preview Modal - works from dashboard/quotes list */}
+      {showQuotePreview && quoteModalMode === 'view' && selectedQuote && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 overflow-y-auto h-full w-full z-50">
+          <div className="relative top-4 mx-auto p-5 border w-11/12 max-w-5xl shadow-lg rounded-lg bg-white mb-8">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-bold text-gray-900">
+                View Quotation - {selectedQuote.quote_number}
+              </h2>
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={() => handleDownloadQuote(selectedQuote)}
+                  className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+                >
+                  <Download className="w-4 h-4 mr-2" />
+                  Download PDF
+                </button>
+                <button
+                  onClick={() => {
+                    setShowQuotePreview(false);
+                    setShowQuoteModal(false);
+                    setSelectedQuote(null);
+                  }}
+                  className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+            
+            {/* Preview Content */}
+            <div className="max-h-[75vh] overflow-y-auto">
+              <div className="bg-white shadow-lg max-w-4xl mx-auto border border-gray-200" style={{fontSize: '14px', lineHeight: '1.4'}}>
+                {/* Header Image */}
+                {companySettings[0]?.header_image_url && (
+                  <div className="w-full">
+                    <img 
+                      src={companySettings[0].header_image_url} 
+                      alt="Header" 
+                      className="w-full h-auto object-cover"
+                      style={{ maxHeight: '120px' }}
+                    />
+                  </div>
+                )}
+                
+                <div className="p-6">
+                  {/* Title */}
+                  <div className="text-center mb-6">
+                    <div className="text-2xl font-bold text-emerald-600 mb-2">QUOTATION</div>
+                    <div className="text-sm text-gray-600">
+                      <span className="mr-4"><strong>Quote #:</strong> {selectedQuote.quote_number}</span>
+                      <span className="mr-4"><strong>Date:</strong> {new Date(selectedQuote.quote_date).toLocaleDateString()}</span>
+                      {selectedQuote.valid_until && (
+                        <span><strong>Valid Until:</strong> {new Date(selectedQuote.valid_until).toLocaleDateString()}</span>
+                      )}
+                    </div>
+                  </div>
+                  
+                  {/* Project Title */}
+                  {selectedQuote.project_title && (
+                    <div className="mb-6 p-4 bg-emerald-50 border border-emerald-200 rounded-lg text-center">
+                      <h3 className="text-lg font-bold text-emerald-800">{selectedQuote.project_title}</h3>
+                      {selectedQuote.estimated_time && (
+                        <p className="text-sm text-emerald-600 mt-1">
+                          <Clock className="w-4 h-4 inline mr-1" />
+                          Estimated Duration: {selectedQuote.estimated_time}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                  
+                  {/* From/To */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                    <div className="bg-gray-50 p-4 rounded">
+                      <div className="font-semibold text-gray-900 mb-2">From:</div>
+                      <div className="text-sm">
+                        <div className="font-medium">{companySettings[0]?.company_name}</div>
+                        {companySettings[0]?.address_line1 && <div className="text-gray-600">{companySettings[0].address_line1}</div>}
+                        <div className="text-gray-600">{[companySettings[0]?.city, companySettings[0]?.state, companySettings[0]?.postal_code].filter(Boolean).join(', ')}</div>
+                        {companySettings[0]?.email && <div className="text-gray-600">📧 {companySettings[0].email}</div>}
+                      </div>
+                      {(selectedQuote.company_contact_name || selectedQuote.company_contact_email) && (
+                        <div className="mt-3 pt-3 border-t border-gray-200">
+                          <div className="font-medium text-sm">Contact Person:</div>
+                          {selectedQuote.company_contact_name && <div className="text-gray-600 text-sm">{selectedQuote.company_contact_name}</div>}
+                          {selectedQuote.company_contact_email && <div className="text-gray-600 text-sm">{selectedQuote.company_contact_email}</div>}
+                          {selectedQuote.company_contact_phone && <div className="text-gray-600 text-sm">{selectedQuote.company_contact_phone}</div>}
+                        </div>
+                      )}
+                    </div>
+                    
+                    <div className="bg-gray-50 p-4 rounded">
+                      <div className="font-semibold text-gray-900 mb-2">To:</div>
+                      <div className="text-sm">
+                        <div className="font-medium">{selectedQuote.customer?.company_name || selectedQuote.customer?.contact_person}</div>
+                        {selectedQuote.customer?.address_line1 && <div className="text-gray-600">{selectedQuote.customer.address_line1}</div>}
+                        <div className="text-gray-600">{[selectedQuote.customer?.city, selectedQuote.customer?.state, selectedQuote.customer?.postal_code].filter(Boolean).join(', ')}</div>
+                        {selectedQuote.customer?.email && <div className="text-gray-600">📧 {selectedQuote.customer.email}</div>}
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* Items Table */}
+                  <div className="mb-6">
+                    <table className="w-full border-collapse border border-gray-300 text-xs">
+                      <thead>
+                        <tr className="bg-emerald-600 text-white">
+                          <th className="border border-emerald-700 px-2 py-2 text-left font-medium w-8">#</th>
+                          <th className="border border-emerald-700 px-2 py-2 text-left font-medium">Item</th>
+                          <th className="border border-emerald-700 px-2 py-2 text-center font-medium w-16">Qty</th>
+                          <th className="border border-emerald-700 px-2 py-2 text-right font-medium w-24">Rate</th>
+                          <th className="border border-emerald-700 px-2 py-2 text-center font-medium w-14">{getTaxLabel(selectedQuote.customer)}%</th>
+                          <th className="border border-emerald-700 px-2 py-2 text-right font-medium w-24">Amount</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {selectedQuote.quote_items?.map((item, index) => {
+                          const lineSubtotal = item.quantity * item.unit_price;
+                          const lineTax = (lineSubtotal * item.tax_rate) / 100;
+                          const lineTotal = lineSubtotal + lineTax;
+                          const currInfo = getCurrencyInfo(selectedQuote.customer);
+                          return (
+                            <tr key={index} className={index % 2 === 0 ? 'bg-gray-50' : 'bg-white'}>
+                              <td className="border border-gray-300 px-2 py-2">{index + 1}</td>
+                              <td className="border border-gray-300 px-2 py-2">
+                                <div className="font-medium">{item.item_name}</div>
+                                {item.description && (
+                                  <div className="text-gray-600 text-xs mt-1 whitespace-pre-wrap">{item.description}</div>
+                                )}
+                              </td>
+                              <td className="border border-gray-300 px-2 py-2 text-center">{item.quantity} {item.unit}</td>
+                              <td className="border border-gray-300 px-2 py-2 text-right">{formatCurrencyAmount(item.unit_price, currInfo)}</td>
+                              <td className="border border-gray-300 px-2 py-2 text-center">{item.tax_rate}%</td>
+                              <td className="border border-gray-300 px-2 py-2 text-right font-medium">{formatCurrencyAmount(lineTotal, currInfo)}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                  
+                  {/* Totals */}
+                  <div className="flex justify-end mb-6">
+                    <div className="w-64 text-sm">
+                      <div className="flex justify-between py-1">
+                        <span>Subtotal:</span>
+                        <span>{formatCurrencyAmount(selectedQuote.subtotal, getCurrencyInfo(selectedQuote.customer))}</span>
+                      </div>
+                      {selectedQuote.discount_amount && selectedQuote.discount_amount > 0 && (
+                        <div className="flex justify-between py-1 text-red-600">
+                          <span>Discount{selectedQuote.discount_type === 'percentage' ? ` (${selectedQuote.discount_value}%)` : ''}:</span>
+                          <span>-{formatCurrencyAmount(selectedQuote.discount_amount, getCurrencyInfo(selectedQuote.customer))}</span>
+                        </div>
+                      )}
+                      <div className="flex justify-between py-1">
+                        <span>{getTaxLabel(selectedQuote.customer)}:</span>
+                        <span>{formatCurrencyAmount(selectedQuote.tax_amount, getCurrencyInfo(selectedQuote.customer))}</span>
+                      </div>
+                      <div className="flex justify-between py-2 font-bold text-emerald-700 border-t border-gray-300 mt-1">
+                        <span>Total:</span>
+                        <span>{formatCurrencyAmount(selectedQuote.total_amount, getCurrencyInfo(selectedQuote.customer))}</span>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* Notes & Terms */}
+                  {selectedQuote.notes && (
+                    <div className="mb-4">
+                      <div className="font-semibold text-sm mb-1">Notes:</div>
+                      <div className="text-xs text-gray-600 whitespace-pre-wrap">{selectedQuote.notes}</div>
+                    </div>
+                  )}
+                  {selectedQuote.terms_conditions && (
+                    <div>
+                      <div className="font-semibold text-sm mb-1">Terms & Conditions:</div>
+                      <div className="text-xs text-gray-600 whitespace-pre-wrap">{selectedQuote.terms_conditions}</div>
+                    </div>
+                  )}
+                </div>
+                
+                {/* Footer Image */}
+                {companySettings[0]?.footer_image_url && (
+                  <div className="w-full">
+                    <img 
+                      src={companySettings[0].footer_image_url} 
+                      alt="Footer" 
+                      className="w-full h-auto object-cover"
+                      style={{ maxHeight: '100px' }}
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
+            
+            {/* Modal Footer */}
+            <div className="flex justify-between mt-6 pt-4 border-t">
+              <div>
+                <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(selectedQuote.status)}`}>
+                  {getStatusIcon(selectedQuote.status)}
+                  <span className="ml-1 capitalize">{selectedQuote.status}</span>
+                </span>
+              </div>
+              <div className="flex space-x-3">
+                {(selectedQuote.status === 'draft' || selectedQuote.status === 'sent') && (
+                  <button
+                    onClick={() => {
+                      setShowQuotePreview(false);
+                      handleEditQuote(selectedQuote);
+                    }}
+                    className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+                  >
+                    <Edit className="w-4 h-4 inline mr-2" />
+                    Edit Quote
+                  </button>
+                )}
+                <button
+                  onClick={() => {
+                    setShowQuotePreview(false);
+                    setShowQuoteModal(false);
+                    setSelectedQuote(null);
+                  }}
+                  className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Edit Quote Modal */}
+      {showQuoteModal && quoteModalMode === 'edit' && selectedQuote && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 overflow-y-auto h-full w-full z-50">
+          <div className="relative top-4 mx-auto p-5 border w-11/12 max-w-6xl shadow-lg rounded-lg bg-white mb-8">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-bold text-gray-900">
+                Edit Quotation - {selectedQuote.quote_number}
+              </h2>
+              <button
+                onClick={closeQuoteModal}
+                className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            {/* Edit Form - Using CreateQuote component */}
+            <CreateQuote
+              quoteFormData={quoteFormData}
+              onFormChange={handleQuoteFormChange}
+              onItemChange={handleQuoteItemChange}
+              onAddItem={addQuoteItem}
+              onRemoveItem={removeQuoteItem}
+              onSaveQuote={handleSaveQuote}
+              onCloseQuote={closeQuoteModal}
+              onShowPreview={() => setShowQuotePreview(true)}
+              onTermsChange={handleTermsChange}
+              onTermsTemplateSelect={handleTermsTemplateSelect}
+              onDefaultProductChange={handleDefaultProductChange}
+              customers={customers}
+              products={products}
+              termsTemplates={termsTemplates}
+              companySettings={companySettings}
+              selectedDefaultProduct={selectedDefaultProduct}
+              selectedTermsTemplateId={selectedTermsTemplateId}
+              globalHsnCode={globalHsnCode}
+              generatedQuoteNumber={generatedQuoteNumber}
+              modalLoading={modalLoading}
+              calculateQuoteTotals={calculateQuoteTotals}
+              getCurrencyInfo={getCurrencyInfo}
+              formatCurrencyAmount={formatCurrencyAmount}
+              formatAmountInWords={formatAmountInWords}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 };
