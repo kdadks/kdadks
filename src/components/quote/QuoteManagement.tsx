@@ -789,7 +789,7 @@ const QuoteManagement: React.FC<QuoteManagementProps> = ({ onBackToDashboard }) 
       const currencyInfo = getCurrencyInfo(customer);
       const taxLabel = getTaxLabel(customer);
 
-      // Create PDF
+      // Create PDF with multi-page support
       const pdf = new jsPDF({
         orientation: 'p',
         unit: 'mm',
@@ -798,179 +798,217 @@ const QuoteManagement: React.FC<QuoteManagementProps> = ({ onBackToDashboard }) 
       
       pdf.setFont('helvetica');
       
-      // Get PDF dimensions
-      const dimensions = PDFBrandingUtils.getStandardDimensions();
-      const pageWidth = 210; // A4 width in mm
-      const rightMargin = 10;
-      const contentWidth = pageWidth - dimensions.leftMargin - rightMargin;
+      // Page dimensions
+      const pageWidth = 210;
+      const pageHeight = 297;
+      const leftMargin = 15;
+      const rightMargin = 15;
+      const topMargin = 15;
+      const bottomMargin = 25;
+      const contentWidth = pageWidth - leftMargin - rightMargin;
+      const maxY = pageHeight - bottomMargin;
       
-      // Apply branding
+      // Helper function to check if we need a new page
+      const checkPageBreak = (requiredSpace: number): void => {
+        if (yPos + requiredSpace > maxY) {
+          pdf.addPage();
+          yPos = topMargin + 10;
+        }
+      };
+      
+      // Apply branding header
+      const dimensions = PDFBrandingUtils.getStandardDimensions();
       const { contentStartY } = await PDFBrandingUtils.applyBranding(pdf, company, dimensions);
       
-      let yPos = contentStartY + 8;
-      const leftMargin = dimensions.leftMargin;
+      let yPos = contentStartY + 10;
       
-      // Title
-      pdf.setFontSize(20);
+      // ========== TITLE SECTION ==========
+      pdf.setFontSize(24);
       pdf.setFont('helvetica', 'bold');
       pdf.setTextColor(5, 150, 105); // Emerald color
       pdf.text('QUOTATION', pageWidth / 2, yPos, { align: 'center' });
       
-      yPos += 8;
+      yPos += 10;
       
       // Quote Number
-      pdf.setFontSize(10);
+      pdf.setFontSize(12);
       pdf.setFont('helvetica', 'normal');
-      pdf.setTextColor(100, 100, 100);
+      pdf.setTextColor(80, 80, 80);
       pdf.text(`Quote #: ${fullQuote.quote_number}`, pageWidth / 2, yPos, { align: 'center' });
       
       // Project Title if exists
       if (fullQuote.project_title) {
-        yPos += 7;
-        pdf.setFontSize(12);
+        yPos += 10;
+        pdf.setFontSize(16);
         pdf.setFont('helvetica', 'bold');
         pdf.setTextColor(0, 0, 0);
-        pdf.text(fullQuote.project_title, pageWidth / 2, yPos, { align: 'center' });
+        const projectTitleLines = pdf.splitTextToSize(fullQuote.project_title, contentWidth - 40);
+        pdf.text(projectTitleLines, pageWidth / 2, yPos, { align: 'center' });
+        yPos += projectTitleLines.length * 6;
         
         if (fullQuote.estimated_time) {
-          yPos += 5;
-          pdf.setFontSize(9);
+          yPos += 2;
+          pdf.setFontSize(11);
           pdf.setFont('helvetica', 'normal');
           pdf.setTextColor(100, 100, 100);
           pdf.text(`Estimated Duration: ${fullQuote.estimated_time}`, pageWidth / 2, yPos, { align: 'center' });
         }
       }
       
-      yPos += 12;
+      yPos += 15;
       
-      // Two column layout for From/To
+      // ========== FROM/TO SECTION ==========
       const col1X = leftMargin;
-      const col2X = pageWidth / 2 + 5;
-      const colWidth = (pageWidth - leftMargin - rightMargin - 10) / 2;
+      const col2X = pageWidth / 2 + 10;
+      const colWidth = (pageWidth - leftMargin - rightMargin - 20) / 2;
       let fromY = yPos;
       let toY = yPos;
       
       // FROM Section
-      pdf.setFontSize(8);
+      pdf.setFontSize(10);
       pdf.setFont('helvetica', 'bold');
-      pdf.setTextColor(100, 100, 100);
+      pdf.setTextColor(5, 150, 105);
       pdf.text('FROM:', col1X, fromY);
       
-      fromY += 5;
-      pdf.setFontSize(10);
+      fromY += 6;
+      pdf.setFontSize(12);
       pdf.setFont('helvetica', 'bold');
       pdf.setTextColor(0, 0, 0);
       const companyNameLines = pdf.splitTextToSize(company.company_name, colWidth);
       pdf.text(companyNameLines, col1X, fromY);
-      fromY += companyNameLines.length * 4;
+      fromY += companyNameLines.length * 5;
       
-      pdf.setFontSize(8);
+      pdf.setFontSize(10);
       pdf.setFont('helvetica', 'normal');
       pdf.setTextColor(60, 60, 60);
       
       if (company.address_line1) {
         const addrLines = pdf.splitTextToSize(company.address_line1, colWidth);
         pdf.text(addrLines, col1X, fromY);
-        fromY += addrLines.length * 3.5;
+        fromY += addrLines.length * 4.5;
       }
       
       const companyLocation = [company.city, company.state, company.postal_code].filter(Boolean).join(', ');
       if (companyLocation) {
         pdf.text(companyLocation, col1X, fromY);
-        fromY += 3.5;
+        fromY += 4.5;
       }
       
       if (company.email) {
         pdf.text(`Email: ${company.email}`, col1X, fromY);
-        fromY += 3.5;
+        fromY += 4.5;
+      }
+      
+      if (company.phone) {
+        pdf.text(`Phone: ${company.phone}`, col1X, fromY);
+        fromY += 4.5;
       }
       
       // Contact person for this quote
       if (fullQuote.company_contact_name || fullQuote.company_contact_email || fullQuote.company_contact_phone) {
-        fromY += 2;
+        fromY += 4;
         pdf.setFont('helvetica', 'bold');
+        pdf.setTextColor(5, 150, 105);
         pdf.text('Contact Person:', col1X, fromY);
-        fromY += 3.5;
+        fromY += 5;
         pdf.setFont('helvetica', 'normal');
+        pdf.setTextColor(60, 60, 60);
         
         if (fullQuote.company_contact_name) {
           pdf.text(fullQuote.company_contact_name, col1X, fromY);
-          fromY += 3.5;
+          fromY += 4.5;
         }
         if (fullQuote.company_contact_email) {
           pdf.text(fullQuote.company_contact_email, col1X, fromY);
-          fromY += 3.5;
+          fromY += 4.5;
         }
         if (fullQuote.company_contact_phone) {
           pdf.text(fullQuote.company_contact_phone, col1X, fromY);
-          fromY += 3.5;
+          fromY += 4.5;
         }
       }
       
       // TO Section
-      pdf.setFontSize(8);
+      pdf.setFontSize(10);
       pdf.setFont('helvetica', 'bold');
-      pdf.setTextColor(100, 100, 100);
+      pdf.setTextColor(5, 150, 105);
       pdf.text('TO:', col2X, toY);
       
-      toY += 5;
-      pdf.setFontSize(10);
+      toY += 6;
+      pdf.setFontSize(12);
       pdf.setFont('helvetica', 'bold');
       pdf.setTextColor(0, 0, 0);
       const customerName = customer.company_name || customer.contact_person || 'Customer';
       const customerNameLines = pdf.splitTextToSize(customerName, colWidth);
       pdf.text(customerNameLines, col2X, toY);
-      toY += customerNameLines.length * 4;
+      toY += customerNameLines.length * 5;
       
-      pdf.setFontSize(8);
+      if (customer.contact_person && customer.company_name) {
+        pdf.setFontSize(10);
+        pdf.setFont('helvetica', 'normal');
+        pdf.text(`Attn: ${customer.contact_person}`, col2X, toY);
+        toY += 4.5;
+      }
+      
+      pdf.setFontSize(10);
       pdf.setFont('helvetica', 'normal');
       pdf.setTextColor(60, 60, 60);
       
       if (customer.address_line1) {
         const addressLines = pdf.splitTextToSize(customer.address_line1, colWidth);
         pdf.text(addressLines, col2X, toY);
-        toY += addressLines.length * 3.5;
+        toY += addressLines.length * 4.5;
       }
       if (customer.address_line2) {
         const addr2Lines = pdf.splitTextToSize(customer.address_line2, colWidth);
         pdf.text(addr2Lines, col2X, toY);
-        toY += addr2Lines.length * 3.5;
+        toY += addr2Lines.length * 4.5;
       }
       
       const customerLocation = [customer.city, customer.state, customer.postal_code].filter(Boolean).join(', ');
       if (customerLocation) {
         pdf.text(customerLocation, col2X, toY);
-        toY += 3.5;
+        toY += 4.5;
       }
       
       if (customer.email) {
         pdf.text(`Email: ${customer.email}`, col2X, toY);
-        toY += 3.5;
+        toY += 4.5;
       }
       
-      // Date info
-      toY += 2;
+      if (customer.phone) {
+        pdf.text(`Phone: ${customer.phone}`, col2X, toY);
+        toY += 4.5;
+      }
+      
+      // Date info box
+      toY += 5;
+      pdf.setFillColor(245, 245, 245);
+      pdf.rect(col2X, toY - 3, colWidth, 20, 'F');
       pdf.setFont('helvetica', 'bold');
-      pdf.text('Quote Details:', col2X, toY);
-      toY += 3.5;
+      pdf.setFontSize(10);
+      pdf.setTextColor(0, 0, 0);
+      pdf.text('Quote Details', col2X + 3, toY + 2);
+      toY += 7;
       pdf.setFont('helvetica', 'normal');
-      pdf.text(`Date: ${new Date(fullQuote.quote_date).toLocaleDateString()}`, col2X, toY);
-      toY += 3.5;
+      pdf.text(`Date: ${new Date(fullQuote.quote_date).toLocaleDateString()}`, col2X + 3, toY);
+      toY += 5;
       if (fullQuote.valid_until) {
-        pdf.text(`Valid Until: ${new Date(fullQuote.valid_until).toLocaleDateString()}`, col2X, toY);
-        toY += 3.5;
+        pdf.text(`Valid Until: ${new Date(fullQuote.valid_until).toLocaleDateString()}`, col2X + 3, toY);
+        toY += 5;
       }
       
-      yPos = Math.max(fromY, toY) + 8;
+      yPos = Math.max(fromY, toY) + 15;
       
-      // Items Table - Fixed column widths for proper alignment
-      const tableStartY = yPos;
+      // ========== ITEMS TABLE ==========
+      checkPageBreak(40);
+      
       const tableLeftMargin = leftMargin;
       const tableRightEdge = pageWidth - rightMargin;
       const tableWidth = tableRightEdge - tableLeftMargin;
       
-      // Column widths: #(8), Description(75), Qty(22), Rate(32), Tax(22), Amount(31)
-      const colWidths = [8, 75, 22, 32, 22, 31];
+      // Improved column widths for readability: #(12), Description(80), Qty(22), Rate(28), Tax(20), Amount(28)
+      const colWidths = [12, 80, 22, 28, 20, 28];
       const colX: number[] = [tableLeftMargin];
       for (let i = 1; i < colWidths.length; i++) {
         colX.push(colX[i-1] + colWidths[i-1]);
@@ -978,186 +1016,230 @@ const QuoteManagement: React.FC<QuoteManagementProps> = ({ onBackToDashboard }) 
       
       // Table header
       pdf.setFillColor(5, 150, 105); // Emerald
-      pdf.rect(tableLeftMargin, tableStartY, tableWidth, 7, 'F');
+      pdf.rect(tableLeftMargin, yPos, tableWidth, 10, 'F');
       
-      pdf.setFontSize(7);
+      pdf.setFontSize(10);
       pdf.setFont('helvetica', 'bold');
       pdf.setTextColor(255, 255, 255);
       
       const headers = ['#', 'Description', 'Qty', 'Rate', taxLabel, 'Amount'];
       headers.forEach((header, i) => {
-        if (i === 0) {
-          pdf.text(header, colX[i] + 2, tableStartY + 4.5);
-        } else if (i === 1) {
-          pdf.text(header, colX[i] + 2, tableStartY + 4.5);
+        if (i <= 1) {
+          pdf.text(header, colX[i] + 3, yPos + 6.5);
         } else {
-          // Right align numeric columns
-          pdf.text(header, colX[i] + colWidths[i] - 2, tableStartY + 4.5, { align: 'right' });
+          pdf.text(header, colX[i] + colWidths[i] - 3, yPos + 6.5, { align: 'right' });
         }
       });
       
-      yPos = tableStartY + 7;
+      yPos += 10;
       
-      // Table rows
+      // Table rows with proper spacing
       pdf.setTextColor(0, 0, 0);
-      pdf.setFont('helvetica', 'normal');
       
       fullQuote.quote_items?.forEach((item, index) => {
         const lineSubtotal = item.quantity * item.unit_price;
         const lineTax = (lineSubtotal * item.tax_rate) / 100;
         const lineTotal = lineSubtotal + lineTax;
         
-        // Process description for bullet points
+        // Process description - allow full content with page breaks
         const descriptionLines = item.description ? item.description.split('\n') : [];
         const formattedDescLines: string[] = [];
-        
-        // Add item name as first line
-        const itemNameLines = pdf.splitTextToSize(item.item_name, colWidths[1] - 4);
         
         descriptionLines.forEach(line => {
           const trimmedLine = line.trim();
           if (trimmedLine) {
-            // Convert bullet markers to proper format
             const cleanLine = trimmedLine.replace(/^[•\-\*]\s*/, '• ');
-            const wrapped = pdf.splitTextToSize(cleanLine, colWidths[1] - 6);
+            const wrapped = pdf.splitTextToSize(cleanLine, colWidths[1] - 8);
             formattedDescLines.push(...wrapped);
           }
         });
         
-        // Calculate row height based on content
-        const nameHeight = itemNameLines.length * 3.5;
-        const descHeight = formattedDescLines.length * 3;
-        const minRowHeight = 8;
-        const rowHeight = Math.max(minRowHeight, nameHeight + descHeight + 4);
+        // Calculate row height - readable sizing
+        const itemNameLines = pdf.splitTextToSize(item.item_name, colWidths[1] - 8);
+        const nameHeight = itemNameLines.length * 5;
+        const descHeight = formattedDescLines.length * 4;
+        const minRowHeight = 12;
+        const rowHeight = Math.max(minRowHeight, nameHeight + descHeight + 8);
+        
+        // Check if we need a new page for this row
+        checkPageBreak(rowHeight + 5);
         
         // Alternate row background
         if (index % 2 === 0) {
-          pdf.setFillColor(249, 250, 251);
+          pdf.setFillColor(250, 250, 250);
           pdf.rect(tableLeftMargin, yPos, tableWidth, rowHeight, 'F');
         }
         
-        // Draw row borders
-        pdf.setDrawColor(230, 230, 230);
+        // Draw row border
+        pdf.setDrawColor(220, 220, 220);
         pdf.line(tableLeftMargin, yPos + rowHeight, tableRightEdge, yPos + rowHeight);
         
-        const textY = yPos + 4;
+        const textY = yPos + 6;
         
         // Row number
-        pdf.setFontSize(7);
+        pdf.setFontSize(10);
         pdf.setFont('helvetica', 'normal');
-        pdf.text(String(index + 1), colX[0] + 2, textY);
+        pdf.text(String(index + 1), colX[0] + 3, textY);
         
-        // Item name (bold)
+        // Item name (bold, readable)
         pdf.setFont('helvetica', 'bold');
-        pdf.setFontSize(7);
+        pdf.setFontSize(10);
         let currentY = textY;
         itemNameLines.forEach((nameLine: string) => {
-          pdf.text(nameLine, colX[1] + 2, currentY);
-          currentY += 3.5;
+          pdf.text(nameLine, colX[1] + 3, currentY);
+          currentY += 5;
         });
         
-        // Description with bullet points (smaller, gray)
+        // Description (normal text, readable size)
         if (formattedDescLines.length > 0) {
           pdf.setFont('helvetica', 'normal');
-          pdf.setFontSize(6);
-          pdf.setTextColor(80, 80, 80);
-          currentY += 0.5;
-          const maxDescLines = 5;
-          formattedDescLines.slice(0, maxDescLines).forEach((line) => {
-            pdf.text(line, colX[1] + 3, currentY);
-            currentY += 3;
+          pdf.setFontSize(9);
+          pdf.setTextColor(70, 70, 70);
+          currentY += 1;
+          formattedDescLines.forEach((line) => {
+            pdf.text(line, colX[1] + 5, currentY);
+            currentY += 4;
           });
-          if (formattedDescLines.length > maxDescLines) {
-            pdf.text('...', colX[1] + 3, currentY);
-          }
           pdf.setTextColor(0, 0, 0);
         }
         
-        // Numeric columns - all right aligned
-        pdf.setFontSize(7);
+        // Numeric columns - readable size, right aligned
+        pdf.setFontSize(10);
         pdf.setFont('helvetica', 'normal');
-        pdf.text(`${item.quantity} ${item.unit}`, colX[2] + colWidths[2] - 2, textY, { align: 'right' });
-        pdf.text(formatCurrencyAmount(item.unit_price, currencyInfo), colX[3] + colWidths[3] - 2, textY, { align: 'right' });
-        pdf.text(`${item.tax_rate}%`, colX[4] + colWidths[4] - 2, textY, { align: 'right' });
+        pdf.text(`${item.quantity} ${item.unit}`, colX[2] + colWidths[2] - 3, textY, { align: 'right' });
+        pdf.text(formatCurrencyAmount(item.unit_price, currencyInfo), colX[3] + colWidths[3] - 3, textY, { align: 'right' });
+        pdf.text(`${item.tax_rate}%`, colX[4] + colWidths[4] - 3, textY, { align: 'right' });
         pdf.setFont('helvetica', 'bold');
-        pdf.text(formatCurrencyAmount(lineTotal, currencyInfo), colX[5] + colWidths[5] - 2, textY, { align: 'right' });
+        pdf.text(formatCurrencyAmount(lineTotal, currencyInfo), colX[5] + colWidths[5] - 3, textY, { align: 'right' });
         
         yPos += rowHeight;
       });
       
-      // Totals Section - aligned to the right
-      yPos += 5;
-      const totalsLabelX = colX[4];
-      const totalsValueX = tableRightEdge - 2;
-      const totalsWidth = colWidths[4] + colWidths[5];
+      // ========== TOTALS SECTION ==========
+      yPos += 8;
+      checkPageBreak(50);
+      
+      const totalsBoxWidth = 80;
+      const totalsBoxX = tableRightEdge - totalsBoxWidth;
+      
+      // Totals box
+      pdf.setFillColor(250, 250, 250);
+      pdf.rect(totalsBoxX, yPos, totalsBoxWidth, discountAmount > 0 ? 45 : 38, 'F');
+      pdf.setDrawColor(200, 200, 200);
+      pdf.rect(totalsBoxX, yPos, totalsBoxWidth, discountAmount > 0 ? 45 : 38, 'S');
+      
+      const labelX = totalsBoxX + 5;
+      const valueX = totalsBoxX + totalsBoxWidth - 5;
+      let totalsY = yPos + 8;
       
       // Subtotal
       pdf.setFont('helvetica', 'normal');
-      pdf.setFontSize(8);
-      pdf.text('Subtotal:', totalsLabelX, yPos);
-      pdf.text(formatCurrencyAmount(subtotal, currencyInfo), totalsValueX, yPos, { align: 'right' });
+      pdf.setFontSize(10);
+      pdf.setTextColor(0, 0, 0);
+      pdf.text('Subtotal:', labelX, totalsY);
+      pdf.text(formatCurrencyAmount(subtotal, currencyInfo), valueX, totalsY, { align: 'right' });
       
       // Discount line (if applicable)
       if (discountAmount > 0) {
-        yPos += 4;
+        totalsY += 7;
         pdf.setTextColor(220, 38, 38); // Red color for discount
         const discountLabel = fullQuote.discount_type === 'percentage' 
           ? `Discount (${fullQuote.discount_value}%):` 
           : 'Discount:';
-        pdf.text(discountLabel, totalsLabelX, yPos);
-        pdf.text(`-${formatCurrencyAmount(discountAmount, currencyInfo)}`, totalsValueX, yPos, { align: 'right' });
-        pdf.setTextColor(0, 0, 0); // Reset color
+        pdf.text(discountLabel, labelX, totalsY);
+        pdf.text(`-${formatCurrencyAmount(discountAmount, currencyInfo)}`, valueX, totalsY, { align: 'right' });
+        pdf.setTextColor(0, 0, 0);
       }
       
       // Tax
-      yPos += 4;
-      pdf.text(`${taxLabel}:`, totalsLabelX, yPos);
-      pdf.text(formatCurrencyAmount(adjustedTotalTax, currencyInfo), totalsValueX, yPos, { align: 'right' });
+      totalsY += 7;
+      pdf.text(`${taxLabel}:`, labelX, totalsY);
+      pdf.text(formatCurrencyAmount(adjustedTotalTax, currencyInfo), valueX, totalsY, { align: 'right' });
       
-      // Total with background
-      yPos += 5;
+      // Total with highlight
+      totalsY += 9;
       pdf.setFillColor(5, 150, 105);
-      pdf.rect(totalsLabelX - 2, yPos - 4, totalsWidth + 4, 7, 'F');
+      pdf.rect(totalsBoxX, totalsY - 5, totalsBoxWidth, 10, 'F');
       pdf.setFont('helvetica', 'bold');
-      pdf.setFontSize(9);
+      pdf.setFontSize(11);
       pdf.setTextColor(255, 255, 255);
-      pdf.text('TOTAL:', totalsLabelX, yPos);
-      pdf.text(formatCurrencyAmount(total, currencyInfo), totalsValueX, yPos, { align: 'right' });
+      pdf.text('TOTAL:', labelX, totalsY);
+      pdf.text(formatCurrencyAmount(total, currencyInfo), valueX, totalsY, { align: 'right' });
       
       // Amount in words
-      yPos += 8;
-      pdf.setFontSize(7);
+      yPos = totalsY + 15;
+      checkPageBreak(15);
+      pdf.setFontSize(10);
       pdf.setFont('helvetica', 'italic');
-      pdf.setTextColor(100, 100, 100);
+      pdf.setTextColor(80, 80, 80);
       const amountWords = formatAmountInWords(total, currencyInfo.name);
       const wordLines = pdf.splitTextToSize(amountWords, contentWidth);
       pdf.text(wordLines, leftMargin, yPos);
-      yPos += wordLines.length * 3 + 5;
+      yPos += wordLines.length * 5 + 10;
       
-      // Notes and Terms
-      pdf.setTextColor(0, 0, 0);
-      
+      // ========== NOTES SECTION ==========
       if (fullQuote.notes) {
+        checkPageBreak(25);
+        
+        pdf.setFillColor(255, 251, 235); // Light amber
+        const notesLines = pdf.splitTextToSize(fullQuote.notes, contentWidth - 10);
+        const notesHeight = 10 + (notesLines.length * 5);
+        pdf.rect(leftMargin, yPos, contentWidth, notesHeight, 'F');
+        
         pdf.setFont('helvetica', 'bold');
-        pdf.setFontSize(8);
-        pdf.text('Notes:', leftMargin, yPos);
-        yPos += 4;
+        pdf.setFontSize(11);
+        pdf.setTextColor(0, 0, 0);
+        pdf.text('Notes:', leftMargin + 5, yPos + 7);
+        
         pdf.setFont('helvetica', 'normal');
-        pdf.setFontSize(7);
-        const notesLines = pdf.splitTextToSize(fullQuote.notes, contentWidth);
-        pdf.text(notesLines, leftMargin, yPos);
-        yPos += notesLines.length * 3 + 4;
+        pdf.setFontSize(10);
+        pdf.setTextColor(60, 60, 60);
+        pdf.text(notesLines, leftMargin + 5, yPos + 14);
+        yPos += notesHeight + 10;
       }
       
+      // ========== TERMS & CONDITIONS SECTION ==========
       if (fullQuote.terms_conditions) {
+        checkPageBreak(25);
+        
         pdf.setFont('helvetica', 'bold');
-        pdf.setFontSize(8);
+        pdf.setFontSize(11);
+        pdf.setTextColor(0, 0, 0);
         pdf.text('Terms & Conditions:', leftMargin, yPos);
-        yPos += 4;
+        yPos += 7;
+        
         pdf.setFont('helvetica', 'normal');
-        pdf.setFontSize(7);
+        pdf.setFontSize(10);
+        pdf.setTextColor(60, 60, 60);
+        
+        // Split terms by lines and handle page breaks
         const termsLines = pdf.splitTextToSize(fullQuote.terms_conditions, contentWidth);
-        pdf.text(termsLines, leftMargin, yPos);
+        const linesPerCheck = 5; // Check for page break every 5 lines
+        
+        for (let i = 0; i < termsLines.length; i++) {
+          if (i > 0 && i % linesPerCheck === 0) {
+            checkPageBreak(linesPerCheck * 5);
+          }
+          pdf.text(termsLines[i], leftMargin, yPos);
+          yPos += 5;
+        }
+      }
+      
+      // ========== FOOTER ==========
+      // Add page numbers to all pages
+      const totalPages = pdf.getNumberOfPages();
+      for (let i = 1; i <= totalPages; i++) {
+        pdf.setPage(i);
+        pdf.setFontSize(9);
+        pdf.setTextColor(150, 150, 150);
+        pdf.text(`Page ${i} of ${totalPages}`, pageWidth / 2, pageHeight - 10, { align: 'center' });
+        
+        // Add "Computer Generated" note on last page
+        if (i === totalPages) {
+          pdf.setFontSize(8);
+          pdf.setFont('helvetica', 'italic');
+          pdf.text('This is a computer generated quotation.', pageWidth / 2, pageHeight - 5, { align: 'center' });
+        }
       }
       
       // Save PDF
