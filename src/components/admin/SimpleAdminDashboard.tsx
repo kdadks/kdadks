@@ -8,14 +8,16 @@ import {
   LogOut,
   Database,
   Receipt,
-  CreditCard
+  CreditCard,
+  FileText
 } from 'lucide-react'
 import { simpleAuth, SimpleUser } from '../../utils/simpleAuth'
 import { isSupabaseConfigured } from '../../config/supabase'
 import InvoiceManagement from '../invoice/InvoiceManagement'
 import { PaymentManagement } from '../payment/PaymentManagement'
+import QuoteManagement from '../quote/QuoteManagement'
 
-type ActiveView = 'dashboard' | 'invoices' | 'payments';
+type ActiveView = 'dashboard' | 'invoices' | 'payments' | 'quotes';
 
 const SimpleAdminDashboard: React.FC = () => {
   const [user, setUser] = useState<SimpleUser | null>(null)
@@ -129,6 +131,10 @@ const SimpleAdminDashboard: React.FC = () => {
     return <PaymentManagement onBackToDashboard={() => setActiveView('dashboard')} />
   }
 
+  if (activeView === 'quotes') {
+    return <QuoteManagement onBackToDashboard={() => setActiveView('dashboard')} />
+  }
+
   return (
     <div className="min-h-screen bg-gray-100">
       {/* Header */}
@@ -170,6 +176,17 @@ const SimpleAdminDashboard: React.FC = () => {
                 >
                   <CreditCard className="w-4 h-4 mr-2" />
                   Payments
+                </button>
+                <button
+                  onClick={() => setActiveView('quotes' as ActiveView)}
+                  className={`flex items-center px-3 py-2 text-sm font-medium rounded-md ${
+                    (activeView as string) === 'quotes'
+                      ? 'bg-blue-100 text-blue-700'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  <FileText className="w-4 h-4 mr-2" />
+                  Quotes
                 </button>
               </nav>
             </div>
