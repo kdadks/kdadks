@@ -803,24 +803,31 @@ const QuoteManagement: React.FC<QuoteManagementProps> = ({ onBackToDashboard }) 
       const pageHeight = 297;
       const leftMargin = 15;
       const rightMargin = 15;
-      const topMargin = 15;
-      const bottomMargin = 25;
       const contentWidth = pageWidth - leftMargin - rightMargin;
-      const maxY = pageHeight - bottomMargin;
+      
+      // Apply branding header to get content boundaries
+      const dimensions = PDFBrandingUtils.getStandardDimensions();
+      const { contentStartY, contentEndY } = await PDFBrandingUtils.applyBranding(pdf, company, dimensions);
+      
+      // Calculate usable content area based on branding
+      const topMargin = contentStartY + 5;
+      const maxY = contentEndY - 5; // Leave space above footer
+      
+      let yPos = topMargin + 5;
+      
+      // Helper function to apply branding to a page
+      const applyPageBranding = async (pageNum: number): Promise<void> => {
+        pdf.setPage(pageNum);
+        await PDFBrandingUtils.applyBranding(pdf, company, dimensions);
+      };
       
       // Helper function to check if we need a new page
       const checkPageBreak = (requiredSpace: number): void => {
         if (yPos + requiredSpace > maxY) {
           pdf.addPage();
-          yPos = topMargin + 10;
+          yPos = topMargin + 5;
         }
       };
-      
-      // Apply branding header
-      const dimensions = PDFBrandingUtils.getStandardDimensions();
-      const { contentStartY } = await PDFBrandingUtils.applyBranding(pdf, company, dimensions);
-      
-      let yPos = contentStartY + 10;
       
       // ========== TITLE SECTION ==========
       pdf.setFontSize(24);
@@ -1225,20 +1232,28 @@ const QuoteManagement: React.FC<QuoteManagementProps> = ({ onBackToDashboard }) 
         }
       }
       
-      // ========== FOOTER ==========
-      // Add page numbers to all pages
+      // ========== APPLY BRANDING TO ALL PAGES ==========
+      // Apply header and footer images to all pages
       const totalPages = pdf.getNumberOfPages();
+      for (let i = 1; i <= totalPages; i++) {
+        await applyPageBranding(i);
+      }
+      
+      // Add page numbers to all pages (after branding so they appear on top)
       for (let i = 1; i <= totalPages; i++) {
         pdf.setPage(i);
         pdf.setFontSize(9);
         pdf.setTextColor(150, 150, 150);
-        pdf.text(`Page ${i} of ${totalPages}`, pageWidth / 2, pageHeight - 10, { align: 'center' });
+        
+        // Position page number above the footer image
+        const pageNumY = contentEndY + 3;
+        pdf.text(`Page ${i} of ${totalPages}`, pageWidth / 2, pageNumY, { align: 'center' });
         
         // Add "Computer Generated" note on last page
         if (i === totalPages) {
           pdf.setFontSize(8);
           pdf.setFont('helvetica', 'italic');
-          pdf.text('This is a computer generated quotation.', pageWidth / 2, pageHeight - 5, { align: 'center' });
+          pdf.text('This is a computer generated quotation.', pageWidth / 2, pageNumY + 5, { align: 'center' });
         }
       }
       
