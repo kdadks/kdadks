@@ -1,23 +1,25 @@
 import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { 
-  Mail, 
-  Users, 
-  MessageSquare, 
+import {
+  Mail,
+  Users,
+  MessageSquare,
   TrendingUp,
   LogOut,
   Database,
   Receipt,
   CreditCard,
-  FileText
+  FileText,
+  Briefcase
 } from 'lucide-react'
 import { simpleAuth, SimpleUser } from '../../utils/simpleAuth'
 import { isSupabaseConfigured } from '../../config/supabase'
 import InvoiceManagement from '../invoice/InvoiceManagement'
 import { PaymentManagement } from '../payment/PaymentManagement'
 import QuoteManagement from '../quote/QuoteManagement'
+import EmploymentDocuments from '../hr/EmploymentDocuments'
 
-type ActiveView = 'dashboard' | 'invoices' | 'payments' | 'quotes';
+type ActiveView = 'dashboard' | 'invoices' | 'payments' | 'quotes' | 'hr';
 
 const SimpleAdminDashboard: React.FC = () => {
   const [user, setUser] = useState<SimpleUser | null>(null)
@@ -135,6 +137,10 @@ const SimpleAdminDashboard: React.FC = () => {
     return <QuoteManagement onBackToDashboard={() => setActiveView('dashboard')} />
   }
 
+  if (activeView === 'hr') {
+    return <EmploymentDocuments onBackToDashboard={() => setActiveView('dashboard')} />
+  }
+
   return (
     <div className="min-h-screen bg-gray-100">
       {/* Header */}
@@ -187,6 +193,17 @@ const SimpleAdminDashboard: React.FC = () => {
                 >
                   <FileText className="w-4 h-4 mr-2" />
                   Quotes
+                </button>
+                <button
+                  onClick={() => setActiveView('hr' as ActiveView)}
+                  className={`flex items-center px-3 py-2 text-sm font-medium rounded-md ${
+                    (activeView as string) === 'hr'
+                      ? 'bg-blue-100 text-blue-700'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  <Briefcase className="w-4 h-4 mr-2" />
+                  HR
                 </button>
               </nav>
             </div>

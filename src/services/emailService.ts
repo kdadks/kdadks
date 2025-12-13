@@ -888,6 +888,109 @@ Lucknow, India
   }
 
   // Payment Request Email Method
+  // Send salary slip email
+  static async sendSalarySlipEmail(params: {
+    to: string;
+    employeeName: string;
+    month: string;
+    netSalary: number;
+    pdfAttachment: string;
+  }): Promise<void> {
+    try {
+      const subject = `Salary Slip for ${params.month} - KDADKS`;
+
+      const htmlEmail = `
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+        .header { background-color: #2563eb; color: white; padding: 20px; text-align: center; }
+        .content { padding: 20px; background-color: #f9fafb; }
+        .footer { text-align: center; padding: 20px; font-size: 12px; color: #6b7280; }
+        .button { display: inline-block; padding: 12px 24px; background-color: #2563eb; color: white; text-decoration: none; border-radius: 5px; margin: 10px 0; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Salary Slip</h1>
+        </div>
+
+        <div class="content">
+            <p>Dear ${params.employeeName},</p>
+
+            <p>Please find attached your salary slip for <strong>${params.month}</strong>.</p>
+
+            <p><strong>Net Salary:</strong> ₹${params.netSalary.toLocaleString('en-IN')}</p>
+
+            <p>The attached PDF contains a detailed breakdown of your earnings, deductions, and tax information.</p>
+
+            <p>If you have any questions or notice any discrepancies, please contact the HR department.</p>
+
+            <p>Best regards,<br>
+            HR Department<br>
+            KDADKS Service Private Limited</p>
+        </div>
+
+        <div class="footer">
+            <p>This is an automated email. Please do not reply to this email.</p>
+            <p>&copy; ${new Date().getFullYear()} KDADKS Service Private Limited. All rights reserved.</p>
+        </div>
+    </div>
+</body>
+</html>
+      `.trim();
+
+      const textEmail = `
+Dear ${params.employeeName},
+
+Please find attached your salary slip for ${params.month}.
+
+Net Salary: ₹${params.netSalary.toLocaleString('en-IN')}
+
+The attached PDF contains a detailed breakdown of your earnings, deductions, and tax information.
+
+If you have any questions or notice any discrepancies, please contact the HR department.
+
+Best regards,
+HR Department
+KDADKS Service Private Limited
+      `.trim();
+
+      const response = await EmailService.makeApiCall(EmailService.getApiEndpoint(), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          to: params.to,
+          from: '"KDADKS HR Department" <hr@kdadks.com>',
+          subject,
+          text: textEmail,
+          html: htmlEmail,
+          attachments: [{
+            filename: `salary_slip_${params.month.replace(' ', '_')}.pdf`,
+            content: params.pdfAttachment.split(',')[1], // Remove data:application/pdf;base64, prefix
+            encoding: 'base64'
+          }]
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ message: 'Unknown error' }));
+        throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+      }
+
+      const result = await response.json();
+      console.log('Salary slip email sent successfully:', result);
+    } catch (error) {
+      console.error('Failed to send salary slip email:', error);
+      throw error;
+    }
+  }
+
   static async sendPaymentRequestEmail(
     recipientEmail: string,
     details: {
