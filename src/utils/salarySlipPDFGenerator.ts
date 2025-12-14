@@ -15,8 +15,20 @@ export async function generateSalarySlipPDF(
 ): Promise<jsPDF> {
   const pdf = new jsPDF('p', 'mm', 'a4');
   const dimensions = PDFBrandingUtils.getStandardDimensions();
+  const pageHeight = pdf.internal.pageSize.getHeight();
+  const footerMargin = 25; // Reserve space for footer
 
   let currentY = dimensions.topMargin;
+
+  // Helper function to check if new page is needed
+  const checkPageBreak = (spaceNeeded: number) => {
+    if (currentY + spaceNeeded > pageHeight - footerMargin) {
+      pdf.addPage();
+      currentY = dimensions.topMargin;
+      return true;
+    }
+    return false;
+  };
 
   // Apply branding if available
   if (companySettings) {
@@ -25,22 +37,23 @@ export async function generateSalarySlipPDF(
   }
 
   // Document Title
-  pdf.setFontSize(18);
+  pdf.setFontSize(16);
   pdf.setFont('helvetica', 'bold');
   pdf.text('SALARY SLIP', pdf.internal.pageSize.getWidth() / 2, currentY, { align: 'center' });
   currentY += 10;
 
   // Month and Year
-  pdf.setFontSize(12);
+  pdf.setFontSize(11);
   pdf.setFont('helvetica', 'normal');
   const monthYear = `${MONTH_NAMES[salarySlip.salary_month - 1]} ${salarySlip.salary_year}`;
   pdf.text(monthYear, pdf.internal.pageSize.getWidth() / 2, currentY, { align: 'center' });
-  currentY += 10;
+  currentY += 8;
 
   // Financial Year
   pdf.setFontSize(9);
+  pdf.setFont('helvetica', 'normal');
   pdf.text(`Financial Year: ${salarySlip.financial_year}`, pdf.internal.pageSize.getWidth() / 2, currentY, { align: 'center' });
-  currentY += 12;
+  currentY += 10;
 
   // Draw a line
   pdf.setLineWidth(0.5);
@@ -48,13 +61,14 @@ export async function generateSalarySlipPDF(
   currentY += 8;
 
   // Employee Information Section
-  pdf.setFontSize(10);
+  checkPageBreak(35);
+  pdf.setFontSize(9);
   pdf.setFont('helvetica', 'bold');
   pdf.text('EMPLOYEE INFORMATION', dimensions.leftMargin, currentY);
   currentY += 6;
 
-  pdf.setFont('helvetica', 'normal');
   pdf.setFontSize(9);
+  pdf.setFont('helvetica', 'normal');
 
   const employeeInfo = [
     ['Employee Name:', employee.full_name, 'Employee No:', employee.employee_number],
@@ -82,10 +96,13 @@ export async function generateSalarySlipPDF(
   currentY += 3;
 
   // Attendance Information
+  checkPageBreak(20);
+  pdf.setFontSize(9);
   pdf.setFont('helvetica', 'bold');
   pdf.text('ATTENDANCE', dimensions.leftMargin, currentY);
   currentY += 6;
 
+  pdf.setFontSize(9);
   pdf.setFont('helvetica', 'normal');
   const attendanceInfo = [
     ['Working Days:', salarySlip.working_days.toString(), 'Paid Days:', salarySlip.paid_days.toString()],
@@ -113,7 +130,8 @@ export async function generateSalarySlipPDF(
   currentY += 8;
 
   // Earnings and Deductions Table
-  pdf.setFontSize(10);
+  checkPageBreak(70);
+  pdf.setFontSize(9);
   pdf.setFont('helvetica', 'bold');
 
   // Table Headers
@@ -187,6 +205,8 @@ export async function generateSalarySlipPDF(
   currentY += 5;
 
   // Totals
+  checkPageBreak(15);
+  pdf.setFontSize(9);
   pdf.setFont('helvetica', 'bold');
   pdf.text('GROSS SALARY', col1X, currentY);
   pdf.text(salarySlip.gross_salary.toLocaleString('en-IN'), col2X + 20, currentY, { align: 'right' });
@@ -201,7 +221,8 @@ export async function generateSalarySlipPDF(
   currentY += 6;
 
   // Net Salary
-  pdf.setFontSize(11);
+  checkPageBreak(20);
+  pdf.setFontSize(10);
   pdf.setFont('helvetica', 'bold');
   pdf.text('NET SALARY PAYABLE', dimensions.leftMargin, currentY);
   pdf.text(`₹ ${salarySlip.net_salary.toLocaleString('en-IN')}`, dimensions.rightMargin, currentY, { align: 'right' });
@@ -209,9 +230,10 @@ export async function generateSalarySlipPDF(
 
   pdf.setLineWidth(0.8);
   pdf.line(dimensions.leftMargin, currentY, dimensions.rightMargin, currentY);
-  currentY += 10;
+  currentY += 8;
 
   // Net Salary in Words
+  checkPageBreak(10);
   pdf.setFontSize(9);
   pdf.setFont('helvetica', 'italic');
   const netInWords = numberToWords(salarySlip.net_salary);
@@ -219,13 +241,14 @@ export async function generateSalarySlipPDF(
   currentY += 10;
 
   // Tax Information
-  pdf.setFontSize(10);
+  checkPageBreak(30);
+  pdf.setFontSize(9);
   pdf.setFont('helvetica', 'bold');
   pdf.text('TAX INFORMATION', dimensions.leftMargin, currentY);
   currentY += 6;
 
-  pdf.setFont('helvetica', 'normal');
   pdf.setFontSize(9);
+  pdf.setFont('helvetica', 'normal');
 
   const taxInfo = [
     ['Year-to-Date Gross Salary:', `₹${salarySlip.ytd_gross.toLocaleString('en-IN')}`],
@@ -235,72 +258,86 @@ export async function generateSalarySlipPDF(
   ];
 
   taxInfo.forEach(([label, value]) => {
+    checkPageBreak(6);
+    pdf.setFontSize(9);
     pdf.setFont('helvetica', 'bold');
     pdf.text(label, dimensions.leftMargin, currentY);
+    pdf.setFontSize(9);
     pdf.setFont('helvetica', 'normal');
     pdf.text(value, dimensions.leftMargin + 75, currentY);
     currentY += 5;
   });
 
-  currentY += 8;
+  currentY += 5;
 
   // Payment Information (if paid)
   if (salarySlip.status === 'paid' && salarySlip.payment_date) {
+    checkPageBreak(25);
+    pdf.setFontSize(9);
     pdf.setFont('helvetica', 'bold');
     pdf.text('PAYMENT INFORMATION', dimensions.leftMargin, currentY);
     currentY += 6;
 
+    pdf.setFontSize(9);
     pdf.setFont('helvetica', 'normal');
     pdf.text(`Payment Date: ${new Date(salarySlip.payment_date).toLocaleDateString('en-GB')}`, dimensions.leftMargin, currentY);
     currentY += 5;
 
     if (salarySlip.payment_mode) {
+      checkPageBreak(6);
       pdf.text(`Payment Mode: ${salarySlip.payment_mode}`, dimensions.leftMargin, currentY);
       currentY += 5;
     }
 
     if (salarySlip.payment_reference) {
+      checkPageBreak(6);
       pdf.text(`Reference: ${salarySlip.payment_reference}`, dimensions.leftMargin, currentY);
       currentY += 5;
     }
 
-    currentY += 5;
+    currentY += 3;
   }
 
   // Bank Details (if available)
   if (employee.bank_name) {
+    checkPageBreak(25);
+    pdf.setFontSize(9);
     pdf.setFont('helvetica', 'bold');
     pdf.text('BANK DETAILS', dimensions.leftMargin, currentY);
     currentY += 6;
 
+    pdf.setFontSize(9);
     pdf.setFont('helvetica', 'normal');
     pdf.text(`Bank Name: ${employee.bank_name}`, dimensions.leftMargin, currentY);
     currentY += 5;
 
     if (employee.bank_account_number) {
+      checkPageBreak(6);
       const maskedAccount = maskAccountNumber(employee.bank_account_number);
       pdf.text(`Account Number: ${maskedAccount}`, dimensions.leftMargin, currentY);
       currentY += 5;
     }
 
     if (employee.bank_ifsc_code) {
+      checkPageBreak(6);
       pdf.text(`IFSC Code: ${employee.bank_ifsc_code}`, dimensions.leftMargin, currentY);
       currentY += 5;
     }
 
-    currentY += 5;
+    currentY += 3;
   }
 
-  // Footer Note
-  currentY += 5;
+  // Footer Note - Always positioned safely above bottom margin
+  // Calculate footer position to avoid overlap
+  const footerStartY = pageHeight - footerMargin + 5;
+
   pdf.setFontSize(8);
   pdf.setFont('helvetica', 'italic');
   pdf.setTextColor(100, 100, 100);
   pdf.text('This is a computer-generated salary slip and does not require a signature.',
-    pdf.internal.pageSize.getWidth() / 2, currentY, { align: 'center' });
-  currentY += 4;
+    pdf.internal.pageSize.getWidth() / 2, footerStartY, { align: 'center' });
   pdf.text('For any discrepancies, please contact the HR department.',
-    pdf.internal.pageSize.getWidth() / 2, currentY, { align: 'center' });
+    pdf.internal.pageSize.getWidth() / 2, footerStartY + 4, { align: 'center' });
 
   // Reset text color
   pdf.setTextColor(0, 0, 0);

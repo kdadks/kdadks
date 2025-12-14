@@ -74,6 +74,8 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
   const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
   const [documentType, setDocumentType] = useState<DocumentType>('offer_letter');
   const [documentData, setDocumentData] = useState<any>({});
+  const [previewPdf, setPreviewPdf] = useState<string | null>(null);
+  const [showPreview, setShowPreview] = useState(false);
 
   // Salary slip generation state
   const [salarySlipInput, setSalarySlipInput] = useState<CreateSalarySlipInput>({
@@ -84,6 +86,14 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
     paid_days: 26,
     lop_days: 0,
     tax_regime: 'new'
+  });
+
+  // Deduction configuration flags
+  const [applyDeductions, setApplyDeductions] = useState({
+    provident_fund: true,
+    professional_tax: true,
+    esic: true,
+    tds: true
   });
 
   useEffect(() => {
@@ -166,6 +176,8 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
   const generateOfferLetterPDF = async (employee: Employee, data: OfferLetterData) => {
     const pdf = new jsPDF('p', 'mm', 'a4');
     const dimensions = PDFBrandingUtils.getStandardDimensions();
+    const pageHeight = pdf.internal.pageSize.getHeight();
+    const footerMargin = 20; // Reserve space for footer
 
     let currentY = dimensions.topMargin;
 
@@ -191,6 +203,16 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
       currentY = brandingResult.contentStartY;
     }
 
+    // Helper function to check if new page is needed
+    const checkPageBreak = (spaceNeeded: number) => {
+      if (currentY + spaceNeeded > pageHeight - footerMargin) {
+        pdf.addPage();
+        currentY = dimensions.topMargin;
+        return true;
+      }
+      return false;
+    };
+
     // Document title
     pdf.setFontSize(16);
     pdf.setFont('helvetica', 'bold');
@@ -204,18 +226,24 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
     currentY += 10;
 
     // Employee details
+    pdf.setFontSize(10);
     pdf.setFont('helvetica', 'normal');
     pdf.text(`Dear ${employee.full_name},`, dimensions.leftMargin, currentY);
     currentY += 10;
 
+    pdf.setFontSize(10);
+    pdf.setFont('helvetica', 'normal');
     pdf.text('We are pleased to offer you employment at our organization.', dimensions.leftMargin, currentY);
     currentY += 15;
 
     // Position details
+    checkPageBreak(40);
+    pdf.setFontSize(10);
     pdf.setFont('helvetica', 'bold');
     pdf.text('Position Details:', dimensions.leftMargin, currentY);
     currentY += 7;
 
+    pdf.setFontSize(10);
     pdf.setFont('helvetica', 'normal');
     pdf.text(`Position: ${data.position}`, dimensions.leftMargin + 5, currentY);
     currentY += 6;
@@ -234,14 +262,19 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
     currentY += 5;
 
     // Compensation
+    checkPageBreak(60);
+    pdf.setFontSize(10);
     pdf.setFont('helvetica', 'bold');
     pdf.text('Compensation:', dimensions.leftMargin, currentY);
     currentY += 7;
 
+    pdf.setFontSize(10);
     pdf.setFont('helvetica', 'normal');
     pdf.text(`Annual CTC: ₹${data.annual_ctc.toLocaleString('en-IN')}`, dimensions.leftMargin + 5, currentY);
     currentY += 10;
 
+    pdf.setFontSize(10);
+    pdf.setFont('helvetica', 'normal');
     pdf.text('Salary Breakdown (Monthly):', dimensions.leftMargin + 5, currentY);
     currentY += 6;
     pdf.text(`  Basic Salary: ₹${data.salary_breakdown.basic.toLocaleString('en-IN')}`, dimensions.leftMargin + 10, currentY);
@@ -254,15 +287,19 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
       pdf.text(`  Other Allowances: ₹${data.salary_breakdown.other_allowances.toLocaleString('en-IN')}`, dimensions.leftMargin + 10, currentY);
       currentY += 5;
     }
+    pdf.setFontSize(10);
     pdf.setFont('helvetica', 'bold');
     pdf.text(`  Gross Monthly: ₹${data.salary_breakdown.gross_salary.toLocaleString('en-IN')}`, dimensions.leftMargin + 10, currentY);
     currentY += 10;
 
     // Terms
+    checkPageBreak(30);
+    pdf.setFontSize(10);
     pdf.setFont('helvetica', 'bold');
     pdf.text('Terms of Employment:', dimensions.leftMargin, currentY);
     currentY += 7;
 
+    pdf.setFontSize(10);
     pdf.setFont('helvetica', 'normal');
     if (data.probation_period) {
       pdf.text(`Probation Period: ${data.probation_period} months`, dimensions.leftMargin + 5, currentY);
@@ -276,30 +313,77 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
 
     // Benefits
     if (data.benefits && data.benefits.length > 0) {
+      checkPageBreak(20 + (data.benefits.length * 5));
+      pdf.setFontSize(10);
       pdf.setFont('helvetica', 'bold');
       pdf.text('Benefits:', dimensions.leftMargin, currentY);
       currentY += 7;
 
+      pdf.setFontSize(10);
       pdf.setFont('helvetica', 'normal');
       data.benefits.forEach(benefit => {
+        checkPageBreak(10);
         pdf.text(`• ${benefit}`, dimensions.leftMargin + 5, currentY);
         currentY += 5;
       });
       currentY += 5;
     }
 
+    // Terms and Conditions (New Section)
+    if (data.terms_and_conditions) {
+      checkPageBreak(30);
+      pdf.setFontSize(10);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text('Terms and Conditions:', dimensions.leftMargin, currentY);
+      currentY += 7;
+
+      pdf.setFontSize(10);
+      pdf.setFont('helvetica', 'normal');
+      const termsLines = pdf.splitTextToSize(data.terms_and_conditions, dimensions.rightMargin - dimensions.leftMargin);
+      termsLines.forEach((line: string) => {
+        checkPageBreak(6);
+        pdf.text(line, dimensions.leftMargin + 5, currentY);
+        currentY += 5;
+      });
+      currentY += 5;
+    }
+
+    // Other Details (New Section)
+    if (data.other_details) {
+      checkPageBreak(30);
+      pdf.setFontSize(10);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text('Additional Information:', dimensions.leftMargin, currentY);
+      currentY += 7;
+
+      pdf.setFontSize(10);
+      pdf.setFont('helvetica', 'normal');
+      const detailsLines = pdf.splitTextToSize(data.other_details, dimensions.rightMargin - dimensions.leftMargin);
+      detailsLines.forEach((line: string) => {
+        checkPageBreak(6);
+        pdf.text(line, dimensions.leftMargin + 5, currentY);
+        currentY += 5;
+      });
+      currentY += 5;
+    }
+
     // Closing
+    checkPageBreak(40);
     currentY += 10;
+    pdf.setFontSize(10);
+    pdf.setFont('helvetica', 'normal');
     pdf.text('We look forward to welcoming you to our team.', dimensions.leftMargin, currentY);
     currentY += 10;
     pdf.text('Sincerely,', dimensions.leftMargin, currentY);
     currentY += 15;
 
     if (hrSettings?.signatory_name) {
+      pdf.setFontSize(10);
       pdf.setFont('helvetica', 'bold');
       pdf.text(hrSettings.signatory_name, dimensions.leftMargin, currentY);
       currentY += 5;
       if (hrSettings.signatory_designation) {
+        pdf.setFontSize(10);
         pdf.setFont('helvetica', 'normal');
         pdf.text(hrSettings.signatory_designation, dimensions.leftMargin, currentY);
       }
@@ -638,6 +722,43 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
     return pdf;
   };
 
+  const handlePreviewDocument = async () => {
+    try {
+      if (!selectedEmployee) {
+        showToast('Please select an employee', 'error');
+        return;
+      }
+
+      let pdf: jsPDF;
+
+      switch (documentType) {
+        case 'offer_letter':
+          pdf = await generateOfferLetterPDF(selectedEmployee, documentData as OfferLetterData);
+          break;
+        case 'salary_certificate':
+          pdf = await generateSalaryCertificatePDF(selectedEmployee, documentData as SalaryCertificateData);
+          break;
+        case 'form_16':
+          pdf = await generateForm16PDF(selectedEmployee, documentData as Form16Data);
+          break;
+        case 'form_24q':
+          pdf = await generateForm24QPDF(documentData as Form24QData);
+          break;
+        default:
+          throw new Error('Unsupported document type');
+      }
+
+      // Generate preview URL
+      const pdfBlob = pdf.output('blob');
+      const pdfUrl = URL.createObjectURL(pdfBlob);
+      setPreviewPdf(pdfUrl);
+      setShowPreview(true);
+    } catch (err) {
+      console.error('Error generating preview:', err);
+      showToast('Failed to generate preview', 'error');
+    }
+  };
+
   const handleGenerateDocument = async () => {
     try {
       if (!selectedEmployee) {
@@ -687,6 +808,54 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
     }
   };
 
+  const handlePreviewSalarySlip = async () => {
+    try {
+      if (!salarySlipInput.employee_id) {
+        showToast('Please select an employee', 'error');
+        return;
+      }
+
+      // Generate salary slip data
+      let salarySlip = await employeeService.generateSalarySlip(salarySlipInput);
+      const employee = employees.find(emp => emp.id === salarySlipInput.employee_id);
+
+      if (!employee) {
+        showToast('Employee not found', 'error');
+        return;
+      }
+
+      // Apply deduction configuration by zeroing out unchecked deductions
+      const adjustedSlip = {
+        ...salarySlip,
+        provident_fund: applyDeductions.provident_fund ? salarySlip.provident_fund : 0,
+        professional_tax: applyDeductions.professional_tax ? salarySlip.professional_tax : 0,
+        esic: applyDeductions.esic ? salarySlip.esic : 0,
+        tds: applyDeductions.tds ? salarySlip.tds : 0
+      };
+
+      // Recalculate total deductions and net salary
+      adjustedSlip.total_deductions =
+        adjustedSlip.provident_fund +
+        adjustedSlip.professional_tax +
+        adjustedSlip.esic +
+        adjustedSlip.tds +
+        (salarySlip.loan_repayment || 0) +
+        (salarySlip.other_deductions || 0);
+
+      adjustedSlip.net_salary = salarySlip.gross_salary - adjustedSlip.total_deductions;
+
+      // Generate PDF for preview
+      const pdf = await generateSalarySlipPDF(employee, adjustedSlip, companySettings || undefined);
+      const pdfBlob = pdf.output('blob');
+      const pdfUrl = URL.createObjectURL(pdfBlob);
+      setPreviewPdf(pdfUrl);
+      setShowPreview(true);
+    } catch (err: any) {
+      console.error('Error generating preview:', err);
+      showToast(err.message || 'Failed to generate preview', 'error');
+    }
+  };
+
   const handleGenerateSalarySlip = async () => {
     try {
       if (!salarySlipInput.employee_id) {
@@ -694,8 +863,41 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
         return;
       }
 
-      // Generate salary slip
+      // Generate salary slip with service
       const salarySlip = await employeeService.generateSalarySlip(salarySlipInput);
+
+      // If deductions are disabled, we need to update the generated slip
+      if (!applyDeductions.provident_fund || !applyDeductions.professional_tax ||
+          !applyDeductions.esic || !applyDeductions.tds) {
+
+        // Update the slip with adjusted deductions
+        const adjustments: any = {};
+
+        if (!applyDeductions.provident_fund) adjustments.provident_fund = 0;
+        if (!applyDeductions.professional_tax) adjustments.professional_tax = 0;
+        if (!applyDeductions.esic) adjustments.esic = 0;
+        if (!applyDeductions.tds) adjustments.tds = 0;
+
+        // Recalculate total deductions and net salary
+        const newTotalDeductions =
+          (applyDeductions.provident_fund ? salarySlip.provident_fund : 0) +
+          (applyDeductions.professional_tax ? salarySlip.professional_tax : 0) +
+          (applyDeductions.esic ? salarySlip.esic : 0) +
+          (applyDeductions.tds ? salarySlip.tds : 0) +
+          (salarySlip.loan_repayment || 0) +
+          (salarySlip.other_deductions || 0);
+
+        adjustments.total_deductions = newTotalDeductions;
+        adjustments.net_salary = salarySlip.gross_salary - newTotalDeductions;
+
+        // Update the slip in database
+        const { error: updateError } = await supabase
+          .from('salary_slips')
+          .update(adjustments)
+          .eq('id', salarySlip.id);
+
+        if (updateError) throw updateError;
+      }
 
       showToast('Salary slip generated successfully', 'success');
       loadData();
@@ -1177,12 +1379,79 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
                 </div>
               </div>
 
-              <div className="flex justify-end space-x-3 pt-4 border-t">
+              {/* Deductions Configuration */}
+              <div className="mt-6 border-t pt-6">
+                <h3 className="text-md font-medium text-gray-700 mb-4">Apply Deductions</h3>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="flex items-center">
+                    <input
+                      type="checkbox"
+                      id="apply_pf"
+                      checked={applyDeductions.provident_fund}
+                      onChange={(e) => setApplyDeductions({ ...applyDeductions, provident_fund: e.target.checked })}
+                      className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                    />
+                    <label htmlFor="apply_pf" className="ml-2 text-sm text-gray-700">
+                      Provident Fund (PF)
+                    </label>
+                  </div>
+
+                  <div className="flex items-center">
+                    <input
+                      type="checkbox"
+                      id="apply_pt"
+                      checked={applyDeductions.professional_tax}
+                      onChange={(e) => setApplyDeductions({ ...applyDeductions, professional_tax: e.target.checked })}
+                      className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                    />
+                    <label htmlFor="apply_pt" className="ml-2 text-sm text-gray-700">
+                      Professional Tax
+                    </label>
+                  </div>
+
+                  <div className="flex items-center">
+                    <input
+                      type="checkbox"
+                      id="apply_esic"
+                      checked={applyDeductions.esic}
+                      onChange={(e) => setApplyDeductions({ ...applyDeductions, esic: e.target.checked })}
+                      className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                    />
+                    <label htmlFor="apply_esic" className="ml-2 text-sm text-gray-700">
+                      ESIC
+                    </label>
+                  </div>
+
+                  <div className="flex items-center">
+                    <input
+                      type="checkbox"
+                      id="apply_tds"
+                      checked={applyDeductions.tds}
+                      onChange={(e) => setApplyDeductions({ ...applyDeductions, tds: e.target.checked })}
+                      className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                    />
+                    <label htmlFor="apply_tds" className="ml-2 text-sm text-gray-700">
+                      TDS (Income Tax)
+                    </label>
+                  </div>
+                </div>
+                <p className="text-xs text-gray-500 mt-2">Uncheck to exclude specific deductions from the salary slip</p>
+              </div>
+
+              <div className="flex justify-end space-x-3 pt-4 border-t mt-6">
                 <button
                   onClick={() => setActiveTab('salary-slips')}
                   className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
                 >
                   Cancel
+                </button>
+                <button
+                  onClick={handlePreviewSalarySlip}
+                  className="px-4 py-2 border border-blue-600 text-blue-600 rounded-md hover:bg-blue-50"
+                  disabled={!salarySlipInput.employee_id}
+                >
+                  <Eye className="w-4 h-4 inline mr-2" />
+                  Preview
                 </button>
                 <button
                   onClick={handleGenerateSalarySlip}
@@ -1740,6 +2009,34 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
                       />
                     </div>
                   </div>
+
+                  <div className="mt-4">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Employment Terms & Conditions
+                    </label>
+                    <textarea
+                      value={documentData.terms_and_conditions || ''}
+                      onChange={(e) => setDocumentData({ ...documentData, terms_and_conditions: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                      rows={6}
+                      placeholder="Enter employment terms and conditions (e.g., working hours, code of conduct, confidentiality, etc.)"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">Optional: Add specific terms and conditions for this employment</p>
+                  </div>
+
+                  <div className="mt-4">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Other Employment Details
+                    </label>
+                    <textarea
+                      value={documentData.other_details || ''}
+                      onChange={(e) => setDocumentData({ ...documentData, other_details: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                      rows={4}
+                      placeholder="Additional information (e.g., relocation assistance, bond period, performance reviews, etc.)"
+                    />
+                  </div>
+
                   <button
                     onClick={() => {
                       setDocumentData({
@@ -1822,6 +2119,14 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
                   Cancel
                 </button>
                 <button
+                  onClick={handlePreviewDocument}
+                  className="px-4 py-2 border border-blue-600 text-blue-600 rounded-md hover:bg-blue-50"
+                  disabled={!selectedEmployee}
+                >
+                  <Eye className="w-4 h-4 inline mr-2" />
+                  Preview
+                </button>
+                <button
                   onClick={handleGenerateDocument}
                   className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
                   disabled={!selectedEmployee}
@@ -1834,6 +2139,36 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
           </div>
         )}
       </main>
+
+      {/* PDF Preview Modal */}
+      {showPreview && previewPdf && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-6xl w-full h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between p-4 border-b">
+              <h2 className="text-lg font-semibold">Document Preview</h2>
+              <button
+                onClick={() => {
+                  setShowPreview(false);
+                  if (previewPdf) {
+                    URL.revokeObjectURL(previewPdf);
+                    setPreviewPdf(null);
+                  }
+                }}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-auto">
+              <iframe
+                src={previewPdf}
+                className="w-full h-full"
+                title="PDF Preview"
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
