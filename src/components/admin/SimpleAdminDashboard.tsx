@@ -13,10 +13,21 @@ import {
   ChevronDown,
   ChevronRight,
   Menu,
-  X
+  X,
+  Plus,
+  Users,
+  TrendingUp,
+  RefreshCw,
+  Eye,
+  Edit,
+  FileCheck,
+  DollarSign
 } from 'lucide-react'
 import { simpleAuth, SimpleUser } from '../../utils/simpleAuth'
-import { isSupabaseConfigured } from '../../config/supabase'
+import { isSupabaseConfigured, supabase } from '../../config/supabase'
+import { invoiceService } from '../../services/invoiceService'
+import { quoteService } from '../../services/quoteService'
+import { employeeService } from '../../services/employeeService'
 import InvoiceManagement from '../invoice/InvoiceManagement'
 import { PaymentManagement } from '../payment/PaymentManagement'
 import QuoteManagement from '../quote/QuoteManagement'
@@ -24,6 +35,23 @@ import EmploymentDocuments from '../hr/EmploymentDocuments'
 import LeaveManagement from '../hr/LeaveManagement'
 import AttendanceManagement from '../hr/AttendanceManagement'
 import OrganizationSettings from '../settings/OrganizationSettings'
+import type { InvoiceStats } from '../../types/invoice'
+import type { QuoteStats } from '../../types/quote'
+
+interface DashboardStats {
+  invoices: InvoiceStats | null;
+  quotes: QuoteStats | null;
+  employees: {
+    total: number;
+    active: number;
+  };
+  payments: {
+    total: number;
+    totalAmount: number;
+  };
+  salarySlips: number;
+  documents: number;
+}
 
 type ActiveView = 'dashboard' | 'invoices' | 'payments' | 'quotes' | 'hr-employees' | 'hr-leave' | 'hr-attendance' | 'hr-organization';
 
@@ -34,6 +62,15 @@ const SimpleAdminDashboard: React.FC = () => {
   const [activeView, setActiveView] = useState<ActiveView>('dashboard')
   const [hrMenuOpen, setHrMenuOpen] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(true)
+  const [dashboardStats, setDashboardStats] = useState<DashboardStats>({
+    invoices: null,
+    quotes: null,
+    employees: { total: 0, active: 0 },
+    payments: { total: 0, totalAmount: 0 },
+    salarySlips: 0,
+    documents: 0
+  })
+  const [statsLoading, setStatsLoading] = useState(false)
   const navigate = useNavigate()
 
   // If Supabase is not configured, redirect to login with message
@@ -91,6 +128,76 @@ const SimpleAdminDashboard: React.FC = () => {
 
     checkAuth()
   }, [navigate])
+
+  // Load dashboard stats when on dashboard view
+  const loadDashboardStats = async () => {
+    try {
+      setStatsLoading(true)
+      
+      // Fetch all stats in parallel
+      const [invoiceStats, quoteStats, employeesResult, paymentsResult, salarySlipsResult, documentsResult] = await Promise.all([
+        invoiceService.getInvoiceStats().catch(() => null),
+        quoteService.getQuoteStats().catch(() => null),
+        (async () => {
+          try {
+            const { data } = await supabase.from('employees').select('id, employment_status')
+            return {
+              total: data?.length || 0,
+              active: data?.filter(e => e.employment_status === 'active').length || 0
+            }
+          } catch {
+            return { total: 0, active: 0 }
+          }
+        })(),
+        (async () => {
+          try {
+            const { data } = await supabase.from('payments').select('id, amount')
+            return {
+              total: data?.length || 0,
+              totalAmount: data?.reduce((sum, p) => sum + (p.amount || 0), 0) || 0
+            }
+          } catch {
+            return { total: 0, totalAmount: 0 }
+          }
+        })(),
+        (async () => {
+          try {
+            const { count } = await supabase.from('salary_slips').select('id', { count: 'exact', head: true })
+            return count || 0
+          } catch {
+            return 0
+          }
+        })(),
+        (async () => {
+          try {
+            const { count } = await supabase.from('employment_documents').select('id', { count: 'exact', head: true })
+            return count || 0
+          } catch {
+            return 0
+          }
+        })()
+      ])
+
+      setDashboardStats({
+        invoices: invoiceStats,
+        quotes: quoteStats,
+        employees: employeesResult,
+        payments: paymentsResult,
+        salarySlips: salarySlipsResult,
+        documents: documentsResult
+      })
+    } catch (error) {
+      console.error('Error loading dashboard stats:', error)
+    } finally {
+      setStatsLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if (activeView === 'dashboard' && user) {
+      loadDashboardStats()
+    }
+  }, [activeView, user])
 
   // Auto-hide success message after 10 seconds
   useEffect(() => {
@@ -398,55 +505,277 @@ const SimpleAdminDashboard: React.FC = () => {
           {/* Dashboard Overview */}
           {activeView === 'dashboard' && (
             <div>
+              {/* Refresh Button */}
+              <div className="flex justify-end mb-4">
+                <button
+                  onClick={loadDashboardStats}
+                  disabled={statsLoading}
+                  className="flex items-center px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50"
+                >
+                  <RefreshCw className={`w-4 h-4 mr-2 ${statsLoading ? 'animate-spin' : ''}`} />
+                  Refresh Stats
+                </button>
+              </div>
+
+              {/* Main Stats Cards */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-                {/* Dashboard Cards */}
-                <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+                {/* Invoices Card */}
+                <div 
+                  className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 cursor-pointer hover:shadow-md transition-shadow"
+                  onClick={() => setActiveView('invoices')}
+                >
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-sm text-gray-600">Invoices</p>
-                      <p className="text-2xl font-semibold text-gray-900 mt-1">-</p>
+                      <p className="text-sm text-gray-600">Total Invoices</p>
+                      <p className="text-2xl font-semibold text-gray-900 mt-1">
+                        {statsLoading ? '...' : (dashboardStats.invoices?.total_invoices || 0)}
+                      </p>
+                      <p className="text-xs text-green-600 mt-1">
+                        {dashboardStats.invoices?.paid_invoices || 0} Paid
+                      </p>
                     </div>
                     <Receipt className="w-8 h-8 text-blue-600" />
                   </div>
                 </div>
 
-                <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+                {/* Payments Card */}
+                <div 
+                  className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 cursor-pointer hover:shadow-md transition-shadow"
+                  onClick={() => setActiveView('payments')}
+                >
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-sm text-gray-600">Payments</p>
-                      <p className="text-2xl font-semibold text-gray-900 mt-1">-</p>
+                      <p className="text-2xl font-semibold text-gray-900 mt-1">
+                        {statsLoading ? '...' : dashboardStats.payments.total}
+                      </p>
+                      <p className="text-xs text-green-600 mt-1">
+                        ₹{(dashboardStats.payments.totalAmount || 0).toLocaleString('en-IN')}
+                      </p>
                     </div>
                     <CreditCard className="w-8 h-8 text-green-600" />
                   </div>
                 </div>
 
-                <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+                {/* Quotes Card */}
+                <div 
+                  className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 cursor-pointer hover:shadow-md transition-shadow"
+                  onClick={() => setActiveView('quotes')}
+                >
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-sm text-gray-600">Quotes</p>
-                      <p className="text-2xl font-semibold text-gray-900 mt-1">-</p>
+                      <p className="text-sm text-gray-600">Total Quotes</p>
+                      <p className="text-2xl font-semibold text-gray-900 mt-1">
+                        {statsLoading ? '...' : (dashboardStats.quotes?.total_quotes || 0)}
+                      </p>
+                      <p className="text-xs text-green-600 mt-1">
+                        {dashboardStats.quotes?.accepted_quotes || 0} Accepted
+                      </p>
                     </div>
                     <FileText className="w-8 h-8 text-purple-600" />
                   </div>
                 </div>
 
-                <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+                {/* Employees Card */}
+                <div 
+                  className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 cursor-pointer hover:shadow-md transition-shadow"
+                  onClick={() => setActiveView('hr-employees')}
+                >
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-sm text-gray-600">Employees</p>
-                      <p className="text-2xl font-semibold text-gray-900 mt-1">-</p>
+                      <p className="text-2xl font-semibold text-gray-900 mt-1">
+                        {statsLoading ? '...' : dashboardStats.employees.total}
+                      </p>
+                      <p className="text-xs text-green-600 mt-1">
+                        {dashboardStats.employees.active} Active
+                      </p>
                     </div>
-                    <Briefcase className="w-8 h-8 text-orange-600" />
+                    <Users className="w-8 h-8 text-orange-600" />
                   </div>
                 </div>
               </div>
 
-              {/* Welcome Message */}
+              {/* Secondary Stats - HR Documents & Salary Slips */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                {/* Documents Card */}
+                <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <p className="text-sm text-gray-600">HR Documents</p>
+                      <p className="text-2xl font-semibold text-gray-900 mt-1">
+                        {statsLoading ? '...' : dashboardStats.documents}
+                      </p>
+                    </div>
+                    <FileCheck className="w-8 h-8 text-indigo-600" />
+                  </div>
+                  <button
+                    onClick={() => setActiveView('hr-employees')}
+                    className="w-full flex items-center justify-center px-3 py-2 text-sm font-medium text-indigo-600 bg-indigo-50 rounded-md hover:bg-indigo-100"
+                  >
+                    <Eye className="w-4 h-4 mr-2" />
+                    View Documents
+                  </button>
+                </div>
+
+                {/* Salary Slips Card */}
+                <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <p className="text-sm text-gray-600">Salary Slips</p>
+                      <p className="text-2xl font-semibold text-gray-900 mt-1">
+                        {statsLoading ? '...' : dashboardStats.salarySlips}
+                      </p>
+                    </div>
+                    <DollarSign className="w-8 h-8 text-teal-600" />
+                  </div>
+                  <button
+                    onClick={() => setActiveView('hr-employees')}
+                    className="w-full flex items-center justify-center px-3 py-2 text-sm font-medium text-teal-600 bg-teal-50 rounded-md hover:bg-teal-100"
+                  >
+                    <Eye className="w-4 h-4 mr-2" />
+                    View Salary Slips
+                  </button>
+                </div>
+
+                {/* Revenue Card */}
+                <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <p className="text-sm text-gray-600">Total Revenue</p>
+                      <p className="text-2xl font-semibold text-gray-900 mt-1">
+                        ₹{statsLoading ? '...' : ((dashboardStats.invoices?.total_revenue_inr || dashboardStats.invoices?.total_revenue || 0) / 100000).toFixed(1)}L
+                      </p>
+                      <p className="text-xs text-yellow-600 mt-1">
+                        Pending: ₹{((dashboardStats.invoices?.pending_amount_inr || dashboardStats.invoices?.pending_amount || 0) / 100000).toFixed(1)}L
+                      </p>
+                    </div>
+                    <TrendingUp className="w-8 h-8 text-emerald-600" />
+                  </div>
+                  <button
+                    onClick={() => setActiveView('invoices')}
+                    className="w-full flex items-center justify-center px-3 py-2 text-sm font-medium text-emerald-600 bg-emerald-50 rounded-md hover:bg-emerald-100"
+                  >
+                    <Eye className="w-4 h-4 mr-2" />
+                    View Details
+                  </button>
+                </div>
+              </div>
+
+              {/* Quick Actions Section */}
+              <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 mb-8">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h3>
+                <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                  {/* Add Employee */}
+                  <button
+                    onClick={() => setActiveView('hr-employees')}
+                    className="flex flex-col items-center p-4 bg-orange-50 rounded-lg hover:bg-orange-100 transition-colors"
+                  >
+                    <div className="w-10 h-10 bg-orange-100 rounded-full flex items-center justify-center mb-2">
+                      <Plus className="w-5 h-5 text-orange-600" />
+                    </div>
+                    <span className="text-sm font-medium text-orange-700">Add Employee</span>
+                  </button>
+
+                  {/* Create Invoice */}
+                  <button
+                    onClick={() => setActiveView('invoices')}
+                    className="flex flex-col items-center p-4 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors"
+                  >
+                    <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center mb-2">
+                      <Receipt className="w-5 h-5 text-blue-600" />
+                    </div>
+                    <span className="text-sm font-medium text-blue-700">New Invoice</span>
+                  </button>
+
+                  {/* Create Quote */}
+                  <button
+                    onClick={() => setActiveView('quotes')}
+                    className="flex flex-col items-center p-4 bg-purple-50 rounded-lg hover:bg-purple-100 transition-colors"
+                  >
+                    <div className="w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center mb-2">
+                      <FileText className="w-5 h-5 text-purple-600" />
+                    </div>
+                    <span className="text-sm font-medium text-purple-700">New Quote</span>
+                  </button>
+
+                  {/* Generate Document */}
+                  <button
+                    onClick={() => setActiveView('hr-employees')}
+                    className="flex flex-col items-center p-4 bg-indigo-50 rounded-lg hover:bg-indigo-100 transition-colors"
+                  >
+                    <div className="w-10 h-10 bg-indigo-100 rounded-full flex items-center justify-center mb-2">
+                      <FileCheck className="w-5 h-5 text-indigo-600" />
+                    </div>
+                    <span className="text-sm font-medium text-indigo-700">Gen. Document</span>
+                  </button>
+
+                  {/* Generate Salary Slip */}
+                  <button
+                    onClick={() => setActiveView('hr-employees')}
+                    className="flex flex-col items-center p-4 bg-teal-50 rounded-lg hover:bg-teal-100 transition-colors"
+                  >
+                    <div className="w-10 h-10 bg-teal-100 rounded-full flex items-center justify-center mb-2">
+                      <DollarSign className="w-5 h-5 text-teal-600" />
+                    </div>
+                    <span className="text-sm font-medium text-teal-700">Gen. Salary Slip</span>
+                  </button>
+
+                  {/* Mark Attendance */}
+                  <button
+                    onClick={() => setActiveView('hr-attendance')}
+                    className="flex flex-col items-center p-4 bg-green-50 rounded-lg hover:bg-green-100 transition-colors"
+                  >
+                    <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center mb-2">
+                      <Clock className="w-5 h-5 text-green-600" />
+                    </div>
+                    <span className="text-sm font-medium text-green-700">Attendance</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Recent Activity / Welcome Message */}
               <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
                 <h3 className="text-lg font-semibold text-gray-900 mb-2">Welcome to Admin Dashboard</h3>
-                <p className="text-gray-600">
-                  Use the sidebar navigation to manage invoices, payments, quotes, and HR operations.
+                <p className="text-gray-600 mb-4">
+                  Use the sidebar navigation or quick actions above to manage invoices, payments, quotes, and HR operations.
                 </p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                  <div className="bg-blue-50 p-4 rounded-lg">
+                    <h4 className="font-medium text-blue-900 mb-2">Invoice Status Summary</h4>
+                    <div className="space-y-1 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Draft:</span>
+                        <span className="font-medium">{dashboardStats.invoices?.draft_invoices || 0}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Sent:</span>
+                        <span className="font-medium">{dashboardStats.invoices?.sent_invoices || 0}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Overdue:</span>
+                        <span className="font-medium text-red-600">{dashboardStats.invoices?.overdue_invoices || 0}</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="bg-purple-50 p-4 rounded-lg">
+                    <h4 className="font-medium text-purple-900 mb-2">Quote Status Summary</h4>
+                    <div className="space-y-1 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Pending:</span>
+                        <span className="font-medium">{(dashboardStats.quotes?.draft_quotes || 0) + (dashboardStats.quotes?.sent_quotes || 0)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Accepted:</span>
+                        <span className="font-medium text-green-600">{dashboardStats.quotes?.accepted_quotes || 0}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Converted:</span>
+                        <span className="font-medium">{dashboardStats.quotes?.converted_quotes || 0}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           )}
