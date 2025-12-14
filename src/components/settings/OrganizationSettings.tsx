@@ -1,10 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { Save, Building2, FileText, Phone, Mail, MapPin, CreditCard, Image as ImageIcon } from 'lucide-react';
+import { Save, Building2, FileText, Phone, Mail, MapPin, CreditCard, Image as ImageIcon, ArrowLeft } from 'lucide-react';
 import { organizationDetailsService } from '../../services/organizationDetailsService';
 import { useToast } from '../ui/ToastProvider';
 import type { OrganizationDetails, UpdateOrganizationDetailsDto } from '../../types/payroll';
 
-const OrganizationSettings: React.FC = () => {
+interface OrganizationSettingsProps {
+  onBackToDashboard?: () => void;
+}
+
+const OrganizationSettings: React.FC<OrganizationSettingsProps> = ({ onBackToDashboard }) => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [organization, setOrganization] = useState<OrganizationDetails | null>(null);
@@ -20,7 +24,13 @@ const OrganizationSettings: React.FC = () => {
       setLoading(true);
       const { data, error } = await organizationDetailsService.getPrimaryOrganization();
 
-      if (error) throw error;
+      // Don't throw error if table doesn't exist or no records found - just allow creating new
+      if (error) {
+        console.warn('No organization details found (table may not exist yet):', error);
+        // This is fine - user can create new organization details
+        setLoading(false);
+        return;
+      }
 
       if (data) {
         setOrganization(data);
@@ -28,7 +38,7 @@ const OrganizationSettings: React.FC = () => {
       }
     } catch (error) {
       console.error('Error loading organization details:', error);
-      showToast('Failed to load organization details', 'error');
+      // Don't show error toast if table doesn't exist - it's expected on first use
     } finally {
       setLoading(false);
     }
@@ -41,19 +51,37 @@ const OrganizationSettings: React.FC = () => {
       if (organization?.id) {
         // Update existing
         const { error } = await organizationDetailsService.update(organization.id, formData);
-        if (error) throw error;
+        if (error) {
+          console.error('Update error:', error);
+          if (error.code === '42P01') {
+            showToast('Database table not found. Please run the migration script first.', 'error');
+          } else {
+            showToast(`Failed to update: ${error.message || 'Unknown error'}`, 'error');
+          }
+          return;
+        }
         showToast('Organization details updated successfully', 'success');
       } else {
         // Create new
         const { error } = await organizationDetailsService.create(formData as any);
-        if (error) throw error;
+        if (error) {
+          console.error('Create error:', error);
+          if (error.code === '42P01') {
+            showToast('Database table "organization_details" not found. Please run migration: 005_add_organization_details.sql', 'error');
+          } else if (error.code === '23502') {
+            showToast('Please fill in required fields: Organization Name, PAN, and TAN', 'error');
+          } else {
+            showToast(`Failed to create: ${error.message || 'Unknown error'}`, 'error');
+          }
+          return;
+        }
         showToast('Organization details created successfully', 'success');
       }
 
       await loadOrganizationDetails();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error saving organization details:', error);
-      showToast('Failed to save organization details', 'error');
+      showToast(`Failed to save organization details: ${error?.message || 'Unknown error'}`, 'error');
     } finally {
       setSaving(false);
     }
@@ -93,10 +121,29 @@ const OrganizationSettings: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-100 py-6">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-gray-100">
+      {/* Header */}
+      <header className="bg-white shadow-sm border-b border-gray-200">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center h-16">
+            {onBackToDashboard && (
+              <button
+                onClick={onBackToDashboard}
+                className="flex items-center text-gray-600 hover:text-gray-900 mr-6"
+              >
+                <ArrowLeft className="w-5 h-5 mr-2" />
+                Back to Dashboard
+              </button>
+            )}
+            <div>
+              <h1 className="text-xl font-semibold text-gray-900">Organization Settings</h1>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         <div className="mb-6">
-          <h1 className="text-2xl font-bold text-gray-900">Organization Settings</h1>
           <p className="text-gray-600">Manage your organization details for statutory compliance and documents</p>
         </div>
 

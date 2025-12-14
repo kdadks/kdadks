@@ -29,16 +29,27 @@ export const organizationDetailsService = {
    */
   async getPrimaryOrganization(): Promise<{ data: OrganizationDetails | null; error: any }> {
     try {
+      console.log('Fetching primary organization...');
       const { data, error } = await supabase
         .from('organization_details')
         .select('*')
         .eq('is_active', true)
-        .single();
+        .maybeSingle(); // Use maybeSingle() instead of single() to avoid 406 errors
 
-      if (error && error.code !== 'PGRST116') throw error; // PGRST116 = no rows found
+      console.log('Supabase response:', { data, error });
+
+      if (error) {
+        console.error('Error fetching primary organization:');
+        console.error('Error code:', error.code);
+        console.error('Error message:', error.message);
+        console.error('Error details:', error.details);
+        console.error('Error hint:', error.hint);
+        console.error('Full error object:', JSON.stringify(error, null, 2));
+        return { data: null, error };
+      }
       return { data, error: null };
     } catch (error) {
-      console.error('Failed to fetch primary organization:', error);
+      console.error('Failed to fetch primary organization (caught exception):', error);
       return { data: null, error };
     }
   },
@@ -67,16 +78,28 @@ export const organizationDetailsService = {
    */
   async create(orgDetails: CreateOrganizationDetailsDto): Promise<{ data: OrganizationDetails | null; error: any }> {
     try {
+      console.log('Creating organization details with data:', orgDetails);
+
       const { data, error } = await supabase
         .from('organization_details')
         .insert([orgDetails])
         .select()
         .single();
 
-      if (error) throw error;
+      console.log('Create response:', { data, error });
+
+      if (error) {
+        console.error('Failed to create organization details:');
+        console.error('Error code:', error.code);
+        console.error('Error message:', error.message);
+        console.error('Error details:', error.details);
+        console.error('Error hint:', error.hint);
+        console.error('Full error object:', JSON.stringify(error, null, 2));
+        return { data: null, error };
+      }
       return { data, error: null };
     } catch (error) {
-      console.error('Failed to create organization details:', error);
+      console.error('Failed to create organization details (caught exception):', error);
       return { data: null, error };
     }
   },
@@ -86,6 +109,9 @@ export const organizationDetailsService = {
    */
   async update(id: string, updates: UpdateOrganizationDetailsDto): Promise<{ data: OrganizationDetails | null; error: any }> {
     try {
+      console.log('Updating organization details, ID:', id);
+      console.log('Update data:', updates);
+
       const { data, error } = await supabase
         .from('organization_details')
         .update({
@@ -96,10 +122,20 @@ export const organizationDetailsService = {
         .select()
         .single();
 
-      if (error) throw error;
+      console.log('Update response:', { data, error });
+
+      if (error) {
+        console.error('Failed to update organization details:');
+        console.error('Error code:', error.code);
+        console.error('Error message:', error.message);
+        console.error('Error details:', error.details);
+        console.error('Error hint:', error.hint);
+        console.error('Full error object:', JSON.stringify(error, null, 2));
+        return { data: null, error };
+      }
       return { data, error: null };
     } catch (error) {
-      console.error('Failed to update organization details:', error);
+      console.error('Failed to update organization details (caught exception):', error);
       return { data: null, error };
     }
   },

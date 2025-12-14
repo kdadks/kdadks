@@ -169,6 +169,22 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
 
     let currentY = dimensions.topMargin;
 
+    // Ensure salary_breakdown is populated
+    if (!data.salary_breakdown) {
+      data.salary_breakdown = {
+        basic: employee.basic_salary,
+        hra: employee.hra || 0,
+        special_allowance: employee.special_allowance || 0,
+        other_allowances: employee.other_allowances || 0,
+        gross_salary: employee.gross_salary
+      };
+    }
+
+    // Ensure annual_ctc is set
+    if (!data.annual_ctc) {
+      data.annual_ctc = employee.gross_salary * 12;
+    }
+
     // Apply branding if available
     if (companySettings) {
       const brandingResult = await PDFBrandingUtils.applyBranding(pdf, companySettings, dimensions);
@@ -297,6 +313,22 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
     const dimensions = PDFBrandingUtils.getStandardDimensions();
 
     let currentY = dimensions.topMargin;
+
+    // Ensure salary_breakdown is populated
+    if (!data.salary_breakdown) {
+      data.salary_breakdown = {
+        basic: employee.basic_salary,
+        hra: employee.hra || 0,
+        special_allowance: employee.special_allowance || 0,
+        other_allowances: employee.other_allowances || 0,
+        gross_monthly: employee.gross_salary
+      };
+    }
+
+    // Ensure annual_gross is set
+    if (!data.annual_gross) {
+      data.annual_gross = employee.gross_salary * 12;
+    }
 
     // Apply branding
     if (companySettings) {

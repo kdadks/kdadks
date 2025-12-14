@@ -431,7 +431,7 @@ const AttendanceManagement: React.FC<AttendanceManagementProps> = ({ onBackToDas
                           {record.working_hours ? `${record.working_hours.toFixed(2)} hrs` : '-'}
                         </td>
                         <td className="px-6 py-4 text-sm text-gray-500">
-                          {record.notes || '-'}
+                          {record.remarks || '-'}
                         </td>
                       </tr>
                     );
@@ -475,59 +475,134 @@ const AttendanceManagement: React.FC<AttendanceManagementProps> = ({ onBackToDas
               </div>
             </div>
 
-            <div className="bg-white shadow-md rounded-lg overflow-hidden">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Employee
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Present
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Absent
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Half Day
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      On Leave
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Total Hours
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {monthlySummary.map((summary) => {
-                    const employee = employees.find(e => e.id === summary.employee_id);
-                    return (
-                      <tr key={summary.employee_id} className="hover:bg-gray-50">
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm font-medium text-gray-900">{employee?.full_name}</div>
-                          <div className="text-sm text-gray-500">{employee?.employee_number}</div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className="text-sm font-medium text-green-600">{summary.present_days}</span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className="text-sm font-medium text-red-600">{summary.absent_days}</span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className="text-sm font-medium text-yellow-600">{summary.half_days}</span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className="text-sm font-medium text-blue-600">{summary.leave_days}</span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {summary.total_working_hours.toFixed(2)} hrs
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+            {/* Legend */}
+            <div className="mb-6 bg-white shadow-md rounded-lg p-4">
+              <h3 className="text-sm font-medium text-gray-700 mb-3">Legend:</h3>
+              <div className="flex flex-wrap gap-4">
+                <div className="flex items-center">
+                  <div className="w-4 h-4 bg-green-500 rounded mr-2"></div>
+                  <span className="text-sm text-gray-700">Present</span>
+                </div>
+                <div className="flex items-center">
+                  <div className="w-4 h-4 bg-red-500 rounded mr-2"></div>
+                  <span className="text-sm text-gray-700">Absent</span>
+                </div>
+                <div className="flex items-center">
+                  <div className="w-4 h-4 bg-yellow-500 rounded mr-2"></div>
+                  <span className="text-sm text-gray-700">Half Day</span>
+                </div>
+                <div className="flex items-center">
+                  <div className="w-4 h-4 bg-blue-500 rounded mr-2"></div>
+                  <span className="text-sm text-gray-700">On Leave</span>
+                </div>
+                <div className="flex items-center">
+                  <div className="w-4 h-4 bg-gray-200 rounded mr-2"></div>
+                  <span className="text-sm text-gray-700">Not Marked</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Calendar View for Each Employee */}
+            <div className="space-y-6">
+              {monthlySummary.map((summary) => {
+                const employee = employees.find(e => e.id === summary.employee_id);
+                const daysInMonth = new Date(selectedYear, selectedMonth, 0).getDate();
+                const firstDayOfMonth = new Date(selectedYear, selectedMonth - 1, 1).getDay();
+
+                return (
+                  <div key={summary.employee_id} className="bg-white shadow-md rounded-lg p-6">
+                    {/* Employee Header */}
+                    <div className="mb-4 flex justify-between items-center">
+                      <div>
+                        <h3 className="text-lg font-semibold text-gray-900">{employee?.full_name}</h3>
+                        <p className="text-sm text-gray-500">{employee?.employee_number}</p>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-sm text-gray-600">
+                          <span className="text-green-600 font-medium">{summary.present_days}P</span>
+                          {' / '}
+                          <span className="text-red-600 font-medium">{summary.absent_days}A</span>
+                          {' / '}
+                          <span className="text-yellow-600 font-medium">{summary.half_days}H</span>
+                          {' / '}
+                          <span className="text-blue-600 font-medium">{summary.leave_days}L</span>
+                        </div>
+                        <div className="text-sm text-gray-600 mt-1">
+                          Total: {summary.total_working_hours.toFixed(2)} hrs
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Calendar Grid */}
+                    <div className="grid grid-cols-7 gap-2">
+                      {/* Day Headers */}
+                      {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
+                        <div key={day} className="text-center text-xs font-semibold text-gray-600 py-2">
+                          {day}
+                        </div>
+                      ))}
+
+                      {/* Empty cells for days before month starts */}
+                      {Array.from({ length: firstDayOfMonth }).map((_, index) => (
+                        <div key={`empty-${index}`} className="aspect-square"></div>
+                      ))}
+
+                      {/* Calendar Days */}
+                      {Array.from({ length: daysInMonth }).map((_, index) => {
+                        const day = index + 1;
+                        const dateStr = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                        const record = attendanceRecords.find(
+                          r => r.employee_id === summary.employee_id && r.attendance_date === dateStr
+                        );
+
+                        const getStatusColor = () => {
+                          if (!record) return 'bg-gray-200 text-gray-700';
+                          switch (record.status) {
+                            case 'present': return 'bg-green-500 text-white';
+                            case 'absent': return 'bg-red-500 text-white';
+                            case 'half-day': return 'bg-yellow-500 text-white';
+                            case 'leave':
+                            case 'on-leave': return 'bg-blue-500 text-white';
+                            default: return 'bg-gray-200 text-gray-700';
+                          }
+                        };
+
+                        const getStatusLabel = () => {
+                          if (!record) return '';
+                          switch (record.status) {
+                            case 'present': return 'P';
+                            case 'absent': return 'A';
+                            case 'half-day': return 'H';
+                            case 'leave':
+                            case 'on-leave': return 'L';
+                            default: return '';
+                          }
+                        };
+
+                        return (
+                          <div
+                            key={day}
+                            className={`aspect-square flex flex-col items-center justify-center rounded-md ${getStatusColor()} text-sm font-medium cursor-pointer hover:opacity-80 transition-opacity`}
+                            title={record ? `${record.status} - ${record.check_in_time || ''} to ${record.check_out_time || ''}` : 'Not marked'}
+                          >
+                            <div className="text-xs">{day}</div>
+                            {getStatusLabel() && (
+                              <div className="text-xs mt-0.5 font-bold">{getStatusLabel()}</div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+
+              {monthlySummary.length === 0 && (
+                <div className="bg-white shadow-md rounded-lg p-12 text-center">
+                  <Calendar className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                  <p className="text-gray-600">No attendance records found for this month.</p>
+                </div>
+              )}
             </div>
           </div>
         )}

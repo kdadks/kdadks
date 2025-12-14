@@ -326,6 +326,119 @@ export const leaveAttendanceService = {
     return data || [];
   },
 
+  async getAttendanceByDate(date: Date): Promise<AttendanceRecord[]> {
+    const dateStr = date.toISOString().split('T')[0];
+    return this.getAttendanceRecords({
+      fromDate: dateStr,
+      toDate: dateStr
+    });
+  },
+
+  async markAttendance(attendance: {
+    employee_id: string;
+    attendance_date: string;
+    status: 'present' | 'absent' | 'half-day' | 'leave';
+    check_in_time?: string;
+    check_out_time?: string;
+    notes?: string;
+    remarks?: string;
+  }): Promise<AttendanceRecord> {
+    try {
+      console.log('markAttendance called with:', attendance);
+
+      // Convert time (HH:MM) to full timestamp with timezone
+      const convertToTimestamp = (date: string, time?: string): string | undefined => {
+        if (!time) return undefined;
+        // Combine date and time into ISO timestamp
+        return `${date}T${time}:00`;
+      };
+
+      const check_in_timestamp = convertToTimestamp(attendance.attendance_date, attendance.check_in_time);
+      const check_out_timestamp = convertToTimestamp(attendance.attendance_date, attendance.check_out_time);
+
+      console.log('Converted timestamps:', { check_in_timestamp, check_out_timestamp });
+
+      // Check if attendance already exists for this date
+      const { data: existing, error: checkError } = await supabase
+        .from('attendance_records')
+        .select('*')
+        .eq('employee_id', attendance.employee_id)
+        .eq('attendance_date', attendance.attendance_date)
+        .maybeSingle();
+
+      console.log('Existing attendance check:', { existing, checkError });
+
+      if (checkError) {
+        console.error('Error checking existing attendance:');
+        console.error('Error code:', checkError.code);
+        console.error('Error message:', checkError.message);
+        console.error('Error details:', checkError.details);
+        console.error('Full error:', JSON.stringify(checkError, null, 2));
+        throw checkError;
+      }
+
+      if (existing) {
+        console.log('Updating existing attendance record:', existing.id);
+        // Update existing record
+        const { data, error } = await supabase
+          .from('attendance_records')
+          .update({
+            status: attendance.status,
+            check_in_time: check_in_timestamp,
+            check_out_time: check_out_timestamp,
+            remarks: attendance.notes || attendance.remarks,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', existing.id)
+          .select()
+          .single();
+
+        console.log('Update response:', { data, error });
+
+        if (error) {
+          console.error('Error updating attendance:');
+          console.error('Error code:', error.code);
+          console.error('Error message:', error.message);
+          console.error('Error details:', error.details);
+          console.error('Full error:', JSON.stringify(error, null, 2));
+          throw error;
+        }
+        return data;
+      } else {
+        console.log('Creating new attendance record');
+        // Create new record
+        const { data, error } = await supabase
+          .from('attendance_records')
+          .insert([{
+            employee_id: attendance.employee_id,
+            attendance_date: attendance.attendance_date,
+            status: attendance.status,
+            check_in_time: check_in_timestamp,
+            check_out_time: check_out_timestamp,
+            remarks: attendance.notes || attendance.remarks
+          }])
+          .select()
+          .single();
+
+        console.log('Insert response:', { data, error });
+
+        if (error) {
+          console.error('Error creating attendance:');
+          console.error('Error code:', error.code);
+          console.error('Error message:', error.message);
+          console.error('Error details:', error.details);
+          console.error('Error hint:', error.hint);
+          console.error('Full error:', JSON.stringify(error, null, 2));
+          throw error;
+        }
+        return data;
+      }
+    } catch (error) {
+      console.error('markAttendance exception caught:', error);
+      throw error;
+    }
+  },
+
   async checkIn(
     employeeId: string,
     location?: string,
@@ -437,42 +550,56 @@ export const leaveAttendanceService = {
   },
 
   async getMonthlyAttendanceSummary(
-    employeeId: string,
-    month: number,
-    year: number
-  ): Promise<MonthlyAttendanceSummary> {
+    year: number,
+    month: number
+  ): Promise<MonthlyAttendanceSummary[]> {
     const startDate = new Date(year, month - 1, 1);
     const endDate = new Date(year, month, 0);
 
+    // Get all attendance records for the month
     const records = await this.getAttendanceRecords({
-      employeeId,
       fromDate: startDate.toISOString().split('T')[0],
       toDate: endDate.toISOString().split('T')[0]
     });
 
-    const summary: MonthlyAttendanceSummary = {
-      employee_id: employeeId,
-      month,
-      year,
-      total_working_days: endDate.getDate(),
-      present_days: records.filter(r => r.status === 'present').length,
-      absent_days: records.filter(r => r.status === 'absent').length,
-      half_days: records.filter(r => r.status === 'half-day').length,
-      leave_days: records.filter(r => r.status === 'on-leave').length,
-      holidays: records.filter(r => r.status === 'holiday').length,
-      week_offs: records.filter(r => r.status === 'week-off').length,
-      paid_days: 0,
-      lop_days: 0,
-      total_hours: records.reduce((sum, r) => sum + (r.total_hours || 0), 0),
-      work_hours: records.reduce((sum, r) => sum + (r.work_hours || 0), 0),
-      overtime_hours: records.reduce((sum, r) => sum + (r.overtime_hours || 0), 0)
-    };
+    // Group by employee
+    const employeeRecords = records.reduce((acc, record) => {
+      if (!acc[record.employee_id]) {
+        acc[record.employee_id] = [];
+      }
+      acc[record.employee_id].push(record);
+      return acc;
+    }, {} as Record<string, AttendanceRecord[]>);
 
-    // Calculate paid days and LOP
-    summary.paid_days = summary.present_days + summary.half_days * 0.5 + summary.leave_days;
-    summary.lop_days = Math.max(0, summary.total_working_days - summary.paid_days - summary.holidays - summary.week_offs);
+    // Create summary for each employee
+    const summaries: MonthlyAttendanceSummary[] = Object.entries(employeeRecords).map(([employeeId, empRecords]) => {
+      const summary: MonthlyAttendanceSummary = {
+        employee_id: employeeId,
+        month,
+        year,
+        total_working_days: endDate.getDate(),
+        present_days: empRecords.filter(r => r.status === 'present').length,
+        absent_days: empRecords.filter(r => r.status === 'absent').length,
+        half_days: empRecords.filter(r => r.status === 'half-day').length,
+        leave_days: empRecords.filter(r => r.status === 'leave' || r.status === 'on-leave').length,
+        holidays: empRecords.filter(r => r.status === 'holiday').length,
+        week_offs: empRecords.filter(r => r.status === 'week-off').length,
+        paid_days: 0,
+        lop_days: 0,
+        total_working_hours: empRecords.reduce((sum, r) => sum + (r.working_hours || 0), 0),
+        total_hours: empRecords.reduce((sum, r) => sum + (r.working_hours || 0), 0),
+        work_hours: empRecords.reduce((sum, r) => sum + (r.working_hours || 0), 0),
+        overtime_hours: empRecords.reduce((sum, r) => sum + (r.overtime_hours || 0), 0)
+      };
 
-    return summary;
+      // Calculate paid days and LOP
+      summary.paid_days = summary.present_days + summary.half_days * 0.5 + summary.leave_days;
+      summary.lop_days = Math.max(0, summary.total_working_days - summary.paid_days - summary.holidays - summary.week_offs);
+
+      return summary;
+    });
+
+    return summaries;
   },
 
   // =====================================================
