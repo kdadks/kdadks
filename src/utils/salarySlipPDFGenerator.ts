@@ -189,13 +189,13 @@ export async function generateSalarySlipPDF(
     pdf.setFontSize(9);
     
     // Earnings
-    if (i < earningsData.length && earningsData[i][1] > 0) {
+    if (i < earningsData.length && Number(earningsData[i][1]) > 0) {
       pdf.text(String(earningsData[i][0]), col1X, currentY);
       pdf.text(Number(earningsData[i][1]).toLocaleString('en-IN'), col2X - 5, currentY, { align: 'right' });
     }
 
     // Deductions
-    if (i < deductionsData.length && deductionsData[i][1] > 0) {
+    if (i < deductionsData.length && Number(deductionsData[i][1]) > 0) {
       pdf.text(String(deductionsData[i][0]), col3X, currentY);
       pdf.text(Number(deductionsData[i][1]).toLocaleString('en-IN'), col4X, currentY, { align: 'right' });
     }

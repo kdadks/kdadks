@@ -30,7 +30,7 @@ const AttendanceManagement: React.FC<AttendanceManagementProps> = ({ onBackToDas
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
-  const { showToast } = useToast();
+  const { showSuccess, showError } = useToast();
 
   // Attendance marking state
   const [bulkAttendance, setBulkAttendance] = useState<{
@@ -72,7 +72,7 @@ const AttendanceManagement: React.FC<AttendanceManagementProps> = ({ onBackToDas
       setBulkAttendance(initial);
     } catch (error) {
       console.error('Error loading data:', error);
-      showToast('Failed to load employee data', 'error');
+      showError('Failed to load employee data');
     } finally {
       setLoading(false);
     }
@@ -113,10 +113,10 @@ const AttendanceManagement: React.FC<AttendanceManagementProps> = ({ onBackToDas
         notes: data.notes
       });
 
-      showToast('Attendance marked successfully', 'success');
+      showSuccess('Attendance marked successfully');
     } catch (error: any) {
       console.error('Error marking attendance:', error);
-      showToast(error.message || 'Failed to mark attendance', 'error');
+      showError(error.message || 'Failed to mark attendance');
     }
   };
 
@@ -135,11 +135,11 @@ const AttendanceManagement: React.FC<AttendanceManagementProps> = ({ onBackToDas
       });
 
       await Promise.all(promises);
-      showToast(`Attendance marked for ${employees.length} employees`, 'success');
+      showSuccess(`Attendance marked for ${employees.length} employees`);
       setActiveTab('view-records');
     } catch (error: any) {
       console.error('Error marking bulk attendance:', error);
-      showToast(error.message || 'Failed to mark attendance', 'error');
+      showError(error.message || 'Failed to mark attendance');
     }
   };
 
@@ -428,7 +428,7 @@ const AttendanceManagement: React.FC<AttendanceManagementProps> = ({ onBackToDas
                           {record.check_out_time || '-'}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {record.working_hours ? `${record.working_hours.toFixed(2)} hrs` : '-'}
+                          {record.work_hours ? `${record.work_hours.toFixed(2)} hrs` : '-'}
                         </td>
                         <td className="px-6 py-4 text-sm text-gray-500">
                           {record.remarks || '-'}
@@ -528,7 +528,7 @@ const AttendanceManagement: React.FC<AttendanceManagementProps> = ({ onBackToDas
                           <span className="text-blue-600 font-medium">{summary.leave_days}L</span>
                         </div>
                         <div className="text-sm text-gray-600 mt-1">
-                          Total: {summary.total_working_hours.toFixed(2)} hrs
+                          Total: {summary.work_hours.toFixed(2)} hrs
                         </div>
                       </div>
                     </div>
@@ -561,7 +561,6 @@ const AttendanceManagement: React.FC<AttendanceManagementProps> = ({ onBackToDas
                             case 'present': return 'bg-green-500 text-white';
                             case 'absent': return 'bg-red-500 text-white';
                             case 'half-day': return 'bg-yellow-500 text-white';
-                            case 'leave':
                             case 'on-leave': return 'bg-blue-500 text-white';
                             default: return 'bg-gray-200 text-gray-700';
                           }
@@ -573,7 +572,6 @@ const AttendanceManagement: React.FC<AttendanceManagementProps> = ({ onBackToDas
                             case 'present': return 'P';
                             case 'absent': return 'A';
                             case 'half-day': return 'H';
-                            case 'leave':
                             case 'on-leave': return 'L';
                             default: return '';
                           }

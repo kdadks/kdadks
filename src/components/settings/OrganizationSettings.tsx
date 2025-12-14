@@ -13,7 +13,7 @@ const OrganizationSettings: React.FC<OrganizationSettingsProps> = ({ onBackToDas
   const [saving, setSaving] = useState(false);
   const [organization, setOrganization] = useState<OrganizationDetails | null>(null);
   const [formData, setFormData] = useState<Partial<UpdateOrganizationDetailsDto>>({});
-  const { showToast } = useToast();
+  const { showSuccess, showError } = useToast();
 
   useEffect(() => {
     loadOrganizationDetails();
@@ -54,34 +54,34 @@ const OrganizationSettings: React.FC<OrganizationSettingsProps> = ({ onBackToDas
         if (error) {
           console.error('Update error:', error);
           if (error.code === '42P01') {
-            showToast('Database table not found. Please run the migration script first.', 'error');
+            showError('Database table not found. Please run the migration script first.');
           } else {
-            showToast(`Failed to update: ${error.message || 'Unknown error'}`, 'error');
+            showError(`Failed to update: ${error.message || 'Unknown error'}`);
           }
           return;
         }
-        showToast('Organization details updated successfully', 'success');
+        showSuccess('Organization details updated successfully');
       } else {
         // Create new
         const { error } = await organizationDetailsService.create(formData as any);
         if (error) {
           console.error('Create error:', error);
           if (error.code === '42P01') {
-            showToast('Database table "organization_details" not found. Please run migration: 005_add_organization_details.sql', 'error');
+            showError('Database table "organization_details" not found. Please run migration: 005_add_organization_details.sql');
           } else if (error.code === '23502') {
-            showToast('Please fill in required fields: Organization Name, PAN, and TAN', 'error');
+            showError('Please fill in required fields: Organization Name, PAN, and TAN');
           } else {
-            showToast(`Failed to create: ${error.message || 'Unknown error'}`, 'error');
+            showError(`Failed to create: ${error.message || 'Unknown error'}`);
           }
           return;
         }
-        showToast('Organization details created successfully', 'success');
+        showSuccess('Organization details created successfully');
       }
 
       await loadOrganizationDetails();
     } catch (error: any) {
       console.error('Error saving organization details:', error);
-      showToast(`Failed to save organization details: ${error?.message || 'Unknown error'}`, 'error');
+      showError(`Failed to save organization details: ${error?.message || 'Unknown error'}`);
     } finally {
       setSaving(false);
     }
@@ -99,11 +99,11 @@ const OrganizationSettings: React.FC<OrganizationSettingsProps> = ({ onBackToDas
         try {
           const { error } = await organizationDetailsService.updateLogo(organization.id, base64);
           if (error) throw error;
-          showToast('Logo uploaded successfully', 'success');
+          showSuccess('Logo uploaded successfully');
           await loadOrganizationDetails();
         } catch (error) {
           console.error('Error uploading logo:', error);
-          showToast('Failed to upload logo', 'error');
+          showError('Failed to upload logo');
         }
       } else {
         setFormData({ ...formData, logo_image_data: base64 });

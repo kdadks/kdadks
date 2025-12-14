@@ -581,14 +581,13 @@ export const leaveAttendanceService = {
         present_days: empRecords.filter(r => r.status === 'present').length,
         absent_days: empRecords.filter(r => r.status === 'absent').length,
         half_days: empRecords.filter(r => r.status === 'half-day').length,
-        leave_days: empRecords.filter(r => r.status === 'leave' || r.status === 'on-leave').length,
+        leave_days: empRecords.filter(r => r.status === 'on-leave').length,
         holidays: empRecords.filter(r => r.status === 'holiday').length,
         week_offs: empRecords.filter(r => r.status === 'week-off').length,
         paid_days: 0,
         lop_days: 0,
-        total_working_hours: empRecords.reduce((sum, r) => sum + (r.working_hours || 0), 0),
-        total_hours: empRecords.reduce((sum, r) => sum + (r.working_hours || 0), 0),
-        work_hours: empRecords.reduce((sum, r) => sum + (r.working_hours || 0), 0),
+        total_hours: empRecords.reduce((sum, r) => sum + (r.work_hours || 0), 0),
+        work_hours: empRecords.reduce((sum, r) => sum + (r.work_hours || 0), 0),
         overtime_hours: empRecords.reduce((sum, r) => sum + (r.overtime_hours || 0), 0)
       };
 

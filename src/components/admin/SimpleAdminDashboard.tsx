@@ -140,33 +140,33 @@ const SimpleAdminDashboard: React.FC = () => {
     )
   }
 
-  // Render different views
-  if (activeView === 'invoices') {
-    return <InvoiceManagement onBackToDashboard={() => setActiveView('dashboard')} />
-  }
+  // Render different views based on activeView
+  const renderView = () => {
+    switch (activeView) {
+      case 'invoices':
+        return <InvoiceManagement onBackToDashboard={() => setActiveView('dashboard')} />;
+      case 'payments':
+        return <PaymentManagement onBackToDashboard={() => setActiveView('dashboard')} />;
+      case 'quotes':
+        return <QuoteManagement onBackToDashboard={() => setActiveView('dashboard')} />;
+      case 'hr-employees':
+        return <EmploymentDocuments onBackToDashboard={() => setActiveView('dashboard')} />;
+      case 'hr-leave':
+        return <LeaveManagement onBackToDashboard={() => setActiveView('dashboard')} />;
+      case 'hr-attendance':
+        return <AttendanceManagement onBackToDashboard={() => setActiveView('dashboard')} />;
+      case 'hr-organization':
+        return <OrganizationSettings onBackToDashboard={() => setActiveView('dashboard')} />;
+      case 'dashboard':
+      default:
+        return null;
+    }
+  };
 
-  if (activeView === 'payments') {
-    return <PaymentManagement onBackToDashboard={() => setActiveView('dashboard')} />
-  }
-
-  if (activeView === 'quotes') {
-    return <QuoteManagement onBackToDashboard={() => setActiveView('dashboard')} />
-  }
-
-  if (activeView === 'hr-employees') {
-    return <EmploymentDocuments onBackToDashboard={() => setActiveView('dashboard')} />
-  }
-
-  if (activeView === 'hr-leave') {
-    return <LeaveManagement onBackToDashboard={() => setActiveView('dashboard')} />
-  }
-
-  if (activeView === 'hr-attendance') {
-    return <AttendanceManagement onBackToDashboard={() => setActiveView('dashboard')} />
-  }
-
-  if (activeView === 'hr-organization') {
-    return <OrganizationSettings onBackToDashboard={() => setActiveView('dashboard')} />
+  // If not on dashboard, render the specific view
+  const viewComponent = renderView();
+  if (viewComponent) {
+    return viewComponent;
   }
 
   return (

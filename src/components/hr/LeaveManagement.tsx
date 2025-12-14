@@ -34,14 +34,14 @@ const LeaveManagement: React.FC<LeaveManagementProps> = ({ onBackToDashboard }) 
   const [balances, setBalances] = useState<EmployeeLeaveBalance[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
-  const { showToast } = useToast();
+  const { showSuccess, showError } = useToast();
 
   // Leave application form state
   const [leaveForm, setLeaveForm] = useState({
     employee_id: '',
     leave_type_id: '',
-    start_date: '',
-    end_date: '',
+    from_date: '',
+    to_date: '',
     days_requested: 0,
     reason: '',
     half_day: false
@@ -65,7 +65,7 @@ const LeaveManagement: React.FC<LeaveManagementProps> = ({ onBackToDashboard }) 
       setEmployees(emps);
     } catch (error) {
       console.error('Error loading leave data:', error);
-      showToast('Failed to load leave data', 'error');
+      showError('Failed to load leave data');
     } finally {
       setLoading(false);
     }
@@ -81,10 +81,10 @@ const LeaveManagement: React.FC<LeaveManagementProps> = ({ onBackToDashboard }) 
   };
 
   const calculateLeaveDays = () => {
-    if (!leaveForm.start_date || !leaveForm.end_date) return;
+    if (!leaveForm.from_date || !leaveForm.to_date) return;
 
-    const start = new Date(leaveForm.start_date);
-    const end = new Date(leaveForm.end_date);
+    const start = new Date(leaveForm.from_date);
+    const end = new Date(leaveForm.to_date);
     const diffTime = Math.abs(end.getTime() - start.getTime());
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
 
@@ -96,22 +96,22 @@ const LeaveManagement: React.FC<LeaveManagementProps> = ({ onBackToDashboard }) 
 
   useEffect(() => {
     calculateLeaveDays();
-  }, [leaveForm.start_date, leaveForm.end_date, leaveForm.half_day]);
+  }, [leaveForm.from_date, leaveForm.to_date, leaveForm.half_day]);
 
   const handleApplyLeave = async () => {
     try {
-      if (!leaveForm.employee_id || !leaveForm.leave_type_id || !leaveForm.start_date || !leaveForm.end_date) {
-        showToast('Please fill all required fields', 'error');
+      if (!leaveForm.employee_id || !leaveForm.leave_type_id || !leaveForm.from_date || !leaveForm.to_date) {
+        showError('Please fill all required fields');
         return;
       }
 
       await leaveAttendanceService.applyLeave(leaveForm);
-      showToast('Leave application submitted successfully', 'success');
+      showSuccess('Leave application submitted successfully');
       setLeaveForm({
         employee_id: '',
         leave_type_id: '',
-        start_date: '',
-        end_date: '',
+        from_date: '',
+        to_date: '',
         days_requested: 0,
         reason: '',
         half_day: false
@@ -120,29 +120,31 @@ const LeaveManagement: React.FC<LeaveManagementProps> = ({ onBackToDashboard }) 
       loadData();
     } catch (error: any) {
       console.error('Error applying leave:', error);
-      showToast(error.message || 'Failed to apply leave', 'error');
+      showError(error.message || 'Failed to apply leave');
     }
   };
 
   const handleApproveLeave = async (id: string) => {
     try {
-      await leaveAttendanceService.approveLeave(id);
-      showToast('Leave approved successfully', 'success');
+      // Using a placeholder approverId - in production this should come from auth context
+      await leaveAttendanceService.approveLeave(id, 'admin');
+      showSuccess('Leave approved successfully');
       loadData();
     } catch (error: any) {
       console.error('Error approving leave:', error);
-      showToast(error.message || 'Failed to approve leave', 'error');
+      showError(error.message || 'Failed to approve leave');
     }
   };
 
   const handleRejectLeave = async (id: string) => {
     try {
-      await leaveAttendanceService.rejectLeave(id);
-      showToast('Leave rejected', 'success');
+      // Using a placeholder approverId and reason - in production these should come from UI
+      await leaveAttendanceService.rejectLeave(id, 'admin', 'Rejected by admin');
+      showSuccess('Leave rejected');
       loadData();
     } catch (error: any) {
       console.error('Error rejecting leave:', error);
-      showToast(error.message || 'Failed to reject leave', 'error');
+      showError(error.message || 'Failed to reject leave');
     }
   };
 
@@ -316,12 +318,12 @@ const LeaveManagement: React.FC<LeaveManagementProps> = ({ onBackToDashboard }) 
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="text-sm text-gray-900">
-                            {new Date(app.start_date).toLocaleDateString('en-GB')} - {new Date(app.end_date).toLocaleDateString('en-GB')}
+                            {new Date(app.from_date).toLocaleDateString('en-GB')} - {new Date(app.to_date).toLocaleDateString('en-GB')}
                           </div>
                           {app.reason && <div className="text-sm text-gray-500 max-w-xs truncate">{app.reason}</div>}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {app.days_requested} {app.half_day ? '(Half Day)' : ''}
+                          {app.total_days} {app.half_day ? '(Half Day)' : ''}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           {getStatusBadge(app.status)}
@@ -398,11 +400,13 @@ const LeaveManagement: React.FC<LeaveManagementProps> = ({ onBackToDashboard }) 
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {balances.map((balance) => (
+                    {balances.map((balance) => {
+                      const balanceWithType = balance as typeof balance & { leave_type?: { name: string; code: string } };
+                      return (
                       <tr key={balance.id} className="hover:bg-gray-50">
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm font-medium text-gray-900">{balance.leave_type?.name}</div>
-                          <div className="text-sm text-gray-500">{balance.leave_type?.code}</div>
+                          <div className="text-sm font-medium text-gray-900">{balanceWithType.leave_type?.name}</div>
+                          <div className="text-sm text-gray-500">{balanceWithType.leave_type?.code}</div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                           {balance.opening_balance}
@@ -417,7 +421,8 @@ const LeaveManagement: React.FC<LeaveManagementProps> = ({ onBackToDashboard }) 
                           {balance.available}
                         </td>
                       </tr>
-                    ))}
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -479,8 +484,8 @@ const LeaveManagement: React.FC<LeaveManagementProps> = ({ onBackToDashboard }) 
                   </label>
                   <input
                     type="date"
-                    value={leaveForm.start_date}
-                    onChange={(e) => setLeaveForm({ ...leaveForm, start_date: e.target.value })}
+                    value={leaveForm.from_date}
+                    onChange={(e) => setLeaveForm({ ...leaveForm, from_date: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
                     required
                   />
@@ -492,8 +497,8 @@ const LeaveManagement: React.FC<LeaveManagementProps> = ({ onBackToDashboard }) 
                   </label>
                   <input
                     type="date"
-                    value={leaveForm.end_date}
-                    onChange={(e) => setLeaveForm({ ...leaveForm, end_date: e.target.value })}
+                    value={leaveForm.to_date}
+                    onChange={(e) => setLeaveForm({ ...leaveForm, to_date: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
                     required
                   />
@@ -541,12 +546,15 @@ const LeaveManagement: React.FC<LeaveManagementProps> = ({ onBackToDashboard }) 
                 <div className="bg-blue-50 border border-blue-200 rounded-md p-4">
                   <h3 className="text-sm font-medium text-blue-900 mb-2">Available Leave Balance</h3>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    {balances.map((balance) => (
+                    {balances.map((balance) => {
+                      const balanceWithType = balance as typeof balance & { leave_type?: { name: string; code: string } };
+                      return (
                       <div key={balance.id} className="text-sm">
-                        <div className="text-gray-600">{balance.leave_type?.code}</div>
+                        <div className="text-gray-600">{balanceWithType.leave_type?.code}</div>
                         <div className="text-lg font-semibold text-blue-900">{balance.available} days</div>
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               )}
