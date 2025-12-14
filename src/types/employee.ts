@@ -129,9 +129,22 @@ export interface HRDocumentSettings {
 
 // Specific document data types
 export interface OfferLetterData {
+  // Basic Details
   position: string;
   department: string;
   joining_date: string;
+  offer_date?: string;
+  candidate_address?: string;
+  
+  // Position Details
+  reporting_to?: string;
+  work_location?: string;
+  employment_type?: string;
+  
+  // Roles and Responsibilities (editable by admin)
+  roles_responsibilities?: string;
+  
+  // Compensation
   salary_breakdown: {
     basic: number;
     hra: number;
@@ -140,12 +153,41 @@ export interface OfferLetterData {
     gross_salary: number;
   };
   annual_ctc: number;
+  salary_payment_note?: string;
+  benefits_note?: string;
+  
+  // Working Hours (editable)
+  working_hours_start?: string;
+  working_hours_end?: string;
+  working_days?: string;
+  additional_hours_note?: string;
+  
+  // Probation & Notice
   probation_period?: number;
+  probation_note?: string;
   notice_period?: number;
-  work_location?: string;
-  reporting_to?: string;
+  
+  // Leave and Holidays
+  leave_policy_note?: string;
+  
+  // Confidentiality
+  confidentiality_note?: string;
+  
+  // Termination
+  termination_note?: string;
+  
+  // Acceptance Section
+  acceptance_section?: boolean;
+  
+  // Signatory Details
+  signatory_name?: string;
+  signatory_designation?: string;
+  signatory_contact?: string;
+  
+  // Additional Content
   benefits?: string[];
-  terms_conditions?: string;
+  terms_and_conditions?: string;
+  other_details?: string;
 }
 
 export interface SalaryCertificateData {

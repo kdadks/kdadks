@@ -54,7 +54,7 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
   const [activeTab, setActiveTab] = useState<ActiveTab>('employees');
   const [employeeView, setEmployeeView] = useState<EmployeeView>('list');
   const [searchTerm, setSearchTerm] = useState('');
-  const { showToast } = useToast();
+  const { showSuccess, showError } = useToast();
 
   // Employee form state
   const [employeeForm, setEmployeeForm] = useState<Partial<Employee>>({
@@ -127,7 +127,7 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
       }
     } catch (err) {
       console.error('Error loading data:', err);
-      showToast('Failed to load data', 'error');
+      showError('Failed to load data');
     } finally {
       setLoading(false);
     }
@@ -136,7 +136,7 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
   const handleCreateEmployee = async () => {
     try {
       if (!employeeForm.employee_number || !employeeForm.first_name || !employeeForm.last_name || !employeeForm.email) {
-        showToast('Please fill all required fields', 'error');
+        showError('Please fill all required fields');
         return;
       }
 
@@ -149,12 +149,12 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
       } as Omit<Employee, 'id' | 'created_at' | 'updated_at'>);
 
       setEmployees([newEmployee, ...employees]);
-      showToast('Employee created successfully', 'success');
+      showSuccess('Employee created successfully');
       setEmployeeView('list');
       resetEmployeeForm();
     } catch (err) {
       console.error('Error creating employee:', err);
-      showToast('Failed to create employee', 'error');
+      showError('Failed to create employee');
     }
   };
 
@@ -175,11 +175,23 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
 
   const generateOfferLetterPDF = async (employee: Employee, data: OfferLetterData) => {
     const pdf = new jsPDF('p', 'mm', 'a4');
+    pdf.setFont('helvetica');
+    
     const dimensions = PDFBrandingUtils.getStandardDimensions();
     const pageHeight = pdf.internal.pageSize.getHeight();
-    const footerMargin = 20; // Reserve space for footer
-
-    let currentY = dimensions.topMargin;
+    const pageWidth = pdf.internal.pageSize.getWidth();
+    const companyName = companySettings?.company_name || 'Kdadks Service Private Limited';
+    
+    // Constants for consistent formatting
+    const FONT_SIZE = {
+      title: 12,
+      heading: 10,
+      body: 10,
+      small: 9
+    };
+    const LINE_HEIGHT = 5;
+    const SECTION_GAP = 8;
+    const PARAGRAPH_GAP = 6;
 
     // Ensure salary_breakdown is populated
     if (!data.salary_breakdown) {
@@ -197,196 +209,326 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
       data.annual_ctc = employee.gross_salary * 12;
     }
 
-    // Apply branding if available
+    // Apply branding (header/footer images) - same as Invoice
+    let contentStartY = dimensions.topMargin;
+    let contentEndY = pageHeight - dimensions.bottomMargin;
+    
     if (companySettings) {
       const brandingResult = await PDFBrandingUtils.applyBranding(pdf, companySettings, dimensions);
-      currentY = brandingResult.contentStartY;
+      contentStartY = brandingResult.contentStartY;
+      contentEndY = brandingResult.contentEndY;
     }
 
+    let currentY = contentStartY;
+    let currentPage = 1;
+
+    // Helper function to add new page with branding
+    const addNewPageWithBranding = async () => {
+      pdf.addPage();
+      currentPage++;
+      
+      // Re-apply branding to new page
+      if (companySettings) {
+        const brandingResult = await PDFBrandingUtils.applyBranding(pdf, companySettings, dimensions);
+        contentStartY = brandingResult.contentStartY;
+        contentEndY = brandingResult.contentEndY;
+      }
+      
+      currentY = contentStartY;
+    };
+
     // Helper function to check if new page is needed
-    const checkPageBreak = (spaceNeeded: number) => {
-      if (currentY + spaceNeeded > pageHeight - footerMargin) {
-        pdf.addPage();
-        currentY = dimensions.topMargin;
+    const checkPageBreak = async (spaceNeeded: number): Promise<boolean> => {
+      if (currentY + spaceNeeded > contentEndY) {
+        await addNewPageWithBranding();
         return true;
       }
       return false;
     };
 
-    // Document title
-    pdf.setFontSize(16);
-    pdf.setFont('helvetica', 'bold');
-    pdf.text('EMPLOYMENT OFFER LETTER', dimensions.leftMargin, currentY);
-    currentY += 15;
+    // Helper function to write wrapped text
+    const writeWrappedText = async (text: string, indent: number = 0) => {
+      const maxWidth = dimensions.rightMargin - dimensions.leftMargin - indent;
+      const lines = pdf.splitTextToSize(text, maxWidth);
+      for (const line of lines) {
+        await checkPageBreak(LINE_HEIGHT + 2);
+        pdf.text(line, dimensions.leftMargin + indent, currentY);
+        currentY += LINE_HEIGHT;
+      }
+    };
+
+    // Helper function to write section heading
+    const writeSectionHeading = async (heading: string) => {
+      await checkPageBreak(15);
+      pdf.setFontSize(FONT_SIZE.heading);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text(heading, dimensions.leftMargin, currentY);
+      currentY += SECTION_GAP;
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(FONT_SIZE.body);
+    };
+
+    // Helper function to write bullet point
+    const writeBulletPoint = async (text: string) => {
+      await checkPageBreak(LINE_HEIGHT + 2);
+      pdf.text('•', dimensions.leftMargin + 3, currentY);
+      const maxWidth = dimensions.rightMargin - dimensions.leftMargin - 10;
+      const lines = pdf.splitTextToSize(text, maxWidth);
+      for (let i = 0; i < lines.length; i++) {
+        if (i > 0) {
+          await checkPageBreak(LINE_HEIGHT + 2);
+        }
+        pdf.text(lines[i], dimensions.leftMargin + 8, currentY);
+        if (i < lines.length - 1) {
+          currentY += LINE_HEIGHT;
+        }
+      }
+      currentY += LINE_HEIGHT;
+    };
+
+    // === PDF CONTENT START ===
+
+    // Company Name Header (if no header image)
+    if (!companySettings?.header_image_data) {
+      pdf.setFontSize(14);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text(companyName, dimensions.leftMargin, currentY);
+      currentY += 12;
+    }
 
     // Date
-    pdf.setFontSize(10);
+    pdf.setFontSize(FONT_SIZE.body);
     pdf.setFont('helvetica', 'normal');
-    pdf.text(`Date: ${new Date().toLocaleDateString('en-GB')}`, dimensions.leftMargin, currentY);
+    const offerDate = data.offer_date ? new Date(data.offer_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' }) : new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' });
+    pdf.text(`Date: ${offerDate}`, dimensions.leftMargin, currentY);
     currentY += 10;
 
-    // Employee details
-    pdf.setFontSize(10);
+    // To section
+    pdf.text('To,', dimensions.leftMargin, currentY);
+    currentY += LINE_HEIGHT;
+    pdf.setFont('helvetica', 'bold');
+    pdf.text(employee.full_name, dimensions.leftMargin, currentY);
+    currentY += LINE_HEIGHT;
+    pdf.setFont('helvetica', 'normal');
+
+    // Candidate Address (use provided address or employee address)
+    if (data.candidate_address) {
+      const addressLines = pdf.splitTextToSize(data.candidate_address, dimensions.rightMargin - dimensions.leftMargin);
+      for (const line of addressLines) {
+        pdf.text(line, dimensions.leftMargin, currentY);
+        currentY += LINE_HEIGHT;
+      }
+    } else if (employee.address_line1) {
+      pdf.text(employee.address_line1, dimensions.leftMargin, currentY);
+      currentY += LINE_HEIGHT;
+      if (employee.address_line2) {
+        pdf.text(employee.address_line2, dimensions.leftMargin, currentY);
+        currentY += LINE_HEIGHT;
+      }
+      const cityLine = [employee.city, employee.state, employee.postal_code].filter(Boolean).join(', ');
+      if (cityLine) {
+        pdf.text(cityLine, dimensions.leftMargin, currentY);
+        currentY += LINE_HEIGHT;
+      }
+    }
+    currentY += PARAGRAPH_GAP;
+
+    // Subject Line
+    pdf.setFont('helvetica', 'bold');
+    pdf.text(`Subject: Offer of Employment – ${data.position || employee.designation}`, dimensions.leftMargin, currentY);
+    currentY += 10;
+
+    // Salutation
     pdf.setFont('helvetica', 'normal');
     pdf.text(`Dear ${employee.full_name},`, dimensions.leftMargin, currentY);
-    currentY += 10;
+    currentY += SECTION_GAP;
 
-    pdf.setFontSize(10);
-    pdf.setFont('helvetica', 'normal');
-    pdf.text('We are pleased to offer you employment at our organization.', dimensions.leftMargin, currentY);
-    currentY += 15;
+    // Opening Paragraph
+    const openingText = `We are pleased to offer you the position of ${data.position || employee.designation} at ${companyName}, based on our discussions and evaluation of your profile. We are confident that your skills and experience will be a valuable addition to our organization.`;
+    await writeWrappedText(openingText);
+    currentY += SECTION_GAP;
 
-    // Position details
-    checkPageBreak(40);
-    pdf.setFontSize(10);
-    pdf.setFont('helvetica', 'bold');
-    pdf.text('Position Details:', dimensions.leftMargin, currentY);
-    currentY += 7;
-
-    pdf.setFontSize(10);
-    pdf.setFont('helvetica', 'normal');
-    pdf.text(`Position: ${data.position}`, dimensions.leftMargin + 5, currentY);
-    currentY += 6;
-    pdf.text(`Department: ${data.department}`, dimensions.leftMargin + 5, currentY);
-    currentY += 6;
-    pdf.text(`Joining Date: ${new Date(data.joining_date).toLocaleDateString('en-GB')}`, dimensions.leftMargin + 5, currentY);
-    currentY += 6;
-    if (data.work_location) {
-      pdf.text(`Work Location: ${data.work_location}`, dimensions.leftMargin + 5, currentY);
-      currentY += 6;
+    // 1. Position Details
+    await writeSectionHeading('1. Position Details');
+    
+    const positionDetails = [
+      `Job Title: ${data.position || employee.designation}`,
+      `Department: ${data.department || employee.department || 'Administration'}`,
+      `Reporting To: ${data.reporting_to || '[Manager/Designation]'}`,
+      `Work Location: ${data.work_location || '[Office Address]'}`,
+      `Employment Type: ${data.employment_type || (employee.employment_type === 'full-time' ? 'Full-time' : employee.employment_type)}`,
+      `Date of Joining: ${new Date(data.joining_date || employee.date_of_joining).toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' })}`
+    ];
+    
+    for (const detail of positionDetails) {
+      await checkPageBreak(LINE_HEIGHT + 2);
+      pdf.text(detail, dimensions.leftMargin, currentY);
+      currentY += PARAGRAPH_GAP;
     }
-    if (data.reporting_to) {
-      pdf.text(`Reporting To: ${data.reporting_to}`, dimensions.leftMargin + 5, currentY);
-      currentY += 6;
+    currentY += SECTION_GAP - PARAGRAPH_GAP;
+
+    // 2. Roles and Responsibilities
+    await writeSectionHeading('2. Roles and Responsibilities');
+    
+    if (data.roles_responsibilities) {
+      // Split by newlines to handle multi-line input
+      const responsibilities = data.roles_responsibilities.split('\n').filter(r => r.trim());
+      pdf.text('Your primary responsibilities will include, but are not limited to:', dimensions.leftMargin, currentY);
+      currentY += PARAGRAPH_GAP;
+      
+      for (const resp of responsibilities) {
+        await writeBulletPoint(resp.trim());
+      }
+    } else {
+      // Default responsibilities
+      const defaultResponsibilities = [
+        'Managing day-to-day administrative operations',
+        'Handling correspondence, documentation, and record-keeping',
+        'Coordinating with internal teams and external vendors',
+        'Maintaining office supplies and inventory',
+        'Supporting HR and accounts-related administrative tasks',
+        'Any other duties assigned by management from time to time'
+      ];
+      
+      pdf.text('Your primary responsibilities will include, but are not limited to:', dimensions.leftMargin, currentY);
+      currentY += PARAGRAPH_GAP;
+      
+      for (const resp of defaultResponsibilities) {
+        await writeBulletPoint(resp);
+      }
     }
-    currentY += 5;
+    currentY += SECTION_GAP - LINE_HEIGHT;
 
-    // Compensation
-    checkPageBreak(60);
-    pdf.setFontSize(10);
-    pdf.setFont('helvetica', 'bold');
-    pdf.text('Compensation:', dimensions.leftMargin, currentY);
-    currentY += 7;
+    // 3. Compensation and Benefits
+    await writeSectionHeading('3. Compensation and Benefits');
+    
+    const grossSalary = data.salary_breakdown.gross_salary.toLocaleString('en-IN');
+    pdf.text(`Gross Salary: INR ${grossSalary} per month`, dimensions.leftMargin, currentY);
+    currentY += PARAGRAPH_GAP;
+    
+    const salaryNote = data.salary_payment_note || "Salary will be paid as per the company's payroll cycle and applicable statutory deductions.";
+    await writeWrappedText(salaryNote);
+    currentY += 3;
+    
+    const benefitsNote = data.benefits_note || 'You will be entitled to benefits and facilities as per company policy, which may be revised from time to time.';
+    await writeWrappedText(benefitsNote);
+    currentY += SECTION_GAP;
 
-    pdf.setFontSize(10);
-    pdf.setFont('helvetica', 'normal');
-    pdf.text(`Annual CTC: ₹${data.annual_ctc.toLocaleString('en-IN')}`, dimensions.leftMargin + 5, currentY);
-    currentY += 10;
+    // 4. Working Hours
+    await writeSectionHeading('4. Working Hours');
+    
+    const workStart = data.working_hours_start || '9:30 AM';
+    const workEnd = data.working_hours_end || '6:30 PM';
+    const workDays = data.working_days || 'Monday to Saturday';
+    
+    pdf.text(`Working hours will be ${workStart} to ${workEnd}, ${workDays}.`, dimensions.leftMargin, currentY);
+    currentY += PARAGRAPH_GAP;
+    
+    const additionalHoursNote = data.additional_hours_note || 'You may be required to work additional hours based on business requirements.';
+    pdf.text(additionalHoursNote, dimensions.leftMargin, currentY);
+    currentY += SECTION_GAP;
 
-    pdf.setFontSize(10);
-    pdf.setFont('helvetica', 'normal');
-    pdf.text('Salary Breakdown (Monthly):', dimensions.leftMargin + 5, currentY);
-    currentY += 6;
-    pdf.text(`  Basic Salary: ₹${data.salary_breakdown.basic.toLocaleString('en-IN')}`, dimensions.leftMargin + 10, currentY);
-    currentY += 5;
-    pdf.text(`  HRA: ₹${data.salary_breakdown.hra.toLocaleString('en-IN')}`, dimensions.leftMargin + 10, currentY);
-    currentY += 5;
-    pdf.text(`  Special Allowance: ₹${data.salary_breakdown.special_allowance.toLocaleString('en-IN')}`, dimensions.leftMargin + 10, currentY);
-    currentY += 5;
-    if (data.salary_breakdown.other_allowances > 0) {
-      pdf.text(`  Other Allowances: ₹${data.salary_breakdown.other_allowances.toLocaleString('en-IN')}`, dimensions.leftMargin + 10, currentY);
-      currentY += 5;
-    }
-    pdf.setFontSize(10);
-    pdf.setFont('helvetica', 'bold');
-    pdf.text(`  Gross Monthly: ₹${data.salary_breakdown.gross_salary.toLocaleString('en-IN')}`, dimensions.leftMargin + 10, currentY);
-    currentY += 10;
+    // 5. Probation
+    await writeSectionHeading('5. Probation');
+    
+    const probationMonths = data.probation_period || 3;
+    pdf.text(`You will be on probation for a period of ${probationMonths} months from your date of joining.`, dimensions.leftMargin, currentY);
+    currentY += PARAGRAPH_GAP;
+    
+    const probationNote = data.probation_note || 'During the probation period, your performance will be reviewed, and upon successful completion, your employment will be confirmed in writing.';
+    await writeWrappedText(probationNote);
+    currentY += SECTION_GAP;
 
-    // Terms
-    checkPageBreak(30);
-    pdf.setFontSize(10);
-    pdf.setFont('helvetica', 'bold');
-    pdf.text('Terms of Employment:', dimensions.leftMargin, currentY);
-    currentY += 7;
+    // 6. Leave and Holidays
+    await writeSectionHeading('6. Leave and Holidays');
+    
+    const leaveNote = data.leave_policy_note || "Leave and holidays will be governed by the company's leave policy applicable at the time of employment.";
+    await writeWrappedText(leaveNote);
+    currentY += SECTION_GAP;
 
-    pdf.setFontSize(10);
-    pdf.setFont('helvetica', 'normal');
-    if (data.probation_period) {
-      pdf.text(`Probation Period: ${data.probation_period} months`, dimensions.leftMargin + 5, currentY);
-      currentY += 6;
-    }
-    if (data.notice_period) {
-      pdf.text(`Notice Period: ${data.notice_period} days`, dimensions.leftMargin + 5, currentY);
-      currentY += 6;
-    }
-    currentY += 5;
+    // 7. Confidentiality
+    await writeSectionHeading('7. Confidentiality');
+    
+    const confidentialityNote = data.confidentiality_note || 'You are required to maintain strict confidentiality of all company information, data, and records during and after your employment with the company.';
+    await writeWrappedText(confidentialityNote);
+    currentY += SECTION_GAP;
 
-    // Benefits
-    if (data.benefits && data.benefits.length > 0) {
-      checkPageBreak(20 + (data.benefits.length * 5));
-      pdf.setFontSize(10);
-      pdf.setFont('helvetica', 'bold');
-      pdf.text('Benefits:', dimensions.leftMargin, currentY);
-      currentY += 7;
+    // 8. Termination
+    await writeSectionHeading('8. Termination');
+    
+    const noticeDays = data.notice_period || 30;
+    const terminationNote = data.termination_note || `Either party may terminate this employment by providing ${noticeDays} days' notice or salary in lieu thereof, as per company policy.`;
+    await writeWrappedText(terminationNote);
+    currentY += SECTION_GAP;
 
-      pdf.setFontSize(10);
-      pdf.setFont('helvetica', 'normal');
-      data.benefits.forEach(benefit => {
-        checkPageBreak(10);
-        pdf.text(`• ${benefit}`, dimensions.leftMargin + 5, currentY);
-        currentY += 5;
-      });
-      currentY += 5;
-    }
+    // 9. Acceptance of Offer
+    await writeSectionHeading('9. Acceptance of Offer');
+    
+    const acceptanceNote = 'Please sign and return a copy of this letter as a token of your acceptance of the offer and the terms and conditions mentioned herein.';
+    await writeWrappedText(acceptanceNote);
+    currentY += SECTION_GAP;
 
-    // Terms and Conditions (New Section)
+    // Additional Terms and Conditions (if provided)
     if (data.terms_and_conditions) {
-      checkPageBreak(30);
-      pdf.setFontSize(10);
-      pdf.setFont('helvetica', 'bold');
-      pdf.text('Terms and Conditions:', dimensions.leftMargin, currentY);
-      currentY += 7;
-
-      pdf.setFontSize(10);
-      pdf.setFont('helvetica', 'normal');
-      const termsLines = pdf.splitTextToSize(data.terms_and_conditions, dimensions.rightMargin - dimensions.leftMargin);
-      termsLines.forEach((line: string) => {
-        checkPageBreak(6);
-        pdf.text(line, dimensions.leftMargin + 5, currentY);
-        currentY += 5;
-      });
-      currentY += 5;
+      await writeSectionHeading('Additional Terms and Conditions');
+      await writeWrappedText(data.terms_and_conditions);
+      currentY += SECTION_GAP;
     }
 
-    // Other Details (New Section)
+    // Additional Information (if provided)
     if (data.other_details) {
-      checkPageBreak(30);
-      pdf.setFontSize(10);
-      pdf.setFont('helvetica', 'bold');
-      pdf.text('Additional Information:', dimensions.leftMargin, currentY);
-      currentY += 7;
-
-      pdf.setFontSize(10);
-      pdf.setFont('helvetica', 'normal');
-      const detailsLines = pdf.splitTextToSize(data.other_details, dimensions.rightMargin - dimensions.leftMargin);
-      detailsLines.forEach((line: string) => {
-        checkPageBreak(6);
-        pdf.text(line, dimensions.leftMargin + 5, currentY);
-        currentY += 5;
-      });
-      currentY += 5;
+      await writeSectionHeading('Additional Information');
+      await writeWrappedText(data.other_details);
+      currentY += SECTION_GAP;
     }
 
     // Closing
-    checkPageBreak(40);
-    currentY += 10;
-    pdf.setFontSize(10);
+    await checkPageBreak(50);
+    currentY += 5;
+    pdf.text(`We welcome you to ${companyName} and look forward to a successful association.`, dimensions.leftMargin, currentY);
+    currentY += SECTION_GAP;
+    
+    pdf.text('Warm regards,', dimensions.leftMargin, currentY);
+    currentY += SECTION_GAP;
+
+    // Company Signature Block
+    pdf.setFont('helvetica', 'bold');
+    pdf.text(`For ${companyName}`, dimensions.leftMargin, currentY);
+    currentY += 12;
+
+    const signatoryName = data.signatory_name || hrSettings?.signatory_name || '[Authorized Signatory Name]';
+    const signatoryDesignation = data.signatory_designation || hrSettings?.signatory_designation || '[Designation]';
+    const signatoryContact = data.signatory_contact || (companySettings?.phone ? `Contact: ${companySettings.phone}` : '[Contact Details]');
+
+    pdf.text(signatoryName, dimensions.leftMargin, currentY);
+    currentY += LINE_HEIGHT;
     pdf.setFont('helvetica', 'normal');
-    pdf.text('We look forward to welcoming you to our team.', dimensions.leftMargin, currentY);
-    currentY += 10;
-    pdf.text('Sincerely,', dimensions.leftMargin, currentY);
+    pdf.text(signatoryDesignation, dimensions.leftMargin, currentY);
+    currentY += LINE_HEIGHT;
+    pdf.text(signatoryContact, dimensions.leftMargin, currentY);
     currentY += 15;
 
-    if (hrSettings?.signatory_name) {
-      pdf.setFontSize(10);
+    // Acceptance Section (on same page or new page if needed)
+    if (data.acceptance_section !== false) {
+      await checkPageBreak(60);
+      
+      // Separator line
+      pdf.setDrawColor(200, 200, 200);
+      pdf.line(dimensions.leftMargin, currentY, dimensions.rightMargin, currentY);
+      currentY += 10;
+      
       pdf.setFont('helvetica', 'bold');
-      pdf.text(hrSettings.signatory_name, dimensions.leftMargin, currentY);
-      currentY += 5;
-      if (hrSettings.signatory_designation) {
-        pdf.setFontSize(10);
-        pdf.setFont('helvetica', 'normal');
-        pdf.text(hrSettings.signatory_designation, dimensions.leftMargin, currentY);
-      }
+      pdf.text('Acceptance by Candidate', dimensions.leftMargin, currentY);
+      currentY += SECTION_GAP;
+      
+      pdf.setFont('helvetica', 'normal');
+      const acceptanceText = `I, ${employee.full_name}, accept the offer of employment with ${companyName} on the terms and conditions mentioned above.`;
+      await writeWrappedText(acceptanceText);
+      currentY += 15;
+      
+      pdf.text('Signature: _______________________', dimensions.leftMargin, currentY);
+      currentY += SECTION_GAP;
+      pdf.text('Date: ____________________________', dimensions.leftMargin, currentY);
     }
 
     return pdf;
@@ -725,7 +867,7 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
   const handlePreviewDocument = async () => {
     try {
       if (!selectedEmployee) {
-        showToast('Please select an employee', 'error');
+        showError('Please select an employee');
         return;
       }
 
@@ -755,14 +897,14 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
       setShowPreview(true);
     } catch (err) {
       console.error('Error generating preview:', err);
-      showToast('Failed to generate preview', 'error');
+      showError('Failed to generate preview');
     }
   };
 
   const handleGenerateDocument = async () => {
     try {
       if (!selectedEmployee) {
-        showToast('Please select an employee', 'error');
+        showError('Please select an employee');
         return;
       }
 
@@ -799,19 +941,19 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
       // Download PDF
       pdf.save(`${documentType}_${selectedEmployee.employee_number}_${documentNumber}.pdf`);
 
-      showToast('Document generated successfully', 'success');
+      showSuccess('Document generated successfully');
       loadData();
       setActiveTab('documents');
     } catch (err) {
       console.error('Error generating document:', err);
-      showToast('Failed to generate document', 'error');
+      showError('Failed to generate document');
     }
   };
 
   const handlePreviewSalarySlip = async () => {
     try {
       if (!salarySlipInput.employee_id) {
-        showToast('Please select an employee', 'error');
+        showError('Please select an employee');
         return;
       }
 
@@ -820,13 +962,14 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
       const employee = employees.find(emp => emp.id === salarySlipInput.employee_id);
 
       if (!employee) {
-        showToast('Employee not found', 'error');
+        showError('Employee not found');
         return;
       }
 
       // Apply deduction configuration by zeroing out unchecked deductions
-      const adjustedSlip = {
+      const adjustedSlip: SalarySlip = {
         ...salarySlip,
+        id: 'preview', // Add temporary id for preview
         provident_fund: applyDeductions.provident_fund ? salarySlip.provident_fund : 0,
         professional_tax: applyDeductions.professional_tax ? salarySlip.professional_tax : 0,
         esic: applyDeductions.esic ? salarySlip.esic : 0,
@@ -852,59 +995,49 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
       setShowPreview(true);
     } catch (err: any) {
       console.error('Error generating preview:', err);
-      showToast(err.message || 'Failed to generate preview', 'error');
+      showError(err.message || 'Failed to generate preview');
     }
   };
 
   const handleGenerateSalarySlip = async () => {
     try {
       if (!salarySlipInput.employee_id) {
-        showToast('Please select an employee', 'error');
+        showError('Please select an employee');
         return;
       }
 
-      // Generate salary slip with service
-      const salarySlip = await employeeService.generateSalarySlip(salarySlipInput);
+      // Generate salary slip data (does not save to database)
+      const salarySlipData = await employeeService.generateSalarySlip(salarySlipInput);
 
-      // If deductions are disabled, we need to update the generated slip
-      if (!applyDeductions.provident_fund || !applyDeductions.professional_tax ||
-          !applyDeductions.esic || !applyDeductions.tds) {
+      // Apply deduction configuration
+      const adjustedSlipData = {
+        ...salarySlipData,
+        provident_fund: applyDeductions.provident_fund ? salarySlipData.provident_fund : 0,
+        professional_tax: applyDeductions.professional_tax ? salarySlipData.professional_tax : 0,
+        esic: applyDeductions.esic ? salarySlipData.esic : 0,
+        tds: applyDeductions.tds ? salarySlipData.tds : 0
+      };
 
-        // Update the slip with adjusted deductions
-        const adjustments: any = {};
+      // Recalculate total deductions and net salary
+      adjustedSlipData.total_deductions =
+        adjustedSlipData.provident_fund +
+        adjustedSlipData.professional_tax +
+        adjustedSlipData.esic +
+        adjustedSlipData.tds +
+        (salarySlipData.loan_repayment || 0) +
+        (salarySlipData.other_deductions || 0);
 
-        if (!applyDeductions.provident_fund) adjustments.provident_fund = 0;
-        if (!applyDeductions.professional_tax) adjustments.professional_tax = 0;
-        if (!applyDeductions.esic) adjustments.esic = 0;
-        if (!applyDeductions.tds) adjustments.tds = 0;
+      adjustedSlipData.net_salary = salarySlipData.gross_salary - adjustedSlipData.total_deductions;
 
-        // Recalculate total deductions and net salary
-        const newTotalDeductions =
-          (applyDeductions.provident_fund ? salarySlip.provident_fund : 0) +
-          (applyDeductions.professional_tax ? salarySlip.professional_tax : 0) +
-          (applyDeductions.esic ? salarySlip.esic : 0) +
-          (applyDeductions.tds ? salarySlip.tds : 0) +
-          (salarySlip.loan_repayment || 0) +
-          (salarySlip.other_deductions || 0);
+      // Save to database (handles insert or update)
+      await employeeService.saveSalarySlip(adjustedSlipData);
 
-        adjustments.total_deductions = newTotalDeductions;
-        adjustments.net_salary = salarySlip.gross_salary - newTotalDeductions;
-
-        // Update the slip in database
-        const { error: updateError } = await supabase
-          .from('salary_slips')
-          .update(adjustments)
-          .eq('id', salarySlip.id);
-
-        if (updateError) throw updateError;
-      }
-
-      showToast('Salary slip generated successfully', 'success');
+      showSuccess('Salary slip generated successfully');
       loadData();
       setActiveTab('salary-slips');
     } catch (err: any) {
       console.error('Error generating salary slip:', err);
-      showToast(err.message || 'Failed to generate salary slip', 'error');
+      showError(err.message || 'Failed to generate salary slip');
     }
   };
 
@@ -912,7 +1045,7 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
     try {
       const employee = employees.find(emp => emp.id === salarySlip.employee_id);
       if (!employee) {
-        showToast('Employee not found', 'error');
+        showError('Employee not found');
         return;
       }
 
@@ -920,10 +1053,10 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
       const fileName = `salary_slip_${employee.employee_number}_${salarySlip.salary_month}_${salarySlip.salary_year}.pdf`;
       pdf.save(fileName);
 
-      showToast('Salary slip downloaded successfully', 'success');
+      showSuccess('Salary slip downloaded successfully');
     } catch (err) {
       console.error('Error downloading salary slip:', err);
-      showToast('Failed to download salary slip', 'error');
+      showError('Failed to download salary slip');
     }
   };
 
@@ -931,12 +1064,12 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
     try {
       const employee = employees.find(emp => emp.id === salarySlip.employee_id);
       if (!employee) {
-        showToast('Employee not found', 'error');
+        showError('Employee not found');
         return;
       }
 
       if (!employee.email) {
-        showToast('Employee email not found', 'error');
+        showError('Employee email not found');
         return;
       }
 
@@ -969,12 +1102,12 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
         // Mark as sent
         await employeeService.markSalarySlipEmailSent(salarySlip.id, employee.email);
 
-        showToast('Salary slip sent successfully', 'success');
+        showSuccess('Salary slip sent successfully');
         loadData();
       };
     } catch (err) {
       console.error('Error sending salary slip:', err);
-      showToast('Failed to send salary slip', 'error');
+      showError('Failed to send salary slip');
     }
   };
 
@@ -1228,7 +1361,7 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
                           }`}>
                             {slip.status}
                           </span>
-                          {slip.email_sent && <CheckCircle className="w-4 h-4 inline ml-2 text-green-600" title="Email sent" />}
+                          {slip.email_sent && <span title="Email sent"><CheckCircle className="w-4 h-4 inline ml-2 text-green-600" /></span>}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                           <button
@@ -1952,89 +2085,364 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
               {/* Document-specific fields */}
               {selectedEmployee && documentType === 'offer_letter' && (
                 <div className="space-y-4 border-t pt-4">
-                  <h3 className="font-medium">Offer Letter Details</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Position</label>
-                      <input
-                        type="text"
-                        value={documentData.position || selectedEmployee.designation}
-                        onChange={(e) => setDocumentData({ ...documentData, position: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                      />
+                  <h3 className="font-medium text-lg">Offer Letter Details</h3>
+                  
+                  {/* Basic Information */}
+                  <div className="bg-gray-50 p-4 rounded-lg space-y-4">
+                    <h4 className="font-medium text-gray-700">Basic Information</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Offer Date</label>
+                        <input
+                          type="date"
+                          value={documentData.offer_date || new Date().toISOString().split('T')[0]}
+                          onChange={(e) => setDocumentData({ ...documentData, offer_date: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Joining Date</label>
+                        <input
+                          type="date"
+                          value={documentData.joining_date || selectedEmployee.date_of_joining}
+                          onChange={(e) => setDocumentData({ ...documentData, joining_date: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                        />
+                      </div>
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Department</label>
-                      <input
-                        type="text"
-                        value={documentData.department || selectedEmployee.department || ''}
-                        onChange={(e) => setDocumentData({ ...documentData, department: e.target.value })}
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Candidate Address</label>
+                      <textarea
+                        value={documentData.candidate_address || ''}
+                        onChange={(e) => setDocumentData({ ...documentData, candidate_address: e.target.value })}
                         className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Joining Date</label>
-                      <input
-                        type="date"
-                        value={documentData.joining_date || selectedEmployee.date_of_joining}
-                        onChange={(e) => setDocumentData({ ...documentData, joining_date: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Annual CTC</label>
-                      <input
-                        type="number"
-                        value={documentData.annual_ctc || selectedEmployee.gross_salary * 12}
-                        onChange={(e) => setDocumentData({ ...documentData, annual_ctc: parseFloat(e.target.value) })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Probation Period (months)</label>
-                      <input
-                        type="number"
-                        value={documentData.probation_period || 3}
-                        onChange={(e) => setDocumentData({ ...documentData, probation_period: parseInt(e.target.value) })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Notice Period (days)</label>
-                      <input
-                        type="number"
-                        value={documentData.notice_period || 30}
-                        onChange={(e) => setDocumentData({ ...documentData, notice_period: parseInt(e.target.value) })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                        rows={3}
+                        placeholder="Enter candidate's full address (or leave blank to use employee address)"
                       />
                     </div>
                   </div>
 
-                  <div className="mt-4">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Employment Terms & Conditions
-                    </label>
-                    <textarea
-                      value={documentData.terms_and_conditions || ''}
-                      onChange={(e) => setDocumentData({ ...documentData, terms_and_conditions: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                      rows={6}
-                      placeholder="Enter employment terms and conditions (e.g., working hours, code of conduct, confidentiality, etc.)"
-                    />
-                    <p className="text-xs text-gray-500 mt-1">Optional: Add specific terms and conditions for this employment</p>
+                  {/* Position Details */}
+                  <div className="bg-blue-50 p-4 rounded-lg space-y-4">
+                    <h4 className="font-medium text-blue-700">1. Position Details</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Job Title / Position</label>
+                        <input
+                          type="text"
+                          value={documentData.position || selectedEmployee.designation}
+                          onChange={(e) => setDocumentData({ ...documentData, position: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                          placeholder="e.g., Office Admin"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Department</label>
+                        <input
+                          type="text"
+                          value={documentData.department || selectedEmployee.department || ''}
+                          onChange={(e) => setDocumentData({ ...documentData, department: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                          placeholder="e.g., Administration"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Reporting To</label>
+                        <input
+                          type="text"
+                          value={documentData.reporting_to || ''}
+                          onChange={(e) => setDocumentData({ ...documentData, reporting_to: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                          placeholder="e.g., Manager Name / Designation"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Work Location</label>
+                        <input
+                          type="text"
+                          value={documentData.work_location || ''}
+                          onChange={(e) => setDocumentData({ ...documentData, work_location: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                          placeholder="e.g., Office Address"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Employment Type</label>
+                        <select
+                          value={documentData.employment_type || selectedEmployee.employment_type}
+                          onChange={(e) => setDocumentData({ ...documentData, employment_type: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                        >
+                          <option value="full-time">Full-time</option>
+                          <option value="part-time">Part-time</option>
+                          <option value="contract">Contract</option>
+                          <option value="intern">Intern</option>
+                        </select>
+                      </div>
+                    </div>
                   </div>
 
-                  <div className="mt-4">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Other Employment Details
-                    </label>
-                    <textarea
-                      value={documentData.other_details || ''}
-                      onChange={(e) => setDocumentData({ ...documentData, other_details: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                      rows={4}
-                      placeholder="Additional information (e.g., relocation assistance, bond period, performance reviews, etc.)"
-                    />
+                  {/* Roles and Responsibilities */}
+                  <div className="bg-green-50 p-4 rounded-lg space-y-4">
+                    <h4 className="font-medium text-green-700">2. Roles and Responsibilities</h4>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Responsibilities (one per line)
+                      </label>
+                      <textarea
+                        value={documentData.roles_responsibilities || ''}
+                        onChange={(e) => setDocumentData({ ...documentData, roles_responsibilities: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md font-mono text-sm"
+                        rows={8}
+                        placeholder={`Managing day-to-day office administrative operations
+Handling correspondence, documentation, and record-keeping
+Coordinating with internal teams and external vendors
+Maintaining office supplies and inventory
+Supporting HR and accounts-related administrative tasks
+Any other duties assigned by management from time to time`}
+                      />
+                      <p className="text-xs text-gray-500 mt-1">Enter each responsibility on a new line. Leave blank to use default responsibilities.</p>
+                    </div>
+                  </div>
+
+                  {/* Compensation */}
+                  <div className="bg-yellow-50 p-4 rounded-lg space-y-4">
+                    <h4 className="font-medium text-yellow-700">3. Compensation and Benefits</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Gross Salary (per month)</label>
+                        <input
+                          type="number"
+                          value={documentData.salary_breakdown?.gross_salary || selectedEmployee.gross_salary}
+                          onChange={(e) => setDocumentData({
+                            ...documentData,
+                            salary_breakdown: {
+                              ...documentData.salary_breakdown,
+                              gross_salary: parseFloat(e.target.value) || 0,
+                              basic: selectedEmployee.basic_salary,
+                              hra: selectedEmployee.hra || 0,
+                              special_allowance: selectedEmployee.special_allowance || 0,
+                              other_allowances: selectedEmployee.other_allowances || 0
+                            }
+                          })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Annual CTC</label>
+                        <input
+                          type="number"
+                          value={documentData.annual_ctc || selectedEmployee.gross_salary * 12}
+                          onChange={(e) => setDocumentData({ ...documentData, annual_ctc: parseFloat(e.target.value) })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Salary Payment Note</label>
+                      <textarea
+                        value={documentData.salary_payment_note || ''}
+                        onChange={(e) => setDocumentData({ ...documentData, salary_payment_note: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                        rows={2}
+                        placeholder="Salary will be paid as per the company's payroll cycle and applicable statutory deductions."
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Benefits Note</label>
+                      <textarea
+                        value={documentData.benefits_note || ''}
+                        onChange={(e) => setDocumentData({ ...documentData, benefits_note: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                        rows={2}
+                        placeholder="You will be entitled to benefits and facilities as per company policy, which may be revised from time to time."
+                      />
+                    </div>
+                  </div>
+
+                  {/* Working Hours */}
+                  <div className="bg-purple-50 p-4 rounded-lg space-y-4">
+                    <h4 className="font-medium text-purple-700">4. Working Hours</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Start Time</label>
+                        <input
+                          type="text"
+                          value={documentData.working_hours_start || '9:30 AM'}
+                          onChange={(e) => setDocumentData({ ...documentData, working_hours_start: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                          placeholder="9:30 AM"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">End Time</label>
+                        <input
+                          type="text"
+                          value={documentData.working_hours_end || '6:30 PM'}
+                          onChange={(e) => setDocumentData({ ...documentData, working_hours_end: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                          placeholder="6:30 PM"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Working Days</label>
+                        <input
+                          type="text"
+                          value={documentData.working_days || 'Monday to Saturday'}
+                          onChange={(e) => setDocumentData({ ...documentData, working_days: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                          placeholder="Monday to Saturday"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Additional Hours Note</label>
+                      <input
+                        type="text"
+                        value={documentData.additional_hours_note || ''}
+                        onChange={(e) => setDocumentData({ ...documentData, additional_hours_note: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                        placeholder="You may be required to work additional hours based on business requirements."
+                      />
+                    </div>
+                  </div>
+
+                  {/* Probation & Notice Period */}
+                  <div className="bg-orange-50 p-4 rounded-lg space-y-4">
+                    <h4 className="font-medium text-orange-700">5. Probation & 8. Termination</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Probation Period (months)</label>
+                        <input
+                          type="number"
+                          value={documentData.probation_period || 3}
+                          onChange={(e) => setDocumentData({ ...documentData, probation_period: parseInt(e.target.value) })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Notice Period (days)</label>
+                        <input
+                          type="number"
+                          value={documentData.notice_period || 30}
+                          onChange={(e) => setDocumentData({ ...documentData, notice_period: parseInt(e.target.value) })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Probation Note</label>
+                      <textarea
+                        value={documentData.probation_note || ''}
+                        onChange={(e) => setDocumentData({ ...documentData, probation_note: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                        rows={2}
+                        placeholder="During the probation period, your performance will be reviewed, and upon successful completion, your employment will be confirmed in writing."
+                      />
+                    </div>
+                  </div>
+
+                  {/* Other Policy Notes */}
+                  <div className="bg-gray-50 p-4 rounded-lg space-y-4">
+                    <h4 className="font-medium text-gray-700">6 & 7. Leave, Holidays & Confidentiality</h4>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Leave Policy Note</label>
+                      <textarea
+                        value={documentData.leave_policy_note || ''}
+                        onChange={(e) => setDocumentData({ ...documentData, leave_policy_note: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                        rows={2}
+                        placeholder="Leave and holidays will be governed by the company's leave policy applicable at the time of employment."
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Confidentiality Note</label>
+                      <textarea
+                        value={documentData.confidentiality_note || ''}
+                        onChange={(e) => setDocumentData({ ...documentData, confidentiality_note: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                        rows={2}
+                        placeholder="You are required to maintain strict confidentiality of all company information, data, and records during and after your employment with the company."
+                      />
+                    </div>
+                  </div>
+
+                  {/* Signatory Details */}
+                  <div className="bg-indigo-50 p-4 rounded-lg space-y-4">
+                    <h4 className="font-medium text-indigo-700">Signatory Details</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Authorized Signatory Name</label>
+                        <input
+                          type="text"
+                          value={documentData.signatory_name || hrSettings?.signatory_name || ''}
+                          onChange={(e) => setDocumentData({ ...documentData, signatory_name: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                          placeholder="Enter signatory name"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Signatory Designation</label>
+                        <input
+                          type="text"
+                          value={documentData.signatory_designation || hrSettings?.signatory_designation || ''}
+                          onChange={(e) => setDocumentData({ ...documentData, signatory_designation: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                          placeholder="Enter designation"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Contact Details</label>
+                        <input
+                          type="text"
+                          value={documentData.signatory_contact || ''}
+                          onChange={(e) => setDocumentData({ ...documentData, signatory_contact: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                          placeholder="Phone or email"
+                        />
+                      </div>
+                    </div>
+                    <div className="flex items-center">
+                      <input
+                        type="checkbox"
+                        id="acceptance_section"
+                        checked={documentData.acceptance_section !== false}
+                        onChange={(e) => setDocumentData({ ...documentData, acceptance_section: e.target.checked })}
+                        className="h-4 w-4 text-blue-600 border-gray-300 rounded"
+                      />
+                      <label htmlFor="acceptance_section" className="ml-2 text-sm text-gray-700">
+                        Include Candidate Acceptance Section (signature & date lines)
+                      </label>
+                    </div>
+                  </div>
+
+                  {/* Additional Sections */}
+                  <div className="bg-red-50 p-4 rounded-lg space-y-4">
+                    <h4 className="font-medium text-red-700">Additional Sections (Optional)</h4>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Additional Terms & Conditions
+                      </label>
+                      <textarea
+                        value={documentData.terms_and_conditions || ''}
+                        onChange={(e) => setDocumentData({ ...documentData, terms_and_conditions: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                        rows={4}
+                        placeholder="Enter any additional terms and conditions (e.g., bond period, code of conduct, etc.)"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Other Information
+                      </label>
+                      <textarea
+                        value={documentData.other_details || ''}
+                        onChange={(e) => setDocumentData({ ...documentData, other_details: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                        rows={4}
+                        placeholder="Additional information (e.g., relocation assistance, training period, etc.)"
+                      />
+                    </div>
                   </div>
 
                   <button
@@ -2047,7 +2455,8 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
                           special_allowance: selectedEmployee.special_allowance || 0,
                           other_allowances: selectedEmployee.other_allowances || 0,
                           gross_salary: selectedEmployee.gross_salary
-                        }
+                        },
+                        annual_ctc: selectedEmployee.gross_salary * 12
                       });
                     }}
                     className="text-blue-600 text-sm hover:underline"

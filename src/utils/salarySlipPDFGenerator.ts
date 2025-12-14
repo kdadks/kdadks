@@ -37,17 +37,17 @@ export async function generateSalarySlipPDF(
   }
 
   // Document Title
-  pdf.setFontSize(16);
+  pdf.setFontSize(14);
   pdf.setFont('helvetica', 'bold');
   pdf.text('SALARY SLIP', pdf.internal.pageSize.getWidth() / 2, currentY, { align: 'center' });
-  currentY += 10;
+  currentY += 8;
 
   // Month and Year
-  pdf.setFontSize(11);
+  pdf.setFontSize(10);
   pdf.setFont('helvetica', 'normal');
   const monthYear = `${MONTH_NAMES[salarySlip.salary_month - 1]} ${salarySlip.salary_year}`;
   pdf.text(monthYear, pdf.internal.pageSize.getWidth() / 2, currentY, { align: 'center' });
-  currentY += 8;
+  currentY += 6;
 
   // Financial Year
   pdf.setFontSize(9);
@@ -134,22 +134,26 @@ export async function generateSalarySlipPDF(
   pdf.setFontSize(9);
   pdf.setFont('helvetica', 'bold');
 
-  // Table Headers
-  const col1X = dimensions.leftMargin;
-  const col2X = dimensions.leftMargin + 70;
-  const col3X = dimensions.leftMargin + 105;
-  const col4X = dimensions.leftMargin + 175;
+  // Table Headers - adjusted column positions to fit within page margins
+  const pageWidth = pdf.internal.pageSize.getWidth();
+  const tableWidth = dimensions.rightMargin - dimensions.leftMargin;
+  const colWidth = tableWidth / 2 - 5; // Half width minus gap
+  
+  const col1X = dimensions.leftMargin;  // Earnings label
+  const col2X = dimensions.leftMargin + colWidth - 10;  // Earnings amount (right-aligned)
+  const col3X = dimensions.leftMargin + colWidth + 10;  // Deductions label
+  const col4X = dimensions.rightMargin - 5;  // Deductions amount (right-aligned)
 
   pdf.text('EARNINGS', col1X, currentY);
-  pdf.text('AMOUNT (₹)', col2X, currentY);
+  pdf.text('AMOUNT (₹)', col2X - 15, currentY, { align: 'right' });
   pdf.text('DEDUCTIONS', col3X, currentY);
-  pdf.text('AMOUNT (₹)', col4X, currentY);
+  pdf.text('AMOUNT (₹)', col4X, currentY, { align: 'right' });
   currentY += 2;
 
   // Underline headers
   pdf.setLineWidth(0.3);
-  pdf.line(col1X, currentY, col2X + 25, currentY);
-  pdf.line(col3X, currentY, col4X + 20, currentY);
+  pdf.line(col1X, currentY, col1X + colWidth - 5, currentY);
+  pdf.line(col3X, currentY, dimensions.rightMargin, currentY);
   currentY += 5;
 
   // Earnings and Deductions Data
@@ -181,16 +185,19 @@ export async function generateSalarySlipPDF(
   const maxRows = Math.max(earningsData.length, deductionsData.length);
 
   for (let i = 0; i < maxRows; i++) {
+    pdf.setFont('helvetica', 'normal');
+    pdf.setFontSize(9);
+    
     // Earnings
     if (i < earningsData.length && earningsData[i][1] > 0) {
-      pdf.text(earningsData[i][0], col1X, currentY);
-      pdf.text(earningsData[i][1].toLocaleString('en-IN'), col2X + 20, currentY, { align: 'right' });
+      pdf.text(String(earningsData[i][0]), col1X, currentY);
+      pdf.text(Number(earningsData[i][1]).toLocaleString('en-IN'), col2X - 5, currentY, { align: 'right' });
     }
 
     // Deductions
     if (i < deductionsData.length && deductionsData[i][1] > 0) {
-      pdf.text(deductionsData[i][0], col3X, currentY);
-      pdf.text(deductionsData[i][1].toLocaleString('en-IN'), col4X + 15, currentY, { align: 'right' });
+      pdf.text(String(deductionsData[i][0]), col3X, currentY);
+      pdf.text(Number(deductionsData[i][1]).toLocaleString('en-IN'), col4X, currentY, { align: 'right' });
     }
 
     currentY += 5;
@@ -200,8 +207,8 @@ export async function generateSalarySlipPDF(
 
   // Draw line before totals
   pdf.setLineWidth(0.5);
-  pdf.line(col1X, currentY, col2X + 25, currentY);
-  pdf.line(col3X, currentY, col4X + 20, currentY);
+  pdf.line(col1X, currentY, col1X + colWidth - 5, currentY);
+  pdf.line(col3X, currentY, dimensions.rightMargin, currentY);
   currentY += 5;
 
   // Totals
@@ -209,10 +216,10 @@ export async function generateSalarySlipPDF(
   pdf.setFontSize(9);
   pdf.setFont('helvetica', 'bold');
   pdf.text('GROSS SALARY', col1X, currentY);
-  pdf.text(salarySlip.gross_salary.toLocaleString('en-IN'), col2X + 20, currentY, { align: 'right' });
+  pdf.text(salarySlip.gross_salary.toLocaleString('en-IN'), col2X - 5, currentY, { align: 'right' });
 
   pdf.text('TOTAL DEDUCTIONS', col3X, currentY);
-  pdf.text(salarySlip.total_deductions.toLocaleString('en-IN'), col4X + 15, currentY, { align: 'right' });
+  pdf.text(salarySlip.total_deductions.toLocaleString('en-IN'), col4X, currentY, { align: 'right' });
   currentY += 7;
 
   // Double line before net salary
@@ -225,12 +232,12 @@ export async function generateSalarySlipPDF(
   pdf.setFontSize(10);
   pdf.setFont('helvetica', 'bold');
   pdf.text('NET SALARY PAYABLE', dimensions.leftMargin, currentY);
-  pdf.text(`₹ ${salarySlip.net_salary.toLocaleString('en-IN')}`, dimensions.rightMargin, currentY, { align: 'right' });
-  currentY += 6;
+  pdf.text(`₹ ${salarySlip.net_salary.toLocaleString('en-IN')}`, dimensions.rightMargin - 10, currentY, { align: 'right' });
+  currentY += 8;
 
   pdf.setLineWidth(0.8);
   pdf.line(dimensions.leftMargin, currentY, dimensions.rightMargin, currentY);
-  currentY += 8;
+  currentY += 6;
 
   // Net Salary in Words
   checkPageBreak(10);
@@ -247,9 +254,6 @@ export async function generateSalarySlipPDF(
   pdf.text('TAX INFORMATION', dimensions.leftMargin, currentY);
   currentY += 6;
 
-  pdf.setFontSize(9);
-  pdf.setFont('helvetica', 'normal');
-
   const taxInfo = [
     ['Year-to-Date Gross Salary:', `₹${salarySlip.ytd_gross.toLocaleString('en-IN')}`],
     ['Year-to-Date TDS Deducted:', `₹${salarySlip.ytd_tds.toLocaleString('en-IN')}`],
@@ -260,11 +264,9 @@ export async function generateSalarySlipPDF(
   taxInfo.forEach(([label, value]) => {
     checkPageBreak(6);
     pdf.setFontSize(9);
-    pdf.setFont('helvetica', 'bold');
-    pdf.text(label, dimensions.leftMargin, currentY);
-    pdf.setFontSize(9);
     pdf.setFont('helvetica', 'normal');
-    pdf.text(value, dimensions.leftMargin + 75, currentY);
+    pdf.text(label, dimensions.leftMargin, currentY);
+    pdf.text(value, dimensions.leftMargin + 70, currentY);
     currentY += 5;
   });
 
@@ -327,20 +329,36 @@ export async function generateSalarySlipPDF(
     currentY += 3;
   }
 
-  // Footer Note - Always positioned safely above bottom margin
-  // Calculate footer position to avoid overlap
-  const footerStartY = pageHeight - footerMargin + 5;
+  // Footer disclaimer - positioned above footer with safe margin
+  const disclaimerHeight = 20;
+  const safeBottomMargin = 30; // Increased margin to avoid footer overlap
+  
+  // Calculate where disclaimer should start
+  let disclaimerY = currentY + 8;
+  
+  // If content is too close to footer, position disclaimer just above footer
+  if (disclaimerY + disclaimerHeight > pageHeight - safeBottomMargin) {
+    disclaimerY = pageHeight - safeBottomMargin - disclaimerHeight;
+  }
+
+  // Draw separator line before disclaimer
+  pdf.setLineWidth(0.2);
+  pdf.setDrawColor(150, 150, 150);
+  pdf.line(dimensions.leftMargin + 30, disclaimerY, dimensions.rightMargin - 30, disclaimerY);
+  disclaimerY += 5;
 
   pdf.setFontSize(8);
   pdf.setFont('helvetica', 'italic');
   pdf.setTextColor(100, 100, 100);
   pdf.text('This is a computer-generated salary slip and does not require a signature.',
-    pdf.internal.pageSize.getWidth() / 2, footerStartY, { align: 'center' });
+    pdf.internal.pageSize.getWidth() / 2, disclaimerY, { align: 'center' });
+  disclaimerY += 4;
   pdf.text('For any discrepancies, please contact the HR department.',
-    pdf.internal.pageSize.getWidth() / 2, footerStartY + 4, { align: 'center' });
+    pdf.internal.pageSize.getWidth() / 2, disclaimerY, { align: 'center' });
 
-  // Reset text color
+  // Reset colors
   pdf.setTextColor(0, 0, 0);
+  pdf.setDrawColor(0, 0, 0);
 
   return pdf;
 }

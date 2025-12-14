@@ -35,7 +35,8 @@ export default defineConfig({
     chunkSizeWarningLimit: 1000
   },
   server: {
-    port: 3000,
+    port: 3001,
+    strictPort: true, // Fail if port 3001 is in use instead of picking another
     open: true,
     host: true,
     // Proxy API requests to development server

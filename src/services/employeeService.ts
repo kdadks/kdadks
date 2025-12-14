@@ -397,7 +397,7 @@ export const employeeService = {
     return data
   },
 
-  async generateSalarySlip(input: CreateSalarySlipInput): Promise<SalarySlip> {
+  async generateSalarySlip(input: CreateSalarySlipInput): Promise<Omit<SalarySlip, 'id' | 'created_at' | 'updated_at'>> {
     // Get employee details
     const employee = await this.getEmployeeById(input.employee_id)
     if (!employee) {
@@ -530,9 +530,40 @@ export const employeeService = {
       email_sent: false
     }
 
+    return salarySlip
+  },
+
+  async saveSalarySlip(salarySlipData: Omit<SalarySlip, 'id' | 'created_at' | 'updated_at'>): Promise<SalarySlip> {
+    // Check if a salary slip already exists for this employee/month/year
+    const { data: existing } = await supabase
+      .from('salary_slips')
+      .select('id')
+      .eq('employee_id', salarySlipData.employee_id)
+      .eq('salary_month', salarySlipData.salary_month)
+      .eq('salary_year', salarySlipData.salary_year)
+      .single()
+
+    if (existing) {
+      // Update existing slip
+      const { data, error } = await supabase
+        .from('salary_slips')
+        .update(salarySlipData)
+        .eq('id', existing.id)
+        .select()
+        .single()
+
+      if (error) {
+        console.error('Error updating salary slip:', error)
+        throw error
+      }
+
+      return data
+    }
+
+    // Insert new slip
     const { data, error } = await supabase
       .from('salary_slips')
-      .insert([salarySlip])
+      .insert([salarySlipData])
       .select()
       .single()
 

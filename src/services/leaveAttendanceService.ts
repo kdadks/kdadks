@@ -138,9 +138,9 @@ export const leaveAttendanceService = {
       .from('leave_applications')
       .select(`
         *,
-        employee:employees(*),
+        employee:employees!leave_applications_employee_id_fkey(*),
         leave_type:leave_types(*),
-        approver:employees!approved_by(*)
+        approver:employees!leave_applications_approved_by_fkey(*)
       `)
       .order('applied_at', { ascending: false });
 
