@@ -10,7 +10,10 @@ import {
   Receipt,
   CreditCard,
   FileText,
-  Briefcase
+  Briefcase,
+  Calendar,
+  Clock,
+  Settings
 } from 'lucide-react'
 import { simpleAuth, SimpleUser } from '../../utils/simpleAuth'
 import { isSupabaseConfigured } from '../../config/supabase'
@@ -18,8 +21,11 @@ import InvoiceManagement from '../invoice/InvoiceManagement'
 import { PaymentManagement } from '../payment/PaymentManagement'
 import QuoteManagement from '../quote/QuoteManagement'
 import EmploymentDocuments from '../hr/EmploymentDocuments'
+import LeaveManagement from '../hr/LeaveManagement'
+import AttendanceManagement from '../hr/AttendanceManagement'
+import OrganizationSettings from '../settings/OrganizationSettings'
 
-type ActiveView = 'dashboard' | 'invoices' | 'payments' | 'quotes' | 'hr';
+type ActiveView = 'dashboard' | 'invoices' | 'payments' | 'quotes' | 'hr' | 'leave' | 'attendance' | 'settings';
 
 const SimpleAdminDashboard: React.FC = () => {
   const [user, setUser] = useState<SimpleUser | null>(null)
@@ -141,6 +147,18 @@ const SimpleAdminDashboard: React.FC = () => {
     return <EmploymentDocuments onBackToDashboard={() => setActiveView('dashboard')} />
   }
 
+  if (activeView === 'leave') {
+    return <LeaveManagement onBackToDashboard={() => setActiveView('dashboard')} />
+  }
+
+  if (activeView === 'attendance') {
+    return <AttendanceManagement onBackToDashboard={() => setActiveView('dashboard')} />
+  }
+
+  if (activeView === 'settings') {
+    return <OrganizationSettings />
+  }
+
   return (
     <div className="min-h-screen bg-gray-100">
       {/* Header */}
@@ -204,6 +222,39 @@ const SimpleAdminDashboard: React.FC = () => {
                 >
                   <Briefcase className="w-4 h-4 mr-2" />
                   HR
+                </button>
+                <button
+                  onClick={() => setActiveView('leave' as ActiveView)}
+                  className={`flex items-center px-3 py-2 text-sm font-medium rounded-md ${
+                    (activeView as string) === 'leave'
+                      ? 'bg-blue-100 text-blue-700'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  <Calendar className="w-4 h-4 mr-2" />
+                  Leave
+                </button>
+                <button
+                  onClick={() => setActiveView('attendance' as ActiveView)}
+                  className={`flex items-center px-3 py-2 text-sm font-medium rounded-md ${
+                    (activeView as string) === 'attendance'
+                      ? 'bg-blue-100 text-blue-700'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  <Clock className="w-4 h-4 mr-2" />
+                  Attendance
+                </button>
+                <button
+                  onClick={() => setActiveView('settings' as ActiveView)}
+                  className={`flex items-center px-3 py-2 text-sm font-medium rounded-md ${
+                    (activeView as string) === 'settings'
+                      ? 'bg-blue-100 text-blue-700'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  <Settings className="w-4 h-4 mr-2" />
+                  Settings
                 </button>
               </nav>
             </div>
