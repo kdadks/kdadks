@@ -158,6 +158,31 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
     }
   };
 
+  const handleUpdateEmployee = async () => {
+    try {
+      if (!employeeForm.id || !employeeForm.employee_number || !employeeForm.first_name || !employeeForm.last_name || !employeeForm.email) {
+        showError('Please fill all required fields');
+        return;
+      }
+
+      const fullName = `${employeeForm.first_name} ${employeeForm.middle_name || ''} ${employeeForm.last_name}`.trim();
+
+      const updatedEmployee = await employeeService.updateEmployee(employeeForm.id, {
+        ...employeeForm,
+        full_name: fullName,
+        gross_salary: (employeeForm.basic_salary || 0) + (employeeForm.hra || 0) + (employeeForm.special_allowance || 0) + (employeeForm.other_allowances || 0)
+      } as Partial<Employee>);
+
+      setEmployees(employees.map(emp => emp.id === updatedEmployee.id ? updatedEmployee : emp));
+      showSuccess('Employee updated successfully');
+      setEmployeeView('list');
+      resetEmployeeForm();
+    } catch (err) {
+      console.error('Error updating employee:', err);
+      showError('Failed to update employee');
+    }
+  };
+
   const resetEmployeeForm = () => {
     setEmployeeForm({
       employee_number: '',
@@ -1216,6 +1241,41 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
         {/* Employees Tab */}
         {activeTab === 'employees' && employeeView === 'list' && (
           <div>
+            {/* Quick Actions for Employees */}
+            <div className="bg-white shadow-sm rounded-lg p-4 mb-6 border border-gray-200">
+              <h3 className="text-sm font-semibold text-gray-700 mb-3">Quick Actions</h3>
+              <div className="flex flex-wrap gap-3">
+                <button
+                  onClick={() => setEmployeeView('add')}
+                  className="flex items-center px-3 py-2 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700"
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  Add Employee
+                </button>
+                <button
+                  onClick={() => setActiveTab('generate-document')}
+                  className="flex items-center px-3 py-2 bg-indigo-600 text-white text-sm rounded-md hover:bg-indigo-700"
+                >
+                  <FileText className="w-4 h-4 mr-2" />
+                  Generate Document
+                </button>
+                <button
+                  onClick={() => setActiveTab('generate-salary-slip')}
+                  className="flex items-center px-3 py-2 bg-teal-600 text-white text-sm rounded-md hover:bg-teal-700"
+                >
+                  <Receipt className="w-4 h-4 mr-2" />
+                  Generate Salary Slip
+                </button>
+                <button
+                  onClick={loadData}
+                  className="flex items-center px-3 py-2 bg-gray-100 text-gray-700 text-sm rounded-md hover:bg-gray-200 border border-gray-300"
+                >
+                  <Eye className="w-4 h-4 mr-2" />
+                  Refresh Data
+                </button>
+              </div>
+            </div>
+
             <div className="mb-6 flex items-center justify-between">
               <div className="flex-1 max-w-md">
                 <div className="relative">
@@ -1291,12 +1351,51 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                         <button
                           onClick={() => {
+                            setEmployeeForm(employee);
+                            setEmployeeView('edit');
+                          }}
+                          className="text-indigo-600 hover:text-indigo-900 mr-3"
+                          title="Edit Employee"
+                        >
+                          <Edit className="w-5 h-5 inline" />
+                        </button>
+                        <button
+                          onClick={() => {
                             setSelectedEmployee(employee);
                             setActiveTab('generate-document');
                           }}
                           className="text-blue-600 hover:text-blue-900 mr-3"
+                          title="Generate Document"
                         >
                           <FileText className="w-5 h-5 inline" />
+                        </button>
+                        <button
+                          onClick={() => {
+                            setSelectedEmployee(employee);
+                            setSalarySlipInput({ ...salarySlipInput, employee_id: employee.id });
+                            setActiveTab('generate-salary-slip');
+                          }}
+                          className="text-teal-600 hover:text-teal-900 mr-3"
+                          title="Generate Salary Slip"
+                        >
+                          <Receipt className="w-5 h-5 inline" />
+                        </button>
+                        <button
+                          onClick={async () => {
+                            if (window.confirm(`Are you sure you want to delete ${employee.full_name}?`)) {
+                              try {
+                                await employeeService.deleteEmployee(employee.id);
+                                showSuccess('Employee deleted successfully');
+                                loadData();
+                              } catch (err) {
+                                showError('Failed to delete employee');
+                              }
+                            }
+                          }}
+                          className="text-red-600 hover:text-red-900"
+                          title="Delete Employee"
+                        >
+                          <Trash2 className="w-5 h-5 inline" />
                         </button>
                       </td>
                     </tr>
@@ -1310,6 +1409,34 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
         {/* Salary Slips Tab */}
         {activeTab === 'salary-slips' && (
           <div>
+            {/* Quick Actions for Salary Slips */}
+            <div className="bg-white shadow-sm rounded-lg p-4 mb-6 border border-gray-200">
+              <h3 className="text-sm font-semibold text-gray-700 mb-3">Quick Actions</h3>
+              <div className="flex flex-wrap gap-3">
+                <button
+                  onClick={() => setActiveTab('generate-salary-slip')}
+                  className="flex items-center px-3 py-2 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700"
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  Generate New Salary Slip
+                </button>
+                <button
+                  onClick={() => setActiveTab('employees')}
+                  className="flex items-center px-3 py-2 bg-orange-600 text-white text-sm rounded-md hover:bg-orange-700"
+                >
+                  <Users className="w-4 h-4 mr-2" />
+                  View Employees
+                </button>
+                <button
+                  onClick={loadData}
+                  className="flex items-center px-3 py-2 bg-gray-100 text-gray-700 text-sm rounded-md hover:bg-gray-200 border border-gray-300"
+                >
+                  <Eye className="w-4 h-4 mr-2" />
+                  Refresh Data
+                </button>
+              </div>
+            </div>
+
             <div className="bg-white shadow-md rounded-lg overflow-hidden">
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
@@ -1602,6 +1729,34 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
         {/* Documents Tab */}
         {activeTab === 'documents' && (
           <div>
+            {/* Quick Actions for Documents */}
+            <div className="bg-white shadow-sm rounded-lg p-4 mb-6 border border-gray-200">
+              <h3 className="text-sm font-semibold text-gray-700 mb-3">Quick Actions</h3>
+              <div className="flex flex-wrap gap-3">
+                <button
+                  onClick={() => setActiveTab('generate-document')}
+                  className="flex items-center px-3 py-2 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700"
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  Generate New Document
+                </button>
+                <button
+                  onClick={() => setActiveTab('employees')}
+                  className="flex items-center px-3 py-2 bg-orange-600 text-white text-sm rounded-md hover:bg-orange-700"
+                >
+                  <Users className="w-4 h-4 mr-2" />
+                  View Employees
+                </button>
+                <button
+                  onClick={loadData}
+                  className="flex items-center px-3 py-2 bg-gray-100 text-gray-700 text-sm rounded-md hover:bg-gray-200 border border-gray-300"
+                >
+                  <Eye className="w-4 h-4 mr-2" />
+                  Refresh Data
+                </button>
+              </div>
+            </div>
+
             <div className="bg-white shadow-md rounded-lg overflow-hidden">
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
@@ -2031,6 +2186,261 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
               >
                 <Save className="w-4 h-4 inline mr-2" />
                 Save Employee
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Edit Employee View */}
+        {activeTab === 'employees' && employeeView === 'edit' && (
+          <div className="bg-white shadow-md rounded-lg p-6">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-lg font-semibold">Edit Employee</h2>
+              <button
+                onClick={() => {
+                  resetEmployeeForm();
+                  setEmployeeView('list');
+                }}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Employee Number *
+                </label>
+                <input
+                  type="text"
+                  value={employeeForm.employee_number || ''}
+                  onChange={(e) => setEmployeeForm({ ...employeeForm, employee_number: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  First Name *
+                </label>
+                <input
+                  type="text"
+                  value={employeeForm.first_name || ''}
+                  onChange={(e) => setEmployeeForm({ ...employeeForm, first_name: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Middle Name
+                </label>
+                <input
+                  type="text"
+                  value={employeeForm.middle_name || ''}
+                  onChange={(e) => setEmployeeForm({ ...employeeForm, middle_name: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Last Name *
+                </label>
+                <input
+                  type="text"
+                  value={employeeForm.last_name || ''}
+                  onChange={(e) => setEmployeeForm({ ...employeeForm, last_name: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Email *
+                </label>
+                <input
+                  type="email"
+                  value={employeeForm.email || ''}
+                  onChange={(e) => setEmployeeForm({ ...employeeForm, email: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Designation
+                </label>
+                <input
+                  type="text"
+                  value={employeeForm.designation || ''}
+                  onChange={(e) => setEmployeeForm({ ...employeeForm, designation: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Department
+                </label>
+                <input
+                  type="text"
+                  value={employeeForm.department || ''}
+                  onChange={(e) => setEmployeeForm({ ...employeeForm, department: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Date of Joining
+                </label>
+                <input
+                  type="date"
+                  value={employeeForm.date_of_joining || ''}
+                  onChange={(e) => setEmployeeForm({ ...employeeForm, date_of_joining: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Employment Type
+                </label>
+                <select
+                  value={employeeForm.employment_type || 'full-time'}
+                  onChange={(e) => setEmployeeForm({ ...employeeForm, employment_type: e.target.value as any })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                >
+                  <option value="full-time">Full Time</option>
+                  <option value="part-time">Part Time</option>
+                  <option value="contract">Contract</option>
+                  <option value="intern">Intern</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Employment Status
+                </label>
+                <select
+                  value={employeeForm.employment_status || 'active'}
+                  onChange={(e) => setEmployeeForm({ ...employeeForm, employment_status: e.target.value as any })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                >
+                  <option value="active">Active</option>
+                  <option value="on-leave">On Leave</option>
+                  <option value="resigned">Resigned</option>
+                  <option value="terminated">Terminated</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Basic Salary
+                </label>
+                <input
+                  type="number"
+                  value={employeeForm.basic_salary || 0}
+                  onChange={(e) => setEmployeeForm({ ...employeeForm, basic_salary: parseFloat(e.target.value) || 0 })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  HRA
+                </label>
+                <input
+                  type="number"
+                  value={employeeForm.hra || 0}
+                  onChange={(e) => setEmployeeForm({ ...employeeForm, hra: parseFloat(e.target.value) || 0 })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Special Allowance
+                </label>
+                <input
+                  type="number"
+                  value={employeeForm.special_allowance || 0}
+                  onChange={(e) => setEmployeeForm({ ...employeeForm, special_allowance: parseFloat(e.target.value) || 0 })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  PAN Number
+                </label>
+                <input
+                  type="text"
+                  value={employeeForm.pan_number || ''}
+                  onChange={(e) => setEmployeeForm({ ...employeeForm, pan_number: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Bank Account Number
+                </label>
+                <input
+                  type="text"
+                  value={employeeForm.bank_account_number || ''}
+                  onChange={(e) => setEmployeeForm({ ...employeeForm, bank_account_number: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Bank Name
+                </label>
+                <input
+                  type="text"
+                  value={employeeForm.bank_name || ''}
+                  onChange={(e) => setEmployeeForm({ ...employeeForm, bank_name: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  IFSC Code
+                </label>
+                <input
+                  type="text"
+                  value={employeeForm.ifsc_code || ''}
+                  onChange={(e) => setEmployeeForm({ ...employeeForm, ifsc_code: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+            </div>
+
+            <div className="mt-6 flex justify-end space-x-3 border-t pt-4">
+              <button
+                onClick={() => {
+                  resetEmployeeForm();
+                  setEmployeeView('list');
+                }}
+                className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleUpdateEmployee}
+                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+              >
+                <Save className="w-4 h-4 inline mr-2" />
+                Update Employee
               </button>
             </div>
           </div>
