@@ -34,6 +34,8 @@ import QuoteManagement from '../quote/QuoteManagement'
 import EmploymentDocuments from '../hr/EmploymentDocuments'
 import LeaveManagement from '../hr/LeaveManagement'
 import AttendanceManagement from '../hr/AttendanceManagement'
+import FullFinalSettlement from '../hr/FullFinalSettlement'
+import TDSReport from '../hr/TDSReport'
 import OrganizationSettings from '../settings/OrganizationSettings'
 import type { InvoiceStats } from '../../types/invoice'
 import type { QuoteStats } from '../../types/quote'
@@ -51,9 +53,10 @@ interface DashboardStats {
   };
   salarySlips: number;
   documents: number;
+  settlements: number;
 }
 
-type ActiveView = 'dashboard' | 'invoices' | 'payments' | 'quotes' | 'hr-employees' | 'hr-leave' | 'hr-attendance' | 'hr-organization';
+type ActiveView = 'dashboard' | 'invoices' | 'payments' | 'quotes' | 'hr-employees' | 'hr-leave' | 'hr-attendance' | 'hr-settlement' | 'hr-tds-report' | 'hr-organization';
 
 const SimpleAdminDashboard: React.FC = () => {
   const [user, setUser] = useState<SimpleUser | null>(null)
@@ -68,7 +71,8 @@ const SimpleAdminDashboard: React.FC = () => {
     employees: { total: 0, active: 0 },
     payments: { total: 0, totalAmount: 0 },
     salarySlips: 0,
-    documents: 0
+    documents: 0,
+    settlements: 0
   })
   const [statsLoading, setStatsLoading] = useState(false)
   const navigate = useNavigate()
@@ -135,7 +139,7 @@ const SimpleAdminDashboard: React.FC = () => {
       setStatsLoading(true)
       
       // Fetch all stats in parallel
-      const [invoiceStats, quoteStats, employeesResult, paymentsResult, salarySlipsResult, documentsResult] = await Promise.all([
+      const [invoiceStats, quoteStats, employeesResult, paymentsResult, salarySlipsResult, documentsResult, settlementsResult] = await Promise.all([
         invoiceService.getInvoiceStats().catch(() => null),
         quoteService.getQuoteStats().catch(() => null),
         (async () => {
@@ -175,6 +179,14 @@ const SimpleAdminDashboard: React.FC = () => {
           } catch {
             return 0
           }
+        })(),
+        (async () => {
+          try {
+            const { count } = await supabase.from('full_final_settlements').select('id', { count: 'exact', head: true })
+            return count || 0
+          } catch {
+            return 0
+          }
         })()
       ])
 
@@ -184,7 +196,8 @@ const SimpleAdminDashboard: React.FC = () => {
         employees: employeesResult,
         payments: paymentsResult,
         salarySlips: salarySlipsResult,
-        documents: documentsResult
+        documents: documentsResult,
+        settlements: settlementsResult
       })
     } catch (error) {
       console.error('Error loading dashboard stats:', error)
@@ -260,6 +273,10 @@ const SimpleAdminDashboard: React.FC = () => {
         return <EmploymentDocuments onBackToDashboard={() => setActiveView('dashboard')} />;
       case 'hr-leave':
         return <LeaveManagement onBackToDashboard={() => setActiveView('dashboard')} />;
+      case 'hr-settlement':
+        return <FullFinalSettlement onBackToDashboard={() => setActiveView('dashboard')} />;
+      case 'hr-tds-report':
+        return <TDSReport onBackToDashboard={() => setActiveView('dashboard')} />;
       case 'hr-attendance':
         return <AttendanceManagement onBackToDashboard={() => setActiveView('dashboard')} />;
       case 'hr-organization':
@@ -417,6 +434,32 @@ const SimpleAdminDashboard: React.FC = () => {
                   </li>
                   <li>
                     <button
+                      onClick={() => setActiveView('hr-settlement')}
+                      className={`w-full flex items-center px-3 py-2 text-sm rounded-md transition-colors ${
+                        activeView === 'hr-settlement'
+                          ? 'bg-blue-100 text-blue-700'
+                          : 'text-gray-600 hover:bg-gray-50'
+                      }`}
+                    >
+                      <DollarSign className="w-4 h-4 flex-shrink-0" />
+                      <span className="ml-3">F&F Settlement</span>
+                    </button>
+                  </li>
+                  <li>
+                    <button
+                      onClick={() => setActiveView('hr-tds-report')}
+                      className={`w-full flex items-center px-3 py-2 text-sm rounded-md transition-colors ${
+                        activeView === 'hr-tds-report'
+                          ? 'bg-blue-100 text-blue-700'
+                          : 'text-gray-600 hover:bg-gray-50'
+                      }`}
+                    >
+                      <FileText className="w-4 h-4 flex-shrink-0" />
+                      <span className="ml-3">TDS Report</span>
+                    </button>
+                  </li>
+                  <li>
+                    <button
                       onClick={() => setActiveView('hr-organization')}
                       className={`w-full flex items-center px-3 py-2 text-sm rounded-md transition-colors ${
                         activeView === 'hr-organization'
@@ -464,6 +507,8 @@ const SimpleAdminDashboard: React.FC = () => {
             {activeView === 'hr-employees' && 'HR - Employees & Documents'}
             {activeView === 'hr-leave' && 'HR - Leave Management'}
             {activeView === 'hr-attendance' && 'HR - Attendance'}
+            {activeView === 'hr-settlement' && 'HR - Full & Final Settlement'}
+            {activeView === 'hr-tds-report' && 'HR - TDS Report'}
             {activeView === 'hr-organization' && 'HR - Organization Settings'}
           </h2>
         </header>

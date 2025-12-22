@@ -365,3 +365,106 @@ export interface CreateSalarySlipInput {
   medical_allowance?: number;
   other_allowances?: number;
 }
+
+// Full & Final Settlement Types
+export type SettlementStatus = 'draft' | 'pending_approval' | 'approved' | 'paid' | 'cancelled';
+
+export interface FullFinalSettlement {
+  id: string;
+  employee_id: string;
+
+  // Employee Details (denormalized for record keeping)
+  employee_number: string;
+  employee_name: string;
+  designation: string;
+  department?: string;
+  date_of_joining: string;
+  date_of_leaving: string;
+  relieving_date: string;
+  reason_for_leaving?: string;
+
+  // Settlement Period
+  settlement_month: number;
+  settlement_year: number;
+  last_working_day: string;
+  notice_period_days: number;
+  notice_period_served: number;
+  notice_period_shortfall: number;
+
+  // Salary Components (Dues)
+  pending_salary_days: number;
+  pending_salary_amount: number;
+  earned_leave_days: number;
+  earned_leave_encashment: number;
+  bonus_amount: number;
+  incentive_amount: number;
+  gratuity_amount: number;
+  notice_pay_recovery: number;
+  other_dues: number;
+  total_dues: number;
+
+  // Deductions (Recoveries)
+  advance_recovery: number;
+  loan_recovery: number;
+  notice_period_recovery: number;
+  asset_recovery: number;
+  other_recoveries: number;
+  total_recoveries: number;
+
+  // Net Settlement
+  gross_settlement: number;
+  tax_deduction: number;
+  net_settlement: number;
+
+  // Assets & Clearance
+  assets_returned: boolean;
+  asset_clearance_remarks?: string;
+  no_dues_certificate_issued: boolean;
+
+  // Payment Details
+  payment_mode?: string;
+  payment_reference?: string;
+  payment_date?: string;
+
+  // Approval Workflow
+  status: SettlementStatus;
+  prepared_by?: string;
+  approved_by?: string;
+  approved_at?: string;
+
+  // Documents
+  pdf_url?: string;
+  pdf_generated_at?: string;
+
+  // Remarks
+  remarks?: string;
+
+  // Metadata
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface CreateSettlementInput {
+  employee_id: string;
+  date_of_leaving: string;
+  relieving_date: string;
+  last_working_day: string;
+  reason_for_leaving?: string;
+  notice_period_days: number;
+  notice_period_served: number;
+
+  // Optional custom amounts
+  bonus_amount?: number;
+  incentive_amount?: number;
+  gratuity_amount?: number;
+  advance_recovery?: number;
+  loan_recovery?: number;
+  asset_recovery?: number;
+  other_dues?: number;
+  other_recoveries?: number;
+
+  // Clearance
+  assets_returned?: boolean;
+  asset_clearance_remarks?: string;
+  remarks?: string;
+}
