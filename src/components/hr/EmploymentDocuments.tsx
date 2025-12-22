@@ -2261,6 +2261,18 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Father's Name
+                </label>
+                <input
+                  type="text"
+                  value={employeeForm.fathers_name || ''}
+                  onChange={(e) => setEmployeeForm({ ...employeeForm, fathers_name: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
                   Email *
                 </label>
                 <input
@@ -2270,6 +2282,46 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
                   required
                 />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Phone
+                </label>
+                <input
+                  type="tel"
+                  value={employeeForm.phone || ''}
+                  onChange={(e) => setEmployeeForm({ ...employeeForm, phone: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Date of Birth
+                </label>
+                <input
+                  type="date"
+                  value={employeeForm.date_of_birth || ''}
+                  onChange={(e) => setEmployeeForm({ ...employeeForm, date_of_birth: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Gender
+                </label>
+                <select
+                  value={employeeForm.gender || ''}
+                  onChange={(e) => setEmployeeForm({ ...employeeForm, gender: e.target.value as any })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                >
+                  <option value="">Select Gender</option>
+                  <option value="male">Male</option>
+                  <option value="female">Female</option>
+                  <option value="other">Other</option>
+                </select>
               </div>
 
               <div>
@@ -2385,43 +2437,140 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
                   value={employeeForm.pan_number || ''}
                   onChange={(e) => setEmployeeForm({ ...employeeForm, pan_number: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="ABCDE1234F"
                 />
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Bank Account Number
+                  Aadhar Number
                 </label>
                 <input
                   type="text"
-                  value={employeeForm.bank_account_number || ''}
-                  onChange={(e) => setEmployeeForm({ ...employeeForm, bank_account_number: e.target.value })}
+                  value={employeeForm.aadhar_number || ''}
+                  onChange={(e) => setEmployeeForm({ ...employeeForm, aadhar_number: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="1234 5678 9012"
                 />
               </div>
+            </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Bank Name
-                </label>
-                <input
-                  type="text"
-                  value={employeeForm.bank_name || ''}
-                  onChange={(e) => setEmployeeForm({ ...employeeForm, bank_name: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-                />
+            <div className="mt-6">
+              <h3 className="text-md font-semibold mb-4">Address Information</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Address Line 1
+                  </label>
+                  <input
+                    type="text"
+                    value={employeeForm.address_line1 || ''}
+                    onChange={(e) => setEmployeeForm({ ...employeeForm, address_line1: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Address Line 2
+                  </label>
+                  <input
+                    type="text"
+                    value={employeeForm.address_line2 || ''}
+                    onChange={(e) => setEmployeeForm({ ...employeeForm, address_line2: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    City
+                  </label>
+                  <input
+                    type="text"
+                    value={employeeForm.city || ''}
+                    onChange={(e) => setEmployeeForm({ ...employeeForm, city: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    State
+                  </label>
+                  <input
+                    type="text"
+                    value={employeeForm.state || ''}
+                    onChange={(e) => setEmployeeForm({ ...employeeForm, state: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Postal Code
+                  </label>
+                  <input
+                    type="text"
+                    value={employeeForm.postal_code || ''}
+                    onChange={(e) => setEmployeeForm({ ...employeeForm, postal_code: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Country
+                  </label>
+                  <input
+                    type="text"
+                    value={employeeForm.country || 'India'}
+                    onChange={(e) => setEmployeeForm({ ...employeeForm, country: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
               </div>
+            </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  IFSC Code
-                </label>
-                <input
-                  type="text"
-                  value={employeeForm.bank_ifsc_code || ''}
-                  onChange={(e) => setEmployeeForm({ ...employeeForm, bank_ifsc_code: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-                />
+            <div className="mt-6">
+              <h3 className="text-md font-semibold mb-4">Bank Details</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Bank Name
+                  </label>
+                  <input
+                    type="text"
+                    value={employeeForm.bank_name || ''}
+                    onChange={(e) => setEmployeeForm({ ...employeeForm, bank_name: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    IFSC Code
+                  </label>
+                  <input
+                    type="text"
+                    value={employeeForm.bank_ifsc_code || ''}
+                    onChange={(e) => setEmployeeForm({ ...employeeForm, bank_ifsc_code: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="SBIN0001234"
+                  />
+                </div>
+
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Account Number
+                  </label>
+                  <input
+                    type="text"
+                    value={employeeForm.bank_account_number || ''}
+                    onChange={(e) => setEmployeeForm({ ...employeeForm, bank_account_number: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
               </div>
             </div>
 
