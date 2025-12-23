@@ -28,6 +28,8 @@ import type {
   DocumentType,
   OfferLetterData,
   SalaryCertificateData,
+  ExperienceCertificateData,
+  RelievingLetterData,
   Form16Data,
   Form24QData,
   HRDocumentSettings,
@@ -76,6 +78,18 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
   const [documentData, setDocumentData] = useState<any>({});
   const [previewPdf, setPreviewPdf] = useState<string | null>(null);
   const [showPreview, setShowPreview] = useState(false);
+
+  // Document editing state
+  const [editingDocument, setEditingDocument] = useState<EmploymentDocument | null>(null);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editedDocumentData, setEditedDocumentData] = useState<any>({});
+  const [isSavingDocument, setIsSavingDocument] = useState(false);
+
+  // Salary slip editing state
+  const [editingSalarySlip, setEditingSalarySlip] = useState<SalarySlip | null>(null);
+  const [showEditSalarySlipModal, setShowEditSalarySlipModal] = useState(false);
+  const [editedSalarySlipData, setEditedSalarySlipData] = useState<Partial<SalarySlip>>({});
+  const [isSavingSalarySlip, setIsSavingSalarySlip] = useState(false);
 
   // Salary slip generation state
   const [salarySlipInput, setSalarySlipInput] = useState<CreateSalarySlipInput>({
@@ -889,6 +903,287 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
     return pdf;
   };
 
+  const generateExperienceCertificatePDF = async (employee: Employee, data: ExperienceCertificateData) => {
+    const pdf = new jsPDF('p', 'mm', 'a4');
+    const dimensions = PDFBrandingUtils.getStandardDimensions();
+
+    let currentY = dimensions.topMargin;
+
+    // Add company header if settings exist
+    if (companySettings?.company_name) {
+      pdf.setFontSize(14);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text(companySettings.company_name, pdf.internal.pageSize.getWidth() / 2, currentY, { align: 'center' });
+      currentY += 6;
+      if (companySettings.address_line1) {
+        pdf.setFontSize(9);
+        pdf.setFont('helvetica', 'normal');
+        const addressParts = [
+          companySettings.address_line1,
+          companySettings.address_line2,
+          companySettings.city,
+          companySettings.state,
+          companySettings.postal_code
+        ].filter(Boolean);
+        const fullAddress = addressParts.join(', ');
+        pdf.text(fullAddress, pdf.internal.pageSize.getWidth() / 2, currentY, { align: 'center' });
+        currentY += 5;
+      }
+      currentY += 10;
+    }
+
+    // Title
+    pdf.setFontSize(16);
+    pdf.setFont('helvetica', 'bold');
+    pdf.text('EXPERIENCE CERTIFICATE', pdf.internal.pageSize.getWidth() / 2, currentY, { align: 'center' });
+    currentY += 15;
+
+    // Certificate body
+    pdf.setFontSize(11);
+    pdf.setFont('helvetica', 'normal');
+
+    const issuedDate = data.issued_date || new Date().toLocaleDateString('en-GB');
+    pdf.text(`Date: ${issuedDate}`, dimensions.rightMargin - 40, currentY, { align: 'right' });
+    currentY += 15;
+
+    // To Whom It May Concern
+    pdf.setFont('helvetica', 'bold');
+    pdf.text('TO WHOM IT MAY CONCERN', dimensions.leftMargin, currentY);
+    currentY += 12;
+
+    // Main content
+    pdf.setFont('helvetica', 'normal');
+    const contentWidth = dimensions.rightMargin - dimensions.leftMargin;
+    const companyName = companySettings?.company_name || 'our organization';
+
+    const lines = [
+      `This is to certify that ${data.employee_name || employee.full_name} was employed with ${companyName} from ${new Date(data.date_of_joining).toLocaleDateString('en-GB')} to ${new Date(data.last_working_date).toLocaleDateString('en-GB')}.`,
+      '',
+      `During the tenure, ${employee.first_name} worked as ${data.designation} in the ${data.department || 'organization'}.`
+    ];
+
+    lines.forEach(line => {
+      const splitLines = pdf.splitTextToSize(line, contentWidth);
+      pdf.text(splitLines, dimensions.leftMargin, currentY);
+      currentY += splitLines.length * 7;
+    });
+
+    currentY += 5;
+
+    // Roles and Responsibilities
+    if (data.roles_responsibilities) {
+      pdf.setFont('helvetica', 'bold');
+      pdf.text('Roles and Responsibilities:', dimensions.leftMargin, currentY);
+      currentY += 7;
+
+      pdf.setFont('helvetica', 'normal');
+      const roleLines = data.roles_responsibilities.split('\n').filter(line => line.trim());
+      roleLines.forEach(role => {
+        const wrapped = pdf.splitTextToSize(`• ${role.trim()}`, contentWidth - 5);
+        pdf.text(wrapped, dimensions.leftMargin + 5, currentY);
+        currentY += wrapped.length * 6;
+      });
+      currentY += 5;
+    }
+
+    // Performance note
+    if (data.performance_note) {
+      const perfLines = pdf.splitTextToSize(data.performance_note, contentWidth);
+      pdf.text(perfLines, dimensions.leftMargin, currentY);
+      currentY += perfLines.length * 7 + 5;
+    }
+
+    // Conduct note
+    if (data.conduct_note) {
+      const conductLines = pdf.splitTextToSize(data.conduct_note, contentWidth);
+      pdf.text(conductLines, dimensions.leftMargin, currentY);
+      currentY += conductLines.length * 7 + 5;
+    }
+
+    // Closing
+    const closingText = `We wish ${employee.first_name} all the best in all future endeavors.`;
+    const closingLines = pdf.splitTextToSize(closingText, contentWidth);
+    pdf.text(closingLines, dimensions.leftMargin, currentY);
+    currentY += closingLines.length * 7 + 15;
+
+    // Signature section
+    pdf.setFont('helvetica', 'normal');
+    pdf.text('For ' + companyName, dimensions.leftMargin, currentY);
+    currentY += 20;
+
+    // Signatory details
+    const sigName = data.signatory_name || hrSettings?.signatory_name || '';
+    const sigDesig = data.signatory_designation || hrSettings?.signatory_designation || '';
+
+    if (sigName) {
+      pdf.setFont('helvetica', 'bold');
+      pdf.text(sigName, dimensions.leftMargin, currentY);
+      currentY += 5;
+    }
+
+    if (sigDesig) {
+      pdf.setFont('helvetica', 'normal');
+      pdf.text(sigDesig, dimensions.leftMargin, currentY);
+      currentY += 5;
+    }
+
+    if (data.contact_details) {
+      pdf.text(data.contact_details, dimensions.leftMargin, currentY);
+    }
+
+    return pdf;
+  };
+
+  const generateRelievingLetterPDF = async (employee: Employee, data: RelievingLetterData) => {
+    const pdf = new jsPDF('p', 'mm', 'a4');
+    const dimensions = PDFBrandingUtils.getStandardDimensions();
+
+    let currentY = dimensions.topMargin;
+
+    // Add company header if settings exist
+    if (companySettings?.company_name) {
+      pdf.setFontSize(14);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text(companySettings.company_name, pdf.internal.pageSize.getWidth() / 2, currentY, { align: 'center' });
+      currentY += 6;
+      if (companySettings.address_line1) {
+        pdf.setFontSize(9);
+        pdf.setFont('helvetica', 'normal');
+        const addressParts = [
+          companySettings.address_line1,
+          companySettings.address_line2,
+          companySettings.city,
+          companySettings.state,
+          companySettings.postal_code
+        ].filter(Boolean);
+        const fullAddress = addressParts.join(', ');
+        pdf.text(fullAddress, pdf.internal.pageSize.getWidth() / 2, currentY, { align: 'center' });
+        currentY += 5;
+      }
+      currentY += 10;
+    }
+
+    // Title
+    pdf.setFontSize(16);
+    pdf.setFont('helvetica', 'bold');
+    pdf.text('RELIEVING LETTER', pdf.internal.pageSize.getWidth() / 2, currentY, { align: 'center' });
+    currentY += 15;
+
+    // Date and reference
+    pdf.setFontSize(11);
+    pdf.setFont('helvetica', 'normal');
+
+    const issuedDate = data.issued_date || new Date().toLocaleDateString('en-GB');
+    pdf.text(`Date: ${issuedDate}`, dimensions.rightMargin - 40, currentY, { align: 'right' });
+    currentY += 10;
+
+    // Employee details
+    currentY += 5;
+    pdf.text(`To,`, dimensions.leftMargin, currentY);
+    currentY += 6;
+    pdf.setFont('helvetica', 'bold');
+    pdf.text(data.employee_name || employee.full_name, dimensions.leftMargin, currentY);
+    currentY += 6;
+    pdf.setFont('helvetica', 'normal');
+    pdf.text(`Employee No: ${data.employee_number || employee.employee_number}`, dimensions.leftMargin, currentY);
+    currentY += 15;
+
+    // Subject
+    pdf.setFont('helvetica', 'bold');
+    pdf.text('Subject: Relieving from Employment', dimensions.leftMargin, currentY);
+    currentY += 12;
+
+    // Dear employee
+    pdf.setFont('helvetica', 'normal');
+    pdf.text(`Dear ${employee.first_name},`, dimensions.leftMargin, currentY);
+    currentY += 10;
+
+    // Main content
+    const contentWidth = dimensions.rightMargin - dimensions.leftMargin;
+    const companyName = companySettings?.company_name || 'our organization';
+
+    const mainPara = data.notice_text || `This is to inform you that you are being relieved from the services of ${companyName} with effect from ${new Date(data.relieving_date).toLocaleDateString('en-GB')}.`;
+    const mainLines = pdf.splitTextToSize(mainPara, contentWidth);
+    pdf.text(mainLines, dimensions.leftMargin, currentY);
+    currentY += mainLines.length * 7 + 5;
+
+    // Employment details
+    const empDetails = [
+      `Your employment with the company commenced on ${new Date(data.date_of_joining).toLocaleDateString('en-GB')} and your last working day was ${new Date(data.last_working_date).toLocaleDateString('en-GB')}.`,
+      '',
+      `During your tenure, you served as ${data.designation}${data.department ? ' in the ' + data.department + ' department' : ''}.`
+    ];
+
+    empDetails.forEach(line => {
+      const splitLines = pdf.splitTextToSize(line, contentWidth);
+      pdf.text(splitLines, dimensions.leftMargin, currentY);
+      currentY += splitLines.length * 7;
+    });
+
+    currentY += 5;
+
+    // Clearance details
+    if (data.handover_completion || data.assets_returned || data.dues_cleared) {
+      pdf.text('We confirm that:', dimensions.leftMargin, currentY);
+      currentY += 7;
+
+      if (data.handover_completion) {
+        pdf.text('• Handover of responsibilities has been completed satisfactorily', dimensions.leftMargin + 5, currentY);
+        currentY += 6;
+      }
+      if (data.assets_returned) {
+        pdf.text('• All company assets have been returned', dimensions.leftMargin + 5, currentY);
+        currentY += 6;
+      }
+      if (data.dues_cleared) {
+        pdf.text('• All financial dues have been cleared', dimensions.leftMargin + 5, currentY);
+        currentY += 6;
+      }
+      currentY += 5;
+    }
+
+    // Notice period mention
+    if (data.resignation_date && data.notice_period_served) {
+      const noticePara = `Your resignation was received on ${new Date(data.resignation_date).toLocaleDateString('en-GB')} and you have ${data.notice_period_served}.`;
+      const noticeLines = pdf.splitTextToSize(noticePara, contentWidth);
+      pdf.text(noticeLines, dimensions.leftMargin, currentY);
+      currentY += noticeLines.length * 7 + 5;
+    }
+
+    // Closing
+    const closingText = `We thank you for your services and wish you all the best in your future endeavors.`;
+    const closingLines = pdf.splitTextToSize(closingText, contentWidth);
+    pdf.text(closingLines, dimensions.leftMargin, currentY);
+    currentY += closingLines.length * 7 + 15;
+
+    // Signature section
+    pdf.setFont('helvetica', 'normal');
+    pdf.text('For ' + companyName, dimensions.leftMargin, currentY);
+    currentY += 20;
+
+    // Signatory details
+    const sigName = data.signatory_name || hrSettings?.signatory_name || '';
+    const sigDesig = data.signatory_designation || hrSettings?.signatory_designation || '';
+
+    if (sigName) {
+      pdf.setFont('helvetica', 'bold');
+      pdf.text(sigName, dimensions.leftMargin, currentY);
+      currentY += 5;
+    }
+
+    if (sigDesig) {
+      pdf.setFont('helvetica', 'normal');
+      pdf.text(sigDesig, dimensions.leftMargin, currentY);
+      currentY += 5;
+    }
+
+    if (data.contact_details) {
+      pdf.text(data.contact_details, dimensions.leftMargin, currentY);
+    }
+
+    return pdf;
+  };
+
   const handlePreviewDocument = async () => {
     try {
       if (!selectedEmployee) {
@@ -904,6 +1199,12 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
           break;
         case 'salary_certificate':
           pdf = await generateSalaryCertificatePDF(selectedEmployee, documentData as SalaryCertificateData);
+          break;
+        case 'experience_certificate':
+          pdf = await generateExperienceCertificatePDF(selectedEmployee, documentData as ExperienceCertificateData);
+          break;
+        case 'relieving_letter':
+          pdf = await generateRelievingLetterPDF(selectedEmployee, documentData as RelievingLetterData);
           break;
         case 'form_16':
           pdf = await generateForm16PDF(selectedEmployee, documentData as Form16Data);
@@ -942,6 +1243,12 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
           break;
         case 'salary_certificate':
           pdf = await generateSalaryCertificatePDF(selectedEmployee, documentData as SalaryCertificateData);
+          break;
+        case 'experience_certificate':
+          pdf = await generateExperienceCertificatePDF(selectedEmployee, documentData as ExperienceCertificateData);
+          break;
+        case 'relieving_letter':
+          pdf = await generateRelievingLetterPDF(selectedEmployee, documentData as RelievingLetterData);
           break;
         case 'form_16':
           pdf = await generateForm16PDF(selectedEmployee, documentData as Form16Data);
@@ -1063,6 +1370,129 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
     } catch (err: any) {
       console.error('Error generating salary slip:', err);
       showError(err.message || 'Failed to generate salary slip');
+    }
+  };
+
+  // Edit and save document handlers
+  const handleEditDocument = async (document: EmploymentDocument) => {
+    try {
+      // Find the employee for this document
+      const employee = employees.find(emp => emp.id === document.employee_id);
+      if (!employee) {
+        showError('Employee not found');
+        return;
+      }
+
+      setEditingDocument(document);
+      setEditedDocumentData(document.document_data || {});
+      setSelectedEmployee(employee);
+      setShowEditModal(true);
+    } catch (err) {
+      console.error('Error opening document for edit:', err);
+      showError('Failed to open document for editing');
+    }
+  };
+
+  const handleSaveEditedDocument = async () => {
+    try {
+      if (!editingDocument || !selectedEmployee) {
+        showError('Invalid document or employee');
+        return;
+      }
+
+      setIsSavingDocument(true);
+
+      // Update document in database with new document_data
+      const { error } = await supabase
+        .from('employment_documents')
+        .update({
+          document_data: editedDocumentData,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', editingDocument.id);
+
+      if (error) throw error;
+
+      // Regenerate PDF with updated data
+      let pdf: jsPDF;
+
+      switch (editingDocument.document_type) {
+        case 'offer_letter':
+          pdf = await generateOfferLetterPDF(selectedEmployee, editedDocumentData as OfferLetterData);
+          break;
+        case 'salary_certificate':
+          pdf = await generateSalaryCertificatePDF(selectedEmployee, editedDocumentData as SalaryCertificateData);
+          break;
+        case 'experience_certificate':
+          pdf = await generateExperienceCertificatePDF(selectedEmployee, editedDocumentData as ExperienceCertificateData);
+          break;
+        case 'relieving_letter':
+          pdf = await generateRelievingLetterPDF(selectedEmployee, editedDocumentData as RelievingLetterData);
+          break;
+        case 'form_16':
+          pdf = await generateForm16PDF(selectedEmployee, editedDocumentData as Form16Data);
+          break;
+        case 'form_24q':
+          pdf = await generateForm24QPDF(editedDocumentData as Form24QData);
+          break;
+        default:
+          throw new Error('Unsupported document type');
+      }
+
+      // Download the regenerated PDF
+      pdf.save(`${editingDocument.document_type}_${selectedEmployee.employee_number}_${editingDocument.document_number}_updated.pdf`);
+
+      showSuccess('Document updated and regenerated successfully');
+      setShowEditModal(false);
+      setEditingDocument(null);
+      setEditedDocumentData({});
+      setSelectedEmployee(null);
+      loadData();
+    } catch (err) {
+      console.error('Error saving edited document:', err);
+      showError('Failed to save document');
+    } finally {
+      setIsSavingDocument(false);
+    }
+  };
+
+  // Edit and save salary slip handlers
+  const handleEditSalarySlip = (slip: SalarySlip) => {
+    setEditingSalarySlip(slip);
+    setEditedSalarySlipData({ ...slip });
+    setShowEditSalarySlipModal(true);
+  };
+
+  const handleSaveEditedSalarySlip = async () => {
+    try {
+      if (!editingSalarySlip) {
+        showError('No salary slip selected');
+        return;
+      }
+
+      setIsSavingSalarySlip(true);
+
+      // Update salary slip in database
+      const { error } = await supabase
+        .from('salary_slips')
+        .update({
+          ...editedSalarySlipData,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', editingSalarySlip.id);
+
+      if (error) throw error;
+
+      showSuccess('Salary slip updated successfully');
+      setShowEditSalarySlipModal(false);
+      setEditingSalarySlip(null);
+      setEditedSalarySlipData({});
+      loadData();
+    } catch (err) {
+      console.error('Error saving salary slip:', err);
+      showError('Failed to save salary slip');
+    } finally {
+      setIsSavingSalarySlip(false);
     }
   };
 
@@ -1492,8 +1922,15 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                           <button
-                            onClick={() => handleDownloadSalarySlip(slip)}
+                            onClick={() => handleEditSalarySlip(slip)}
                             className="text-blue-600 hover:text-blue-900 mr-3"
+                            title="Edit Salary Slip"
+                          >
+                            <Edit className="w-5 h-5 inline" />
+                          </button>
+                          <button
+                            onClick={() => handleDownloadSalarySlip(slip)}
+                            className="text-green-600 hover:text-green-900 mr-3"
                             title="Download PDF"
                           >
                             <Download className="w-5 h-5 inline" />
@@ -1501,7 +1938,7 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
                           {!slip.email_sent && employee?.email && (
                             <button
                               onClick={() => handleEmailSalarySlip(slip)}
-                              className="text-green-600 hover:text-green-900"
+                              className="text-orange-600 hover:text-orange-900"
                               title="Send via Email"
                             >
                               <Mail className="w-5 h-5 inline" />
@@ -1773,6 +2210,9 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Status
                     </th>
+                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Actions
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
@@ -1791,6 +2231,22 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
                         <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
                           {doc.status}
                         </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                        <button
+                          onClick={() => handleEditDocument(doc)}
+                          className="text-blue-600 hover:text-blue-900 mr-4"
+                          title="Edit Document"
+                        >
+                          <Edit className="w-4 h-4 inline" />
+                        </button>
+                        <button
+                          onClick={() => {/* TODO: Add download handler */}}
+                          className="text-green-600 hover:text-green-900"
+                          title="Download PDF"
+                        >
+                          <Download className="w-4 h-4 inline" />
+                        </button>
                       </td>
                     </tr>
                   ))}
@@ -2614,9 +3070,9 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
                 >
                   <option value="">Select an employee</option>
-                  {employees.filter(e => e.employment_status === 'active').map(emp => (
+                  {employees.map(emp => (
                     <option key={emp.id} value={emp.id}>
-                      {emp.full_name} ({emp.employee_number})
+                      {emp.full_name} ({emp.employee_number}) - {emp.employment_status}
                     </option>
                   ))}
                 </select>
@@ -2636,6 +3092,10 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
                 >
                   <option value="offer_letter">Offer Letter</option>
                   <option value="salary_certificate">Salary Certificate</option>
+                  <option value="experience_certificate">Experience Certificate</option>
+                  {selectedEmployee?.employment_status === 'terminated' && (
+                    <option value="relieving_letter">Relieving Letter</option>
+                  )}
                   <option value="form_16">Form 16</option>
                   <option value="form_24q">Form 24Q</option>
                 </select>
@@ -3079,6 +3539,361 @@ Any other duties assigned by management from time to time`}
                 </div>
               )}
 
+              {selectedEmployee && documentType === 'experience_certificate' && (
+                <div className="space-y-4 border-t pt-4">
+                  <h3 className="font-medium text-lg">Experience Certificate Details</h3>
+
+                  {/* Employee Information (Auto-filled) */}
+                  <div className="bg-gray-50 p-4 rounded-lg space-y-4">
+                    <h4 className="font-medium text-gray-700">Employee Information (Auto-filled)</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Employee Name</label>
+                        <input
+                          type="text"
+                          value={documentData.employee_name || selectedEmployee.full_name}
+                          onChange={(e) => setDocumentData({ ...documentData, employee_name: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50"
+                          readOnly
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Designation</label>
+                        <input
+                          type="text"
+                          value={documentData.designation || selectedEmployee.designation}
+                          onChange={(e) => setDocumentData({ ...documentData, designation: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Department</label>
+                        <input
+                          type="text"
+                          value={documentData.department || selectedEmployee.department || ''}
+                          onChange={(e) => setDocumentData({ ...documentData, department: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Date of Joining</label>
+                        <input
+                          type="date"
+                          value={documentData.date_of_joining || selectedEmployee.date_of_joining}
+                          onChange={(e) => setDocumentData({ ...documentData, date_of_joining: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50"
+                          readOnly
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Last Working Date</label>
+                        <input
+                          type="date"
+                          value={documentData.last_working_date || selectedEmployee.date_of_leaving || ''}
+                          onChange={(e) => setDocumentData({ ...documentData, last_working_date: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Issued Date</label>
+                        <input
+                          type="date"
+                          value={documentData.issued_date || new Date().toISOString().split('T')[0]}
+                          onChange={(e) => setDocumentData({ ...documentData, issued_date: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Roles and Performance */}
+                  <div className="bg-blue-50 p-4 rounded-lg space-y-4">
+                    <h4 className="font-medium text-blue-700">Roles, Responsibilities & Performance</h4>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Roles and Responsibilities</label>
+                      <textarea
+                        value={documentData.roles_responsibilities || ''}
+                        onChange={(e) => setDocumentData({ ...documentData, roles_responsibilities: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                        rows={4}
+                        placeholder="Describe the employee's key roles and responsibilities during their tenure"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Performance Note</label>
+                      <textarea
+                        value={documentData.performance_note || ''}
+                        onChange={(e) => setDocumentData({ ...documentData, performance_note: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                        rows={3}
+                        placeholder="e.g., Performed duties with dedication and professionalism throughout the tenure"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Conduct Note</label>
+                      <textarea
+                        value={documentData.conduct_note || ''}
+                        onChange={(e) => setDocumentData({ ...documentData, conduct_note: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                        rows={2}
+                        placeholder="e.g., Maintained excellent professional conduct and teamwork"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Reason for Leaving (Optional)</label>
+                      <input
+                        type="text"
+                        value={documentData.reason_for_leaving || ''}
+                        onChange={(e) => setDocumentData({ ...documentData, reason_for_leaving: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                        placeholder="e.g., Better opportunity, Personal reasons (optional)"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Signatory Details */}
+                  <div className="bg-green-50 p-4 rounded-lg space-y-4">
+                    <h4 className="font-medium text-green-700">Signatory Details</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Signatory Name</label>
+                        <input
+                          type="text"
+                          value={documentData.signatory_name || hrSettings?.signatory_name || ''}
+                          onChange={(e) => setDocumentData({ ...documentData, signatory_name: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                          placeholder="Authorized Signatory Name"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Signatory Designation</label>
+                        <input
+                          type="text"
+                          value={documentData.signatory_designation || hrSettings?.signatory_designation || ''}
+                          onChange={(e) => setDocumentData({ ...documentData, signatory_designation: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                          placeholder="Designation"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Contact Details</label>
+                        <input
+                          type="text"
+                          value={documentData.contact_details || ''}
+                          onChange={(e) => setDocumentData({ ...documentData, contact_details: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                          placeholder="Phone or Email"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {selectedEmployee && documentType === 'relieving_letter' && (
+                <div className="space-y-4 border-t pt-4">
+                  <h3 className="font-medium text-lg">Relieving Letter Details</h3>
+
+                  {/* Employee Information (Auto-filled) */}
+                  <div className="bg-gray-50 p-4 rounded-lg space-y-4">
+                    <h4 className="font-medium text-gray-700">Employee Information (Auto-filled)</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Employee Name</label>
+                        <input
+                          type="text"
+                          value={documentData.employee_name || selectedEmployee.full_name}
+                          onChange={(e) => setDocumentData({ ...documentData, employee_name: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50"
+                          readOnly
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Employee Number</label>
+                        <input
+                          type="text"
+                          value={documentData.employee_number || selectedEmployee.employee_number}
+                          onChange={(e) => setDocumentData({ ...documentData, employee_number: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50"
+                          readOnly
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Designation</label>
+                        <input
+                          type="text"
+                          value={documentData.designation || selectedEmployee.designation}
+                          onChange={(e) => setDocumentData({ ...documentData, designation: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Department</label>
+                        <input
+                          type="text"
+                          value={documentData.department || selectedEmployee.department || ''}
+                          onChange={(e) => setDocumentData({ ...documentData, department: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Date of Joining</label>
+                        <input
+                          type="date"
+                          value={documentData.date_of_joining || selectedEmployee.date_of_joining}
+                          onChange={(e) => setDocumentData({ ...documentData, date_of_joining: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50"
+                          readOnly
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Last Working Date *</label>
+                        <input
+                          type="date"
+                          value={documentData.last_working_date || selectedEmployee.date_of_leaving || ''}
+                          onChange={(e) => setDocumentData({ ...documentData, last_working_date: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Relieving Details */}
+                  <div className="bg-blue-50 p-4 rounded-lg space-y-4">
+                    <h4 className="font-medium text-blue-700">Relieving Information</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Relieving Date *</label>
+                        <input
+                          type="date"
+                          value={documentData.relieving_date || ''}
+                          onChange={(e) => setDocumentData({ ...documentData, relieving_date: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Resignation Date</label>
+                        <input
+                          type="date"
+                          value={documentData.resignation_date || ''}
+                          onChange={(e) => setDocumentData({ ...documentData, resignation_date: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Notice Period Served</label>
+                        <input
+                          type="text"
+                          value={documentData.notice_period_served || ''}
+                          onChange={(e) => setDocumentData({ ...documentData, notice_period_served: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                          placeholder="e.g., 30 days, 1 month"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Issued Date</label>
+                        <input
+                          type="date"
+                          value={documentData.issued_date || new Date().toISOString().split('T')[0]}
+                          onChange={(e) => setDocumentData({ ...documentData, issued_date: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Notice Text</label>
+                      <textarea
+                        value={documentData.notice_text || ''}
+                        onChange={(e) => setDocumentData({ ...documentData, notice_text: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                        rows={3}
+                        placeholder="Additional notice or remarks to include in the letter"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Clearance Checklist */}
+                  <div className="bg-green-50 p-4 rounded-lg space-y-4">
+                    <h4 className="font-medium text-green-700">Clearance Checklist</h4>
+                    <div className="space-y-3">
+                      <div className="flex items-center">
+                        <input
+                          type="checkbox"
+                          id="handover_completion"
+                          checked={documentData.handover_completion || false}
+                          onChange={(e) => setDocumentData({ ...documentData, handover_completion: e.target.checked })}
+                          className="h-4 w-4 text-blue-600 border-gray-300 rounded"
+                        />
+                        <label htmlFor="handover_completion" className="ml-2 text-sm text-gray-700">
+                          Handover of responsibilities completed
+                        </label>
+                      </div>
+                      <div className="flex items-center">
+                        <input
+                          type="checkbox"
+                          id="assets_returned"
+                          checked={documentData.assets_returned || false}
+                          onChange={(e) => setDocumentData({ ...documentData, assets_returned: e.target.checked })}
+                          className="h-4 w-4 text-blue-600 border-gray-300 rounded"
+                        />
+                        <label htmlFor="assets_returned" className="ml-2 text-sm text-gray-700">
+                          All company assets returned
+                        </label>
+                      </div>
+                      <div className="flex items-center">
+                        <input
+                          type="checkbox"
+                          id="dues_cleared"
+                          checked={documentData.dues_cleared || false}
+                          onChange={(e) => setDocumentData({ ...documentData, dues_cleared: e.target.checked })}
+                          className="h-4 w-4 text-blue-600 border-gray-300 rounded"
+                        />
+                        <label htmlFor="dues_cleared" className="ml-2 text-sm text-gray-700">
+                          All dues cleared (no pending payments)
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Signatory Details */}
+                  <div className="bg-purple-50 p-4 rounded-lg space-y-4">
+                    <h4 className="font-medium text-purple-700">Signatory Details</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Signatory Name</label>
+                        <input
+                          type="text"
+                          value={documentData.signatory_name || hrSettings?.signatory_name || ''}
+                          onChange={(e) => setDocumentData({ ...documentData, signatory_name: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                          placeholder="Authorized Signatory Name"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Signatory Designation</label>
+                        <input
+                          type="text"
+                          value={documentData.signatory_designation || hrSettings?.signatory_designation || ''}
+                          onChange={(e) => setDocumentData({ ...documentData, signatory_designation: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                          placeholder="Designation"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Contact Details</label>
+                        <input
+                          type="text"
+                          value={documentData.contact_details || ''}
+                          onChange={(e) => setDocumentData({ ...documentData, contact_details: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                          placeholder="Phone or Email"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <div className="flex justify-end space-x-3 pt-4">
                 <button
                   onClick={() => setActiveTab('employees')}
@@ -3107,6 +3922,1166 @@ Any other duties assigned by management from time to time`}
           </div>
         )}
       </main>
+
+      {/* Edit Document Modal */}
+      {showEditModal && editingDocument && selectedEmployee && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 overflow-y-auto">
+          <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full my-8">
+            <div className="flex items-center justify-between p-6 border-b">
+              <div>
+                <h2 className="text-xl font-semibold">Edit Document</h2>
+                <p className="text-sm text-gray-500 mt-1">
+                  {editingDocument.document_type.replace('_', ' ').toUpperCase()} - {editingDocument.document_number}
+                </p>
+                <p className="text-sm text-gray-600 mt-1">
+                  Employee: {selectedEmployee.first_name} {selectedEmployee.last_name} ({selectedEmployee.employee_number})
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  setShowEditModal(false);
+                  setEditingDocument(null);
+                  setEditedDocumentData({});
+                  setSelectedEmployee(null);
+                }}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            <div className="p-6 max-h-[70vh] overflow-y-auto">
+              {/* Offer Letter Fields - Complete */}
+              {editingDocument.document_type === 'offer_letter' && (
+                <div className="space-y-4">
+                  {/* Basic Information */}
+                  <div className="bg-gray-50 p-4 rounded-lg space-y-3">
+                    <h4 className="font-medium text-gray-700">Basic Information</h4>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Offer Date</label>
+                        <input
+                          type="date"
+                          value={(editedDocumentData as OfferLetterData).offer_date || ''}
+                          onChange={(e) => setEditedDocumentData({ ...editedDocumentData, offer_date: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Joining Date</label>
+                        <input
+                          type="date"
+                          value={(editedDocumentData as OfferLetterData).joining_date || ''}
+                          onChange={(e) => setEditedDocumentData({ ...editedDocumentData, joining_date: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Candidate Address</label>
+                      <textarea
+                        rows={2}
+                        value={(editedDocumentData as OfferLetterData).candidate_address || ''}
+                        onChange={(e) => setEditedDocumentData({ ...editedDocumentData, candidate_address: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Position Details */}
+                  <div className="bg-blue-50 p-4 rounded-lg space-y-3">
+                    <h4 className="font-medium text-blue-700">Position Details</h4>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Position</label>
+                        <input
+                          type="text"
+                          value={(editedDocumentData as OfferLetterData).position || ''}
+                          onChange={(e) => setEditedDocumentData({ ...editedDocumentData, position: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Department</label>
+                        <input
+                          type="text"
+                          value={(editedDocumentData as OfferLetterData).department || ''}
+                          onChange={(e) => setEditedDocumentData({ ...editedDocumentData, department: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Reporting To</label>
+                        <input
+                          type="text"
+                          value={(editedDocumentData as OfferLetterData).reporting_to || ''}
+                          onChange={(e) => setEditedDocumentData({ ...editedDocumentData, reporting_to: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Work Location</label>
+                        <input
+                          type="text"
+                          value={(editedDocumentData as OfferLetterData).work_location || ''}
+                          onChange={(e) => setEditedDocumentData({ ...editedDocumentData, work_location: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Employment Type</label>
+                        <select
+                          value={(editedDocumentData as OfferLetterData).employment_type || 'full-time'}
+                          onChange={(e) => setEditedDocumentData({ ...editedDocumentData, employment_type: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                        >
+                          <option value="full-time">Full-time</option>
+                          <option value="part-time">Part-time</option>
+                          <option value="contract">Contract</option>
+                          <option value="intern">Intern</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Roles */}
+                  <div className="bg-green-50 p-4 rounded-lg space-y-3">
+                    <h4 className="font-medium text-green-700">Roles & Responsibilities</h4>
+                    <textarea
+                      rows={6}
+                      value={(editedDocumentData as OfferLetterData).roles_responsibilities || ''}
+                      onChange={(e) => setEditedDocumentData({ ...editedDocumentData, roles_responsibilities: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm font-mono"
+                    />
+                  </div>
+
+                  {/* Compensation */}
+                  <div className="bg-yellow-50 p-4 rounded-lg space-y-3">
+                    <h4 className="font-medium text-yellow-700">Compensation</h4>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Annual CTC</label>
+                        <input
+                          type="number"
+                          value={(editedDocumentData as OfferLetterData).annual_ctc || ''}
+                          onChange={(e) => setEditedDocumentData({ ...editedDocumentData, annual_ctc: parseFloat(e.target.value) })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Gross Salary (Monthly)</label>
+                        <input
+                          type="number"
+                          value={(editedDocumentData as OfferLetterData).salary_breakdown?.gross_salary || ''}
+                          onChange={(e) => setEditedDocumentData({
+                            ...editedDocumentData,
+                            salary_breakdown: {
+                              ...(editedDocumentData as OfferLetterData).salary_breakdown,
+                              gross_salary: parseFloat(e.target.value)
+                            }
+                          })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Basic</label>
+                        <input
+                          type="number"
+                          value={(editedDocumentData as OfferLetterData).salary_breakdown?.basic || ''}
+                          onChange={(e) => setEditedDocumentData({
+                            ...editedDocumentData,
+                            salary_breakdown: {
+                              ...(editedDocumentData as OfferLetterData).salary_breakdown,
+                              basic: parseFloat(e.target.value)
+                            }
+                          })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">HRA</label>
+                        <input
+                          type="number"
+                          value={(editedDocumentData as OfferLetterData).salary_breakdown?.hra || ''}
+                          onChange={(e) => setEditedDocumentData({
+                            ...editedDocumentData,
+                            salary_breakdown: {
+                              ...(editedDocumentData as OfferLetterData).salary_breakdown,
+                              hra: parseFloat(e.target.value)
+                            }
+                          })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Special Allowance</label>
+                        <input
+                          type="number"
+                          value={(editedDocumentData as OfferLetterData).salary_breakdown?.special_allowance || ''}
+                          onChange={(e) => setEditedDocumentData({
+                            ...editedDocumentData,
+                            salary_breakdown: {
+                              ...(editedDocumentData as OfferLetterData).salary_breakdown,
+                              special_allowance: parseFloat(e.target.value)
+                            }
+                          })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Other Allowances</label>
+                        <input
+                          type="number"
+                          value={(editedDocumentData as OfferLetterData).salary_breakdown?.other_allowances || ''}
+                          onChange={(e) => setEditedDocumentData({
+                            ...editedDocumentData,
+                            salary_breakdown: {
+                              ...(editedDocumentData as OfferLetterData).salary_breakdown,
+                              other_allowances: parseFloat(e.target.value)
+                            }
+                          })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Salary Payment Note</label>
+                      <textarea
+                        rows={2}
+                        value={(editedDocumentData as OfferLetterData).salary_payment_note || ''}
+                        onChange={(e) => setEditedDocumentData({ ...editedDocumentData, salary_payment_note: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Benefits Note</label>
+                      <textarea
+                        rows={2}
+                        value={(editedDocumentData as OfferLetterData).benefits_note || ''}
+                        onChange={(e) => setEditedDocumentData({ ...editedDocumentData, benefits_note: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Working Hours */}
+                  <div className="bg-purple-50 p-4 rounded-lg space-y-3">
+                    <h4 className="font-medium text-purple-700">Working Hours</h4>
+                    <div className="grid grid-cols-3 gap-3">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Start Time</label>
+                        <input
+                          type="text"
+                          value={(editedDocumentData as OfferLetterData).working_hours_start || ''}
+                          onChange={(e) => setEditedDocumentData({ ...editedDocumentData, working_hours_start: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">End Time</label>
+                        <input
+                          type="text"
+                          value={(editedDocumentData as OfferLetterData).working_hours_end || ''}
+                          onChange={(e) => setEditedDocumentData({ ...editedDocumentData, working_hours_end: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Working Days</label>
+                        <input
+                          type="text"
+                          value={(editedDocumentData as OfferLetterData).working_days || ''}
+                          onChange={(e) => setEditedDocumentData({ ...editedDocumentData, working_days: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Additional Hours Note</label>
+                      <input
+                        type="text"
+                        value={(editedDocumentData as OfferLetterData).additional_hours_note || ''}
+                        onChange={(e) => setEditedDocumentData({ ...editedDocumentData, additional_hours_note: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Probation & Notice */}
+                  <div className="bg-orange-50 p-4 rounded-lg space-y-3">
+                    <h4 className="font-medium text-orange-700">Probation & Notice Period</h4>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Probation Period (months)</label>
+                        <input
+                          type="number"
+                          value={(editedDocumentData as OfferLetterData).probation_period || ''}
+                          onChange={(e) => setEditedDocumentData({ ...editedDocumentData, probation_period: parseInt(e.target.value) })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Notice Period (days)</label>
+                        <input
+                          type="number"
+                          value={(editedDocumentData as OfferLetterData).notice_period || ''}
+                          onChange={(e) => setEditedDocumentData({ ...editedDocumentData, notice_period: parseInt(e.target.value) })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Probation Note</label>
+                      <textarea
+                        rows={2}
+                        value={(editedDocumentData as OfferLetterData).probation_note || ''}
+                        onChange={(e) => setEditedDocumentData({ ...editedDocumentData, probation_note: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Termination Note</label>
+                      <textarea
+                        rows={2}
+                        value={(editedDocumentData as OfferLetterData).termination_note || ''}
+                        onChange={(e) => setEditedDocumentData({ ...editedDocumentData, termination_note: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Leave & Confidentiality */}
+                  <div className="bg-gray-50 p-4 rounded-lg space-y-3">
+                    <h4 className="font-medium text-gray-700">Leave & Confidentiality</h4>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Leave Policy Note</label>
+                      <textarea
+                        rows={2}
+                        value={(editedDocumentData as OfferLetterData).leave_policy_note || ''}
+                        onChange={(e) => setEditedDocumentData({ ...editedDocumentData, leave_policy_note: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Confidentiality Note</label>
+                      <textarea
+                        rows={2}
+                        value={(editedDocumentData as OfferLetterData).confidentiality_note || ''}
+                        onChange={(e) => setEditedDocumentData({ ...editedDocumentData, confidentiality_note: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Signatory */}
+                  <div className="bg-indigo-50 p-4 rounded-lg space-y-3">
+                    <h4 className="font-medium text-indigo-700">Signatory Details</h4>
+                    <div className="grid grid-cols-3 gap-3">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Signatory Name</label>
+                        <input
+                          type="text"
+                          value={(editedDocumentData as OfferLetterData).signatory_name || ''}
+                          onChange={(e) => setEditedDocumentData({ ...editedDocumentData, signatory_name: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Designation</label>
+                        <input
+                          type="text"
+                          value={(editedDocumentData as OfferLetterData).signatory_designation || ''}
+                          onChange={(e) => setEditedDocumentData({ ...editedDocumentData, signatory_designation: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Contact</label>
+                        <input
+                          type="text"
+                          value={(editedDocumentData as OfferLetterData).signatory_contact || ''}
+                          onChange={(e) => setEditedDocumentData({ ...editedDocumentData, signatory_contact: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                        />
+                      </div>
+                    </div>
+                    <div className="flex items-center">
+                      <input
+                        type="checkbox"
+                        id="acceptance_section"
+                        checked={(editedDocumentData as OfferLetterData).acceptance_section !== false}
+                        onChange={(e) => setEditedDocumentData({ ...editedDocumentData, acceptance_section: e.target.checked })}
+                        className="h-4 w-4 text-blue-600 border-gray-300 rounded"
+                      />
+                      <label htmlFor="acceptance_section" className="ml-2 text-sm text-gray-700">
+                        Include Candidate Acceptance Section
+                      </label>
+                    </div>
+                  </div>
+
+                  {/* Additional */}
+                  <div className="bg-red-50 p-4 rounded-lg space-y-3">
+                    <h4 className="font-medium text-red-700">Additional Information</h4>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Terms & Conditions</label>
+                      <textarea
+                        rows={3}
+                        value={(editedDocumentData as OfferLetterData).terms_and_conditions || ''}
+                        onChange={(e) => setEditedDocumentData({ ...editedDocumentData, terms_and_conditions: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Other Details</label>
+                      <textarea
+                        rows={2}
+                        value={(editedDocumentData as OfferLetterData).other_details || ''}
+                        onChange={(e) => setEditedDocumentData({ ...editedDocumentData, other_details: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Salary Certificate Fields */}
+              {editingDocument.document_type === 'salary_certificate' && (
+                <div className="space-y-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Purpose *
+                      </label>
+                      <input
+                        type="text"
+                        value={(editedDocumentData as SalaryCertificateData).purpose || ''}
+                        onChange={(e) => setEditedDocumentData({ ...editedDocumentData, purpose: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Annual Gross *
+                      </label>
+                      <input
+                        type="number"
+                        value={(editedDocumentData as SalaryCertificateData).annual_gross || ''}
+                        onChange={(e) => setEditedDocumentData({ ...editedDocumentData, annual_gross: parseFloat(e.target.value) })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Period From *
+                      </label>
+                      <input
+                        type="date"
+                        value={(editedDocumentData as SalaryCertificateData).period_from || ''}
+                        onChange={(e) => setEditedDocumentData({ ...editedDocumentData, period_from: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Period To *
+                      </label>
+                      <input
+                        type="date"
+                        value={(editedDocumentData as SalaryCertificateData).period_to || ''}
+                        onChange={(e) => setEditedDocumentData({ ...editedDocumentData, period_to: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="border-t pt-4">
+                    <h3 className="text-sm font-semibold text-gray-700 mb-3">Monthly Salary Breakdown</h3>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Basic</label>
+                        <input
+                          type="number"
+                          value={(editedDocumentData as SalaryCertificateData).salary_breakdown?.basic || ''}
+                          onChange={(e) => setEditedDocumentData({
+                            ...editedDocumentData,
+                            salary_breakdown: {
+                              ...(editedDocumentData as SalaryCertificateData).salary_breakdown,
+                              basic: parseFloat(e.target.value)
+                            }
+                          })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">HRA</label>
+                        <input
+                          type="number"
+                          value={(editedDocumentData as SalaryCertificateData).salary_breakdown?.hra || ''}
+                          onChange={(e) => setEditedDocumentData({
+                            ...editedDocumentData,
+                            salary_breakdown: {
+                              ...(editedDocumentData as SalaryCertificateData).salary_breakdown,
+                              hra: parseFloat(e.target.value)
+                            }
+                          })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {editingDocument.document_type === 'experience_certificate' && (
+                <div className="space-y-4">
+                  {/* Basic Information */}
+                  <div className="bg-gray-50 p-4 rounded-lg space-y-3">
+                    <h4 className="font-medium text-gray-700">Basic Information</h4>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Designation</label>
+                        <input
+                          type="text"
+                          value={(editedDocumentData as ExperienceCertificateData).designation || ''}
+                          onChange={(e) => setEditedDocumentData({ ...editedDocumentData, designation: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Department</label>
+                        <input
+                          type="text"
+                          value={(editedDocumentData as ExperienceCertificateData).department || ''}
+                          onChange={(e) => setEditedDocumentData({ ...editedDocumentData, department: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Last Working Date</label>
+                        <input
+                          type="date"
+                          value={(editedDocumentData as ExperienceCertificateData).last_working_date || ''}
+                          onChange={(e) => setEditedDocumentData({ ...editedDocumentData, last_working_date: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Issued Date</label>
+                        <input
+                          type="date"
+                          value={(editedDocumentData as ExperienceCertificateData).issued_date || ''}
+                          onChange={(e) => setEditedDocumentData({ ...editedDocumentData, issued_date: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Roles and Performance */}
+                  <div className="bg-blue-50 p-4 rounded-lg space-y-3">
+                    <h4 className="font-medium text-blue-700">Roles & Performance</h4>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Roles and Responsibilities</label>
+                      <textarea
+                        rows={3}
+                        value={(editedDocumentData as ExperienceCertificateData).roles_responsibilities || ''}
+                        onChange={(e) => setEditedDocumentData({ ...editedDocumentData, roles_responsibilities: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Performance Note</label>
+                      <textarea
+                        rows={2}
+                        value={(editedDocumentData as ExperienceCertificateData).performance_note || ''}
+                        onChange={(e) => setEditedDocumentData({ ...editedDocumentData, performance_note: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Conduct Note</label>
+                      <textarea
+                        rows={2}
+                        value={(editedDocumentData as ExperienceCertificateData).conduct_note || ''}
+                        onChange={(e) => setEditedDocumentData({ ...editedDocumentData, conduct_note: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Reason for Leaving</label>
+                      <input
+                        type="text"
+                        value={(editedDocumentData as ExperienceCertificateData).reason_for_leaving || ''}
+                        onChange={(e) => setEditedDocumentData({ ...editedDocumentData, reason_for_leaving: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Signatory Details */}
+                  <div className="bg-green-50 p-4 rounded-lg space-y-3">
+                    <h4 className="font-medium text-green-700">Signatory Details</h4>
+                    <div className="grid grid-cols-3 gap-3">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Signatory Name</label>
+                        <input
+                          type="text"
+                          value={(editedDocumentData as ExperienceCertificateData).signatory_name || ''}
+                          onChange={(e) => setEditedDocumentData({ ...editedDocumentData, signatory_name: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Designation</label>
+                        <input
+                          type="text"
+                          value={(editedDocumentData as ExperienceCertificateData).signatory_designation || ''}
+                          onChange={(e) => setEditedDocumentData({ ...editedDocumentData, signatory_designation: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Contact Details</label>
+                        <input
+                          type="text"
+                          value={(editedDocumentData as ExperienceCertificateData).contact_details || ''}
+                          onChange={(e) => setEditedDocumentData({ ...editedDocumentData, contact_details: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {editingDocument.document_type === 'relieving_letter' && (
+                <div className="space-y-4">
+                  {/* Basic Information */}
+                  <div className="bg-gray-50 p-4 rounded-lg space-y-3">
+                    <h4 className="font-medium text-gray-700">Basic Information</h4>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Designation</label>
+                        <input
+                          type="text"
+                          value={(editedDocumentData as RelievingLetterData).designation || ''}
+                          onChange={(e) => setEditedDocumentData({ ...editedDocumentData, designation: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Department</label>
+                        <input
+                          type="text"
+                          value={(editedDocumentData as RelievingLetterData).department || ''}
+                          onChange={(e) => setEditedDocumentData({ ...editedDocumentData, department: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Last Working Date</label>
+                        <input
+                          type="date"
+                          value={(editedDocumentData as RelievingLetterData).last_working_date || ''}
+                          onChange={(e) => setEditedDocumentData({ ...editedDocumentData, last_working_date: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Relieving Date *</label>
+                        <input
+                          type="date"
+                          value={(editedDocumentData as RelievingLetterData).relieving_date || ''}
+                          onChange={(e) => setEditedDocumentData({ ...editedDocumentData, relieving_date: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Relieving Details */}
+                  <div className="bg-blue-50 p-4 rounded-lg space-y-3">
+                    <h4 className="font-medium text-blue-700">Relieving Information</h4>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Resignation Date</label>
+                        <input
+                          type="date"
+                          value={(editedDocumentData as RelievingLetterData).resignation_date || ''}
+                          onChange={(e) => setEditedDocumentData({ ...editedDocumentData, resignation_date: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Notice Period Served</label>
+                        <input
+                          type="text"
+                          value={(editedDocumentData as RelievingLetterData).notice_period_served || ''}
+                          onChange={(e) => setEditedDocumentData({ ...editedDocumentData, notice_period_served: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                          placeholder="e.g., 30 days"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Issued Date</label>
+                        <input
+                          type="date"
+                          value={(editedDocumentData as RelievingLetterData).issued_date || ''}
+                          onChange={(e) => setEditedDocumentData({ ...editedDocumentData, issued_date: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Notice Text</label>
+                      <textarea
+                        rows={2}
+                        value={(editedDocumentData as RelievingLetterData).notice_text || ''}
+                        onChange={(e) => setEditedDocumentData({ ...editedDocumentData, notice_text: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Clearance Checklist */}
+                  <div className="bg-green-50 p-4 rounded-lg space-y-3">
+                    <h4 className="font-medium text-green-700">Clearance Checklist</h4>
+                    <div className="space-y-2">
+                      <div className="flex items-center">
+                        <input
+                          type="checkbox"
+                          id="edit_handover_completion"
+                          checked={(editedDocumentData as RelievingLetterData).handover_completion || false}
+                          onChange={(e) => setEditedDocumentData({ ...editedDocumentData, handover_completion: e.target.checked })}
+                          className="h-4 w-4 text-blue-600 border-gray-300 rounded"
+                        />
+                        <label htmlFor="edit_handover_completion" className="ml-2 text-sm text-gray-700">
+                          Handover of responsibilities completed
+                        </label>
+                      </div>
+                      <div className="flex items-center">
+                        <input
+                          type="checkbox"
+                          id="edit_assets_returned"
+                          checked={(editedDocumentData as RelievingLetterData).assets_returned || false}
+                          onChange={(e) => setEditedDocumentData({ ...editedDocumentData, assets_returned: e.target.checked })}
+                          className="h-4 w-4 text-blue-600 border-gray-300 rounded"
+                        />
+                        <label htmlFor="edit_assets_returned" className="ml-2 text-sm text-gray-700">
+                          All company assets returned
+                        </label>
+                      </div>
+                      <div className="flex items-center">
+                        <input
+                          type="checkbox"
+                          id="edit_dues_cleared"
+                          checked={(editedDocumentData as RelievingLetterData).dues_cleared || false}
+                          onChange={(e) => setEditedDocumentData({ ...editedDocumentData, dues_cleared: e.target.checked })}
+                          className="h-4 w-4 text-blue-600 border-gray-300 rounded"
+                        />
+                        <label htmlFor="edit_dues_cleared" className="ml-2 text-sm text-gray-700">
+                          All dues cleared
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Signatory Details */}
+                  <div className="bg-purple-50 p-4 rounded-lg space-y-3">
+                    <h4 className="font-medium text-purple-700">Signatory Details</h4>
+                    <div className="grid grid-cols-3 gap-3">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Signatory Name</label>
+                        <input
+                          type="text"
+                          value={(editedDocumentData as RelievingLetterData).signatory_name || ''}
+                          onChange={(e) => setEditedDocumentData({ ...editedDocumentData, signatory_name: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Designation</label>
+                        <input
+                          type="text"
+                          value={(editedDocumentData as RelievingLetterData).signatory_designation || ''}
+                          onChange={(e) => setEditedDocumentData({ ...editedDocumentData, signatory_designation: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Contact Details</label>
+                        <input
+                          type="text"
+                          value={(editedDocumentData as RelievingLetterData).contact_details || ''}
+                          onChange={(e) => setEditedDocumentData({ ...editedDocumentData, contact_details: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Form 16 Fields */}
+              {editingDocument.document_type === 'form_16' && (
+                <div className="space-y-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Financial Year *
+                      </label>
+                      <input
+                        type="text"
+                        value={(editedDocumentData as Form16Data).financial_year || ''}
+                        onChange={(e) => setEditedDocumentData({ ...editedDocumentData, financial_year: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                        placeholder="e.g., 2024-25"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Employee PAN *
+                      </label>
+                      <input
+                        type="text"
+                        value={(editedDocumentData as Form16Data).employee?.pan || ''}
+                        onChange={(e) => setEditedDocumentData({
+                          ...editedDocumentData,
+                          employee: {
+                            ...(editedDocumentData as Form16Data).employee,
+                            pan: e.target.value
+                          }
+                        })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Employee Address
+                    </label>
+                    <textarea
+                      rows={2}
+                      value={(editedDocumentData as Form16Data).employee?.address || ''}
+                      onChange={(e) => setEditedDocumentData({
+                        ...editedDocumentData,
+                        employee: {
+                          ...(editedDocumentData as Form16Data).employee,
+                          address: e.target.value
+                        }
+                      })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Form 24Q Fields */}
+              {editingDocument.document_type === 'form_24q' && (
+                <div className="space-y-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Financial Year *
+                      </label>
+                      <input
+                        type="text"
+                        value={(editedDocumentData as Form24QData).financial_year || ''}
+                        onChange={(e) => setEditedDocumentData({ ...editedDocumentData, financial_year: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                        placeholder="e.g., 2024-25"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Quarter *
+                      </label>
+                      <select
+                        value={(editedDocumentData as Form24QData).quarter || ''}
+                        onChange={(e) => setEditedDocumentData({ ...editedDocumentData, quarter: parseInt(e.target.value) })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                      >
+                        <option value="">Select Quarter</option>
+                        <option value="1">Q1 (Apr-Jun)</option>
+                        <option value="2">Q2 (Jul-Sep)</option>
+                        <option value="3">Q3 (Oct-Dec)</option>
+                        <option value="4">Q4 (Jan-Mar)</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center justify-end gap-3 p-6 border-t bg-gray-50">
+              <button
+                onClick={() => {
+                  setShowEditModal(false);
+                  setEditingDocument(null);
+                  setEditedDocumentData({});
+                  setSelectedEmployee(null);
+                }}
+                className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveEditedDocument}
+                disabled={isSavingDocument}
+                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+              >
+                {isSavingDocument ? (
+                  <>
+                    <span className="mr-2">Saving...</span>
+                  </>
+                ) : (
+                  <>
+                    <Save className="w-4 h-4 mr-2" />
+                    Save & Regenerate PDF
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Salary Slip Modal */}
+      {showEditSalarySlipModal && editingSalarySlip && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 overflow-y-auto">
+          <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full my-8">
+            <div className="flex items-center justify-between p-6 border-b">
+              <div>
+                <h2 className="text-xl font-semibold">Edit Salary Slip</h2>
+                <p className="text-sm text-gray-600 mt-1">
+                  {employees.find(e => e.id === editingSalarySlip.employee_id)?.full_name} - {['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][editingSalarySlip.salary_month - 1]} {editingSalarySlip.salary_year}
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  setShowEditSalarySlipModal(false);
+                  setEditingSalarySlip(null);
+                  setEditedSalarySlipData({});
+                }}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            <div className="p-6 max-h-[70vh] overflow-y-auto">
+              <div className="space-y-6">
+                {/* Earnings */}
+                <div className="bg-green-50 p-4 rounded-lg">
+                  <h3 className="text-lg font-medium text-green-700 mb-4">Earnings</h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Basic Salary</label>
+                      <input
+                        type="number"
+                        value={editedSalarySlipData.basic_salary || ''}
+                        onChange={(e) => setEditedSalarySlipData({ ...editedSalarySlipData, basic_salary: parseFloat(e.target.value) })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">HRA</label>
+                      <input
+                        type="number"
+                        value={editedSalarySlipData.hra || ''}
+                        onChange={(e) => setEditedSalarySlipData({ ...editedSalarySlipData, hra: parseFloat(e.target.value) })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Special Allowance</label>
+                      <input
+                        type="number"
+                        value={editedSalarySlipData.special_allowance || ''}
+                        onChange={(e) => setEditedSalarySlipData({ ...editedSalarySlipData, special_allowance: parseFloat(e.target.value) })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Other Allowances</label>
+                      <input
+                        type="number"
+                        value={editedSalarySlipData.other_allowances || ''}
+                        onChange={(e) => setEditedSalarySlipData({ ...editedSalarySlipData, other_allowances: parseFloat(e.target.value) })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                      />
+                    </div>
+                    <div className="col-span-2">
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Gross Salary (Auto-calculated)</label>
+                      <input
+                        type="number"
+                        value={editedSalarySlipData.gross_salary || ''}
+                        onChange={(e) => setEditedSalarySlipData({ ...editedSalarySlipData, gross_salary: parseFloat(e.target.value) })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm bg-gray-100"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Deductions */}
+                <div className="bg-red-50 p-4 rounded-lg">
+                  <h3 className="text-lg font-medium text-red-700 mb-4">Deductions</h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Provident Fund</label>
+                      <input
+                        type="number"
+                        value={editedSalarySlipData.provident_fund || ''}
+                        onChange={(e) => setEditedSalarySlipData({ ...editedSalarySlipData, provident_fund: parseFloat(e.target.value) })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Professional Tax</label>
+                      <input
+                        type="number"
+                        value={editedSalarySlipData.professional_tax || ''}
+                        onChange={(e) => setEditedSalarySlipData({ ...editedSalarySlipData, professional_tax: parseFloat(e.target.value) })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">ESIC</label>
+                      <input
+                        type="number"
+                        value={editedSalarySlipData.esic || ''}
+                        onChange={(e) => setEditedSalarySlipData({ ...editedSalarySlipData, esic: parseFloat(e.target.value) })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">TDS</label>
+                      <input
+                        type="number"
+                        value={editedSalarySlipData.tds || ''}
+                        onChange={(e) => setEditedSalarySlipData({ ...editedSalarySlipData, tds: parseFloat(e.target.value) })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Loan Repayment</label>
+                      <input
+                        type="number"
+                        value={editedSalarySlipData.loan_repayment || ''}
+                        onChange={(e) => setEditedSalarySlipData({ ...editedSalarySlipData, loan_repayment: parseFloat(e.target.value) })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Other Deductions</label>
+                      <input
+                        type="number"
+                        value={editedSalarySlipData.other_deductions || ''}
+                        onChange={(e) => setEditedSalarySlipData({ ...editedSalarySlipData, other_deductions: parseFloat(e.target.value) })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                      />
+                    </div>
+                    <div className="col-span-2">
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Total Deductions</label>
+                      <input
+                        type="number"
+                        value={editedSalarySlipData.total_deductions || ''}
+                        onChange={(e) => setEditedSalarySlipData({ ...editedSalarySlipData, total_deductions: parseFloat(e.target.value) })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm bg-gray-100"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Attendance & Net */}
+                <div className="bg-blue-50 p-4 rounded-lg">
+                  <h3 className="text-lg font-medium text-blue-700 mb-4">Attendance & Net Salary</h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Working Days</label>
+                      <input
+                        type="number"
+                        value={editedSalarySlipData.working_days || ''}
+                        onChange={(e) => setEditedSalarySlipData({ ...editedSalarySlipData, working_days: parseInt(e.target.value) })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Paid Days</label>
+                      <input
+                        type="number"
+                        value={editedSalarySlipData.paid_days || ''}
+                        onChange={(e) => setEditedSalarySlipData({ ...editedSalarySlipData, paid_days: parseInt(e.target.value) })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">LOP Days</label>
+                      <input
+                        type="number"
+                        value={editedSalarySlipData.lop_days || ''}
+                        onChange={(e) => setEditedSalarySlipData({ ...editedSalarySlipData, lop_days: parseInt(e.target.value) })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
+                      <select
+                        value={editedSalarySlipData.status || 'draft'}
+                        onChange={(e) => setEditedSalarySlipData({ ...editedSalarySlipData, status: e.target.value as any })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                      >
+                        <option value="draft">Draft</option>
+                        <option value="approved">Approved</option>
+                        <option value="paid">Paid</option>
+                      </select>
+                    </div>
+                    <div className="col-span-2">
+                      <label className="block text-sm font-medium text-gray-700 mb-2 text-lg">Net Salary (Gross - Deductions)</label>
+                      <input
+                        type="number"
+                        value={editedSalarySlipData.net_salary || ''}
+                        onChange={(e) => setEditedSalarySlipData({ ...editedSalarySlipData, net_salary: parseFloat(e.target.value) })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm bg-blue-100 font-bold"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 p-6 border-t bg-gray-50">
+              <button
+                onClick={() => {
+                  setShowEditSalarySlipModal(false);
+                  setEditingSalarySlip(null);
+                  setEditedSalarySlipData({});
+                }}
+                className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveEditedSalarySlip}
+                disabled={isSavingSalarySlip}
+                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+              >
+                {isSavingSalarySlip ? (
+                  <>
+                    <span className="mr-2">Saving...</span>
+                  </>
+                ) : (
+                  <>
+                    <Save className="w-4 h-4 mr-2" />
+                    Save Changes
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* PDF Preview Modal */}
       {showPreview && previewPdf && (

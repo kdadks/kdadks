@@ -61,7 +61,7 @@ export interface Employee {
   updated_at?: string;
 }
 
-export type DocumentType = 'offer_letter' | 'salary_certificate' | 'form_16' | 'form_24q' | 'other';
+export type DocumentType = 'offer_letter' | 'salary_certificate' | 'experience_certificate' | 'relieving_letter' | 'form_16' | 'form_24q' | 'other';
 export type DocumentStatus = 'draft' | 'generated' | 'sent' | 'archived';
 
 export interface EmploymentDocument {
@@ -267,6 +267,43 @@ export interface Form24QData {
     tan: string;
     pan: string;
   };
+}
+
+export interface ExperienceCertificateData {
+  employee_name: string;
+  designation: string;
+  department?: string;
+  date_of_joining: string;
+  last_working_date: string;
+  period_of_employment?: string; // Auto-calculated
+  roles_responsibilities?: string;
+  performance_note?: string;
+  conduct_note?: string;
+  reason_for_leaving?: string;
+  issued_date?: string;
+  signatory_name?: string;
+  signatory_designation?: string;
+  contact_details?: string;
+}
+
+export interface RelievingLetterData {
+  employee_name: string;
+  employee_number: string;
+  designation: string;
+  department?: string;
+  date_of_joining: string;
+  last_working_date: string;
+  relieving_date: string;
+  resignation_date?: string;
+  notice_period_served?: string;
+  handover_completion?: boolean;
+  assets_returned?: boolean;
+  dues_cleared?: boolean;
+  notice_text?: string;
+  issued_date?: string;
+  signatory_name?: string;
+  signatory_designation?: string;
+  contact_details?: string;
 }
 
 export interface EmployeeStats {
