@@ -1,9 +1,12 @@
-import React from 'react';
-import { FileText, Package, Plus, Trash, X, Eye, Save, Briefcase, Phone, Clock, Percent, DollarSign } from 'lucide-react';
+import React, { useState } from 'react';
+import { FileText, Package, Plus, Trash, X, Eye, Save, Briefcase, Phone, Clock, Percent, DollarSign, Calculator, ChevronDown, ChevronUp } from 'lucide-react';
 import type { CreateQuoteData, CreateQuoteItemData, Customer, Product } from '../../types/quote';
 import type { TermsTemplate, CompanySettings } from '../../types/invoice';
+import type { RateCardTemplate } from '../../types/rateCard';
 import { getTaxLabel, getClassificationCodeLabel } from '../../utils/taxUtils';
 import { ExchangeRateDisplay } from '../ui/ExchangeRateDisplay';
+import { rateCardService } from '../../services/rateCardService';
+import { analyzeSalaryToRate, calculateTotalRate } from '../../types/rateCard';
 
 interface CreateQuoteProps {
   quoteFormData: CreateQuoteData;
@@ -65,6 +68,35 @@ export const CreateQuote: React.FC<CreateQuoteProps> = ({
   // Get dynamic tax label based on customer's country
   const taxLabel = getTaxLabel(selectedCustomer);
   const classificationLabel = getClassificationCodeLabel(selectedCustomer);
+
+  // Rate Card Reference State
+  const [showRateCardReference, setShowRateCardReference] = useState(false);
+  const [rateCardTemplates, setRateCardTemplates] = useState<RateCardTemplate[]>([]);
+  const [loadingRateCards, setLoadingRateCards] = useState(false);
+  const [selectedRateCardFilter, setSelectedRateCardFilter] = useState<'all' | 'Full Stack Custom' | 'AI/ML' | 'Non Technical Roles'>('all');
+
+  // Load rate card templates when reference panel is opened
+  const loadRateCardTemplates = async () => {
+    setLoadingRateCards(true);
+    try {
+      const templates = await rateCardService.getRateCardTemplates({
+        is_active: true,
+        ...(selectedRateCardFilter !== 'all' && { category: selectedRateCardFilter })
+      });
+      setRateCardTemplates(templates);
+    } catch (error) {
+      console.error('Failed to load rate card templates:', error);
+    } finally {
+      setLoadingRateCards(false);
+    }
+  };
+
+  // Load rate cards when panel is opened or filter changes
+  React.useEffect(() => {
+    if (showRateCardReference) {
+      loadRateCardTemplates();
+    }
+  }, [showRateCardReference, selectedRateCardFilter]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-emerald-50">
@@ -370,6 +402,176 @@ export const CreateQuote: React.FC<CreateQuoteProps> = ({
               </div>
             </div>
 
+            {/* Rate Card Reference (Optional) */}
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200">
+              <button
+                onClick={() => setShowRateCardReference(!showRateCardReference)}
+                className="w-full flex items-center justify-between p-6 hover:bg-slate-50 transition-colors"
+              >
+                <div className="flex items-center">
+                  <Calculator className="w-5 h-5 text-blue-600 mr-2" />
+                  <div className="text-left">
+                    <h3 className="text-lg font-semibold text-slate-900">Rate Card Reference</h3>
+                    <p className="text-sm text-slate-600 mt-0.5">Optional: View standard rates to help with pricing</p>
+                  </div>
+                </div>
+                {showRateCardReference ? (
+                  <ChevronUp className="w-5 h-5 text-slate-400" />
+                ) : (
+                  <ChevronDown className="w-5 h-5 text-slate-400" />
+                )}
+              </button>
+
+              {showRateCardReference && (
+                <div className="px-6 pb-6 border-t border-slate-200">
+                  {/* Filter by Category */}
+                  <div className="mt-4 mb-4">
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      Filter by Category
+                    </label>
+                    <div className="flex flex-wrap gap-2">
+                      {['all', 'Full Stack Custom', 'AI/ML', 'Non Technical Roles'].map((category) => (
+                        <button
+                          key={category}
+                          onClick={() => setSelectedRateCardFilter(category as any)}
+                          className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
+                            selectedRateCardFilter === category
+                              ? 'bg-blue-600 text-white'
+                              : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                          }`}
+                        >
+                          {category === 'all' ? 'All Categories' : category}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Rate Card Templates */}
+                  {loadingRateCards ? (
+                    <div className="text-center py-8">
+                      <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                      <p className="text-sm text-slate-600 mt-2">Loading rate cards...</p>
+                    </div>
+                  ) : rateCardTemplates.length === 0 ? (
+                    <div className="text-center py-8 text-slate-500">
+                      <Calculator className="w-12 h-12 mx-auto mb-2 text-slate-300" />
+                      <p className="text-sm">No rate card templates found</p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {rateCardTemplates.map((template) => {
+                        const analysis = analyzeSalaryToRate(template);
+                        // Calculate total rate including all cost heads
+                        const totalRateCalc = calculateTotalRate(
+                          template.base_rate_usd,
+                          template.base_rate_inr,
+                          template.cost_heads
+                        );
+
+                        return (
+                          <div
+                            key={template.id}
+                            className="border border-slate-200 rounded-lg p-4 bg-slate-50 hover:shadow-md transition-shadow"
+                          >
+                            <div className="flex items-start justify-between mb-2">
+                              <div>
+                                <h4 className="font-semibold text-slate-900">{template.template_name}</h4>
+                                <p className="text-xs text-slate-600">
+                                  {template.category} • {template.resource_level}
+                                </p>
+                              </div>
+                              {analysis && (
+                                <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded">
+                                  {analysis.markup_percentage.toFixed(0)}% markup
+                                </span>
+                              )}
+                            </div>
+
+                            <div className="space-y-2 mt-3">
+                              {/* Total Hourly Rate - Highlighted */}
+                              <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-md p-2 mb-2">
+                                <div className="flex justify-between items-center">
+                                  <span className="text-sm font-semibold text-slate-700">Total Hourly Rate:</span>
+                                  <div className="text-right">
+                                    <div className="text-lg font-bold text-blue-600">
+                                      ${totalRateCalc.total_rate_usd.toFixed(2)}/hr
+                                    </div>
+                                    <div className="text-xs text-slate-600">
+                                      ₹{totalRateCalc.total_rate_inr.toFixed(2)}/hr
+                                    </div>
+                                  </div>
+                                </div>
+                                <div className="text-xs text-blue-600 mt-1">
+                                  ℹ️ Includes all cost heads
+                                </div>
+                              </div>
+
+                              {/* Base Rate */}
+                              <div className="flex justify-between items-center text-xs">
+                                <span className="text-slate-600">Base Rate:</span>
+                                <span className="font-medium text-slate-700">
+                                  ${template.base_rate_usd.toFixed(2)}/hr
+                                </span>
+                              </div>
+
+                              {/* Cost Heads Breakdown */}
+                              {template.cost_heads && template.cost_heads.length > 0 && (
+                                <div className="pt-2 border-t border-slate-200">
+                                  <p className="text-xs font-medium text-slate-700 mb-1">Cost Breakdown:</p>
+                                  <div className="space-y-1 max-h-32 overflow-y-auto">
+                                    {template.cost_heads.map((head, idx) => (
+                                      <div key={idx} className="flex justify-between text-xs">
+                                        <span className="text-slate-600">{head.name}:</span>
+                                        <span className="text-slate-700">
+                                          ${head.value.toFixed(2)}
+                                          {head.percentage ? ` (${head.percentage}%)` : ''}
+                                        </span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                  <div className="mt-1 pt-1 border-t border-slate-300 flex justify-between text-xs font-semibold">
+                                    <span className="text-slate-700">Total Cost Heads:</span>
+                                    <span className="text-blue-600">
+                                      ${totalRateCalc.total_cost_heads_usd.toFixed(2)}
+                                    </span>
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Monthly Revenue Projection */}
+                              {analysis && (
+                                <div className="pt-2 border-t border-slate-200">
+                                  <div className="flex justify-between items-center text-xs">
+                                    <span className="text-slate-600">Monthly Revenue (160h):</span>
+                                    <span className="font-semibold text-green-600">
+                                      ${analysis.potential_monthly_revenue_usd.toLocaleString()}
+                                    </span>
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Description */}
+                              {template.description && (
+                                <p className="text-xs text-slate-500 mt-2 line-clamp-2">
+                                  {template.description}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                    <p className="text-xs text-blue-800">
+                      <strong>Note:</strong> These are reference rates only. You can manually enter your desired rates in the line items below.
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+
             {/* Line Items Card */}
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
               <div className="flex items-center justify-between mb-6">
@@ -388,32 +590,81 @@ export const CreateQuote: React.FC<CreateQuoteProps> = ({
 
               <div className="space-y-4">
                 {quoteFormData.items.map((item, index) => {
-                  const lineSubtotal = item.quantity * item.unit_price;
+                  // Calculate line total based on item type
+                  let lineSubtotal = 0;
+                  if (item.is_service_item && item.billable_hours) {
+                    const resourceCount = item.resource_count || 1;
+                    lineSubtotal = resourceCount * item.quantity * item.billable_hours * item.unit_price;
+                  } else {
+                    lineSubtotal = item.quantity * item.unit_price;
+                  }
                   const lineTaxAmount = (lineSubtotal * item.tax_rate) / 100;
                   const lineTotal = lineSubtotal + lineTaxAmount;
-                  
+
                   return (
                     <div key={index} className="p-4 border border-slate-200 rounded-lg bg-slate-50">
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                      {/* Service Item Toggle */}
+                      <div className="mb-3 flex items-center">
+                        <label className="flex items-center cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={item.is_service_item || false}
+                            onChange={(e) => {
+                              onItemChange(index, 'is_service_item', e.target.checked);
+                              // Reset unit when toggling
+                              if (e.target.checked) {
+                                onItemChange(index, 'unit', 'months');
+                              } else {
+                                onItemChange(index, 'unit', 'pcs');
+                                onItemChange(index, 'billable_hours', undefined);
+                              }
+                            }}
+                            className="mr-2 h-4 w-4 text-blue-600 focus:ring-blue-500 border-slate-300 rounded"
+                          />
+                          <span className="text-sm font-medium text-slate-700">
+                            Service-based Item (Consulting/Training)
+                          </span>
+                        </label>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
                         {/* Item Name */}
-                        <div>
+                        <div className={item.is_service_item ? "lg:col-span-1" : "lg:col-span-2"}>
                           <label className="block text-sm font-medium text-slate-700 mb-1">
                             Item Name *
                           </label>
                           <input
                             type="text"
-                            placeholder="Enter item name"
+                            placeholder={item.is_service_item ? "e.g., IT Consulting Services" : "Enter item name"}
                             value={item.item_name}
                             onChange={(e) => onItemChange(index, 'item_name', e.target.value)}
                             className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-colors text-sm"
                             required
                           />
                         </div>
-                        
-                        {/* Quantity */}
+
+                        {/* Resource Count - Only for Service Items */}
+                        {item.is_service_item && (
+                          <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-1">
+                              Resources/Personnel
+                            </label>
+                            <input
+                              type="number"
+                              min="1"
+                              step="1"
+                              placeholder="e.g., 5"
+                              value={item.resource_count || 1}
+                              onChange={(e) => onItemChange(index, 'resource_count', parseFloat(e.target.value) || 1)}
+                              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-colors text-sm"
+                            />
+                          </div>
+                        )}
+
+                        {/* Quantity / Duration */}
                         <div>
                           <label className="block text-sm font-medium text-slate-700 mb-1">
-                            Quantity
+                            {item.is_service_item ? 'Duration (Months)' : 'Quantity'}
                           </label>
                           <input
                             type="number"
@@ -424,30 +675,48 @@ export const CreateQuote: React.FC<CreateQuoteProps> = ({
                             className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-colors text-sm"
                           />
                         </div>
-                        
-                        {/* Unit */}
+
+                        {/* Conditional: Billable Hours for Services OR Unit for Products */}
+                        {item.is_service_item ? (
+                          <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-1">
+                              Hours/Month
+                            </label>
+                            <input
+                              type="number"
+                              min="0"
+                              step="1"
+                              placeholder="e.g., 160"
+                              value={item.billable_hours || ''}
+                              onChange={(e) => onItemChange(index, 'billable_hours', parseFloat(e.target.value) || undefined)}
+                              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-colors text-sm"
+                            />
+                          </div>
+                        ) : (
+                          <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-1">
+                              Unit
+                            </label>
+                            <input
+                              type="text"
+                              placeholder="pcs"
+                              value={item.unit}
+                              onChange={(e) => onItemChange(index, 'unit', e.target.value)}
+                              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-colors text-sm"
+                            />
+                          </div>
+                        )}
+
+                        {/* Unit Price / Hourly Rate */}
                         <div>
                           <label className="block text-sm font-medium text-slate-700 mb-1">
-                            Unit
-                          </label>
-                          <input
-                            type="text"
-                            placeholder="pcs"
-                            value={item.unit}
-                            onChange={(e) => onItemChange(index, 'unit', e.target.value)}
-                            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-colors text-sm"
-                          />
-                        </div>
-                        
-                        {/* Unit Price */}
-                        <div>
-                          <label className="block text-sm font-medium text-slate-700 mb-1">
-                            Rate ({currencyInfo.symbol})
+                            {item.is_service_item ? `Rate (${currencyInfo.symbol}/hr)` : `Rate (${currencyInfo.symbol})`}
                           </label>
                           <input
                             type="number"
                             min="0"
                             step="0.01"
+                            placeholder={item.is_service_item ? "Hourly rate" : "Unit price"}
                             value={item.unit_price}
                             onChange={(e) => onItemChange(index, 'unit_price', parseFloat(e.target.value) || 0)}
                             className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-colors text-sm"

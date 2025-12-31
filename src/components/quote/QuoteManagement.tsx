@@ -93,7 +93,10 @@ const QuoteManagement: React.FC<QuoteManagementProps> = ({ onBackToDashboard }) 
       unit: 'pcs',
       unit_price: 0,
       tax_rate: 18,
-      hsn_code: undefined
+      hsn_code: undefined,
+      billable_hours: undefined,
+      resource_count: undefined,
+      is_service_item: false
     }]
   });
   const [selectedTermsTemplateId, setSelectedTermsTemplateId] = useState<string>('');
@@ -268,7 +271,10 @@ const QuoteManagement: React.FC<QuoteManagementProps> = ({ onBackToDashboard }) 
       unit: 'pcs',
       unit_price: 0,
       tax_rate: defaultTaxRate,
-      hsn_code: globalHsnCode || undefined
+      hsn_code: globalHsnCode || undefined,
+      billable_hours: undefined,
+      resource_count: undefined,
+      is_service_item: false
     };
 
     setQuoteFormData(prev => ({
@@ -291,7 +297,17 @@ const QuoteManagement: React.FC<QuoteManagementProps> = ({ onBackToDashboard }) 
     let totalTax = 0;
 
     quoteFormData.items.forEach(item => {
-      const lineTotal = item.quantity * item.unit_price;
+      let lineTotal = 0;
+
+      // For service-based items: resource_count × quantity (months) × billable_hours × unit_price (rate/hour)
+      if (item.is_service_item && item.billable_hours) {
+        const resourceCount = item.resource_count || 1;
+        lineTotal = resourceCount * item.quantity * item.billable_hours * item.unit_price;
+      } else {
+        // For product-based items: quantity × unit_price
+        lineTotal = item.quantity * item.unit_price;
+      }
+
       const taxAmount = (lineTotal * item.tax_rate) / 100;
       subtotal += lineTotal;
       totalTax += taxAmount;

@@ -21,7 +21,8 @@ import {
   Eye,
   Edit,
   FileCheck,
-  DollarSign
+  DollarSign,
+  Calculator
 } from 'lucide-react'
 import { simpleAuth, SimpleUser } from '../../utils/simpleAuth'
 import { isSupabaseConfigured, supabase } from '../../config/supabase'
@@ -37,6 +38,7 @@ import AttendanceManagement from '../hr/AttendanceManagement'
 import FullFinalSettlement from '../hr/FullFinalSettlement'
 import TDSReport from '../hr/TDSReport'
 import OrganizationSettings from '../settings/OrganizationSettings'
+import RateCardManagement from './RateCardManagement'
 import type { InvoiceStats } from '../../types/invoice'
 import type { QuoteStats } from '../../types/quote'
 
@@ -56,7 +58,7 @@ interface DashboardStats {
   settlements: number;
 }
 
-type ActiveView = 'dashboard' | 'invoices' | 'payments' | 'quotes' | 'hr-employees' | 'hr-leave' | 'hr-attendance' | 'hr-settlement' | 'hr-tds-report' | 'hr-organization';
+type ActiveView = 'dashboard' | 'invoices' | 'payments' | 'quotes' | 'rate-cards' | 'hr-employees' | 'hr-leave' | 'hr-attendance' | 'hr-settlement' | 'hr-tds-report' | 'hr-organization';
 
 const SimpleAdminDashboard: React.FC = () => {
   const [user, setUser] = useState<SimpleUser | null>(null)
@@ -269,6 +271,8 @@ const SimpleAdminDashboard: React.FC = () => {
         return <PaymentManagement onBackToDashboard={() => setActiveView('dashboard')} />;
       case 'quotes':
         return <QuoteManagement onBackToDashboard={() => setActiveView('dashboard')} />;
+      case 'rate-cards':
+        return <RateCardManagement onBackToDashboard={() => setActiveView('dashboard')} />;
       case 'hr-employees':
         return <EmploymentDocuments onBackToDashboard={() => setActiveView('dashboard')} />;
       case 'hr-leave':
@@ -368,6 +372,21 @@ const SimpleAdminDashboard: React.FC = () => {
               >
                 <FileText className="w-5 h-5 flex-shrink-0" />
                 {sidebarOpen && <span className="ml-3">Quotes</span>}
+              </button>
+            </li>
+
+            {/* Rate Cards */}
+            <li>
+              <button
+                onClick={() => setActiveView('rate-cards')}
+                className={`w-full flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                  activeView === 'rate-cards'
+                    ? 'bg-blue-100 text-blue-700'
+                    : 'text-gray-700 hover:bg-gray-100'
+                }`}
+              >
+                <Calculator className="w-5 h-5 flex-shrink-0" />
+                {sidebarOpen && <span className="ml-3">Rate Cards</span>}
               </button>
             </li>
 
@@ -504,6 +523,7 @@ const SimpleAdminDashboard: React.FC = () => {
             {activeView === 'invoices' && 'Invoices'}
             {activeView === 'payments' && 'Payments'}
             {activeView === 'quotes' && 'Quotes'}
+            {activeView === 'rate-cards' && 'Rate Cards'}
             {activeView === 'hr-employees' && 'HR - Employees & Documents'}
             {activeView === 'hr-leave' && 'HR - Leave Management'}
             {activeView === 'hr-attendance' && 'HR - Attendance'}

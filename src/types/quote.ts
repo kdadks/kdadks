@@ -41,19 +41,24 @@ export interface QuoteItem {
   id: string;
   quote_id: string;
   product_id?: string;
-  
+
   // Item Details
   item_name: string;
   description: string;
   quantity: number;
   unit: string;
   unit_price: number;
-  
+
+  // Service-based billing (for IT consulting, training, etc.)
+  billable_hours?: number; // Total billable monthly hours
+  resource_count?: number; // Number of resources/personnel (e.g., 5 developers)
+  is_service_item?: boolean; // Flag to identify service-based items
+
   // Calculations
   line_total: number;
   tax_rate: number;
   tax_amount: number;
-  
+
   // Multi-currency support
   original_unit_price?: number;
   original_line_total?: number;
@@ -61,12 +66,12 @@ export interface QuoteItem {
   inr_unit_price?: number;
   inr_line_total?: number;
   inr_tax_amount?: number;
-  
+
   // HSN/SAC for India IGST
   hsn_code?: string;
-  
+
   created_at: string;
-  
+
   // Populated from relations
   product?: Product;
 }
@@ -163,6 +168,10 @@ export interface CreateQuoteItemData {
   unit_price: number;
   tax_rate: number;
   hsn_code?: string;
+  // Service-based billing
+  billable_hours?: number;
+  resource_count?: number;
+  is_service_item?: boolean;
 }
 
 export interface UpdateQuoteData {
