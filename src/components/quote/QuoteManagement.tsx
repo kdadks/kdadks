@@ -247,7 +247,7 @@ const QuoteManagement: React.FC<QuoteManagementProps> = ({ onBackToDashboard }) 
     }));
   };
 
-  const handleQuoteItemChange = (index: number, field: keyof CreateQuoteItemData, value: string | number | undefined) => {
+  const handleQuoteItemChange = (index: number, field: keyof CreateQuoteItemData, value: string | number | boolean | undefined) => {
     setQuoteFormData(prev => ({
       ...prev,
       items: prev.items.map((item, i) => {

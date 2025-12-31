@@ -11,7 +11,7 @@ import { analyzeSalaryToRate, calculateTotalRate } from '../../types/rateCard';
 interface CreateQuoteProps {
   quoteFormData: CreateQuoteData;
   onFormChange: (field: keyof CreateQuoteData, value: string | CreateQuoteItemData[]) => void;
-  onItemChange: (index: number, field: keyof CreateQuoteItemData, value: string | number | undefined) => void;
+  onItemChange: (index: number, field: keyof CreateQuoteItemData, value: string | number | boolean | undefined) => void;
   onAddItem: () => void;
   onRemoveItem: (index: number) => void;
   onSaveQuote: () => void;

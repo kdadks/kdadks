@@ -785,7 +785,7 @@ const RateCardManagement: React.FC<RateCardManagementProps> = ({ onBackToDashboa
                           <div className="bg-white rounded-md p-3 border border-green-200">
                             <div className="text-xs text-gray-600 mb-1">Recommended INR Rate</div>
                             <div className="text-2xl font-bold text-green-600">
-                              ₹{((formData.estimated_monthly_salary_inr / formData.working_hours_per_month) * formData.salary_to_rate_multiplier).toFixed(2)}/hr
+                              ₹{(((formData.estimated_monthly_salary_inr || 0) / (formData.working_hours_per_month || 160)) * (formData.salary_to_rate_multiplier || 1.75)).toFixed(2)}/hr
                             </div>
                             <div className="text-xs text-gray-500 mt-1">
                               Current: ₹{formData.base_rate_inr.toFixed(2)}/hr
@@ -795,8 +795,8 @@ const RateCardManagement: React.FC<RateCardManagementProps> = ({ onBackToDashboa
                         <button
                           type="button"
                           onClick={() => {
-                            const recommendedUSD = parseFloat(((formData.estimated_monthly_salary_usd / formData.working_hours_per_month) * formData.salary_to_rate_multiplier).toFixed(2));
-                            const recommendedINR = parseFloat(((formData.estimated_monthly_salary_inr / formData.working_hours_per_month) * formData.salary_to_rate_multiplier).toFixed(2));
+                            const recommendedUSD = parseFloat((((formData.estimated_monthly_salary_usd || 0) / (formData.working_hours_per_month || 160)) * (formData.salary_to_rate_multiplier || 1.75)).toFixed(2));
+                            const recommendedINR = parseFloat((((formData.estimated_monthly_salary_inr || 0) / (formData.working_hours_per_month || 160)) * (formData.salary_to_rate_multiplier || 1.75)).toFixed(2));
 
                             // Update base rates and recalculate cost heads
                             const updatedCostHeads = formData.cost_heads.map((head) => {
