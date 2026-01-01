@@ -163,19 +163,24 @@ export interface InvoiceItem {
   id: string;
   invoice_id: string;
   product_id?: string;
-  
+
   // Item Details
   item_name: string;
   description: string;
   quantity: number;
   unit: string;
   unit_price: number;
-  
+
+  // Service-based billing (for IT consulting, training, etc.)
+  billable_hours?: number; // Total billable monthly hours
+  resource_count?: number; // Number of resources/personnel (e.g., 5 developers)
+  is_service_item?: boolean; // Flag to identify service-based items
+
   // Calculations
   line_total: number;
   tax_rate: number;
   tax_amount: number;
-  
+
   // Multi-currency support
   original_unit_price?: number;
   original_line_total?: number;
@@ -183,12 +188,12 @@ export interface InvoiceItem {
   inr_unit_price?: number;
   inr_line_total?: number;
   inr_tax_amount?: number;
-  
+
   // HSN/SAC for India IGST
   hsn_code?: string;
-  
+
   created_at: string;
-  
+
   // Populated from relations
   product?: Product;
 }
@@ -198,17 +203,27 @@ export interface Invoice {
   invoice_number: string;
   customer_id: string;
   company_settings_id: string;
-  
+
+  // Project Details
+  project_title?: string;
+  estimated_time?: string; // e.g., "2-3 weeks", "1 month"
+  company_contact_name?: string;
+  company_contact_email?: string;
+  company_contact_phone?: string;
+
   // Invoice Details
   invoice_date: string;
   due_date?: string;
-  
+
   // Financial Information (current/display amounts)
   subtotal: number;
+  discount_type?: 'percentage' | 'fixed'; // Type of discount
+  discount_value?: number; // Discount amount or percentage
+  discount_amount?: number; // Calculated discount amount
   tax_amount: number;
   total_amount: number;
   currency_code: string;
-  
+
   // Multi-currency support
   original_currency_code?: string;
   original_subtotal?: number;
@@ -219,20 +234,24 @@ export interface Invoice {
   inr_subtotal?: number;
   inr_tax_amount?: number;
   inr_total_amount?: number;
-  
+
   // Status
   status: 'draft' | 'sent' | 'paid' | 'cancelled' | 'overdue';
   payment_status: 'pending' | 'partial' | 'paid';
-  
+
+  // Quote conversion tracking
+  created_from_quote_id?: string;
+  quote_reference?: string;
+
   // Additional Information
   notes?: string;
   terms_conditions?: string;
-  
+
   // Tracking
   created_by?: string;
   created_at: string;
   updated_at: string;
-  
+
   // Populated from relations
   customer?: Customer;
   company_settings?: CompanySettings;
@@ -273,6 +292,19 @@ export interface CreateInvoiceData {
   customer_id: string;
   invoice_date: string;
   due_date?: string;
+  // Project details
+  project_title?: string;
+  estimated_time?: string;
+  company_contact_name?: string;
+  company_contact_email?: string;
+  company_contact_phone?: string;
+  // Discount
+  discount_type?: 'percentage' | 'fixed';
+  discount_value?: number;
+  // Quote reference
+  created_from_quote_id?: string;
+  quote_reference?: string;
+  // Additional info
   notes?: string;
   terms_conditions?: string;
   items: CreateInvoiceItemData[];
@@ -287,12 +319,26 @@ export interface CreateInvoiceItemData {
   unit_price: number;
   tax_rate: number;
   hsn_code?: string;
+  // Service-based billing
+  billable_hours?: number;
+  resource_count?: number;
+  is_service_item?: boolean;
 }
 
 export interface UpdateInvoiceData {
   customer_id?: string;
   invoice_date?: string;
   due_date?: string;
+  // Project details
+  project_title?: string;
+  estimated_time?: string;
+  company_contact_name?: string;
+  company_contact_email?: string;
+  company_contact_phone?: string;
+  // Discount
+  discount_type?: 'percentage' | 'fixed';
+  discount_value?: number;
+  // Additional info
   notes?: string;
   terms_conditions?: string;
   items?: CreateInvoiceItemData[];

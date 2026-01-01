@@ -137,6 +137,16 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
     customer_id: '',
     invoice_date: new Date().toISOString().split('T')[0],
     due_date: '',
+    // Project details
+    project_title: '',
+    estimated_time: '',
+    company_contact_name: '',
+    company_contact_email: '',
+    company_contact_phone: '',
+    // Discount
+    discount_type: undefined,
+    discount_value: 0,
+    // Additional info
     notes: '',
     terms_conditions: '',
     items: [{
@@ -147,7 +157,10 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
       unit: 'pcs',
       unit_price: 0,
       tax_rate: 18,
-      hsn_code: undefined
+      hsn_code: undefined,
+      billable_hours: undefined,
+      resource_count: undefined,
+      is_service_item: false
     }]
   });
   const [termsTemplates, setTermsTemplates] = useState<TermsTemplate[]>([]);
@@ -761,7 +774,7 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
     }));
   };
 
-  const handleInvoiceItemChange = (index: number, field: keyof CreateInvoiceItemData, value: string | number | undefined) => {
+  const handleInvoiceItemChange = (index: number, field: keyof CreateInvoiceItemData, value: string | number | boolean | undefined) => {
     // Debug product_id changes specifically
     if (field === 'product_id') {
       console.log(`🔄 Setting product_id for item ${index + 1}:`, {
@@ -773,13 +786,13 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
         isEmpty: value === ''
       });
     }
-    
+
     setInvoiceFormData(prev => ({
       ...prev,
       items: prev.items.map((item, i) => {
         if (i === index) {
           const updatedItem = { ...item, [field]: value };
-          
+
           // Debug the complete updated item for product_id changes
           if (field === 'product_id') {
             console.log(`📝 Updated item ${index + 1} after product_id change:`, {
@@ -852,16 +865,43 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
     let totalTax = 0;
 
     invoiceFormData.items.forEach(item => {
-      const lineTotal = item.quantity * item.unit_price;
+      let lineTotal = 0;
+
+      // For service-based items: resource_count × quantity (months) × billable_hours × unit_price (rate/hour)
+      if (item.is_service_item && item.billable_hours) {
+        const resourceCount = item.resource_count || 1;
+        lineTotal = resourceCount * item.quantity * item.billable_hours * item.unit_price;
+      } else {
+        // For product-based items: quantity × unit_price
+        lineTotal = item.quantity * item.unit_price;
+      }
+
       const taxAmount = (lineTotal * item.tax_rate) / 100;
       subtotal += lineTotal;
       totalTax += taxAmount;
     });
 
+    // Calculate discount
+    let discountAmount = 0;
+    if (invoiceFormData.discount_type && invoiceFormData.discount_value) {
+      const discountValue = Number(invoiceFormData.discount_value);
+      if (invoiceFormData.discount_type === 'percentage') {
+        discountAmount = (subtotal * discountValue) / 100;
+      } else {
+        discountAmount = discountValue;
+      }
+    }
+
+    // Recalculate tax on discounted subtotal
+    const discountedSubtotal = subtotal - discountAmount;
+    const averageTaxRate = totalTax > 0 && subtotal > 0 ? (totalTax / subtotal) * 100 : 0;
+    const adjustedTaxAmount = (discountedSubtotal * averageTaxRate) / 100;
+
     return {
       subtotal,
-      taxAmount: totalTax,
-      total: subtotal + totalTax
+      discountAmount,
+      taxAmount: adjustedTaxAmount,
+      total: discountedSubtotal + adjustedTaxAmount
     };
   };
 
@@ -1822,10 +1862,68 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
       downloadPdf.setFontSize(7);
       downloadPdf.setFont('helvetica', 'bold');
       downloadPdf.text(fullInvoice.payment_status.toUpperCase(), statusX + 12.5, billToYPos + 1, { align: 'center' });
-      
+
       // Set yPos to the maximum of both columns for proper spacing
       yPos = Math.max(fromYPos, billToYPos) + 10;
-      
+
+      // Project Details Section (if present)
+      if (fullInvoice.project_title || fullInvoice.estimated_time || fullInvoice.company_contact_name) {
+        downloadPdf.setFillColor(250, 251, 252);
+        const projectBoxHeight = 8 +
+          (fullInvoice.project_title ? 4 : 0) +
+          (fullInvoice.estimated_time ? 4 : 0) +
+          (fullInvoice.company_contact_name ? 4 : 0);
+
+        downloadPdf.rect(leftMargin, yPos, 180, projectBoxHeight, 'F');
+        downloadPdf.setDrawColor(220, 220, 220);
+        downloadPdf.setLineWidth(0.1);
+        downloadPdf.rect(leftMargin, yPos, 180, projectBoxHeight);
+
+        yPos += 3;
+        downloadPdf.setTextColor(37, 99, 235);
+        downloadPdf.setFontSize(9);
+        downloadPdf.setFont('helvetica', 'bold');
+        downloadPdf.text('Project Details', leftMargin + 2, yPos);
+        yPos += 5;
+
+        downloadPdf.setFontSize(8);
+        downloadPdf.setFont('helvetica', 'normal');
+        downloadPdf.setTextColor(60, 60, 60);
+
+        if (fullInvoice.project_title) {
+          downloadPdf.setFont('helvetica', 'bold');
+          downloadPdf.text('Project: ', leftMargin + 2, yPos);
+          downloadPdf.setFont('helvetica', 'normal');
+          downloadPdf.text(String(fullInvoice.project_title), leftMargin + 20, yPos);
+          yPos += 4;
+        }
+
+        if (fullInvoice.estimated_time) {
+          downloadPdf.setFont('helvetica', 'bold');
+          downloadPdf.text('Timeline: ', leftMargin + 2, yPos);
+          downloadPdf.setFont('helvetica', 'normal');
+          downloadPdf.text(String(fullInvoice.estimated_time), leftMargin + 20, yPos);
+          yPos += 4;
+        }
+
+        if (fullInvoice.company_contact_name) {
+          downloadPdf.setFont('helvetica', 'bold');
+          downloadPdf.text('Contact: ', leftMargin + 2, yPos);
+          downloadPdf.setFont('helvetica', 'normal');
+          let contactText = String(fullInvoice.company_contact_name);
+          if (fullInvoice.company_contact_email) {
+            contactText += ' (' + String(fullInvoice.company_contact_email) + ')';
+          }
+          if (fullInvoice.company_contact_phone) {
+            contactText += ' | ' + String(fullInvoice.company_contact_phone);
+          }
+          downloadPdf.text(contactText, leftMargin + 20, yPos);
+          yPos += 4;
+        }
+
+        yPos += 8;
+      }
+
       // Professional Items Table
       downloadPdf.setFillColor(245, 247, 250);
       downloadPdf.rect(leftMargin, yPos, 180, 8, 'F');
@@ -1923,7 +2021,14 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
       
       if (fullInvoice.invoice_items && fullInvoice.invoice_items.length > 0) {
         fullInvoice.invoice_items.forEach((item, index) => {
-          const itemSubtotal = item.quantity * item.unit_price;
+          // Calculate based on item type
+          let itemSubtotal = 0;
+          if (item.is_service_item && item.billable_hours) {
+            const resourceCount = item.resource_count || 1;
+            itemSubtotal = resourceCount * item.quantity * item.billable_hours * item.unit_price;
+          } else {
+            itemSubtotal = item.quantity * item.unit_price;
+          }
           const itemTax = itemSubtotal * item.tax_rate / 100;
           const itemTotal = itemSubtotal + itemTax;
           
@@ -2086,13 +2191,17 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
       const tableWidth = 180; // Same as table width
       const totalsWidth = 60; // Slightly wider for better formatting
       const totalsStartX = leftMargin + tableWidth - totalsWidth; // Right-align with table
-      
+
+      // Calculate totals box height based on whether discount is present
+      const hasDiscount = fullInvoice.discount_amount && fullInvoice.discount_amount > 0;
+      const totalsBoxHeight = hasDiscount ? 31 : 25; // Extra 6 for discount line
+
       // Clean totals box
       downloadPdf.setFillColor(250, 251, 252);
-      downloadPdf.rect(totalsStartX, yPos - 3, totalsWidth, 25, 'F');
+      downloadPdf.rect(totalsStartX, yPos - 3, totalsWidth, totalsBoxHeight, 'F');
       downloadPdf.setDrawColor(225, 229, 235);
       downloadPdf.setLineWidth(0.2);
-      downloadPdf.rect(totalsStartX, yPos - 3, totalsWidth, 25);
+      downloadPdf.rect(totalsStartX, yPos - 3, totalsWidth, totalsBoxHeight);
       
       downloadPdf.setTextColor(60, 60, 60);
       downloadPdf.setFontSize(8);
@@ -2144,8 +2253,25 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
       downloadPdf.setFont('helvetica', 'bold');
       const subtotalWithCurrency = safeCurrencySymbol + ' ' + subtotalText;
       downloadPdf.text(subtotalWithCurrency, totalsStartX + totalsWidth - 3, yPos + 2, { align: 'right' });
-      
+
       yPos += 6;
+
+      // Discount (if applicable)
+      if (fullInvoice.discount_amount && fullInvoice.discount_amount > 0) {
+        const discountText = formatIndianNumber(fullInvoice.discount_amount);
+        downloadPdf.setFont('helvetica', 'normal');
+        downloadPdf.setTextColor(34, 197, 94); // Green color
+        const discountLabel = fullInvoice.discount_type === 'percentage'
+          ? `Discount (${fullInvoice.discount_value}%):`
+          : 'Discount:';
+        downloadPdf.text(discountLabel, totalsStartX + 3, yPos + 2);
+        downloadPdf.setFont('helvetica', 'bold');
+        const discountWithCurrency = '- ' + safeCurrencySymbol + ' ' + discountText;
+        downloadPdf.text(discountWithCurrency, totalsStartX + totalsWidth - 3, yPos + 2, { align: 'right' });
+        yPos += 6;
+        downloadPdf.setTextColor(60, 60, 60); // Reset color
+      }
+
       downloadPdf.setFont('helvetica', 'normal');
       downloadPdf.text(`${taxLabel} Amount:`, totalsStartX + 3, yPos + 2);
       downloadPdf.setFont('helvetica', 'bold');
@@ -2634,10 +2760,68 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
       emailPdf.setFontSize(7);
       emailPdf.setFont('helvetica', 'bold');
       emailPdf.text(fullInvoice.payment_status.toUpperCase(), statusX + 12.5, billToYPos + 1, { align: 'center' });
-      
+
       // Set yPos to the maximum of both columns for proper spacing
       yPos = Math.max(fromYPos, billToYPos) + 10;
-      
+
+      // Project Details Section (if present)
+      if (fullInvoice.project_title || fullInvoice.estimated_time || fullInvoice.company_contact_name) {
+        emailPdf.setFillColor(250, 251, 252);
+        const projectBoxHeight = 8 +
+          (fullInvoice.project_title ? 4 : 0) +
+          (fullInvoice.estimated_time ? 4 : 0) +
+          (fullInvoice.company_contact_name ? 4 : 0);
+
+        emailPdf.rect(leftMargin, yPos, 180, projectBoxHeight, 'F');
+        emailPdf.setDrawColor(220, 220, 220);
+        emailPdf.setLineWidth(0.1);
+        emailPdf.rect(leftMargin, yPos, 180, projectBoxHeight);
+
+        yPos += 3;
+        emailPdf.setTextColor(37, 99, 235);
+        emailPdf.setFontSize(9);
+        emailPdf.setFont('helvetica', 'bold');
+        emailPdf.text('Project Details', leftMargin + 2, yPos);
+        yPos += 5;
+
+        emailPdf.setFontSize(8);
+        emailPdf.setFont('helvetica', 'normal');
+        emailPdf.setTextColor(60, 60, 60);
+
+        if (fullInvoice.project_title) {
+          emailPdf.setFont('helvetica', 'bold');
+          emailPdf.text('Project: ', leftMargin + 2, yPos);
+          emailPdf.setFont('helvetica', 'normal');
+          emailPdf.text(String(fullInvoice.project_title), leftMargin + 20, yPos);
+          yPos += 4;
+        }
+
+        if (fullInvoice.estimated_time) {
+          emailPdf.setFont('helvetica', 'bold');
+          emailPdf.text('Timeline: ', leftMargin + 2, yPos);
+          emailPdf.setFont('helvetica', 'normal');
+          emailPdf.text(String(fullInvoice.estimated_time), leftMargin + 20, yPos);
+          yPos += 4;
+        }
+
+        if (fullInvoice.company_contact_name) {
+          emailPdf.setFont('helvetica', 'bold');
+          emailPdf.text('Contact: ', leftMargin + 2, yPos);
+          emailPdf.setFont('helvetica', 'normal');
+          let contactText = String(fullInvoice.company_contact_name);
+          if (fullInvoice.company_contact_email) {
+            contactText += ' (' + String(fullInvoice.company_contact_email) + ')';
+          }
+          if (fullInvoice.company_contact_phone) {
+            contactText += ' | ' + String(fullInvoice.company_contact_phone);
+          }
+          emailPdf.text(contactText, leftMargin + 20, yPos);
+          yPos += 4;
+        }
+
+        yPos += 8;
+      }
+
       // Professional Items Table
       emailPdf.setFillColor(245, 247, 250);
       emailPdf.rect(leftMargin, yPos, 180, 8, 'F');
@@ -2730,7 +2914,14 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
       
       if (fullInvoice.invoice_items && fullInvoice.invoice_items.length > 0) {
         fullInvoice.invoice_items.forEach((item: any, index: number) => {
-          const itemSubtotal = item.quantity * item.unit_price;
+          // Calculate based on item type
+          let itemSubtotal = 0;
+          if (item.is_service_item && item.billable_hours) {
+            const resourceCount = item.resource_count || 1;
+            itemSubtotal = resourceCount * item.quantity * item.billable_hours * item.unit_price;
+          } else {
+            itemSubtotal = item.quantity * item.unit_price;
+          }
           const itemTax = itemSubtotal * item.tax_rate / 100;
           const itemTotal = itemSubtotal + itemTax;
           
@@ -2806,29 +2997,50 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
       const totalsWidth = 60; // Slightly wider for better formatting
       const totalsStartX = leftMargin + tableWidth - totalsWidth; // Right-align with table
       
+      // Calculate totals box height based on whether discount is present
+      const hasDiscount = fullInvoice.discount_amount && fullInvoice.discount_amount > 0;
+      const totalsBoxHeight = hasDiscount ? 31 : 25; // Extra 6 for discount line
+
       // Clean totals box
       emailPdf.setFillColor(250, 251, 252);
-      emailPdf.rect(totalsStartX, yPos - 3, totalsWidth, 25, 'F');
+      emailPdf.rect(totalsStartX, yPos - 3, totalsWidth, totalsBoxHeight, 'F');
       emailPdf.setDrawColor(225, 229, 235);
       emailPdf.setLineWidth(0.2);
-      emailPdf.rect(totalsStartX, yPos - 3, totalsWidth, 25);
-      
+      emailPdf.rect(totalsStartX, yPos - 3, totalsWidth, totalsBoxHeight);
+
       emailPdf.setTextColor(60, 60, 60);
       emailPdf.setFontSize(8);
       emailPdf.setFont('helvetica', 'normal');
-      
+
       // Format the totals with Indian number formatting (no currency concatenation)
       const subtotalText = formatIndianNumber(subtotal);
-      const taxAmountText = formatIndianNumber(totalTax);  
+      const taxAmountText = formatIndianNumber(totalTax);
       const finalTotalText = formatIndianNumber(total);
-      
+
       // Subtotal - safe currency concatenation
       emailPdf.text('Subtotal:', totalsStartX + 3, yPos + 2);
       emailPdf.setFont('helvetica', 'bold');
       const subtotalWithCurrency = safeCurrencySymbol + ' ' + subtotalText;
       emailPdf.text(subtotalWithCurrency, totalsStartX + totalsWidth - 3, yPos + 2, { align: 'right' });
-      
+
       yPos += 6;
+
+      // Discount (if applicable)
+      if (fullInvoice.discount_amount && fullInvoice.discount_amount > 0) {
+        const discountText = formatIndianNumber(fullInvoice.discount_amount);
+        emailPdf.setFont('helvetica', 'normal');
+        emailPdf.setTextColor(34, 197, 94); // Green color
+        const discountLabel = fullInvoice.discount_type === 'percentage'
+          ? `Discount (${fullInvoice.discount_value}%):`
+          : 'Discount:';
+        emailPdf.text(discountLabel, totalsStartX + 3, yPos + 2);
+        emailPdf.setFont('helvetica', 'bold');
+        const discountWithCurrency = '- ' + safeCurrencySymbol + ' ' + discountText;
+        emailPdf.text(discountWithCurrency, totalsStartX + totalsWidth - 3, yPos + 2, { align: 'right' });
+        yPos += 6;
+        emailPdf.setTextColor(60, 60, 60); // Reset color
+      }
+
       emailPdf.setFont('helvetica', 'normal');
       emailPdf.text(`${taxLabel} Amount:`, totalsStartX + 3, yPos + 2);
       emailPdf.setFont('helvetica', 'bold');
@@ -5596,7 +5808,7 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
 
   // Invoice Preview Content Function
   const renderInvoicePreviewContent = () => {
-    const { subtotal, taxAmount, total } = calculateInvoiceTotals();
+    const { subtotal, discountAmount, taxAmount, total } = calculateInvoiceTotals();
     const selectedCustomer = customers.find(c => c.id === invoiceFormData.customer_id);
     const currencyInfo = getCurrencyInfo(selectedCustomer);
     const company = companySettings[0];
@@ -5674,6 +5886,34 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
           </div>
         )}
 
+        {/* Project Details - if present */}
+        {(invoiceFormData.project_title || invoiceFormData.estimated_time || invoiceFormData.company_contact_name) && (
+          <div className="mb-6">
+            <div className="bg-blue-50 p-4 rounded border border-blue-200">
+              <div className="font-semibold text-blue-900 mb-2">Project Details:</div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs text-gray-700">
+                {invoiceFormData.project_title && (
+                  <div>
+                    <span className="font-medium">Project:</span> {invoiceFormData.project_title}
+                  </div>
+                )}
+                {invoiceFormData.estimated_time && (
+                  <div>
+                    <span className="font-medium">Timeline:</span> {invoiceFormData.estimated_time}
+                  </div>
+                )}
+                {invoiceFormData.company_contact_name && (
+                  <div className="md:col-span-2">
+                    <span className="font-medium">Contact:</span> {invoiceFormData.company_contact_name}
+                    {invoiceFormData.company_contact_email && ` (${invoiceFormData.company_contact_email})`}
+                    {invoiceFormData.company_contact_phone && ` | ${invoiceFormData.company_contact_phone}`}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Items Table - More Compact */}
         <div className="mb-6">
           <table className="w-full border-collapse border border-gray-300 text-xs">
@@ -5682,30 +5922,70 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
                 <th className="border border-gray-300 px-2 py-2 text-left font-medium text-gray-900">Item</th>
                 <th className="border border-gray-300 px-2 py-2 text-left font-medium text-gray-900">Description</th>
                 <th className="border border-gray-300 px-2 py-2 text-center font-medium text-gray-900 w-20">{getClassificationCodeLabel(selectedCustomer)}</th>
-                <th className="border border-gray-300 px-2 py-2 text-center font-medium text-gray-900 w-16">Qty</th>
-                <th className="border border-gray-300 px-2 py-2 text-center font-medium text-gray-900 w-16">Unit</th>
-                <th className="border border-gray-300 px-2 py-2 text-right font-medium text-gray-900 w-20">Rate</th>
+                <th className="border border-gray-300 px-2 py-2 text-center font-medium text-gray-900 w-24">
+                  {/* Dynamic header - check if any service items exist */}
+                  {invoiceFormData.items.some(item => item.is_service_item) ? 'Duration (months)' : 'Qty'}
+                </th>
+                <th className="border border-gray-300 px-2 py-2 text-center font-medium text-gray-900 w-24">
+                  {/* Dynamic header - check if any service items exist */}
+                  {invoiceFormData.items.some(item => item.is_service_item && item.billable_hours) ? 'Billable Hrs' : 'Unit'}
+                </th>
+                <th className="border border-gray-300 px-2 py-2 text-right font-medium text-gray-900 w-24">
+                  {/* Dynamic header - check if any service items exist */}
+                  {invoiceFormData.items.some(item => item.is_service_item) ? 'Rate (/hour)' : 'Rate'}
+                </th>
                 <th className="border border-gray-300 px-2 py-2 text-right font-medium text-gray-900 w-16">{taxLabel}%</th>
                 <th className="border border-gray-300 px-2 py-2 text-right font-medium text-gray-900 w-24">Amount</th>
               </tr>
             </thead>
             <tbody>
-              {invoiceFormData.items.map((item, index) => (
-                <tr key={index}>
-                  <td className="border border-gray-300 px-2 py-2 font-medium">{item.item_name}</td>
-                  <td className="border border-gray-300 px-2 py-2">{item.description}</td>
-                  <td className="border border-gray-300 px-2 py-2 text-center text-gray-600">
-                    {item.hsn_code || 'N/A'}
-                  </td>
-                  <td className="border border-gray-300 px-2 py-2 text-center">{item.quantity}</td>
-                  <td className="border border-gray-300 px-2 py-2 text-center">{item.unit}</td>
-                  <td className="border border-gray-300 px-2 py-2 text-right">{formatCurrencyAmount(item.unit_price, currencyInfo)}</td>
-                  <td className="border border-gray-300 px-2 py-2 text-right">{item.tax_rate}%</td>
-                  <td className="border border-gray-300 px-2 py-2 text-right font-medium">
-                    {formatCurrencyAmount((item.quantity * item.unit_price) * (1 + item.tax_rate / 100), currencyInfo)}
-                  </td>
-                </tr>
-              ))}
+              {invoiceFormData.items.map((item, index) => {
+                // Calculate line total based on item type
+                let lineSubtotal = 0;
+                if (item.is_service_item && item.billable_hours) {
+                  const resourceCount = item.resource_count || 1;
+                  lineSubtotal = resourceCount * item.quantity * item.billable_hours * item.unit_price;
+                } else {
+                  lineSubtotal = item.quantity * item.unit_price;
+                }
+                const lineTotal = lineSubtotal * (1 + item.tax_rate / 100);
+
+                return (
+                  <tr key={index}>
+                    <td className="border border-gray-300 px-2 py-2 font-medium">{item.item_name}</td>
+                    <td className="border border-gray-300 px-2 py-2">
+                      {item.description}
+                      {item.is_service_item && item.billable_hours && (
+                        <div className="text-xs text-blue-600 mt-1">
+                          <strong>Service Details:</strong><br/>
+                          Resources: {item.resource_count || 1} | Billable Hrs/Month: {item.billable_hours}<br/>
+                          Calculation: {item.resource_count || 1} × {item.quantity} months × {item.billable_hours} hrs × {formatCurrencyAmount(item.unit_price, currencyInfo)}
+                        </div>
+                      )}
+                    </td>
+                    <td className="border border-gray-300 px-2 py-2 text-center text-gray-600">
+                      {item.hsn_code || 'N/A'}
+                    </td>
+                    <td className="border border-gray-300 px-2 py-2 text-center font-medium">
+                      {item.quantity}
+                    </td>
+                    <td className="border border-gray-300 px-2 py-2 text-center font-medium">
+                      {item.is_service_item && item.billable_hours ? (
+                        item.billable_hours
+                      ) : (
+                        item.unit
+                      )}
+                    </td>
+                    <td className="border border-gray-300 px-2 py-2 text-right font-medium">
+                      {formatCurrencyAmount(item.unit_price, currencyInfo)}
+                    </td>
+                    <td className="border border-gray-300 px-2 py-2 text-right">{item.tax_rate}%</td>
+                    <td className="border border-gray-300 px-2 py-2 text-right font-medium">
+                      {formatCurrencyAmount(lineTotal, currencyInfo)}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -5729,6 +6009,14 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
                 <span className="font-medium">Subtotal:</span>
                 <span>{formatCurrencyAmount(subtotal, currencyInfo)}</span>
               </div>
+              {discountAmount > 0 && (
+                <div className="flex justify-between px-3 py-2 border-b border-gray-300 text-green-600">
+                  <span className="font-medium">
+                    Discount ({invoiceFormData.discount_type === 'percentage' ? `${invoiceFormData.discount_value}%` : 'Fixed'}):
+                  </span>
+                  <span>- {formatCurrencyAmount(discountAmount, currencyInfo)}</span>
+                </div>
+              )}
               <div className="flex justify-between px-3 py-2 border-b border-gray-300">
                 <span className="font-medium">{taxLabel}:</span>
                 <span>{formatCurrencyAmount(taxAmount, currencyInfo)}</span>

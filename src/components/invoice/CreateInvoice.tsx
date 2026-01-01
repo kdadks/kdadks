@@ -7,7 +7,7 @@ import { ExchangeRateDisplay } from '../ui/ExchangeRateDisplay';
 interface CreateInvoiceProps {
   invoiceFormData: CreateInvoiceData;
   onFormChange: (field: keyof CreateInvoiceData, value: string | CreateInvoiceItemData[]) => void;
-  onItemChange: (index: number, field: keyof CreateInvoiceItemData, value: string | number | undefined) => void;
+  onItemChange: (index: number, field: keyof CreateInvoiceItemData, value: string | number | boolean | undefined) => void;
   onAddItem: () => void;
   onRemoveItem: (index: number) => void;
   onSaveInvoice: () => void;
@@ -25,7 +25,7 @@ interface CreateInvoiceProps {
   globalHsnCode: string;
   generatedInvoiceNumber: string;
   modalLoading?: boolean;
-  calculateInvoiceTotals: () => { subtotal: number; taxAmount: number; total: number };
+  calculateInvoiceTotals: () => { subtotal: number; discountAmount: number; taxAmount: number; total: number };
   getCurrencyInfo: (customer: Customer | undefined) => { symbol: string; code: string; name: string };
   formatCurrencyAmount: (amount: number, currencyInfo: { symbol: string; code: string }) => string;
   formatAmountInWords: (amount: number, currencyName: string) => string;
@@ -57,7 +57,7 @@ export const CreateInvoice: React.FC<CreateInvoiceProps> = ({
   formatCurrencyAmount,
   formatAmountInWords
 }) => {
-  const { subtotal, taxAmount, total } = calculateInvoiceTotals();
+  const { subtotal, discountAmount, taxAmount, total } = calculateInvoiceTotals();
   const selectedCustomer = customers.find(c => c.id === invoiceFormData.customer_id);
   const currencyInfo = getCurrencyInfo(selectedCustomer);
   const activeProducts = products.filter(p => p.is_active);
@@ -186,6 +186,115 @@ export const CreateInvoice: React.FC<CreateInvoiceProps> = ({
                 </div>
               </div>
 
+              {/* Project Details Section */}
+              <div className="mt-6 pt-6 border-t border-slate-200">
+                <h4 className="text-sm font-semibold text-slate-900 mb-4">Project Details (Optional)</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      Project Title
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g., Website Development"
+                      value={invoiceFormData.project_title || ''}
+                      onChange={(e) => onFormChange('project_title', e.target.value)}
+                      className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      Estimated Time
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g., 2-3 weeks, 1 month"
+                      value={invoiceFormData.estimated_time || ''}
+                      onChange={(e) => onFormChange('estimated_time', e.target.value)}
+                      className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      Company Contact Name
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Your contact person"
+                      value={invoiceFormData.company_contact_name || ''}
+                      onChange={(e) => onFormChange('company_contact_name', e.target.value)}
+                      className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      Company Contact Email
+                    </label>
+                    <input
+                      type="email"
+                      placeholder="contact@company.com"
+                      value={invoiceFormData.company_contact_email || ''}
+                      onChange={(e) => onFormChange('company_contact_email', e.target.value)}
+                      className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      Company Contact Phone
+                    </label>
+                    <input
+                      type="tel"
+                      placeholder="+1234567890"
+                      value={invoiceFormData.company_contact_phone || ''}
+                      onChange={(e) => onFormChange('company_contact_phone', e.target.value)}
+                      className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Discount Section */}
+              <div className="mt-6 pt-6 border-t border-slate-200">
+                <h4 className="text-sm font-semibold text-slate-900 mb-4">Discount (Optional)</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      Discount Type
+                    </label>
+                    <select
+                      value={invoiceFormData.discount_type || ''}
+                      onChange={(e) => onFormChange('discount_type', e.target.value ? e.target.value : '' as any)}
+                      className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                    >
+                      <option value="">No Discount</option>
+                      <option value="percentage">Percentage (%)</option>
+                      <option value="fixed">Fixed Amount</option>
+                    </select>
+                  </div>
+
+                  {invoiceFormData.discount_type && (
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-2">
+                        Discount Value {invoiceFormData.discount_type === 'percentage' ? '(%)' : `(${currencyInfo.symbol})`}
+                      </label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        placeholder={invoiceFormData.discount_type === 'percentage' ? '10' : '100'}
+                        value={invoiceFormData.discount_value || ''}
+                        onChange={(e) => onFormChange('discount_value', e.target.value)}
+                        className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
+
               {/* Product Selection */}
               {activeProducts.length > 0 && (
                 <div className="mt-6 pt-6 border-t border-slate-200">
@@ -227,12 +336,34 @@ export const CreateInvoice: React.FC<CreateInvoiceProps> = ({
 
               <div className="space-y-4">
                 {invoiceFormData.items.map((item, index) => {
-                  const lineSubtotal = item.quantity * item.unit_price;
+                  // Calculate line total based on item type
+                  let lineSubtotal = 0;
+                  if (item.is_service_item && item.billable_hours) {
+                    const resourceCount = item.resource_count || 1;
+                    lineSubtotal = resourceCount * item.quantity * item.billable_hours * item.unit_price;
+                  } else {
+                    lineSubtotal = item.quantity * item.unit_price;
+                  }
                   const lineTaxAmount = (lineSubtotal * item.tax_rate) / 100;
                   const lineTotal = lineSubtotal + lineTaxAmount;
-                  
+
                   return (
                     <div key={index} className="p-4 border border-slate-200 rounded-lg bg-slate-50">
+                      {/* Service Item Toggle */}
+                      <div className="mb-4">
+                        <label className="flex items-center cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={item.is_service_item || false}
+                            onChange={(e) => onItemChange(index, 'is_service_item', e.target.checked)}
+                            className="w-4 h-4 text-blue-600 border-slate-300 rounded focus:ring-blue-500"
+                          />
+                          <span className="ml-2 text-sm font-medium text-slate-700">
+                            Service-based billing (hours × resources)
+                          </span>
+                        </label>
+                      </div>
+
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                         {/* Item Name */}
                         <div>
@@ -252,7 +383,7 @@ export const CreateInvoice: React.FC<CreateInvoiceProps> = ({
                         {/* Quantity */}
                         <div>
                           <label className="block text-sm font-medium text-slate-700 mb-1">
-                            Quantity
+                            {item.is_service_item ? 'Duration (months)' : 'Quantity'}
                           </label>
                           <input
                             type="number"
@@ -263,7 +394,7 @@ export const CreateInvoice: React.FC<CreateInvoiceProps> = ({
                             className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
                           />
                         </div>
-                        
+
                         {/* Unit */}
                         <div>
                           <label className="block text-sm font-medium text-slate-700 mb-1">
@@ -271,17 +402,17 @@ export const CreateInvoice: React.FC<CreateInvoiceProps> = ({
                           </label>
                           <input
                             type="text"
-                            placeholder="pcs"
+                            placeholder={item.is_service_item ? 'months' : 'pcs'}
                             value={item.unit}
                             onChange={(e) => onItemChange(index, 'unit', e.target.value)}
                             className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
                           />
                         </div>
-                        
+
                         {/* Unit Price */}
                         <div>
                           <label className="block text-sm font-medium text-slate-700 mb-1">
-                            Rate ({currencyInfo.symbol})
+                            {item.is_service_item ? 'Hourly Rate' : 'Rate'} ({currencyInfo.symbol})
                           </label>
                           <input
                             type="number"
@@ -293,6 +424,44 @@ export const CreateInvoice: React.FC<CreateInvoiceProps> = ({
                           />
                         </div>
                       </div>
+
+                      {/* Service Billing Fields */}
+                      {item.is_service_item && (
+                        <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-1">
+                              Billable Hours (per month)
+                            </label>
+                            <input
+                              type="number"
+                              min="0"
+                              step="1"
+                              placeholder="160"
+                              value={item.billable_hours || ''}
+                              onChange={(e) => onItemChange(index, 'billable_hours', parseFloat(e.target.value) || undefined)}
+                              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
+                            />
+                            <p className="text-xs text-slate-500 mt-1">Total hours per month</p>
+                          </div>
+
+                          <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-1">
+                              Number of Resources
+                            </label>
+                            <input
+                              type="number"
+                              min="1"
+                              step="1"
+                              placeholder="1"
+                              value={item.resource_count || 1}
+                              onChange={(e) => onItemChange(index, 'resource_count', parseInt(e.target.value) || 1)}
+                              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
+                            />
+                            <p className="text-xs text-slate-500 mt-1">e.g., 5 developers</p>
+                          </div>
+                        </div>
+                      )}
+
                       
                       {/* Description and HSN Code */}
                       <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -354,9 +523,15 @@ export const CreateInvoice: React.FC<CreateInvoiceProps> = ({
                         </div>
                         <div className="text-right">
                           <div className="space-y-1">
-                            <div className="text-xs text-slate-600">
-                              {item.quantity} × {formatCurrencyAmount(item.unit_price, currencyInfo)} = {formatCurrencyAmount(lineSubtotal, currencyInfo)}
-                            </div>
+                            {item.is_service_item && item.billable_hours ? (
+                              <div className="text-xs text-slate-600">
+                                {item.resource_count || 1} × {item.quantity} × {item.billable_hours} × {formatCurrencyAmount(item.unit_price, currencyInfo)} = {formatCurrencyAmount(lineSubtotal, currencyInfo)}
+                              </div>
+                            ) : (
+                              <div className="text-xs text-slate-600">
+                                {item.quantity} × {formatCurrencyAmount(item.unit_price, currencyInfo)} = {formatCurrencyAmount(lineSubtotal, currencyInfo)}
+                              </div>
+                            )}
                             <div className="text-xs text-slate-600">
                               {taxLabel} ({item.tax_rate}%): {formatCurrencyAmount(lineTaxAmount, currencyInfo)}
                             </div>
@@ -446,6 +621,14 @@ export const CreateInvoice: React.FC<CreateInvoiceProps> = ({
                   <span className="text-slate-600">Subtotal:</span>
                   <span className="font-medium">{formatCurrencyAmount(subtotal, currencyInfo)}</span>
                 </div>
+                {discountAmount > 0 && (
+                  <div className="flex justify-between text-sm text-green-600">
+                    <span>
+                      Discount ({invoiceFormData.discount_type === 'percentage' ? `${invoiceFormData.discount_value}%` : 'Fixed'}):
+                    </span>
+                    <span className="font-medium">- {formatCurrencyAmount(discountAmount, currencyInfo)}</span>
+                  </div>
+                )}
                 <div className="flex justify-between text-sm">
                   <span className="text-slate-600">{taxLabel}:</span>
                   <span className="font-medium">{formatCurrencyAmount(taxAmount, currencyInfo)}</span>

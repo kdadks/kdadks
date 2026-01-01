@@ -783,19 +783,45 @@ class InvoiceService {
     let taxAmount = 0;
 
     invoiceData.items.forEach(item => {
-      const lineTotal = item.quantity * item.unit_price;
+      let lineTotal = 0;
+
+      // For service-based items: resource_count × quantity (months) × billable_hours × unit_price (rate/hour)
+      if (item.is_service_item && item.billable_hours) {
+        const resourceCount = item.resource_count || 1;
+        lineTotal = resourceCount * item.quantity * item.billable_hours * item.unit_price;
+      } else {
+        // For product-based items: quantity × unit_price
+        lineTotal = item.quantity * item.unit_price;
+      }
+
       const itemTax = (lineTotal * item.tax_rate) / 100;
       subtotal += lineTotal;
       taxAmount += itemTax;
     });
 
-    const totalAmount = subtotal + taxAmount;
+    // Calculate discount
+    let discountAmount = 0;
+    if (invoiceData.discount_type && invoiceData.discount_value) {
+      const discountValue = Number(invoiceData.discount_value);
+      if (invoiceData.discount_type === 'percentage') {
+        discountAmount = (subtotal * discountValue) / 100;
+      } else {
+        discountAmount = discountValue;
+      }
+    }
+
+    // Recalculate tax on discounted subtotal
+    const discountedSubtotal = subtotal - discountAmount;
+    const averageTaxRate = taxAmount > 0 && subtotal > 0 ? (taxAmount / subtotal) * 100 : 0;
+    const adjustedTaxAmount = (discountedSubtotal * averageTaxRate) / 100;
+
+    const totalAmount = discountedSubtotal + adjustedTaxAmount;
 
     // Get exchange rate and convert to INR
     const invoiceDate = invoiceData.invoice_date.split('T')[0]; // Get date part only
     let exchangeRate = 1.0;
     let inrSubtotal = subtotal;
-    let inrTaxAmount = taxAmount;
+    let inrTaxAmount = adjustedTaxAmount;
     let inrTotalAmount = totalAmount;
 
     if (currencyCode !== 'INR') {
@@ -821,7 +847,7 @@ class InvoiceService {
           
           // Convert amounts to INR using the exchange rate service
           inrSubtotal = await exchangeRateService.convertToINR(subtotal, currencyCode, invoiceDate);
-          inrTaxAmount = await exchangeRateService.convertToINR(taxAmount, currencyCode, invoiceDate);
+          inrTaxAmount = await exchangeRateService.convertToINR(adjustedTaxAmount, currencyCode, invoiceDate);
           inrTotalAmount = await exchangeRateService.convertToINR(totalAmount, currencyCode, invoiceDate);
           
           console.log('✅ Currency conversion completed via database:', {
@@ -858,23 +884,36 @@ class InvoiceService {
         invoice_number: finalInvoiceNumber,
         customer_id: invoiceData.customer_id,
         company_settings_id: companySettings.id,
+        // Project details
+        project_title: invoiceData.project_title,
+        estimated_time: invoiceData.estimated_time,
+        company_contact_name: invoiceData.company_contact_name,
+        company_contact_email: invoiceData.company_contact_email,
+        company_contact_phone: invoiceData.company_contact_phone,
+        // Invoice dates
         invoice_date: invoiceData.invoice_date,
         due_date: invoiceData.due_date,
         // Original currency amounts (for display and PDF generation)
         subtotal,
-        tax_amount: taxAmount,
+        discount_type: invoiceData.discount_type || null,
+        discount_value: invoiceData.discount_value || 0,
+        discount_amount: discountAmount,
+        tax_amount: adjustedTaxAmount,
         total_amount: totalAmount,
         currency_code: currencyCode,
         // Multi-currency fields
         original_currency_code: currencyCode,
         original_subtotal: subtotal,
-        original_tax_amount: taxAmount,
+        original_tax_amount: adjustedTaxAmount,
         original_total_amount: totalAmount,
         exchange_rate: exchangeRate,
         exchange_rate_date: invoiceDate,
         inr_subtotal: inrSubtotal,
         inr_tax_amount: inrTaxAmount,
         inr_total_amount: inrTotalAmount,
+        // Quote reference
+        created_from_quote_id: invoiceData.created_from_quote_id || null,
+        quote_reference: invoiceData.quote_reference || null,
         // Other fields
         notes: invoiceData.notes,
         terms_conditions: invoiceData.terms_conditions,
@@ -896,7 +935,17 @@ class InvoiceService {
 
     // Create invoice items with multi-currency support
     const itemsWithCalculations = await Promise.all(invoiceData.items.map(async (item, index) => {
-      const lineTotal = item.quantity * item.unit_price;
+      let lineTotal = 0;
+
+      // For service-based items: resource_count × quantity (months) × billable_hours × unit_price (rate/hour)
+      if (item.is_service_item && item.billable_hours) {
+        const resourceCount = item.resource_count || 1;
+        lineTotal = resourceCount * item.quantity * item.billable_hours * item.unit_price;
+      } else {
+        // For product-based items: quantity × unit_price
+        lineTotal = item.quantity * item.unit_price;
+      }
+
       const itemTaxAmount = (lineTotal * item.tax_rate) / 100;
       
       // Convert item amounts to INR
@@ -937,6 +986,10 @@ class InvoiceService {
         inr_unit_price: inrUnitPrice,
         inr_line_total: inrLineTotal,
         inr_tax_amount: inrItemTaxAmount,
+        // Service-based billing fields
+        billable_hours: item.billable_hours || null,
+        resource_count: item.resource_count || null,
+        is_service_item: item.is_service_item || false,
         // Other fields
         hsn_code: item.hsn_code || null
       };
@@ -984,6 +1037,16 @@ class InvoiceService {
           customer_id: invoiceData.customer_id,
           invoice_date: invoiceData.invoice_date,
           due_date: invoiceData.due_date,
+          // Project details
+          project_title: invoiceData.project_title,
+          estimated_time: invoiceData.estimated_time,
+          company_contact_name: invoiceData.company_contact_name,
+          company_contact_email: invoiceData.company_contact_email,
+          company_contact_phone: invoiceData.company_contact_phone,
+          // Discount fields
+          discount_type: invoiceData.discount_type || null,
+          discount_value: invoiceData.discount_value || 0,
+          // Additional info
           notes: invoiceData.notes,
           terms_conditions: invoiceData.terms_conditions,
           updated_at: new Date().toISOString()
@@ -1086,7 +1149,17 @@ class InvoiceService {
 
         // Create invoice items with multi-currency support
         const itemsWithCalculations = await Promise.all(invoiceData.items.map(async (item, index) => {
-          const lineTotal = item.quantity * item.unit_price;
+          let lineTotal = 0;
+
+          // For service-based items: resource_count × quantity (months) × billable_hours × unit_price (rate/hour)
+          if (item.is_service_item && item.billable_hours) {
+            const resourceCount = item.resource_count || 1;
+            lineTotal = resourceCount * item.quantity * item.billable_hours * item.unit_price;
+          } else {
+            // For product-based items: quantity × unit_price
+            lineTotal = item.quantity * item.unit_price;
+          }
+
           const itemTaxAmount = (lineTotal * item.tax_rate) / 100;
           subtotal += lineTotal;
           taxAmount += itemTaxAmount;
@@ -1128,6 +1201,10 @@ class InvoiceService {
             inr_unit_price: inrUnitPrice,
             inr_line_total: inrLineTotal,
             inr_tax_amount: inrItemTaxAmount,
+            // Service-based billing fields
+            billable_hours: item.billable_hours || null,
+            resource_count: item.resource_count || null,
+            is_service_item: item.is_service_item || false,
             // Other fields
             hsn_code: item.hsn_code || null,
             created_at: new Date().toISOString(),
@@ -1162,15 +1239,31 @@ class InvoiceService {
         
         console.log('✅ New items inserted successfully with multi-currency support');
 
+        // Calculate discount
+        let discountAmount = 0;
+        if (invoiceData.discount_type && invoiceData.discount_value) {
+          const discountValue = Number(invoiceData.discount_value);
+          if (invoiceData.discount_type === 'percentage') {
+            discountAmount = (subtotal * discountValue) / 100;
+          } else {
+            discountAmount = discountValue;
+          }
+        }
+
+        // Recalculate tax on discounted subtotal
+        const discountedSubtotal = subtotal - discountAmount;
+        const averageTaxRate = taxAmount > 0 && subtotal > 0 ? (taxAmount / subtotal) * 100 : 0;
+        const adjustedTaxAmount = (discountedSubtotal * averageTaxRate) / 100;
+
         // Convert totals to INR for multi-currency support
-        const totalAmount = subtotal + taxAmount;
+        const totalAmount = discountedSubtotal + adjustedTaxAmount;
         let inrSubtotal = subtotal;
-        let inrTaxAmount = taxAmount;
+        let inrTaxAmount = adjustedTaxAmount;
         let inrTotalAmount = totalAmount;
 
         if (currencyCode !== 'INR') {
           inrSubtotal = await exchangeRateService.convertToINR(subtotal, currencyCode, invoiceDate);
-          inrTaxAmount = await exchangeRateService.convertToINR(taxAmount, currencyCode, invoiceDate);
+          inrTaxAmount = await exchangeRateService.convertToINR(adjustedTaxAmount, currencyCode, invoiceDate);
           inrTotalAmount = await exchangeRateService.convertToINR(totalAmount, currencyCode, invoiceDate);
           
           console.log('✅ Currency conversion completed for invoice update:', {
@@ -1197,13 +1290,16 @@ class InvoiceService {
           .update({
             // Original currency amounts (for display and PDF generation)
             subtotal,
-            tax_amount: taxAmount,
+            discount_type: invoiceData.discount_type || null,
+            discount_value: invoiceData.discount_value || 0,
+            discount_amount: discountAmount,
+            tax_amount: adjustedTaxAmount,
             total_amount: totalAmount,
             currency_code: currencyCode,
             // Multi-currency fields
             original_currency_code: currencyCode,
             original_subtotal: subtotal,
-            original_tax_amount: taxAmount,
+            original_tax_amount: adjustedTaxAmount,
             original_total_amount: totalAmount,
             exchange_rate: exchangeRate,
             exchange_rate_date: invoiceDate,
@@ -1991,6 +2087,159 @@ class InvoiceService {
       console.error('💥 Failed to force fix currency conversions:', error);
       throw error;
     }
+  }
+
+  /**
+   * Create invoice(s) from a quote with optional split capability
+   * @param quoteId - The quote ID to convert
+   * @param splitOptions - Optional array of item indices for each invoice (for split invoices)
+   * @returns Array of created invoice IDs and numbers
+   */
+  async createInvoicesFromQuote(
+    quoteId: string,
+    splitOptions?: { itemIndices: number[]; dueDate?: string }[]
+  ): Promise<{ invoiceId: string; invoiceNumber: string }[]> {
+    // Import quoteService to avoid circular dependency
+    const { quoteService } = await import('./quoteService');
+
+    const quote = await quoteService.getQuoteById(quoteId);
+    if (!quote) {
+      throw new Error('Quote not found');
+    }
+
+    if (quote.status === 'converted') {
+      throw new Error('Quote has already been converted to an invoice');
+    }
+
+    if (!quote.quote_items || quote.quote_items.length === 0) {
+      throw new Error('Quote has no items to convert');
+    }
+
+    const invoiceSettings = await this.getInvoiceSettings();
+    const dueDays = invoiceSettings?.due_days || 30;
+
+    const invoices: { invoiceId: string; invoiceNumber: string }[] = [];
+
+    // If no split options provided, create a single invoice with all items
+    if (!splitOptions || splitOptions.length === 0) {
+      const defaultDueDate = new Date();
+      defaultDueDate.setDate(defaultDueDate.getDate() + dueDays);
+
+      const invoiceData: CreateInvoiceData = {
+        customer_id: quote.customer_id,
+        invoice_date: new Date().toISOString().split('T')[0],
+        due_date: defaultDueDate.toISOString().split('T')[0],
+        // Copy project details from quote
+        project_title: quote.project_title,
+        estimated_time: quote.estimated_time,
+        company_contact_name: quote.company_contact_name,
+        company_contact_email: quote.company_contact_email,
+        company_contact_phone: quote.company_contact_phone,
+        // Copy discount
+        discount_type: quote.discount_type,
+        discount_value: quote.discount_value,
+        // Quote reference
+        created_from_quote_id: quote.id,
+        quote_reference: quote.quote_number,
+        // Additional info
+        notes: quote.notes || `Generated from Quote: ${quote.quote_number}`,
+        terms_conditions: quote.terms_conditions || '',
+        items: quote.quote_items.map(item => ({
+          product_id: item.product_id,
+          item_name: item.item_name,
+          description: item.description,
+          quantity: item.quantity,
+          unit: item.unit,
+          unit_price: item.unit_price,
+          tax_rate: item.tax_rate,
+          hsn_code: item.hsn_code,
+          billable_hours: item.billable_hours,
+          resource_count: item.resource_count,
+          is_service_item: item.is_service_item
+        }))
+      };
+
+      const invoice = await this.createInvoice(invoiceData);
+      invoices.push({
+        invoiceId: invoice.id,
+        invoiceNumber: invoice.invoice_number
+      });
+    } else {
+      // Create multiple invoices (split invoice functionality)
+      for (let i = 0; i < splitOptions.length; i++) {
+        const option = splitOptions[i];
+        const itemIndices = option.itemIndices;
+
+        if (itemIndices.length === 0) {
+          continue; // Skip empty splits
+        }
+
+        const selectedItems = itemIndices
+          .filter(idx => idx >= 0 && idx < quote.quote_items!.length)
+          .map(idx => quote.quote_items![idx]);
+
+        if (selectedItems.length === 0) {
+          continue; // Skip if no valid items
+        }
+
+        const splitDueDate = option.dueDate || (() => {
+          const date = new Date();
+          date.setDate(date.getDate() + dueDays);
+          return date.toISOString().split('T')[0];
+        })();
+
+        const invoiceData: CreateInvoiceData = {
+          customer_id: quote.customer_id,
+          invoice_date: new Date().toISOString().split('T')[0],
+          due_date: splitDueDate,
+          // Copy project details from quote
+          project_title: quote.project_title,
+          estimated_time: quote.estimated_time,
+          company_contact_name: quote.company_contact_name,
+          company_contact_email: quote.company_contact_email,
+          company_contact_phone: quote.company_contact_phone,
+          // Note: Discount is not applied to split invoices for accuracy
+          // Quote reference
+          created_from_quote_id: quote.id,
+          quote_reference: `${quote.quote_number} (Split ${i + 1}/${splitOptions.length})`,
+          // Additional info
+          notes: quote.notes || `Generated from Quote: ${quote.quote_number} - Part ${i + 1} of ${splitOptions.length}`,
+          terms_conditions: quote.terms_conditions || '',
+          items: selectedItems.map(item => ({
+            product_id: item.product_id,
+            item_name: item.item_name,
+            description: item.description,
+            quantity: item.quantity,
+            unit: item.unit,
+            unit_price: item.unit_price,
+            tax_rate: item.tax_rate,
+            hsn_code: item.hsn_code,
+            billable_hours: item.billable_hours,
+            resource_count: item.resource_count,
+            is_service_item: item.is_service_item
+          }))
+        };
+
+        const invoice = await this.createInvoice(invoiceData);
+        invoices.push({
+          invoiceId: invoice.id,
+          invoiceNumber: invoice.invoice_number
+        });
+      }
+    }
+
+    // Update quote status to converted
+    await supabase
+      .from('quotes')
+      .update({
+        status: 'converted',
+        converted_to_invoice_id: invoices[0].invoiceId, // Reference the first invoice
+        converted_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', quoteId);
+
+    return invoices;
   }
 }
 
