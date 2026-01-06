@@ -561,7 +561,27 @@ const QuoteManagement: React.FC<QuoteManagementProps> = ({ onBackToDashboard }) 
       await loadData();
     } catch (error) {
       console.error('Failed to save quote:', error);
-      showError(`Failed to save quote: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      
+      // Better error message extraction
+      let errorMessage = 'Unknown error';
+      if (error instanceof Error) {
+        errorMessage = error.message;
+      } else if (typeof error === 'string') {
+        errorMessage = error;
+      } else if (error && typeof error === 'object') {
+        // Handle Supabase error format
+        if ('message' in error && typeof error.message === 'string') {
+          errorMessage = error.message;
+        } else if ('error' in error && typeof error.error === 'string') {
+          errorMessage = error.error;
+        } else if ('details' in error && typeof error.details === 'string') {
+          errorMessage = error.details;
+        } else {
+          errorMessage = JSON.stringify(error);
+        }
+      }
+      
+      showError(`Failed to save quote: ${errorMessage}`);
     } finally {
       setModalLoading(false);
     }
@@ -590,7 +610,10 @@ const QuoteManagement: React.FC<QuoteManagementProps> = ({ onBackToDashboard }) 
           unit: item.unit,
           unit_price: item.unit_price,
           tax_rate: item.tax_rate,
-          hsn_code: item.hsn_code
+          hsn_code: item.hsn_code,
+          billable_hours: item.billable_hours,
+          resource_count: item.resource_count,
+          is_service_item: item.is_service_item || false
         })) || [];
         
         setQuoteFormData({
@@ -617,7 +640,10 @@ const QuoteManagement: React.FC<QuoteManagementProps> = ({ onBackToDashboard }) 
             unit: 'pcs',
             unit_price: 0,
             tax_rate: 18,
-            hsn_code: undefined
+            hsn_code: undefined,
+            billable_hours: undefined,
+            resource_count: undefined,
+            is_service_item: false
           }]
         });
         setGeneratedQuoteNumber(fullQuote.quote_number);
@@ -633,53 +659,18 @@ const QuoteManagement: React.FC<QuoteManagementProps> = ({ onBackToDashboard }) 
 
   const handleEditQuote = async (quote: Quote) => {
     try {
+      setModalLoading(true);
       const fullQuote = await quoteService.getQuoteById(quote.id);
-      if (fullQuote) {
-        setSelectedQuote(fullQuote);
-        
-        const mappedItems = fullQuote.quote_items?.map(item => ({
-          product_id: item.product_id,
-          item_name: item.item_name,
-          description: item.description,
-          quantity: item.quantity,
-          unit: item.unit,
-          unit_price: item.unit_price,
-          tax_rate: item.tax_rate,
-          hsn_code: item.hsn_code
-        })) || [];
-        
-        const itemsForForm = mappedItems.length > 0 ? mappedItems : [{
-          product_id: undefined,
-          item_name: '',
-          description: '',
-          quantity: 1,
-          unit: 'pcs',
-          unit_price: 0,
-          tax_rate: 18,
-          hsn_code: undefined
-        }];
-        
-        setQuoteFormData({
-          customer_id: fullQuote.customer_id,
-          quote_date: fullQuote.quote_date,
-          valid_until: fullQuote.valid_until || '',
-          // Project details
-          project_title: fullQuote.project_title || '',
-          estimated_time: fullQuote.estimated_time || '',
-          company_contact_name: fullQuote.company_contact_name || '',
-          company_contact_email: fullQuote.company_contact_email || '',
-          company_contact_phone: fullQuote.company_contact_phone || '',
-          // Additional info
-          notes: fullQuote.notes || '',
-          terms_conditions: fullQuote.terms_conditions || '',
-          items: itemsForForm
-        });
-        setGeneratedQuoteNumber(fullQuote.quote_number);
-        setQuoteModalMode('edit');
-        setShowQuoteModal(true);
-        
-        // Load necessary data for editing
-        if (customers.length === 0 || products.length === 0) {
+      
+      if (!fullQuote) {
+        showError('Quote not found');
+        setModalLoading(false);
+        return;
+      }
+      
+      // First, load necessary data for editing if not already loaded
+      if (customers.length === 0 || products.length === 0) {
+        try {
           const [customersData, productsData, termsData] = await Promise.all([
             invoiceService.getCustomers({}, 1, 1000),
             invoiceService.getProducts({}, 1, 1000),
@@ -688,11 +679,88 @@ const QuoteManagement: React.FC<QuoteManagementProps> = ({ onBackToDashboard }) 
           setCustomers(customersData.data || []);
           setProducts(productsData.data || []);
           setTermsTemplates(termsData || []);
+        } catch (loadError) {
+          console.error('Failed to load support data:', loadError);
+          showWarning('Some support data could not be loaded');
         }
       }
+      
+      // Map quote items with all fields INCLUDING the ID for updates
+      const mappedItems = fullQuote.quote_items?.map(item => ({
+        id: item.id, // IMPORTANT: Preserve ID for updates
+        product_id: item.product_id,
+        item_name: item.item_name,
+        description: item.description,
+        quantity: item.quantity,
+        unit: item.unit,
+        unit_price: item.unit_price,
+        tax_rate: item.tax_rate,
+        hsn_code: item.hsn_code,
+        billable_hours: item.billable_hours,
+        resource_count: item.resource_count,
+        is_service_item: item.is_service_item || false
+      })) || [];
+      
+      const itemsForForm = mappedItems.length > 0 ? mappedItems : [{
+        product_id: undefined,
+        item_name: '',
+        description: '',
+        quantity: 1,
+        unit: 'pcs',
+        unit_price: 0,
+        tax_rate: 18,
+        hsn_code: undefined,
+        billable_hours: undefined,
+        resource_count: undefined,
+        is_service_item: false
+      }];
+      
+      // Set all form data
+      const formData = {
+        customer_id: fullQuote.customer_id,
+        quote_date: fullQuote.quote_date,
+        valid_until: fullQuote.valid_until || '',
+        // Project details
+        project_title: fullQuote.project_title || '',
+        estimated_time: fullQuote.estimated_time || '',
+        company_contact_name: fullQuote.company_contact_name || '',
+        company_contact_email: fullQuote.company_contact_email || '',
+        company_contact_phone: fullQuote.company_contact_phone || '',
+        // Discount
+        discount_type: fullQuote.discount_type,
+        discount_value: fullQuote.discount_value || 0,
+        // Additional info
+        notes: fullQuote.notes || '',
+        terms_conditions: fullQuote.terms_conditions || '',
+        items: itemsForForm
+      };
+      
+      setQuoteFormData(formData);
+      
+      // Set the default product dropdown if first item has a product
+      if (itemsForForm.length > 0 && itemsForForm[0].product_id) {
+        setSelectedDefaultProduct(itemsForForm[0].product_id);
+        const product = products.find(p => p.id === itemsForForm[0].product_id);
+        if (product?.hsn_code) {
+          setGlobalHsnCode(product.hsn_code);
+        }
+      } else {
+        setSelectedDefaultProduct('');
+        setGlobalHsnCode('');
+      }
+      
+      // Set state to show modal
+      setSelectedQuote(fullQuote);
+      setGeneratedQuoteNumber(fullQuote.quote_number);
+      setShowQuotePreview(false); // Start in form mode, not preview
+      setQuoteModalMode('edit');
+      setShowQuoteModal(true);
+      
     } catch (error) {
       console.error('Failed to load quote details:', error);
       showError(`Failed to load quote details: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setModalLoading(false);
     }
   };
 
@@ -2163,7 +2231,15 @@ const QuoteManagement: React.FC<QuoteManagementProps> = ({ onBackToDashboard }) 
                       </thead>
                       <tbody>
                         {selectedQuote.quote_items?.map((item, index) => {
-                          const lineSubtotal = item.quantity * item.unit_price;
+                          // Calculate line totals based on item type
+                          let lineSubtotal = 0;
+                          if (item.is_service_item && item.billable_hours) {
+                            const resourceCount = item.resource_count || 1;
+                            lineSubtotal = resourceCount * item.quantity * item.billable_hours * item.unit_price;
+                          } else {
+                            lineSubtotal = item.quantity * item.unit_price;
+                          }
+                          
                           const lineTax = (lineSubtotal * item.tax_rate) / 100;
                           const lineTotal = lineSubtotal + lineTax;
                           const currInfo = getCurrencyInfo(selectedQuote.customer);
@@ -2172,6 +2248,11 @@ const QuoteManagement: React.FC<QuoteManagementProps> = ({ onBackToDashboard }) 
                               <td className="border border-gray-300 px-2 py-2">{index + 1}</td>
                               <td className="border border-gray-300 px-2 py-2">
                                 <div className="font-medium">{item.item_name}</div>
+                                {item.is_service_item && item.billable_hours && (
+                                  <div className="text-xs text-blue-600 mt-1">
+                                    📊 Service: {item.resource_count || 1} resources × {item.quantity} months × {item.billable_hours} hrs/month
+                                  </div>
+                                )}
                                 {item.description && (
                                   <div className="text-gray-600 text-xs mt-1 whitespace-pre-wrap">{item.description}</div>
                                 )}

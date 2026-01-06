@@ -659,6 +659,11 @@ class ExchangeRateService {
    * Convert any currency to INR (most common use case)
    */
   async convertToINR(amount: number, fromCurrency: string, date?: string): Promise<number> {
+    // Bypass conversion for zero or negative amounts
+    if (amount <= 0) {
+      return 0;
+    }
+    
     if (fromCurrency === 'INR') {
       return amount;
     }

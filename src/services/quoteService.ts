@@ -401,7 +401,15 @@ class QuoteService {
 
     // Create quote items
     const itemsWithCalculations = await Promise.all(quoteData.items.map(async (item) => {
-      const lineTotal = item.quantity * item.unit_price;
+      // Calculate line total based on item type
+      let lineTotal = 0;
+      if (item.is_service_item && item.billable_hours) {
+        const resourceCount = item.resource_count || 1;
+        lineTotal = resourceCount * item.quantity * item.billable_hours * item.unit_price;
+      } else {
+        lineTotal = item.quantity * item.unit_price;
+      }
+      
       const itemTaxAmount = (lineTotal * item.tax_rate) / 100;
       
       let inrUnitPrice = item.unit_price;
@@ -431,7 +439,10 @@ class QuoteService {
         inr_unit_price: inrUnitPrice,
         inr_line_total: inrLineTotal,
         inr_tax_amount: inrItemTaxAmount,
-        hsn_code: item.hsn_code || null
+        hsn_code: item.hsn_code || null,
+        billable_hours: item.billable_hours || null,
+        resource_count: item.resource_count || null,
+        is_service_item: item.is_service_item || false
       };
     }));
 
@@ -472,8 +483,9 @@ class QuoteService {
     
     if (quoteError) throw quoteError;
 
-    // If items are provided, update them
+    // If items are provided, update them intelligently
     if (quoteData.items && quoteData.items.length > 0) {
+      
       // Get customer to determine currency
       const { data: customer } = await supabase
         .from('customers')
@@ -486,13 +498,7 @@ class QuoteService {
         currencyCode = customer.country.currency_code;
       }
 
-      // Delete existing items
-      await supabase
-        .from('quote_items')
-        .delete()
-        .eq('quote_id', id);
-
-      // Calculate totals and create new items
+      // Calculate totals and prepare items
       let subtotal = 0;
       let taxAmount = 0;
       const quoteDate = quoteData.quote_date?.split('T')[0] || quote.quote_date?.split('T')[0];
@@ -505,8 +511,21 @@ class QuoteService {
         }
       }
 
-      const itemsWithCalculations = await Promise.all(quoteData.items.map(async (item) => {
-        const lineTotal = item.quantity * item.unit_price;
+      // Separate items into: items with ID (update), items without ID (insert)
+      const itemsToUpdate: any[] = [];
+      const itemsToInsert: any[] = [];
+      const providedItemIds = new Set<string>();
+
+      for (const item of quoteData.items) {
+        // Calculate line total based on item type
+        let lineTotal = 0;
+        if (item.is_service_item && item.billable_hours) {
+          const resourceCount = item.resource_count || 1;
+          lineTotal = resourceCount * item.quantity * item.billable_hours * item.unit_price;
+        } else {
+          lineTotal = item.quantity * item.unit_price;
+        }
+        
         const itemTaxAmount = (lineTotal * item.tax_rate) / 100;
         subtotal += lineTotal;
         taxAmount += itemTaxAmount;
@@ -521,7 +540,7 @@ class QuoteService {
           inrItemTaxAmount = await exchangeRateService.convertToINR(itemTaxAmount, currencyCode, quoteDate);
         }
 
-        return {
+        const itemData = {
           quote_id: id,
           product_id: item.product_id || null,
           item_name: item.item_name,
@@ -538,13 +557,64 @@ class QuoteService {
           inr_unit_price: inrUnitPrice,
           inr_line_total: inrLineTotal,
           inr_tax_amount: inrItemTaxAmount,
-          hsn_code: item.hsn_code || null
+          hsn_code: item.hsn_code || null,
+          billable_hours: item.billable_hours || null,
+          resource_count: item.resource_count || null,
+          is_service_item: item.is_service_item || false
         };
-      }));
 
-      await supabase
+        if (item.id) {
+          // This is an existing item - UPDATE it
+          itemsToUpdate.push({ ...itemData, id: item.id });
+          providedItemIds.add(item.id);
+        } else {
+          // This is a new item - INSERT it
+          itemsToInsert.push(itemData);
+        }
+      }
+
+      // Get existing item IDs from database
+      const { data: existingItems } = await supabase
         .from('quote_items')
-        .insert(itemsWithCalculations);
+        .select('id')
+        .eq('quote_id', id);
+
+      const existingItemIds = new Set(existingItems?.map(i => i.id) || []);
+      
+      // Find items to delete (in DB but not in provided list)
+      const itemsToDelete = Array.from(existingItemIds).filter(itemId => !providedItemIds.has(itemId));
+
+      // Execute updates
+      if (itemsToUpdate.length > 0) {
+        for (const item of itemsToUpdate) {
+          const { id: itemId, ...updateData } = item;
+          const { error: updateError } = await supabase
+            .from('quote_items')
+            .update(updateData)
+            .eq('id', itemId);
+          
+          if (updateError) throw updateError;
+        }
+      }
+
+      // Execute inserts
+      if (itemsToInsert.length > 0) {
+        const { error: insertError } = await supabase
+          .from('quote_items')
+          .insert(itemsToInsert);
+        
+        if (insertError) throw insertError;
+      }
+
+      // Execute deletes
+      if (itemsToDelete.length > 0) {
+        const { error: deleteError } = await supabase
+          .from('quote_items')
+          .delete()
+          .in('id', itemsToDelete);
+        
+        if (deleteError) throw deleteError;
+      }
 
       // Calculate discount
       let discountAmount = 0;
@@ -596,6 +666,45 @@ class QuoteService {
           updated_at: new Date().toISOString()
         })
         .eq('id', id);
+    } else {
+      // If no items were provided in the update, recalculate totals from existing items in database
+      // This ensures data integrity - totals always match actual items
+      const { data: existingItems } = await supabase
+        .from('quote_items')
+        .select('line_total, tax_amount')
+        .eq('quote_id', id);
+
+      if (existingItems && existingItems.length > 0) {
+        // Recalculate totals from existing items
+        const subtotal = existingItems.reduce((sum, item) => sum + (item.line_total || 0), 0);
+        const taxAmount = existingItems.reduce((sum, item) => sum + (item.tax_amount || 0), 0);
+        const totalAmount = subtotal + taxAmount;
+
+        await supabase
+          .from('quotes')
+          .update({
+            subtotal,
+            tax_amount: taxAmount,
+            total_amount: totalAmount,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', id);
+      } else {
+        // No items exist - reset totals to zero
+        await supabase
+          .from('quotes')
+          .update({
+            subtotal: 0,
+            discount_amount: 0,
+            tax_amount: 0,
+            total_amount: 0,
+            inr_subtotal: 0,
+            inr_tax_amount: 0,
+            inr_total_amount: 0,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', id);
+      }
     }
 
     return this.getQuoteById(id) as Promise<Quote>;

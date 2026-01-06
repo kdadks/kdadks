@@ -611,12 +611,21 @@ export const CreateQuote: React.FC<CreateQuoteProps> = ({
                             checked={item.is_service_item || false}
                             onChange={(e) => {
                               onItemChange(index, 'is_service_item', e.target.checked);
-                              // Reset unit when toggling
+                              // Initialize service fields when toggling
                               if (e.target.checked) {
                                 onItemChange(index, 'unit', 'months');
+                                // Initialize resource_count if not set
+                                if (!item.resource_count) {
+                                  onItemChange(index, 'resource_count', 1);
+                                }
+                                // Initialize billable_hours if not set
+                                if (!item.billable_hours) {
+                                  onItemChange(index, 'billable_hours', 160);
+                                }
                               } else {
                                 onItemChange(index, 'unit', 'pcs');
                                 onItemChange(index, 'billable_hours', undefined);
+                                onItemChange(index, 'resource_count', undefined);
                               }
                             }}
                             className="mr-2 h-4 w-4 text-blue-600 focus:ring-blue-500 border-slate-300 rounded"
@@ -627,72 +636,129 @@ export const CreateQuote: React.FC<CreateQuoteProps> = ({
                         </label>
                       </div>
 
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-                        {/* Item Name */}
-                        <div className={item.is_service_item ? "lg:col-span-1" : "lg:col-span-2"}>
-                          <label className="block text-sm font-medium text-slate-700 mb-1">
-                            Item Name *
-                          </label>
-                          <input
-                            type="text"
-                            placeholder={item.is_service_item ? "e.g., IT Consulting Services" : "Enter item name"}
-                            value={item.item_name}
-                            onChange={(e) => onItemChange(index, 'item_name', e.target.value)}
-                            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-colors text-sm"
-                            required
-                          />
-                        </div>
+                      {/* Service Items: Split into 2 rows for better alignment */}
+                      {item.is_service_item ? (
+                        <div className="space-y-4">
+                          {/* Row 1: Item Name and Resources/Personnel */}
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            {/* Item Name */}
+                            <div>
+                              <label className="block text-sm font-medium text-slate-700 mb-1">
+                                Item Name *
+                              </label>
+                              <input
+                                type="text"
+                                placeholder="e.g., IT Consulting Services"
+                                value={item.item_name}
+                                onChange={(e) => onItemChange(index, 'item_name', e.target.value)}
+                                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-colors text-sm"
+                                required
+                              />
+                            </div>
 
-                        {/* Resource Count - Only for Service Items */}
-                        {item.is_service_item && (
-                          <div>
+                            {/* Resource Count */}
+                            <div>
+                              <label className="block text-sm font-medium text-slate-700 mb-1">
+                                Resources/Personnel
+                              </label>
+                              <input
+                                type="number"
+                                min="1"
+                                step="1"
+                                placeholder="e.g., 5"
+                                value={item.resource_count || 1}
+                                onChange={(e) => onItemChange(index, 'resource_count', parseFloat(e.target.value) || 1)}
+                                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-colors text-sm"
+                              />
+                            </div>
+                          </div>
+
+                          {/* Row 2: Duration, Hours/Month, and Rate */}
+                          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                            {/* Duration (Months) */}
+                            <div>
+                              <label className="block text-sm font-medium text-slate-700 mb-1">
+                                Duration (Months)
+                              </label>
+                              <input
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                placeholder="e.g., 6"
+                                value={item.quantity}
+                                onChange={(e) => onItemChange(index, 'quantity', parseFloat(e.target.value) || 0)}
+                                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-colors text-sm"
+                              />
+                            </div>
+
+                            {/* Billable Hours */}
+                            <div>
+                              <label className="block text-sm font-medium text-slate-700 mb-1">
+                                Hours/Month
+                              </label>
+                              <input
+                                type="number"
+                                min="0"
+                                step="1"
+                                placeholder="e.g., 160"
+                                value={item.billable_hours || ''}
+                                onChange={(e) => onItemChange(index, 'billable_hours', parseFloat(e.target.value) || undefined)}
+                                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-colors text-sm"
+                              />
+                            </div>
+
+                            {/* Hourly Rate */}
+                            <div>
+                              <label className="block text-sm font-medium text-slate-700 mb-1">
+                                Rate ({currencyInfo.symbol}/hr)
+                              </label>
+                              <input
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                placeholder="Hourly rate"
+                                value={item.unit_price}
+                                onChange={(e) => onItemChange(index, 'unit_price', parseFloat(e.target.value) || 0)}
+                                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-colors text-sm"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        /* Regular Items: 3 fields */
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+                          {/* Item Name - spans 2 columns */}
+                          <div className="sm:col-span-2">
                             <label className="block text-sm font-medium text-slate-700 mb-1">
-                              Resources/Personnel
+                              Item Name *
                             </label>
                             <input
-                              type="number"
-                              min="1"
-                              step="1"
-                              placeholder="e.g., 5"
-                              value={item.resource_count || 1}
-                              onChange={(e) => onItemChange(index, 'resource_count', parseFloat(e.target.value) || 1)}
+                              type="text"
+                              placeholder="Enter item name"
+                              value={item.item_name}
+                              onChange={(e) => onItemChange(index, 'item_name', e.target.value)}
                               className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-colors text-sm"
+                              required
                             />
                           </div>
-                        )}
 
-                        {/* Quantity / Duration */}
-                        <div>
-                          <label className="block text-sm font-medium text-slate-700 mb-1">
-                            {item.is_service_item ? 'Duration (Months)' : 'Quantity'}
-                          </label>
-                          <input
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            value={item.quantity}
-                            onChange={(e) => onItemChange(index, 'quantity', parseFloat(e.target.value) || 0)}
-                            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-colors text-sm"
-                          />
-                        </div>
-
-                        {/* Conditional: Billable Hours for Services OR Unit for Products */}
-                        {item.is_service_item ? (
+                          {/* Quantity */}
                           <div>
                             <label className="block text-sm font-medium text-slate-700 mb-1">
-                              Hours/Month
+                              Quantity
                             </label>
                             <input
                               type="number"
                               min="0"
-                              step="1"
-                              placeholder="e.g., 160"
-                              value={item.billable_hours || ''}
-                              onChange={(e) => onItemChange(index, 'billable_hours', parseFloat(e.target.value) || undefined)}
+                              step="0.01"
+                              placeholder="e.g., 10"
+                              value={item.quantity}
+                              onChange={(e) => onItemChange(index, 'quantity', parseFloat(e.target.value) || 0)}
                               className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-colors text-sm"
                             />
                           </div>
-                        ) : (
+
+                          {/* Unit */}
                           <div>
                             <label className="block text-sm font-medium text-slate-700 mb-1">
                               Unit
@@ -705,24 +771,31 @@ export const CreateQuote: React.FC<CreateQuoteProps> = ({
                               className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-colors text-sm"
                             />
                           </div>
-                        )}
-
-                        {/* Unit Price / Hourly Rate */}
-                        <div>
-                          <label className="block text-sm font-medium text-slate-700 mb-1">
-                            {item.is_service_item ? `Rate (${currencyInfo.symbol}/hr)` : `Rate (${currencyInfo.symbol})`}
-                          </label>
-                          <input
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            placeholder={item.is_service_item ? "Hourly rate" : "Unit price"}
-                            value={item.unit_price}
-                            onChange={(e) => onItemChange(index, 'unit_price', parseFloat(e.target.value) || 0)}
-                            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-colors text-sm"
-                          />
                         </div>
-                      </div>
+                      )}
+
+                      {/* Rate field for regular items - separate row for better alignment */}
+                      {!item.is_service_item && (
+                        <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+                          <div className="sm:col-span-2">
+                            {/* Empty space for alignment */}
+                          </div>
+                          <div className="sm:col-span-2">
+                            <label className="block text-sm font-medium text-slate-700 mb-1">
+                              Rate ({currencyInfo.symbol})
+                            </label>
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              placeholder="Unit price"
+                              value={item.unit_price}
+                              onChange={(e) => onItemChange(index, 'unit_price', parseFloat(e.target.value) || 0)}
+                              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-colors text-sm"
+                            />
+                          </div>
+                        </div>
+                      )}
                       
                       {/* Description and HSN Code */}
                       <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">

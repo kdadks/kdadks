@@ -160,6 +160,7 @@ export interface CreateQuoteData {
 }
 
 export interface CreateQuoteItemData {
+  id?: string; // Include ID for updates
   product_id?: string;
   item_name: string;
   description: string;
