@@ -740,16 +740,30 @@ class QuoteService {
   }
 
   async deleteQuote(id: string): Promise<void> {
+    // Get current user for authentication check
+    const currentUser = await simpleAuth.getCurrentUser();
+    if (!currentUser) {
+      throw new Error('User not authenticated');
+    }
+
     // Soft delete: mark as expired
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from('quotes')
       .update({ 
         status: 'expired', 
         updated_at: new Date().toISOString() 
       })
-      .eq('id', id);
+      .eq('id', id)
+      .select();
     
-    if (error) throw error;
+    if (error) {
+      console.error('Delete quote error:', error);
+      throw new Error(`Failed to delete quote: ${error.message}`);
+    }
+    
+    if (!data || data.length === 0) {
+      throw new Error('Quote not found or already deleted');
+    }
   }
 
   async duplicateQuote(id: string): Promise<Quote> {

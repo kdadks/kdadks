@@ -25,6 +25,7 @@ import { quoteService } from '../../services/quoteService';
 import { invoiceService } from '../../services/invoiceService';
 import { useToast } from '../ui/ToastProvider';
 import { useConfirmDialog } from '../../hooks/useConfirmDialog';
+import ConfirmDialog from '../ui/ConfirmDialog';
 import { PDFBrandingUtils } from '../../utils/pdfBrandingUtils';
 import { CurrencyDisplay } from '../ui/CurrencyDisplay';
 import { CreateQuote } from './CreateQuote';
@@ -769,17 +770,21 @@ const QuoteManagement: React.FC<QuoteManagementProps> = ({ onBackToDashboard }) 
       title: 'Delete Quotation',
       message: `Are you sure you want to delete quotation "${quote.quote_number}"?\n\nThis will mark the quotation as expired.`,
       confirmText: 'Delete',
+      cancelText: 'Cancel',
       type: 'danger'
     });
     
     if (confirmed) {
       try {
+        setLoading(true);
         await quoteService.deleteQuote(quote.id);
         showSuccess('Quotation deleted successfully!');
         await loadData();
       } catch (error) {
         console.error('Failed to delete quote:', error);
         showError(`Failed to delete quote: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      } finally {
+        setLoading(false);
       }
     }
   };
@@ -849,8 +854,17 @@ const QuoteManagement: React.FC<QuoteManagementProps> = ({ onBackToDashboard }) 
         return;
       }
 
-      // Calculate totals
-      const subtotal = fullQuote.quote_items?.reduce((sum, item) => sum + (item.quantity * item.unit_price), 0) || 0;
+      // Calculate totals with service item support
+      const subtotal = fullQuote.quote_items?.reduce((sum, item) => {
+        let lineTotal = 0;
+        if (item.is_service_item && item.billable_hours) {
+          const resourceCount = item.resource_count || 1;
+          lineTotal = resourceCount * item.quantity * item.billable_hours * item.unit_price;
+        } else {
+          lineTotal = item.quantity * item.unit_price;
+        }
+        return sum + lineTotal;
+      }, 0) || 0;
       
       // Calculate discount
       let discountAmount = 0;
@@ -864,7 +878,16 @@ const QuoteManagement: React.FC<QuoteManagementProps> = ({ onBackToDashboard }) 
       
       // Calculate tax on discounted subtotal
       const discountedSubtotal = subtotal - discountAmount;
-      const totalTax = fullQuote.quote_items?.reduce((sum, item) => sum + (item.quantity * item.unit_price * item.tax_rate / 100), 0) || 0;
+      const totalTax = fullQuote.quote_items?.reduce((sum, item) => {
+        let lineSubtotal = 0;
+        if (item.is_service_item && item.billable_hours) {
+          const resourceCount = item.resource_count || 1;
+          lineSubtotal = resourceCount * item.quantity * item.billable_hours * item.unit_price;
+        } else {
+          lineSubtotal = item.quantity * item.unit_price;
+        }
+        return sum + (lineSubtotal * item.tax_rate / 100);
+      }, 0) || 0;
       const averageTaxRate = totalTax > 0 && subtotal > 0 ? (totalTax / subtotal) * 100 : 0;
       const adjustedTotalTax = (discountedSubtotal * averageTaxRate) / 100;
       const total = discountedSubtotal + adjustedTotalTax;
@@ -1098,8 +1121,8 @@ const QuoteManagement: React.FC<QuoteManagementProps> = ({ onBackToDashboard }) 
       const tableRightEdge = pageWidth - rightMargin;
       const tableWidth = tableRightEdge - tableLeftMargin;
       
-      // Improved column widths for readability: #(12), Description(80), Qty(22), Rate(28), Tax(20), Amount(28)
-      const colWidths = [12, 80, 22, 28, 20, 28];
+      // Column widths optimized for A4 page (total 180mm): #(10), Description(75), Qty(20), Rate(27), Tax(18), Amount(30)
+      const colWidths = [10, 75, 20, 27, 18, 30];
       const colX: number[] = [tableLeftMargin];
       for (let i = 1; i < colWidths.length; i++) {
         colX.push(colX[i-1] + colWidths[i-1]);
@@ -1128,7 +1151,14 @@ const QuoteManagement: React.FC<QuoteManagementProps> = ({ onBackToDashboard }) 
       pdf.setTextColor(0, 0, 0);
       
       fullQuote.quote_items?.forEach((item, index) => {
-        const lineSubtotal = item.quantity * item.unit_price;
+        // Calculate line subtotal based on item type
+        let lineSubtotal = 0;
+        if (item.is_service_item && item.billable_hours) {
+          const resourceCount = item.resource_count || 1;
+          lineSubtotal = resourceCount * item.quantity * item.billable_hours * item.unit_price;
+        } else {
+          lineSubtotal = item.quantity * item.unit_price;
+        }
         const lineTax = (lineSubtotal * item.tax_rate) / 100;
         const lineTotal = lineSubtotal + lineTax;
         
@@ -1148,9 +1178,10 @@ const QuoteManagement: React.FC<QuoteManagementProps> = ({ onBackToDashboard }) 
         // Calculate row height - readable sizing
         const itemNameLines = pdf.splitTextToSize(item.item_name, colWidths[1] - 8);
         const nameHeight = itemNameLines.length * 5;
+        const serviceInfoHeight = (item.is_service_item && item.billable_hours) ? 4.5 : 0;
         const descHeight = formattedDescLines.length * 4;
         const minRowHeight = 12;
-        const rowHeight = Math.max(minRowHeight, nameHeight + descHeight + 8);
+        const rowHeight = Math.max(minRowHeight, nameHeight + serviceInfoHeight + descHeight + 8);
         
         // Check if we need a new page for this row
         checkPageBreak(rowHeight + 5);
@@ -1180,6 +1211,18 @@ const QuoteManagement: React.FC<QuoteManagementProps> = ({ onBackToDashboard }) 
           pdf.text(nameLine, colX[1] + 3, currentY);
           currentY += 5;
         });
+        
+        // Service item calculation info (if applicable)
+        if (item.is_service_item && item.billable_hours) {
+          pdf.setFont('helvetica', 'normal');
+          pdf.setFontSize(8);
+          pdf.setTextColor(100, 100, 100);
+          const resourceCount = item.resource_count || 1;
+          const serviceInfo = `Service: ${resourceCount} resource${resourceCount > 1 ? 's' : ''} x ${item.quantity} month${item.quantity > 1 ? 's' : ''} x ${item.billable_hours} hrs/month`;
+          pdf.text(serviceInfo, colX[1] + 5, currentY);
+          currentY += 4.5;
+          pdf.setTextColor(0, 0, 0);
+        }
         
         // Description (normal text, readable size)
         if (formattedDescLines.length > 0) {
@@ -1213,11 +1256,22 @@ const QuoteManagement: React.FC<QuoteManagementProps> = ({ onBackToDashboard }) 
       const totalsBoxWidth = 80;
       const totalsBoxX = tableRightEdge - totalsBoxWidth;
       
-      // Totals box
+      // Calculate amount in words lines first to determine box height
+      pdf.setFontSize(9);
+      const amountWords = formatAmountInWords(total, currencyInfo.name);
+      const maxWordWidth = totalsBoxWidth - 10;
+      const wordLines = pdf.splitTextToSize(amountWords, maxWordWidth);
+      const wordLinesHeight = wordLines.length * 4.5 + 8; // Line height + padding
+      
+      // Calculate total box height based on content
+      const baseHeight = discountAmount > 0 ? 45 : 38;
+      const totalsBoxHeight = baseHeight + wordLinesHeight;
+      
+      // Draw totals box with calculated height
       pdf.setFillColor(250, 250, 250);
-      pdf.rect(totalsBoxX, yPos, totalsBoxWidth, discountAmount > 0 ? 45 : 38, 'F');
+      pdf.rect(totalsBoxX, yPos, totalsBoxWidth, totalsBoxHeight, 'F');
       pdf.setDrawColor(200, 200, 200);
-      pdf.rect(totalsBoxX, yPos, totalsBoxWidth, discountAmount > 0 ? 45 : 38, 'S');
+      pdf.rect(totalsBoxX, yPos, totalsBoxWidth, totalsBoxHeight, 'S');
       
       const labelX = totalsBoxX + 5;
       const valueX = totalsBoxX + totalsBoxWidth - 5;
@@ -1257,16 +1311,19 @@ const QuoteManagement: React.FC<QuoteManagementProps> = ({ onBackToDashboard }) 
       pdf.text('TOTAL:', labelX, totalsY);
       pdf.text(formatCurrencyAmount(total, currencyInfo), valueX, totalsY, { align: 'right' });
       
-      // Amount in words
-      yPos = totalsY + 15;
-      checkPageBreak(15);
-      pdf.setFontSize(10);
+      // Amount in words - inside the totals box, right aligned
+      totalsY += 12;
+      pdf.setFontSize(9);
       pdf.setFont('helvetica', 'italic');
       pdf.setTextColor(80, 80, 80);
-      const amountWords = formatAmountInWords(total, currencyInfo.name);
-      const wordLines = pdf.splitTextToSize(amountWords, contentWidth);
-      pdf.text(wordLines, leftMargin, yPos);
-      yPos += wordLines.length * 5 + 10;
+      
+      // Right-align each line within the totals box
+      wordLines.forEach((line: string, index: number) => {
+        pdf.text(line, valueX, totalsY + (index * 4.5), { align: 'right' });
+      });
+      
+      // Update yPos to be after the totals box
+      yPos = yPos + totalsBoxHeight + 10;
       
       // ========== NOTES SECTION ==========
       if (fullQuote.notes) {
@@ -2275,10 +2332,10 @@ const QuoteManagement: React.FC<QuoteManagementProps> = ({ onBackToDashboard }) 
                         <span>Subtotal:</span>
                         <span>{formatCurrencyAmount(selectedQuote.subtotal, getCurrencyInfo(selectedQuote.customer))}</span>
                       </div>
-                      {selectedQuote.discount_amount && selectedQuote.discount_amount > 0 && (
+                      {(selectedQuote.discount_amount ?? 0) > 0 && (
                         <div className="flex justify-between py-1 text-red-600">
                           <span>Discount{selectedQuote.discount_type === 'percentage' ? ` (${selectedQuote.discount_value}%)` : ''}:</span>
-                          <span>-{formatCurrencyAmount(selectedQuote.discount_amount, getCurrencyInfo(selectedQuote.customer))}</span>
+                          <span>-{formatCurrencyAmount(selectedQuote.discount_amount ?? 0, getCurrencyInfo(selectedQuote.customer))}</span>
                         </div>
                       )}
                       <div className="flex justify-between py-1">
@@ -2405,6 +2462,276 @@ const QuoteManagement: React.FC<QuoteManagementProps> = ({ onBackToDashboard }) 
           </div>
         </div>
       )}
+
+      {/* Edit Mode Preview Modal */}
+      {showQuoteModal && quoteModalMode === 'edit' && showQuotePreview && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 overflow-y-auto h-full w-full z-[60]">
+          <div className="relative top-4 mx-auto p-5 border w-11/12 max-w-5xl shadow-lg rounded-lg bg-white mb-8">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-bold text-gray-900">Quotation Preview - {selectedQuote?.quote_number}</h2>
+              <button
+                onClick={() => setShowQuotePreview(false)}
+                className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <div className="max-h-[75vh] overflow-y-auto">
+              <div className="bg-white shadow-lg max-w-4xl mx-auto border border-gray-200" style={{fontSize: '14px', lineHeight: '1.4'}}>
+                {companySettings[0]?.header_image_url && (
+                  <div className="w-full">
+                    <img 
+                      src={companySettings[0].header_image_url} 
+                      alt="Header" 
+                      className="w-full h-auto object-cover"
+                      style={{ maxHeight: '120px' }}
+                    />
+                  </div>
+                )}
+                
+                <div className="p-6">
+                  {!companySettings[0]?.header_image_url && companySettings[0] && (
+                    <div className="flex justify-between items-start mb-6 pb-4 border-b-2 border-emerald-600">
+                      <div className="flex-1">
+                        {companySettings[0].logo_url && (
+                          <img 
+                            src={companySettings[0].logo_url} 
+                            alt="Logo" 
+                            className="h-16 w-auto mb-3"
+                          />
+                        )}
+                        <div className="text-xl font-bold text-gray-900 mb-1">{companySettings[0].company_name}</div>
+                        <div className="text-xs text-gray-600 space-y-0.5">
+                          {companySettings[0].address_line1 && <div>{companySettings[0].address_line1}</div>}
+                          {companySettings[0].address_line2 && <div>{companySettings[0].address_line2}</div>}
+                          <div>{[companySettings[0].city, companySettings[0].state, companySettings[0].postal_code].filter(Boolean).join(', ')}</div>
+                          <div className="flex gap-4 mt-1">
+                            {companySettings[0].email && <span>{companySettings[0].email}</span>}
+                            {companySettings[0].phone && <span>{companySettings[0].phone}</span>}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-3xl font-bold text-emerald-600 mb-2">QUOTATION</div>
+                        <div className="text-xs text-gray-600 space-y-1">
+                          <div><strong>Quote #:</strong> {selectedQuote?.quote_number}</div>
+                          <div><strong>Date:</strong> {new Date(quoteFormData.quote_date).toLocaleDateString()}</div>
+                          {quoteFormData.valid_until && (
+                            <div><strong>Valid Until:</strong> {new Date(quoteFormData.valid_until).toLocaleDateString()}</div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  
+                  {companySettings[0]?.header_image_url && (
+                    <div className="text-center mb-6 pb-4 border-b-2 border-emerald-600">
+                      <div className="text-3xl font-bold text-emerald-600 mb-2">QUOTATION</div>
+                      <div className="text-sm text-gray-600 space-x-4">
+                        <span><strong>Quote #:</strong> {selectedQuote?.quote_number}</span>
+                        <span><strong>Date:</strong> {new Date(quoteFormData.quote_date).toLocaleDateString()}</span>
+                        {quoteFormData.valid_until && (
+                          <span><strong>Valid Until:</strong> {new Date(quoteFormData.valid_until).toLocaleDateString()}</span>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {quoteFormData.project_title && (
+                    <div className="mb-6 p-4 bg-emerald-50 border border-emerald-200 rounded-lg text-center">
+                      <h3 className="text-lg font-bold text-emerald-800">{quoteFormData.project_title}</h3>
+                      {quoteFormData.estimated_time && (
+                        <p className="text-sm text-emerald-600 mt-1">Estimated Duration: {quoteFormData.estimated_time}</p>
+                      )}
+                    </div>
+                  )}
+                  
+                  <div className="grid grid-cols-2 gap-6 mb-6">
+                    <div className="bg-gray-50 p-4 rounded">
+                      <div className="font-semibold text-emerald-600 mb-2">QUOTE FOR:</div>
+                      {(() => {
+                        const customer = customers.find(c => c.id === quoteFormData.customer_id);
+                        if (!customer) return <p className="text-gray-400 italic">No customer selected</p>;
+                        const currencyInfo = getCurrencyInfo(customer);
+                        const taxLabel = getTaxLabel(customer);
+                        
+                        // Calculate totals for preview
+                        const { subtotal, discountAmount, taxAmount, total } = calculateQuoteTotals();
+                        
+                        return (
+                          <>
+                            <div className="text-sm">
+                              <div className="font-bold text-base mb-1">{customer.company_name || customer.contact_person}</div>
+                              {customer.contact_person && customer.company_name && (
+                                <div className="text-gray-600">Attn: {customer.contact_person}</div>
+                              )}
+                              <div className="text-xs text-gray-600 mt-2 space-y-0.5">
+                                {customer.address_line1 && <div>{customer.address_line1}</div>}
+                                {customer.address_line2 && <div>{customer.address_line2}</div>}
+                                <div>{[customer.city, customer.state, customer.postal_code].filter(Boolean).join(', ')}</div>
+                                {customer.email && <div>Email: {customer.email}</div>}
+                                {customer.phone && <div>Phone: {customer.phone}</div>}
+                              </div>
+                            </div>
+                          </>
+                        );
+                      })()}
+                    </div>
+                    
+                    <div className="bg-gray-50 p-4 rounded">
+                      <div className="font-semibold text-emerald-600 mb-2">YOUR CONTACT:</div>
+                      {(quoteFormData.company_contact_name || quoteFormData.company_contact_email || quoteFormData.company_contact_phone) ? (
+                        <div className="text-sm space-y-1">
+                          {quoteFormData.company_contact_name && (
+                            <div className="font-bold text-base">{quoteFormData.company_contact_name}</div>
+                          )}
+                          <div className="text-xs text-gray-600 mt-2 space-y-0.5">
+                            {quoteFormData.company_contact_email && <div>Email: {quoteFormData.company_contact_email}</div>}
+                            {quoteFormData.company_contact_phone && <div>Phone: {quoteFormData.company_contact_phone}</div>}
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="text-gray-400 italic text-sm">No contact specified</p>
+                      )}
+                    </div>
+                  </div>
+                  
+                  {(() => {
+                    const customer = customers.find(c => c.id === quoteFormData.customer_id);
+                    if (!customer) return null;
+                    const currencyInfo = getCurrencyInfo(customer);
+                    const taxLabel = getTaxLabel(customer);
+                    const { subtotal, discountAmount, taxAmount, total } = calculateQuoteTotals();
+                    
+                    return (
+                      <>
+                        <table className="w-full border-collapse border border-gray-300 text-xs mb-6">
+                          <thead>
+                            <tr className="bg-emerald-600 text-white">
+                              <th className="border border-emerald-700 px-2 py-2 text-left w-8">#</th>
+                              <th className="border border-emerald-700 px-2 py-2 text-left">Description</th>
+                              <th className="border border-emerald-700 px-2 py-2 text-center w-16">Qty</th>
+                              <th className="border border-emerald-700 px-2 py-2 text-right w-20">Rate</th>
+                              <th className="border border-emerald-700 px-2 py-2 text-center w-14">{taxLabel}%</th>
+                              <th className="border border-emerald-700 px-2 py-2 text-right w-24">Amount</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {quoteFormData.items.map((item, index) => {
+                              let lineSubtotal = 0;
+                              if (item.is_service_item && item.billable_hours) {
+                                const resourceCount = item.resource_count || 1;
+                                lineSubtotal = resourceCount * item.quantity * item.billable_hours * item.unit_price;
+                              } else {
+                                lineSubtotal = item.quantity * item.unit_price;
+                              }
+                              const lineTax = (lineSubtotal * item.tax_rate) / 100;
+                              const lineTotal = lineSubtotal + lineTax;
+                              
+                              return (
+                                <tr key={index} className={index % 2 === 0 ? 'bg-gray-50' : 'bg-white'}>
+                                  <td className="border border-gray-300 px-2 py-2">{index + 1}</td>
+                                  <td className="border border-gray-300 px-2 py-2">
+                                    <div className="font-bold">{item.item_name}</div>
+                                    {item.is_service_item && item.billable_hours && (
+                                      <div className="text-[10px] text-gray-500 mt-0.5">
+                                        Service: {item.resource_count || 1} resource{(item.resource_count || 1) > 1 ? 's' : ''} x {item.quantity} month{item.quantity > 1 ? 's' : ''} x {item.billable_hours} hrs/month
+                                      </div>
+                                    )}
+                                    <div className="text-gray-600 mt-1 whitespace-pre-line">{item.description}</div>
+                                  </td>
+                                  <td className="border border-gray-300 px-2 py-2 text-center">{item.quantity} {item.unit}</td>
+                                  <td className="border border-gray-300 px-2 py-2 text-right">{formatCurrencyAmount(item.unit_price, currencyInfo)}</td>
+                                  <td className="border border-gray-300 px-2 py-2 text-center">{item.tax_rate}%</td>
+                                  <td className="border border-gray-300 px-2 py-2 text-right font-bold">{formatCurrencyAmount(lineTotal, currencyInfo)}</td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                        
+                        <div className="flex justify-end mb-6">
+                          <div className="w-64 border border-gray-300">
+                            <div className="flex justify-between px-3 py-2 border-b border-gray-300 text-xs">
+                              <span className="font-medium">Subtotal:</span>
+                              <span>{formatCurrencyAmount(subtotal, currencyInfo)}</span>
+                            </div>
+                            {discountAmount > 0 && (
+                              <div className="flex justify-between px-3 py-2 border-b border-gray-300 text-xs text-red-600">
+                                <span className="font-medium">Discount{quoteFormData.discount_type === 'percentage' ? ` (${quoteFormData.discount_value}%)` : ''}:</span>
+                                <span>-{formatCurrencyAmount(discountAmount, currencyInfo)}</span>
+                              </div>
+                            )}
+                            <div className="flex justify-between px-3 py-2 border-b border-gray-300 text-xs">
+                              <span className="font-medium">{taxLabel}:</span>
+                              <span>{formatCurrencyAmount(taxAmount, currencyInfo)}</span>
+                            </div>
+                            <div className="flex justify-between px-3 py-2 bg-emerald-600 text-white font-bold text-sm">
+                              <span>TOTAL:</span>
+                              <span>{formatCurrencyAmount(total, currencyInfo)}</span>
+                            </div>
+                            <div className="px-3 py-2 text-[10px] text-gray-500 italic text-right">
+                              {formatAmountInWords(total, currencyInfo.name)}
+                            </div>
+                          </div>
+                        </div>
+                      </>
+                    );
+                  })()}
+                  
+                  {quoteFormData.notes && (
+                    <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded">
+                      <div className="font-semibold text-sm mb-1">Notes:</div>
+                      <div className="text-xs text-gray-700 whitespace-pre-wrap">{quoteFormData.notes}</div>
+                    </div>
+                  )}
+                  
+                  {quoteFormData.terms_conditions && (
+                    <div className="mb-4 p-3 bg-gray-50 border border-gray-200 rounded">
+                      <div className="font-semibold text-sm mb-1">Terms & Conditions:</div>
+                      <div className="text-xs text-gray-700 whitespace-pre-wrap">{quoteFormData.terms_conditions}</div>
+                    </div>
+                  )}
+                  
+                  {companySettings[0]?.footer_image_url && (
+                    <div className="w-full mt-6">
+                      <img 
+                        src={companySettings[0].footer_image_url} 
+                        alt="Footer" 
+                        className="w-full h-auto object-cover"
+                        style={{ maxHeight: '80px' }}
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+            
+            <div className="flex justify-end space-x-3 mt-6">
+              <button
+                onClick={() => setShowQuotePreview(false)}
+                className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+              >
+                Close Preview
+              </button>
+              <button
+                onClick={() => {
+                  setShowQuotePreview(false);
+                  handleSaveQuote();
+                }}
+                disabled={modalLoading}
+                className="px-6 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50 text-sm font-medium"
+              >
+                {modalLoading ? 'Saving...' : 'Save Changes'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirm Dialog */}
+      <ConfirmDialog {...dialogProps} loading={loading} />
     </div>
   );
 };

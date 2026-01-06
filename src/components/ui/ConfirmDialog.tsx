@@ -10,6 +10,7 @@ interface ConfirmDialogProps {
   confirmText?: string;
   cancelText?: string;
   type?: 'danger' | 'warning' | 'info';
+  loading?: boolean;
 }
 
 const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
@@ -20,7 +21,8 @@ const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
   message,
   confirmText = 'Confirm',
   cancelText = 'Cancel',
-  type = 'danger'
+  type = 'danger',
+  loading = false
 }) => {
   if (!isOpen) return null;
 
@@ -113,19 +115,24 @@ const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
             <div className="mt-8 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end sm:gap-4">
               <button
                 type="button"
-                className="w-full inline-flex justify-center rounded-md border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:w-auto transition-colors"
+                className="w-full inline-flex justify-center rounded-md border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:w-auto transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 onClick={onClose}
+                disabled={loading}
               >
                 {cancelText}
               </button>
               <button
                 type="button"
-                className={`w-full inline-flex justify-center rounded-md border border-transparent px-4 py-2.5 text-sm font-medium text-white shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 sm:w-auto transition-colors ${colors.button}`}
+                className={`w-full inline-flex justify-center items-center rounded-md border border-transparent px-4 py-2.5 text-sm font-medium text-white shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 sm:w-auto transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${colors.button}`}
                 onClick={() => {
                   onConfirm();
                   onClose();
                 }}
+                disabled={loading}
               >
+                {loading && (
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                )}
                 {confirmText}
               </button>
             </div>
