@@ -414,9 +414,12 @@ const QuoteManagement: React.FC<QuoteManagementProps> = ({ onBackToDashboard }) 
     const integerPart = Math.floor(amount);
     const decimalPart = Math.round((amount - integerPart) * 100);
     
+    // Determine decimal unit based on currency
+    const decimalUnit = currencyName.toLowerCase().includes('rupee') ? 'Paise' : 'Cents';
+    
     let result = numberToWords(integerPart).trim() + ' ' + currencyName;
     if (decimalPart > 0) {
-      result += ' and ' + numberToWords(decimalPart).trim() + ' Paise';
+      result += ' and ' + numberToWords(decimalPart).trim() + ' ' + decimalUnit;
     }
     result += ' Only';
     return result.replace(/\s+/g, ' ').trim();
