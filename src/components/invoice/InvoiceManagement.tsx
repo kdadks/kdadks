@@ -12,7 +12,6 @@ import {
   Users,
   Package,
   ArrowLeft,
-  LogOut,
   RefreshCw,
   Trash2,
   X,
@@ -217,15 +216,6 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
     // Reset to page 1 when changing tabs
     setCurrentPage(1);
   }, [activeTab]);
-
-  const handleLogout = async () => {
-    try {
-      await simpleAuth.logout();
-      navigate('/admin/login');
-    } catch (error) {
-      console.error('Logout failed:', error);
-    }
-  };
 
   // Product Modal Functions
   const openProductModal = (mode: 'view' | 'edit' | 'add', product?: Product) => {
@@ -6083,27 +6073,7 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
       <header className="bg-white shadow-sm border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
-            <div className="flex items-center space-x-4">
-              {onBackToDashboard && (
-                <button
-                  onClick={onBackToDashboard}
-                  className="flex items-center px-3 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 rounded-md hover:bg-gray-100"
-                >
-                  <ArrowLeft className="w-4 h-4 mr-2" />
-                  Back to Dashboard
-                </button>
-              )}
-              <h1 className="text-xl font-semibold text-gray-900">Invoice Management</h1>
-            </div>
-            <div className="flex items-center space-x-4">
-              <button
-                onClick={handleLogout}
-                className="flex items-center px-3 py-2 text-sm text-gray-600 hover:text-gray-900"
-              >
-                <LogOut className="w-4 h-4 mr-1" />
-                Logout
-              </button>
-            </div>
+            <h1 className="text-xl font-semibold text-gray-900">Invoice Management</h1>
           </div>
         </div>
       </header>

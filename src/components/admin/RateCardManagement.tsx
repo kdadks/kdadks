@@ -24,11 +24,7 @@ import type {
 import { calculateTotalRate, analyzeSalaryToRate } from '../../types/rateCard';
 import SalaryRateAnalyzer from './SalaryRateAnalyzer';
 
-interface RateCardManagementProps {
-  onBackToDashboard: () => void;
-}
-
-const RateCardManagement: React.FC<RateCardManagementProps> = ({ onBackToDashboard }) => {
+const RateCardManagement: React.FC = () => {
   const [templates, setTemplates] = useState<RateCardTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -988,9 +984,6 @@ const RateCardManagement: React.FC<RateCardManagementProps> = ({ onBackToDashboa
     <div className="min-h-screen bg-gray-100">
       {/* Header */}
       <header className="bg-white shadow-sm border-b border-gray-200 h-16 flex items-center px-6">
-        <button onClick={onBackToDashboard} className="mr-4 p-2 hover:bg-gray-100 rounded">
-          <ArrowLeft className="w-5 h-5" />
-        </button>
         <h1 className="text-xl font-semibold text-gray-900">Rate Card Management</h1>
       </header>
 

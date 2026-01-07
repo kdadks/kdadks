@@ -32,6 +32,7 @@ import { employeeService } from '../../services/employeeService'
 import InvoiceManagement from '../invoice/InvoiceManagement'
 import { PaymentManagement } from '../payment/PaymentManagement'
 import QuoteManagement from '../quote/QuoteManagement'
+import ContractManagement from '../contract/ContractManagement'
 import EmploymentDocuments from '../hr/EmploymentDocuments'
 import LeaveManagement from '../hr/LeaveManagement'
 import AttendanceManagement from '../hr/AttendanceManagement'
@@ -45,6 +46,10 @@ import type { QuoteStats } from '../../types/quote'
 interface DashboardStats {
   invoices: InvoiceStats | null;
   quotes: QuoteStats | null;
+  contracts: {
+    total: number;
+    active: number;
+  };
   employees: {
     total: number;
     active: number;
@@ -58,7 +63,7 @@ interface DashboardStats {
   settlements: number;
 }
 
-type ActiveView = 'dashboard' | 'invoices' | 'payments' | 'quotes' | 'rate-cards' | 'hr-employees' | 'hr-leave' | 'hr-attendance' | 'hr-settlement' | 'hr-tds-report' | 'hr-organization';
+type ActiveView = 'dashboard' | 'invoices' | 'payments' | 'quotes' | 'contracts' | 'rate-cards' | 'hr-employees' | 'hr-leave' | 'hr-attendance' | 'hr-settlement' | 'hr-tds-report' | 'hr-organization';
 
 const SimpleAdminDashboard: React.FC = () => {
   const [user, setUser] = useState<SimpleUser | null>(null)
@@ -70,6 +75,7 @@ const SimpleAdminDashboard: React.FC = () => {
   const [dashboardStats, setDashboardStats] = useState<DashboardStats>({
     invoices: null,
     quotes: null,
+    contracts: { total: 0, active: 0 },
     employees: { total: 0, active: 0 },
     payments: { total: 0, totalAmount: 0 },
     salarySlips: 0,
@@ -141,9 +147,20 @@ const SimpleAdminDashboard: React.FC = () => {
       setStatsLoading(true)
       
       // Fetch all stats in parallel
-      const [invoiceStats, quoteStats, employeesResult, paymentsResult, salarySlipsResult, documentsResult, settlementsResult] = await Promise.all([
+      const [invoiceStats, quoteStats, contractsResult, employeesResult, paymentsResult, salarySlipsResult, documentsResult, settlementsResult] = await Promise.all([
         invoiceService.getInvoiceStats().catch(() => null),
         quoteService.getQuoteStats().catch(() => null),
+        (async () => {
+          try {
+            const { data } = await supabase.from('contracts').select('id, status')
+            return {
+              total: data?.length || 0,
+              active: data?.filter(c => c.status === 'active').length || 0
+            }
+          } catch {
+            return { total: 0, active: 0 }
+          }
+        })(),
         (async () => {
           try {
             const { data } = await supabase.from('employees').select('id, employment_status')
@@ -195,6 +212,7 @@ const SimpleAdminDashboard: React.FC = () => {
       setDashboardStats({
         invoices: invoiceStats,
         quotes: quoteStats,
+        contracts: contractsResult,
         employees: employeesResult,
         payments: paymentsResult,
         salarySlips: salarySlipsResult,
@@ -262,47 +280,43 @@ const SimpleAdminDashboard: React.FC = () => {
     )
   }
 
-  // Render different views based on activeView
-  const renderView = () => {
+  // Render main content based on activeView
+  const renderMainContent = () => {
     switch (activeView) {
       case 'invoices':
-        return <InvoiceManagement onBackToDashboard={() => setActiveView('dashboard')} />;
+        return <InvoiceManagement />;
       case 'payments':
-        return <PaymentManagement onBackToDashboard={() => setActiveView('dashboard')} />;
+        return <PaymentManagement />;
       case 'quotes':
-        return <QuoteManagement onBackToDashboard={() => setActiveView('dashboard')} />;
+        return <QuoteManagement />;
+      case 'contracts':
+        return <ContractManagement />;
       case 'rate-cards':
-        return <RateCardManagement onBackToDashboard={() => setActiveView('dashboard')} />;
+        return <RateCardManagement />;
       case 'hr-employees':
-        return <EmploymentDocuments onBackToDashboard={() => setActiveView('dashboard')} />;
+        return <EmploymentDocuments />;
       case 'hr-leave':
-        return <LeaveManagement onBackToDashboard={() => setActiveView('dashboard')} />;
+        return <LeaveManagement />;
       case 'hr-settlement':
-        return <FullFinalSettlement onBackToDashboard={() => setActiveView('dashboard')} />;
+        return <FullFinalSettlement />;
       case 'hr-tds-report':
-        return <TDSReport onBackToDashboard={() => setActiveView('dashboard')} />;
+        return <TDSReport />;
       case 'hr-attendance':
-        return <AttendanceManagement onBackToDashboard={() => setActiveView('dashboard')} />;
+        return <AttendanceManagement />;
       case 'hr-organization':
-        return <OrganizationSettings onBackToDashboard={() => setActiveView('dashboard')} />;
+        return <OrganizationSettings />;
       case 'dashboard':
       default:
         return null;
     }
   };
 
-  // If not on dashboard, render the specific view
-  const viewComponent = renderView();
-  if (viewComponent) {
-    return viewComponent;
-  }
-
   return (
     <div className="min-h-screen bg-gray-100 flex">
       {/* Sidebar */}
-      <div className={`${sidebarOpen ? 'w-64' : 'w-20'} bg-white shadow-lg transition-all duration-300 flex flex-col`}>
+      <div className={`${sidebarOpen ? 'w-64' : 'w-20'} bg-white shadow-lg transition-all duration-300 flex flex-col h-screen sticky top-0`}>
         {/* Sidebar Header */}
-        <div className="h-16 flex items-center justify-between px-4 border-b border-gray-200">
+        <div className="h-16 flex items-center justify-between px-4 border-b border-gray-200 flex-shrink-0">
           {sidebarOpen && <h1 className="text-lg font-semibold text-gray-900">Admin Portal</h1>}
           <button
             onClick={() => setSidebarOpen(!sidebarOpen)}
@@ -313,7 +327,7 @@ const SimpleAdminDashboard: React.FC = () => {
         </div>
 
         {/* Sidebar Navigation */}
-        <nav className="flex-1 py-4 overflow-y-auto">
+        <nav className="flex-1 py-4 overflow-y-auto min-h-0">
           <ul className="space-y-1 px-2">
             {/* Dashboard */}
             <li>
@@ -387,6 +401,21 @@ const SimpleAdminDashboard: React.FC = () => {
               >
                 <Calculator className="w-5 h-5 flex-shrink-0" />
                 {sidebarOpen && <span className="ml-3">Rate Cards</span>}
+              </button>
+            </li>
+
+            {/* Contracts */}
+            <li>
+              <button
+                onClick={() => setActiveView('contracts')}
+                className={`w-full flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                  activeView === 'contracts'
+                    ? 'bg-blue-100 text-blue-700'
+                    : 'text-gray-700 hover:bg-gray-100'
+                }`}
+              >
+                <FileCheck className="w-5 h-5 flex-shrink-0" />
+                {sidebarOpen && <span className="ml-3">Contracts</span>}
               </button>
             </li>
 
@@ -497,7 +526,7 @@ const SimpleAdminDashboard: React.FC = () => {
         </nav>
 
         {/* Sidebar Footer */}
-        <div className="border-t border-gray-200 p-4">
+        <div className="border-t border-gray-200 p-4 flex-shrink-0">
           {sidebarOpen && (
             <div className="mb-3">
               <p className="text-xs text-gray-500">Logged in as:</p>
@@ -506,9 +535,9 @@ const SimpleAdminDashboard: React.FC = () => {
           )}
           <button
             onClick={handleLogout}
-            className="w-full flex items-center px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-md transition-colors"
+            className="w-full flex items-center px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-md transition-colors"
           >
-            <LogOut className="w-5 h-5 flex-shrink-0" />
+            <LogOut className="w-5 h-5 flex-shrink-0 text-red-600" />
             {sidebarOpen && <span className="ml-3">Logout</span>}
           </button>
         </div>
@@ -516,22 +545,12 @@ const SimpleAdminDashboard: React.FC = () => {
 
       {/* Main Content */}
       <div className="flex-1 overflow-auto">
-        {/* Top Header */}
-        <header className="bg-white shadow-sm border-b border-gray-200 h-16 flex items-center px-6">
-          <h2 className="text-xl font-semibold text-gray-900">
-            {activeView === 'dashboard' && 'Dashboard'}
-            {activeView === 'invoices' && 'Invoices'}
-            {activeView === 'payments' && 'Payments'}
-            {activeView === 'quotes' && 'Quotes'}
-            {activeView === 'rate-cards' && 'Rate Cards'}
-            {activeView === 'hr-employees' && 'HR - Employees & Documents'}
-            {activeView === 'hr-leave' && 'HR - Leave Management'}
-            {activeView === 'hr-attendance' && 'HR - Attendance'}
-            {activeView === 'hr-settlement' && 'HR - Full & Final Settlement'}
-            {activeView === 'hr-tds-report' && 'HR - TDS Report'}
-            {activeView === 'hr-organization' && 'HR - Organization Settings'}
-          </h2>
-        </header>
+        {/* Top Header - only show title on dashboard */}
+        {activeView === 'dashboard' && (
+          <header className="bg-white shadow-sm border-b border-gray-200 h-16 flex items-center px-6">
+            <h2 className="text-xl font-semibold text-gray-900">Dashboard</h2>
+          </header>
+        )}
 
         {/* Main Content Area */}
         <main className="p-6">
@@ -567,8 +586,8 @@ const SimpleAdminDashboard: React.FC = () => {
             </div>
           )}
 
-          {/* Dashboard Overview */}
-          {activeView === 'dashboard' && (
+          {/* Dashboard Overview or Other Views */}
+          {activeView === 'dashboard' ? (
             <div>
               {/* Refresh Button */}
               <div className="flex justify-end mb-4">
@@ -661,8 +680,31 @@ const SimpleAdminDashboard: React.FC = () => {
                 </div>
               </div>
 
-              {/* Secondary Stats - HR Documents & Salary Slips */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+              {/* Secondary Stats - HR Documents, Salary Slips, Contracts & Revenue */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                {/* Contracts Card */}
+                <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <p className="text-sm text-gray-600">Contracts</p>
+                      <p className="text-2xl font-semibold text-gray-900 mt-1">
+                        {statsLoading ? '...' : dashboardStats.contracts.total}
+                      </p>
+                      <p className="text-xs text-green-600 mt-1">
+                        {dashboardStats.contracts.active} Active
+                      </p>
+                    </div>
+                    <FileCheck className="w-8 h-8 text-cyan-600" />
+                  </div>
+                  <button
+                    onClick={() => setActiveView('contracts')}
+                    className="w-full flex items-center justify-center px-3 py-2 text-sm font-medium text-cyan-600 bg-cyan-50 rounded-md hover:bg-cyan-100"
+                  >
+                    <Eye className="w-4 h-4 mr-2" />
+                    View Contracts
+                  </button>
+                </div>
+
                 {/* Documents Card */}
                 <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
                   <div className="flex items-center justify-between mb-4">
@@ -764,6 +806,17 @@ const SimpleAdminDashboard: React.FC = () => {
                     <span className="text-sm font-medium text-purple-700">New Quote</span>
                   </button>
 
+                  {/* Create Contract */}
+                  <button
+                    onClick={() => setActiveView('contracts')}
+                    className="flex flex-col items-center p-4 bg-cyan-50 rounded-lg hover:bg-cyan-100 transition-colors"
+                  >
+                    <div className="w-10 h-10 bg-cyan-100 rounded-full flex items-center justify-center mb-2">
+                      <FileCheck className="w-5 h-5 text-cyan-600" />
+                    </div>
+                    <span className="text-sm font-medium text-cyan-700">New Contract</span>
+                  </button>
+
                   {/* Generate Document */}
                   <button
                     onClick={() => setActiveView('hr-employees')}
@@ -842,6 +895,10 @@ const SimpleAdminDashboard: React.FC = () => {
                   </div>
                 </div>
               </div>
+            </div>
+          ) : (
+            <div>
+              {renderMainContent()}
             </div>
           )}
         </main>

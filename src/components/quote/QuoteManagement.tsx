@@ -70,6 +70,7 @@ const QuoteManagement: React.FC<QuoteManagementProps> = ({ onBackToDashboard }) 
   const [globalHsnCode, setGlobalHsnCode] = useState<string>('');
   const [showQuotePreview, setShowQuotePreview] = useState(false);
   const [generatedQuoteNumber, setGeneratedQuoteNumber] = useState<string>('');
+  const [statusDropdownOpen, setStatusDropdownOpen] = useState<string | null>(null);
   const [quoteFormData, setQuoteFormData] = useState<CreateQuoteData>({
     customer_id: '',
     quote_date: new Date().toISOString().split('T')[0],
@@ -769,6 +770,12 @@ const QuoteManagement: React.FC<QuoteManagementProps> = ({ onBackToDashboard }) 
   };
 
   const handleDeleteQuote = async (quote: Quote) => {
+    // Prevent deletion of accepted quotes
+    if (quote.status === 'accepted') {
+      showError('Cannot delete an accepted quotation. Please reject it first if needed.');
+      return;
+    }
+
     const confirmed = await confirm({
       title: 'Delete Quotation',
       message: `Are you sure you want to delete quotation "${quote.quote_number}"?\n\nThis will mark the quotation as expired.`,
@@ -1560,36 +1567,35 @@ const QuoteManagement: React.FC<QuoteManagementProps> = ({ onBackToDashboard }) 
         <div className="px-6 py-4 border-b border-gray-200">
           <h3 className="text-lg font-medium text-gray-900">Recent Quotations</h3>
         </div>
-        <div className="overflow-x-auto">
-          {renderQuoteTable(quotes.slice(0, 5))}
-        </div>
+        {renderQuoteTable(quotes.slice(0, 5))}
       </div>
     </div>
   );
 
   const renderQuoteTable = (quoteList: Quote[] = quotes) => (
-    <table className="min-w-full divide-y divide-gray-200">
-      <thead className="bg-gray-50">
-        <tr>
-          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-            Quote
-          </th>
-          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-            Customer
-          </th>
-          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-            Date
-          </th>
-          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-            Valid Until
-          </th>
-          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-            Amount
-          </th>
-          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-            Status
-          </th>
-          <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+    <div className="w-full">
+      <table className="w-full divide-y divide-gray-200">
+        <thead className="bg-gray-50">
+          <tr>
+            <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-32">
+              Quote
+            </th>
+            <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              Customer
+            </th>
+            <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-28">
+              Date
+            </th>
+            <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-28">
+              Valid Until
+            </th>
+            <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-32">
+              Amount
+            </th>
+            <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-28">
+              Status
+            </th>
+            <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider w-40">
             Actions
           </th>
         </tr>
@@ -1597,27 +1603,27 @@ const QuoteManagement: React.FC<QuoteManagementProps> = ({ onBackToDashboard }) 
       <tbody className="bg-white divide-y divide-gray-200">
         {quoteList.map((quote) => (
           <tr key={quote.id} className={`hover:bg-gray-50 ${quote.status === 'expired' || quote.status === 'rejected' ? 'opacity-60 bg-gray-50' : ''}`}>
-            <td className="px-6 py-4 whitespace-nowrap">
+            <td className="px-3 py-3 whitespace-nowrap">
               <div className={`text-sm font-medium ${quote.status === 'expired' ? 'text-gray-500 line-through' : 'text-gray-900'}`}>
                 {quote.quote_number}
               </div>
             </td>
-            <td className="px-6 py-4 whitespace-nowrap">
-              <div className="text-sm text-gray-900">
+            <td className="px-3 py-3">
+              <div className="text-sm text-gray-900 truncate max-w-xs">
                 {quote.customer?.company_name || quote.customer?.contact_person || 'N/A'}
               </div>
             </td>
-            <td className="px-6 py-4 whitespace-nowrap">
+            <td className="px-3 py-3 whitespace-nowrap">
               <div className="text-sm text-gray-900">
-                {new Date(quote.quote_date).toLocaleDateString()}
+                {new Date(quote.quote_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}
               </div>
             </td>
-            <td className="px-6 py-4 whitespace-nowrap">
+            <td className="px-3 py-3 whitespace-nowrap">
               <div className="text-sm text-gray-900">
-                {quote.valid_until ? new Date(quote.valid_until).toLocaleDateString() : 'N/A'}
+                {quote.valid_until ? new Date(quote.valid_until).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }) : 'N/A'}
               </div>
             </td>
-            <td className="px-6 py-4 whitespace-nowrap">
+            <td className="px-3 py-3 whitespace-nowrap">
               <div className="text-sm font-medium text-gray-900">
                 <CurrencyDisplay 
                   amount={quote.total_amount}
@@ -1628,13 +1634,13 @@ const QuoteManagement: React.FC<QuoteManagementProps> = ({ onBackToDashboard }) 
                 />
               </div>
             </td>
-            <td className="px-6 py-4 whitespace-nowrap">
+            <td className="px-3 py-3 whitespace-nowrap">
               <span className={`inline-flex items-center px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(quote.status)}`}>
                 {getStatusIcon(quote.status)}
                 <span className="ml-1">{quote.status}</span>
               </span>
             </td>
-            <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+            <td className="px-3 py-3 whitespace-nowrap text-right text-sm font-medium">
               <div className="flex items-center justify-end space-x-2">
                 <button 
                   onClick={() => handleViewQuote(quote)}
@@ -1650,6 +1656,77 @@ const QuoteManagement: React.FC<QuoteManagementProps> = ({ onBackToDashboard }) 
                 >
                   <Download className="w-4 h-4" />
                 </button>
+                {/* Status Change Dropdown */}
+                {quote.status !== 'converted' && quote.status !== 'expired' && (
+                  <div className="relative">
+                    <button 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setStatusDropdownOpen(statusDropdownOpen === quote.id ? null : quote.id);
+                      }}
+                      className="text-orange-600 hover:text-orange-900"
+                      title="Change Status"
+                    >
+                      <Settings className="w-4 h-4" />
+                    </button>
+                    {statusDropdownOpen === quote.id && (
+                      <>
+                        <div 
+                          className="fixed inset-0 z-10" 
+                          onClick={() => setStatusDropdownOpen(null)}
+                        />
+                        <div className="absolute right-0 mt-2 w-48 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 z-20">
+                          <div className="py-1" role="menu">
+                            {quote.status !== 'draft' && (
+                              <button
+                                onClick={() => {
+                                  handleUpdateQuoteStatus(quote, 'draft');
+                                  setStatusDropdownOpen(null);
+                                }}
+                                className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                              >
+                                Mark as Draft
+                              </button>
+                            )}
+                            {quote.status !== 'sent' && (
+                              <button
+                                onClick={() => {
+                                  handleUpdateQuoteStatus(quote, 'sent');
+                                  setStatusDropdownOpen(null);
+                                }}
+                                className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                              >
+                                Mark as Sent
+                              </button>
+                            )}
+                            {quote.status !== 'accepted' && (
+                              <button
+                                onClick={() => {
+                                  handleUpdateQuoteStatus(quote, 'accepted');
+                                  setStatusDropdownOpen(null);
+                                }}
+                                className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                              >
+                                Mark as Accepted
+                              </button>
+                            )}
+                            {quote.status !== 'rejected' && (
+                              <button
+                                onClick={() => {
+                                  handleUpdateQuoteStatus(quote, 'rejected');
+                                  setStatusDropdownOpen(null);
+                                }}
+                                className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                              >
+                                Mark as Rejected
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
                 {(quote.status === 'draft' || quote.status === 'sent') && (
                   <button 
                     onClick={() => handleEditQuote(quote)}
@@ -1675,7 +1752,7 @@ const QuoteManagement: React.FC<QuoteManagementProps> = ({ onBackToDashboard }) 
                     <ArrowRightCircle className="w-4 h-4" />
                   </button>
                 )}
-                {quote.status !== 'expired' && quote.status !== 'converted' && (
+                {quote.status !== 'expired' && quote.status !== 'converted' && quote.status !== 'accepted' && (
                   <button 
                     onClick={() => handleDeleteQuote(quote)}
                     className="text-red-600 hover:text-red-900"
@@ -1697,6 +1774,7 @@ const QuoteManagement: React.FC<QuoteManagementProps> = ({ onBackToDashboard }) 
         )}
       </tbody>
     </table>
+    </div>
   );
 
   const renderQuotesList = () => (
@@ -1757,10 +1835,8 @@ const QuoteManagement: React.FC<QuoteManagementProps> = ({ onBackToDashboard }) 
       </div>
 
       {/* Quotes Table */}
-      <div className="bg-white rounded-lg shadow overflow-hidden">
-        <div className="overflow-x-auto">
-          {renderQuoteTable()}
-        </div>
+      <div className="bg-white rounded-lg shadow">
+        {renderQuoteTable()}
         
         {/* Pagination */}
         {totalPages > 1 && (
@@ -2125,17 +2201,7 @@ const QuoteManagement: React.FC<QuoteManagementProps> = ({ onBackToDashboard }) 
       <header className="bg-white shadow-sm border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
-            <div className="flex items-center space-x-4">
-              {onBackToDashboard && (
-                <button
-                  onClick={onBackToDashboard}
-                  className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg"
-                >
-                  <ArrowLeft className="w-5 h-5" />
-                </button>
-              )}
-              <h1 className="text-xl font-semibold text-gray-900">Quotation Management</h1>
-            </div>
+            <h1 className="text-xl font-semibold text-gray-900">Quotation Management</h1>
             <nav className="flex space-x-4">
               <button
                 onClick={() => setActiveTab('dashboard')}

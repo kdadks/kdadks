@@ -180,15 +180,6 @@ const AttendanceManagement: React.FC<AttendanceManagementProps> = ({ onBackToDas
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center space-x-8">
-              {onBackToDashboard && (
-                <button
-                  onClick={onBackToDashboard}
-                  className="flex items-center text-gray-600 hover:text-gray-900"
-                >
-                  <ArrowLeft className="w-5 h-5 mr-2" />
-                  Back to Dashboard
-                </button>
-              )}
               <h1 className="text-xl font-semibold text-gray-900">Attendance Management</h1>
             </div>
           </div>
