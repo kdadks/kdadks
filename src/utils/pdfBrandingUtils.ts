@@ -69,12 +69,12 @@ export class PDFBrandingUtils {
         'FAST'
       );
       
-      // Return Y position for content to start after header
-      return headerHeight + 5; // Small gap after header image
+      // Return Y position for content to start after header (no extra gap, handled in applyBranding)
+      return headerHeight;
       
     } catch (error) {
       console.error('Failed to add header image:', error);
-      return 15; // Return default top margin if image fails
+      return 2; // Return minimal margin if image fails
     }
   }
   
@@ -245,20 +245,18 @@ export class PDFBrandingUtils {
     let contentStartY = dimensions.topMargin;
     let contentEndY = dimensions.pageHeight - dimensions.bottomMargin;
     
-    // First, add header image if available (this affects contentStartY)
+    // First, add header image if available (edge-to-edge, affects contentStartY)
     if (companySettings.header_image_data) {
-      // Add header image in background first
       const headerEndY = await this.addHeaderImage(
         pdf, 
         companySettings.header_image_data, 
         dimensions
       );
-      // For header with overlay text, we want the header image to start from top
-      // but the content should start after we overlay the text
-      contentStartY = Math.max(headerEndY - 20, 30); // Reserve space for text overlay
+      // Content starts right after header image with minimal gap
+      contentStartY = headerEndY + 2; // 2mm gap after header
     }
     
-    // Add footer image if available (this affects contentEndY)
+    // Add footer image if available (edge-to-edge, affects contentEndY)
     if (companySettings.footer_image_data) {
       console.log(`Applying footer image branding...`);
       contentEndY = await this.addFooterImage(
@@ -267,6 +265,8 @@ export class PDFBrandingUtils {
         dimensions
       );
       console.log(`Footer image applied, contentEndY set to: ${contentEndY.toFixed(1)}mm`);
+      // Adjust to leave minimal gap before footer
+      contentEndY = contentEndY - 2; // 2mm gap before footer
     } else {
       console.log(`No footer image found in company settings`);
     }
@@ -281,9 +281,9 @@ export class PDFBrandingUtils {
       );
     }
     
-    // Ensure we have proper spacing for text content
-    contentStartY = Math.max(contentStartY, 35); // Minimum space for header text
-    contentEndY = Math.min(contentEndY, dimensions.pageHeight - 30); // Minimum space for footer
+    // Ensure minimal margins if no images
+    contentStartY = Math.max(contentStartY, dimensions.topMargin);
+    contentEndY = Math.min(contentEndY, dimensions.pageHeight - dimensions.bottomMargin);
     
     return { contentStartY, contentEndY };
   }
@@ -295,10 +295,10 @@ export class PDFBrandingUtils {
     return {
       pageWidth: 210,
       pageHeight: 297,
-      leftMargin: 15,
-      rightMargin: 195,
-      topMargin: 15,
-      bottomMargin: 20
+      leftMargin: 2,
+      rightMargin: 208, // 210 - 2
+      topMargin: 2,
+      bottomMargin: 2
     };
   }
   

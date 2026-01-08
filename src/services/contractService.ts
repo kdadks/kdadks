@@ -25,7 +25,7 @@ class ContractService {
   
   /**
    * Generate next contract number
-   * Format: CONTRACT/YYYY/MM/###
+   * Format: KDADKS/C/YYYY/MM/###
    */
   async generateContractNumber(): Promise<string> {
     if (!isSupabaseConfigured) {
@@ -35,7 +35,7 @@ class ContractService {
     const now = new Date();
     const year = now.getFullYear();
     const month = (now.getMonth() + 1).toString().padStart(2, '0');
-    const prefix = `CONTRACT/${year}/${month}/`;
+    const prefix = `KDADKS/C/${year}/${month}/`;
 
     // Get the highest contract number for this month
     const { data, error } = await supabase

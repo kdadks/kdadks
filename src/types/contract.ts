@@ -20,6 +20,9 @@ export type ContractType =
 
 export type ContractStatus = 
   | 'draft' 
+  | 'sent'
+  | 'accepted'
+  | 'rejected'
   | 'active' 
   | 'expired' 
   | 'terminated' 
@@ -171,6 +174,7 @@ export interface Contract {
   contract_date: string;
   effective_date: string;
   expiry_date?: string;
+  preamble?: string;  // Introductory text before sections
   
   // Financial
   contract_value?: number;
@@ -228,6 +232,7 @@ export interface CreateContractData {
   contract_date: string;
   effective_date: string;
   expiry_date?: string;
+  preamble?: string;  // Introductory text before sections
   
   // Financial
   contract_value?: number;

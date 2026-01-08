@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import jsPDF from 'jspdf';
 import { 
   Plus, 
   Search, 
@@ -20,7 +19,11 @@ import { invoiceService } from '../../services/invoiceService';
 import { useToast } from '../ui/ToastProvider';
 import { useConfirmDialog } from '../../hooks/useConfirmDialog';
 import ConfirmDialog from '../ui/ConfirmDialog';
-import { PDFBrandingUtils } from '../../utils/pdfBrandingUtils';
+import { generateContractPDF } from '../../utils/contractPDFGenerator';
+import ViewContractModal from './ViewContractModal';
+import EditContractModal from './EditContractModal';
+import StatusUpdateModal from './StatusUpdateModal';
+import CreateContractModal from './CreateContractModal';
 import type { CompanySettings } from '../../types/invoice';
 import type { 
   Contract, 
@@ -28,6 +31,7 @@ import type {
   ContractStatistics,
   ContractType,
   ContractStatus,
+  ContractWithDetails,
   CreateContractData,
   CreateContractSectionData
 } from '../../types/contract';
@@ -46,6 +50,10 @@ const ContractManagement: React.FC = () => {
   
   // Modal states
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showViewModal, setShowViewModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [showStatusModal, setShowStatusModal] = useState(false);
+  const [selectedContract, setSelectedContract] = useState<ContractWithDetails | null>(null);
   const [formData, setFormData] = useState<CreateContractData>({
     party_a_name: '',
     party_b_name: '',
@@ -149,79 +157,112 @@ const ContractManagement: React.FC = () => {
     setShowCreateModal(true);
   };
 
-  // Handle form submission
-  const handleSubmitContract = async (e: React.FormEvent) => {
-    e.preventDefault();
+  // Handle save new contract
+  const handleSaveNewContract = async (contractData: CreateContractData) => {
     try {
-      await contractService.createContract(formData);
+      await contractService.createContract(contractData);
       showSuccess('Contract created successfully');
       setShowCreateModal(false);
-      loadData();
+      await loadData();
     } catch (err) {
       console.error('Error creating contract:', err);
       showError('Failed to create contract');
+      throw err; // Re-throw to keep modal open on error
     }
-  };
-
-  // Add section
-  const addSection = () => {
-    setFormData(prev => ({
-      ...prev,
-      sections: [
-        ...prev.sections,
-        {
-          section_number: prev.sections.length + 1,
-          section_title: '',
-          section_content: '',
-          is_required: false,
-          page_break_before: false
-        }
-      ]
-    }));
-  };
-
-  // Remove section
-  const removeSection = (index: number) => {
-    setFormData(prev => ({
-      ...prev,
-      sections: prev.sections.filter((_, i) => i !== index).map((s, i) => ({
-        ...s,
-        section_number: i + 1
-      }))
-    }));
-  };
-
-  // Update section
-  const updateSection = (index: number, field: keyof CreateContractSectionData, value: string | boolean | number) => {
-    setFormData(prev => ({
-      ...prev,
-      sections: prev.sections.map((s, i) => 
-        i === index ? { ...s, [field]: value } : s
-      )
-    }));
   };
 
   // Handle contract view
   const handleViewContract = async (contractId: string) => {
     try {
+      setLoading(true);
       const contract = await contractService.getContractById(contractId);
-      console.log('Contract details:', contract);
-      showInfo('Contract viewing coming soon...');
+      if (contract) {
+        setSelectedContract(contract);
+        setShowViewModal(true);
+      } else {
+        showError('Contract not found');
+      }
     } catch (err) {
       console.error('Error loading contract:', err);
       showError('Failed to load contract details');
+    } finally {
+      setLoading(false);
     }
   };
 
   // Handle contract edit
   const handleEditContract = async (contractId: string) => {
     try {
+      setLoading(true);
       const contract = await contractService.getContractById(contractId);
-      console.log('Contract to edit:', contract);
-      showInfo('Contract editing coming soon...');
+      if (contract) {
+        setSelectedContract(contract);
+        setShowEditModal(true);
+      } else {
+        showError('Contract not found');
+      }
     } catch (err) {
       console.error('Error loading contract:', err);
       showError('Failed to load contract details');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Handle save contract edits
+  const handleSaveContract = async (updatedContract: any) => {
+    try {
+      setLoading(true);
+      await contractService.updateContract(updatedContract);
+      showSuccess('Contract updated successfully');
+      setShowEditModal(false);
+      setSelectedContract(null);
+      await loadData();
+    } catch (err) {
+      console.error('Error updating contract:', err);
+      showError('Failed to update contract');
+      throw err; // Re-throw to keep modal open on error
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Handle status update
+  const handleStatusUpdate = async (contractId: string) => {
+    try {
+      setLoading(true);
+      const contract = await contractService.getContractById(contractId);
+      if (contract) {
+        setSelectedContract(contract);
+        setShowStatusModal(true);
+      } else {
+        showError('Contract not found');
+      }
+    } catch (err) {
+      console.error('Error loading contract:', err);
+      showError('Failed to load contract details');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Handle save status update
+  const handleSaveStatus = async (newStatus: ContractStatus) => {
+    if (!selectedContract) return;
+    
+    try {
+      setLoading(true);
+      await contractService.updateContractStatus(selectedContract.id, newStatus);
+      showSuccess(`Contract status updated to ${newStatus}`);
+      setShowStatusModal(false);
+      setSelectedContract(null);
+      await loadData();
+    } catch (err) {
+      console.error('Error updating status:', err);
+      showError('Failed to update contract status');
+      throw err; // Re-throw to keep modal open on error
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -270,328 +311,12 @@ const ContractManagement: React.FC = () => {
         return;
       }
 
-      // Create PDF with multi-page support
-      const pdf = new jsPDF({
-        orientation: 'p',
-        unit: 'mm',
-        format: 'a4'
-      });
-      
-      pdf.setFont('helvetica');
-      
-      // Page dimensions
-      const pageWidth = 210;
-      const leftMargin = 15;
-      const rightMargin = 15;
-      const contentWidth = pageWidth - leftMargin - rightMargin;
-      
-      // Apply branding header to get content boundaries
-      const dimensions = PDFBrandingUtils.getStandardDimensions();
-      const { contentStartY, contentEndY } = await PDFBrandingUtils.applyBranding(pdf, company, dimensions);
-      
-      // Calculate usable content area based on branding
-      const topMargin = contentStartY + 5;
-      const maxY = contentEndY - 5; // Leave space above footer
-      
-      let yPos = topMargin + 5;
-      
-      // Helper function to check if we need a new page
-      const checkPageBreak = (requiredSpace: number): void => {
-        if (yPos + requiredSpace > maxY) {
-          pdf.addPage();
-          yPos = topMargin + 5;
-        }
-      };
-      
-      // ========== TITLE SECTION ==========
-      pdf.setFontSize(24);
-      pdf.setFont('helvetica', 'bold');
-      pdf.setTextColor(5, 150, 105); // Emerald color
-      pdf.text('CONTRACT AGREEMENT', pageWidth / 2, yPos, { align: 'center' });
-      
-      yPos += 10;
-      
-      // Contract Number
-      pdf.setFontSize(12);
-      pdf.setFont('helvetica', 'normal');
-      pdf.setTextColor(80, 80, 80);
-      pdf.text(`Contract #: ${fullContract.contract_number}`, pageWidth / 2, yPos, { align: 'center' });
-      
-      yPos += 8;
-      
-      // Contract Type
-      pdf.setFontSize(11);
-      pdf.setTextColor(100, 100, 100);
-      pdf.text(`Type: ${fullContract.contract_type}`, pageWidth / 2, yPos, { align: 'center' });
-      
-      // Contract Title if exists
-      if (fullContract.contract_title) {
-        yPos += 10;
-        pdf.setFontSize(16);
-        pdf.setFont('helvetica', 'bold');
-        pdf.setTextColor(0, 0, 0);
-        const titleLines = pdf.splitTextToSize(fullContract.contract_title, contentWidth - 40);
-        pdf.text(titleLines, pageWidth / 2, yPos, { align: 'center' });
-        yPos += titleLines.length * 6;
-      }
-      
-      yPos += 15;
-      checkPageBreak(80);
-      
-      // ========== PARTIES SECTION ==========
-      const col1X = leftMargin;
-      const col2X = pageWidth / 2 + 10;
-      const colWidth = (pageWidth - leftMargin - rightMargin - 20) / 2;
-      let partyAY = yPos;
-      let partyBY = yPos;
-      
-      // Party A Section
-      pdf.setFontSize(10);
-      pdf.setFont('helvetica', 'bold');
-      pdf.setTextColor(5, 150, 105);
-      pdf.text('PARTY A (Service Provider):', col1X, partyAY);
-      
-      partyAY += 6;
-      pdf.setFontSize(12);
-      pdf.setFont('helvetica', 'bold');
-      pdf.setTextColor(0, 0, 0);
-      const partyANameLines = pdf.splitTextToSize(fullContract.party_a_name, colWidth);
-      pdf.text(partyANameLines, col1X, partyAY);
-      partyAY += partyANameLines.length * 5;
-      
-      pdf.setFontSize(9);
-      pdf.setFont('helvetica', 'normal');
-      pdf.setTextColor(60, 60, 60);
-      
-      if (fullContract.party_a_address) {
-        const addrLines = pdf.splitTextToSize(fullContract.party_a_address, colWidth);
-        pdf.text(addrLines, col1X, partyAY);
-        partyAY += addrLines.length * 4;
-      }
-      
-      if (fullContract.party_a_contact) {
-        partyAY += 2;
-        pdf.text(`Contact: ${fullContract.party_a_contact}`, col1X, partyAY);
-        partyAY += 4;
-      }
-      
-      if (fullContract.party_a_gstin) {
-        pdf.text(`GSTIN: ${fullContract.party_a_gstin}`, col1X, partyAY);
-        partyAY += 4;
-      }
-      
-      if (fullContract.party_a_pan) {
-        pdf.text(`PAN: ${fullContract.party_a_pan}`, col1X, partyAY);
-        partyAY += 4;
-      }
-      
-      // Party B Section
-      pdf.setFontSize(10);
-      pdf.setFont('helvetica', 'bold');
-      pdf.setTextColor(5, 150, 105);
-      pdf.text('PARTY B (Client):', col2X, partyBY);
-      
-      partyBY += 6;
-      pdf.setFontSize(12);
-      pdf.setFont('helvetica', 'bold');
-      pdf.setTextColor(0, 0, 0);
-      const partyBNameLines = pdf.splitTextToSize(fullContract.party_b_name, colWidth);
-      pdf.text(partyBNameLines, col2X, partyBY);
-      partyBY += partyBNameLines.length * 5;
-      
-      pdf.setFontSize(9);
-      pdf.setFont('helvetica', 'normal');
-      pdf.setTextColor(60, 60, 60);
-      
-      if (fullContract.party_b_address) {
-        const addrLines = pdf.splitTextToSize(fullContract.party_b_address, colWidth);
-        pdf.text(addrLines, col2X, partyBY);
-        partyBY += addrLines.length * 4;
-      }
-      
-      if (fullContract.party_b_contact) {
-        partyBY += 2;
-        pdf.text(`Contact: ${fullContract.party_b_contact}`, col2X, partyBY);
-        partyBY += 4;
-      }
-      
-      if (fullContract.party_b_gstin) {
-        pdf.text(`GSTIN: ${fullContract.party_b_gstin}`, col2X, partyBY);
-        partyBY += 4;
-      }
-      
-      if (fullContract.party_b_pan) {
-        pdf.text(`PAN: ${fullContract.party_b_pan}`, col2X, partyBY);
-        partyBY += 4;
-      }
-      
-      yPos = Math.max(partyAY, partyBY) + 15;
-      checkPageBreak(60);
-      
-      // ========== CONTRACT DETAILS ==========
-      pdf.setFillColor(245, 245, 245);
-      pdf.rect(leftMargin, yPos, contentWidth, 30, 'F');
-      
-      yPos += 7;
-      const detailsStartX = leftMargin + 5;
-      const detailsColWidth = contentWidth / 2;
-      
-      pdf.setFontSize(9);
-      pdf.setFont('helvetica', 'bold');
-      pdf.setTextColor(0, 0, 0);
-      
-      pdf.text('Contract Date:', detailsStartX, yPos);
-      pdf.setFont('helvetica', 'normal');
-      pdf.text(new Date(fullContract.contract_date).toLocaleDateString(), detailsStartX + 40, yPos);
-      
-      pdf.setFont('helvetica', 'bold');
-      pdf.text('Effective Date:', detailsStartX + detailsColWidth, yPos);
-      pdf.setFont('helvetica', 'normal');
-      pdf.text(new Date(fullContract.effective_date).toLocaleDateString(), detailsStartX + detailsColWidth + 40, yPos);
-      
-      yPos += 6;
-      
-      if (fullContract.expiry_date) {
-        pdf.setFont('helvetica', 'bold');
-        pdf.text('Expiry Date:', detailsStartX, yPos);
-        pdf.setFont('helvetica', 'normal');
-        pdf.text(new Date(fullContract.expiry_date).toLocaleDateString(), detailsStartX + 40, yPos);
-      }
-      
-      pdf.setFont('helvetica', 'bold');
-      pdf.text('Status:', detailsStartX + detailsColWidth, yPos);
-      pdf.setFont('helvetica', 'normal');
-      pdf.text(fullContract.status.toUpperCase(), detailsStartX + detailsColWidth + 40, yPos);
-      
-      yPos += 6;
-      
-      if (fullContract.contract_value) {
-        pdf.setFont('helvetica', 'bold');
-        pdf.text('Contract Value:', detailsStartX, yPos);
-        pdf.setFont('helvetica', 'normal');
-        const value = formatCurrency(fullContract.contract_value, fullContract.currency_code || 'INR');
-        pdf.text(value, detailsStartX + 40, yPos);
-      }
-      
-      yPos += 15;
-      checkPageBreak(40);
-      
-      // ========== PAYMENT TERMS ==========
-      if (fullContract.payment_terms) {
-        pdf.setFontSize(12);
-        pdf.setFont('helvetica', 'bold');
-        pdf.setTextColor(5, 150, 105);
-        pdf.text('Payment Terms', leftMargin, yPos);
-        
-        yPos += 8;
-        pdf.setFontSize(9);
-        pdf.setFont('helvetica', 'normal');
-        pdf.setTextColor(40, 40, 40);
-        
-        const paymentLines = pdf.splitTextToSize(fullContract.payment_terms, contentWidth);
-        paymentLines.forEach((line: string) => {
-          checkPageBreak(6);
-          pdf.text(line, leftMargin, yPos);
-          yPos += 5;
-        });
-        
-        yPos += 10;
-      }
-      
-      // ========== CONTRACT SECTIONS ==========
-      if (fullContract.sections && fullContract.sections.length > 0) {
-        // Sort sections by section_number
-        const sortedSections = [...fullContract.sections].sort((a, b) => a.section_number - b.section_number);
-        
-        sortedSections.forEach((section) => {
-          checkPageBreak(25);
-          
-          // Section Header
-          pdf.setFontSize(11);
-          pdf.setFont('helvetica', 'bold');
-          pdf.setTextColor(5, 150, 105);
-          pdf.text(`${section.section_number}. ${section.section_title}`, leftMargin, yPos);
-          
-          yPos += 7;
-          
-          // Section Content
-          pdf.setFontSize(9);
-          pdf.setFont('helvetica', 'normal');
-          pdf.setTextColor(40, 40, 40);
-          
-          const contentLines = pdf.splitTextToSize(section.section_content, contentWidth);
-          contentLines.forEach((line: string) => {
-            checkPageBreak(6);
-            pdf.text(line, leftMargin, yPos);
-            yPos += 5;
-          });
-          
-          yPos += 8;
-        });
-      }
-      
-      // ========== NOTES ==========
-      if (fullContract.notes) {
-        checkPageBreak(25);
-        
-        pdf.setFontSize(12);
-        pdf.setFont('helvetica', 'bold');
-        pdf.setTextColor(5, 150, 105);
-        pdf.text('Additional Notes', leftMargin, yPos);
-        
-        yPos += 8;
-        pdf.setFontSize(9);
-        pdf.setFont('helvetica', 'normal');
-        pdf.setTextColor(40, 40, 40);
-        
-        const notesLines = pdf.splitTextToSize(fullContract.notes, contentWidth);
-        notesLines.forEach((line: string) => {
-          checkPageBreak(6);
-          pdf.text(line, leftMargin, yPos);
-          yPos += 5;
-        });
-        
-        yPos += 10;
-      }
-      
-      // ========== SIGNATURES ==========
-      checkPageBreak(50);
-      yPos += 20;
-      
-      pdf.setFontSize(10);
-      pdf.setFont('helvetica', 'bold');
-      pdf.setTextColor(0, 0, 0);
-      
-      // Party A Signature
-      pdf.text('Party A (Service Provider)', col1X, yPos);
-      yPos += 20;
-      pdf.line(col1X, yPos, col1X + colWidth - 10, yPos);
-      yPos += 5;
-      pdf.setFontSize(9);
-      pdf.setFont('helvetica', 'normal');
-      pdf.text('Authorized Signature', col1X, yPos);
-      
-      // Party B Signature
-      yPos -= 25;
-      pdf.setFontSize(10);
-      pdf.setFont('helvetica', 'bold');
-      pdf.text('Party B (Client)', col2X, yPos);
-      yPos += 20;
-      pdf.line(col2X, yPos, col2X + colWidth - 10, yPos);
-      yPos += 5;
-      pdf.setFontSize(9);
-      pdf.setFont('helvetica', 'normal');
-      pdf.text('Authorized Signature', col2X, yPos);
-      
-      // Apply branding to all pages
-      const totalPages = pdf.getNumberOfPages();
-      for (let i = 2; i <= totalPages; i++) {
-        pdf.setPage(i);
-        await PDFBrandingUtils.applyBranding(pdf, company, dimensions);
-      }
+      // Generate PDF using jsPDF
+      const pdf = await generateContractPDF(fullContract, company);
       
       // Download the PDF
-      pdf.save(`${fullContract.contract_number}_${fullContract.party_b_name.replace(/\s+/g, '_')}.pdf`);
+      const filename = `${fullContract.contract_number}_${fullContract.party_b_name.replace(/\s+/g, '_')}.pdf`;
+      pdf.save(filename);
       showSuccess('Contract PDF generated successfully!');
     } catch (err) {
       console.error('Error generating PDF:', err);
@@ -603,6 +328,9 @@ const ContractManagement: React.FC = () => {
   const getStatusBadge = (status: ContractStatus) => {
     const badges = {
       draft: 'bg-gray-100 text-gray-800',
+      sent: 'bg-blue-100 text-blue-800',
+      accepted: 'bg-teal-100 text-teal-800',
+      rejected: 'bg-red-100 text-red-800',
       active: 'bg-green-100 text-green-800',
       expired: 'bg-red-100 text-red-800',
       terminated: 'bg-orange-100 text-orange-800',
@@ -815,6 +543,13 @@ const ContractManagement: React.FC = () => {
                       <Edit className="w-4 h-4" />
                     </button>
                     <button
+                      onClick={() => handleStatusUpdate(contract.id)}
+                      className="text-purple-600 hover:text-purple-900"
+                      title="Update Status"
+                    >
+                      <RefreshCw className="w-4 h-4" />
+                    </button>
+                    <button
                       onClick={() => handleGeneratePDF(contract.id)}
                       className="text-purple-600 hover:text-purple-900"
                       title="Download PDF"
@@ -976,329 +711,48 @@ const ContractManagement: React.FC = () => {
 
       {/* Create Contract Modal */}
       {showCreateModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-            <form onSubmit={handleSubmitContract}>
-              {/* Modal Header */}
-              <div className="flex items-center justify-between p-6 border-b border-gray-200 sticky top-0 bg-white">
-                <h2 className="text-xl font-semibold text-gray-900">Create New Contract</h2>
-                <button
-                  type="button"
-                  onClick={() => setShowCreateModal(false)}
-                  className="text-gray-400 hover:text-gray-600"
-                >
-                  <X className="w-6 h-6" />
-                </button>
-              </div>
+        <CreateContractModal
+          initialData={formData}
+          onSave={handleSaveNewContract}
+          onClose={() => setShowCreateModal(false)}
+        />
+      )}
 
-              {/* Modal Body */}
-              <div className="p-6 space-y-6">
-                {/* Contract Type & Title */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Contract Type <span className="text-red-500">*</span>
-                    </label>
-                    <select
-                      required
-                      value={formData.contract_type}
-                      onChange={(e) => setFormData({ ...formData, contract_type: e.target.value as ContractType })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    >
-                      <option value="MSA">Master Service Agreement (MSA)</option>
-                      <option value="SOW">Statement of Work (SOW)</option>
-                      <option value="NDA">Non-Disclosure Agreement (NDA)</option>
-                      <option value="SLA">Service Level Agreement (SLA)</option>
-                      <option value="WORK_ORDER">Work Order</option>
-                      <option value="MAINTENANCE">Maintenance Contract</option>
-                      <option value="CONSULTING">Consulting Agreement</option>
-                      <option value="LICENSE">Software License Agreement</option>
-                      <option value="OTHER">Other</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Contract Title <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={formData.contract_title}
-                      onChange={(e) => setFormData({ ...formData, contract_title: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      placeholder="Enter contract title"
-                    />
-                  </div>
-                </div>
+      {/* View Contract Modal */}
+      {showViewModal && selectedContract && (
+        <ViewContractModal
+          contract={selectedContract}
+          onClose={() => {
+            setShowViewModal(false);
+            setSelectedContract(null);
+          }}
+        />
+      )}
 
-                {/* Party A (Our Company) */}
-                <div className="border-t border-gray-200 pt-4">
-                  <h3 className="text-lg font-medium text-gray-900 mb-4">Party A (Our Company)</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Company Name <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="text"
-                        required
-                        readOnly
-                        value={formData.party_a_name}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50 text-gray-600 cursor-not-allowed"
-                        placeholder="Your company name"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Contact</label>
-                      <input
-                        type="text"
-                        readOnly
-                        value={formData.party_a_contact || ''}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50 text-gray-600 cursor-not-allowed"
-                        placeholder="Contact person"
-                      />
-                    </div>
-                    <div className="md:col-span-2">
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Address</label>
-                      <textarea
-                        readOnly
-                        value={formData.party_a_address || ''}
-                        rows={2}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50 text-gray-600 cursor-not-allowed"
-                        placeholder="Company address"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">GSTIN</label>
-                      <input
-                        type="text"
-                        readOnly
-                        value={formData.party_a_gstin || ''}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50 text-gray-600 cursor-not-allowed"
-                        placeholder="GST Number"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">PAN</label>
-                      <input
-                        type="text"
-                        readOnly
-                        value={formData.party_a_pan || ''}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50 text-gray-600 cursor-not-allowed"
-                        placeholder="PAN Number"
-                      />
-                    </div>
-                  </div>
-                </div>
+      {/* Edit Contract Modal */}
+      {showEditModal && selectedContract && (
+        <EditContractModal
+          contract={selectedContract}
+          onSave={handleSaveContract}
+          onClose={() => {
+            setShowEditModal(false);
+            setSelectedContract(null);
+          }}
+        />
+      )}
 
-                {/* Party B (Client) */}
-                <div className="border-t border-gray-200 pt-4">
-                  <h3 className="text-lg font-medium text-gray-900 mb-4">Party B (Client)</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Company Name <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="text"
-                        required
-                        value={formData.party_b_name}
-                        onChange={(e) => setFormData({ ...formData, party_b_name: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        placeholder="Client company name"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Contact</label>
-                      <input
-                        type="text"
-                        value={formData.party_b_contact || ''}
-                        onChange={(e) => setFormData({ ...formData, party_b_contact: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        placeholder="Contact person"
-                      />
-                    </div>
-                    <div className="md:col-span-2">
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Address</label>
-                      <textarea
-                        value={formData.party_b_address || ''}
-                        onChange={(e) => setFormData({ ...formData, party_b_address: e.target.value })}
-                        rows={2}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        placeholder="Client address"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">GSTIN</label>
-                      <input
-                        type="text"
-                        value={formData.party_b_gstin || ''}
-                        onChange={(e) => setFormData({ ...formData, party_b_gstin: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        placeholder="GST Number"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">PAN</label>
-                      <input
-                        type="text"
-                        value={formData.party_b_pan || ''}
-                        onChange={(e) => setFormData({ ...formData, party_b_pan: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        placeholder="PAN Number"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Dates & Financial */}
-                <div className="border-t border-gray-200 pt-4">
-                  <h3 className="text-lg font-medium text-gray-900 mb-4">Contract Details</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Contract Date <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="date"
-                        required
-                        value={formData.contract_date}
-                        onChange={(e) => setFormData({ ...formData, contract_date: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Effective Date <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="date"
-                        required
-                        value={formData.effective_date}
-                        onChange={(e) => setFormData({ ...formData, effective_date: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Expiry Date</label>
-                      <input
-                        type="date"
-                        value={formData.expiry_date || ''}
-                        onChange={(e) => setFormData({ ...formData, expiry_date: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Contract Value</label>
-                      <input
-                        type="number"
-                        value={formData.contract_value || ''}
-                        onChange={(e) => setFormData({ ...formData, contract_value: Number(e.target.value) })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        placeholder="0.00"
-                      />
-                    </div>
-                  </div>
-                  <div className="mt-4">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Payment Terms</label>
-                    <textarea
-                      value={formData.payment_terms || ''}
-                      onChange={(e) => setFormData({ ...formData, payment_terms: e.target.value })}
-                      rows={3}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      placeholder="Describe payment terms..."
-                    />
-                  </div>
-                </div>
-
-                {/* Sections */}
-                <div className="border-t border-gray-200 pt-4">
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-lg font-medium text-gray-900">Contract Sections</h3>
-                    <button
-                      type="button"
-                      onClick={addSection}
-                      className="flex items-center px-3 py-1 text-sm text-blue-600 hover:bg-blue-50 rounded-md"
-                    >
-                      <Plus className="w-4 h-4 mr-1" />
-                      Add Section
-                    </button>
-                  </div>
-                  <div className="space-y-4">
-                    {formData.sections.map((section, index) => (
-                      <div key={index} className="border border-gray-200 rounded-lg p-4">
-                        <div className="flex items-center justify-between mb-3">
-                          <h4 className="font-medium text-gray-900">Section {section.section_number}</h4>
-                          {formData.sections.length > 1 && (
-                            <button
-                              type="button"
-                              onClick={() => removeSection(index)}
-                              className="text-red-600 hover:text-red-800"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          )}
-                        </div>
-                        <div className="space-y-3">
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Title</label>
-                            <input
-                              type="text"
-                              value={section.section_title}
-                              onChange={(e) => updateSection(index, 'section_title', e.target.value)}
-                              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                              placeholder="Section title"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Content</label>
-                            <textarea
-                              value={section.section_content}
-                              onChange={(e) => updateSection(index, 'section_content', e.target.value)}
-                              rows={4}
-                              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                              placeholder="Section content..."
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Notes */}
-                <div className="border-t border-gray-200 pt-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Additional Notes</label>
-                  <textarea
-                    value={formData.notes || ''}
-                    onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                    rows={3}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    placeholder="Any additional notes..."
-                  />
-                </div>
-              </div>
-
-              {/* Modal Footer */}
-              <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-200 bg-gray-50 sticky bottom-0">
-                <button
-                  type="button"
-                  onClick={() => setShowCreateModal(false)}
-                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="flex items-center px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700"
-                >
-                  <Save className="w-4 h-4 mr-2" />
-                  Create Contract
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+      {/* Status Update Modal */}
+      {showStatusModal && selectedContract && (
+        <StatusUpdateModal
+          contractId={selectedContract.id}
+          contractNumber={selectedContract.contract_number}
+          currentStatus={selectedContract.status}
+          onUpdate={handleSaveStatus}
+          onClose={() => {
+            setShowStatusModal(false);
+            setSelectedContract(null);
+          }}
+        />
       )}
 
       {/* Confirm Dialog */}
