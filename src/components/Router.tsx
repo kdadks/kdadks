@@ -32,6 +32,7 @@ import AttendanceMarking from './employee/AttendanceMarking'
 import EmployeeProfile from './employee/EmployeeProfile'
 import EmployeeLogin from './employee/EmployeeLogin'
 import ChangePassword from './employee/ChangePassword'
+import ProtectedEmployeeRoute from './employee/ProtectedEmployeeRoute'
 
 // Payment Gateway Components (Lazy loaded)
 import { CheckoutPage } from './payment/CheckoutPage'
@@ -173,12 +174,12 @@ const Router = () => {
           {/* Employee Portal routes */}
           <Route path="/employee/login" element={<EmployeeLogin />} />
           <Route path="/employee/change-password" element={<ChangePassword />} />
-          <Route path="/employee" element={<EmployeeLayout><EmployeeDashboard /></EmployeeLayout>} />
-          <Route path="/employee/leaves" element={<EmployeeLayout><LeaveManagement /></EmployeeLayout>} />
-          <Route path="/employee/attendance" element={<EmployeeLayout><AttendanceMarking /></EmployeeLayout>} />
-          <Route path="/employee/profile" element={<EmployeeLayout><EmployeeProfile /></EmployeeLayout>} />
-          <Route path="/employee/salary" element={<EmployeeLayout><div className="p-8 text-center text-gray-500">Salary module coming soon...</div></EmployeeLayout>} />
-          <Route path="/employee/documents" element={<EmployeeLayout><div className="p-8 text-center text-gray-500">Documents module coming soon...</div></EmployeeLayout>} />
+          <Route path="/employee" element={<ProtectedEmployeeRoute><EmployeeLayout><EmployeeDashboard /></EmployeeLayout></ProtectedEmployeeRoute>} />
+          <Route path="/employee/leaves" element={<ProtectedEmployeeRoute><EmployeeLayout><LeaveManagement /></EmployeeLayout></ProtectedEmployeeRoute>} />
+          <Route path="/employee/attendance" element={<ProtectedEmployeeRoute><EmployeeLayout><AttendanceMarking /></EmployeeLayout></ProtectedEmployeeRoute>} />
+          <Route path="/employee/profile" element={<ProtectedEmployeeRoute><EmployeeLayout><EmployeeProfile /></EmployeeLayout></ProtectedEmployeeRoute>} />
+          <Route path="/employee/salary" element={<ProtectedEmployeeRoute><EmployeeLayout><div className="p-8 text-center text-gray-500">Salary module coming soon...</div></EmployeeLayout></ProtectedEmployeeRoute>} />
+          <Route path="/employee/documents" element={<ProtectedEmployeeRoute><EmployeeLayout><div className="p-8 text-center text-gray-500">Documents module coming soon...</div></EmployeeLayout></ProtectedEmployeeRoute>} />
           
           {/* Payment routes */}
           <Route path="/payment/:token" element={<CheckoutPage />} />
