@@ -1,0 +1,383 @@
+/**
+ * Leave Service - Handles leave management, requests, and approvals
+ */
+
+import { supabase } from '../config/supabase';
+import type { Leave, LeaveAllocation, LeaveType, LeaveFilter, LeaveRequest, LeaveStatus } from '../types/employee';
+
+export const leaveService = {
+  /**
+   * Get leave types
+   */
+  async getLeaveTypes(): Promise<LeaveType[] | null> {
+    try {
+      const { data, error } = await supabase
+        .from('leave_types')
+        .select('*')
+        .order('name');
+
+      if (error) throw error;
+
+      return data || [];
+    } catch (error) {
+      console.error('Error fetching leave types:', error);
+      return null;
+    }
+  },
+
+  /**
+   * Get employee's leave allocation for a financial year
+   */
+  async getLeaveAllocation(employeeId: string, financialYear: number): Promise<LeaveAllocation[] | null> {
+    try {
+      const { data, error } = await supabase
+        .from('leave_allocations')
+        .select('*, leave_types(*)')
+        .eq('employee_id', employeeId)
+        .eq('financial_year', financialYear);
+
+      if (error) throw error;
+
+      return data || [];
+    } catch (error) {
+      console.error('Error fetching leave allocation:', error);
+      return null;
+    }
+  },
+
+  /**
+   * Get remaining leaves for an employee
+   */
+  async getRemainingLeaves(employeeId: string, financialYear: number): Promise<any[] | null> {
+    try {
+      const allocations = await this.getLeaveAllocation(employeeId, financialYear);
+      if (!allocations) return null;
+
+      return allocations.map(alloc => ({
+        leave_type: alloc.leave_type?.name,
+        allocated: alloc.allocated_days,
+        used: alloc.used_days,
+        carried_forward: alloc.carried_forward_days,
+        total_available: alloc.allocated_days + alloc.carried_forward_days,
+        remaining: (alloc.allocated_days + alloc.carried_forward_days) - alloc.used_days,
+      }));
+    } catch (error) {
+      console.error('Error calculating remaining leaves:', error);
+      return null;
+    }
+  },
+
+  /**
+   * Request leave
+   */
+  async requestLeave(leaveRequest: LeaveRequest): Promise<Leave | null> {
+    try {
+      // Calculate total days
+      const startDate = new Date(leaveRequest.start_date);
+      const endDate = new Date(leaveRequest.end_date);
+      const totalDays = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+
+      const { data, error } = await supabase
+        .from('leaves')
+        .insert({
+          employee_id: leaveRequest.employee_id,
+          leave_type_id: leaveRequest.leave_type_id,
+          start_date: leaveRequest.start_date,
+          end_date: leaveRequest.end_date,
+          total_days: totalDays,
+          reason: leaveRequest.reason,
+          status: 'pending',
+          requested_at: new Date().toISOString(),
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      return data;
+    } catch (error) {
+      console.error('Error requesting leave:', error);
+      return null;
+    }
+  },
+
+  /**
+   * Get employee's leave requests
+   */
+  async getEmployeeLeaves(employeeId: string, filters?: { status?: LeaveStatus }): Promise<Leave[] | null> {
+    try {
+      let query = supabase
+        .from('leaves')
+        .select('*')
+        .eq('employee_id', employeeId);
+
+      if (filters?.status) {
+        query = query.eq('status', filters.status);
+      }
+
+      const { data, error } = await query.order('start_date', { ascending: false });
+
+      if (error) throw error;
+
+      return data || [];
+    } catch (error) {
+      console.error('Error fetching employee leaves:', error);
+      return null;
+    }
+  },
+
+  /**
+   * Get pending leave requests (Admin view)
+   */
+  async getPendingLeaveRequests(): Promise<any[] | null> {
+    try {
+      const { data, error } = await supabase
+        .from('leaves')
+        .select('*, employees(id, first_name, last_name, email, department), leave_types(name)')
+        .eq('status', 'pending')
+        .order('requested_at', { ascending: false });
+
+      if (error) throw error;
+
+      return data || [];
+    } catch (error) {
+      console.error('Error fetching pending requests:', error);
+      return null;
+    }
+  },
+
+  /**
+   * Get leaves with filters (Admin view)
+   */
+  async getLeavesWithFilters(
+    filters: LeaveFilter,
+    limit = 50,
+    offset = 0
+  ): Promise<{ leaves: any[], total: number } | null> {
+    try {
+      let query = supabase
+        .from('leaves')
+        .select('*, employees(first_name, last_name, email, department), leave_types(name)', { count: 'exact' });
+
+      if (filters.employee_id) {
+        query = query.eq('employee_id', filters.employee_id);
+      }
+
+      if (filters.status) {
+        query = query.eq('status', filters.status);
+      }
+
+      if (filters.leave_type_id) {
+        query = query.eq('leave_type_id', filters.leave_type_id);
+      }
+
+      if (filters.from_date) {
+        query = query.gte('start_date', filters.from_date);
+      }
+
+      if (filters.to_date) {
+        query = query.lte('end_date', filters.to_date);
+      }
+
+      const { data, count, error } = await query
+        .order('requested_at', { ascending: false })
+        .range(offset, offset + limit - 1);
+
+      if (error) throw error;
+
+      return {
+        leaves: data || [],
+        total: count || 0,
+      };
+    } catch (error) {
+      console.error('Error fetching leaves:', error);
+      return null;
+    }
+  },
+
+  /**
+   * Approve leave request (Admin)
+   */
+  async approveLeave(
+    leaveId: string,
+    approvedBy: string,
+    approvalComments?: string
+  ): Promise<Leave | null> {
+    try {
+      // Get leave details
+      const { data: leave, error: fetchError } = await supabase
+        .from('leaves')
+        .select('*')
+        .eq('id', leaveId)
+        .single();
+
+      if (fetchError) throw fetchError;
+
+      // Update leave status
+      const { data, error: updateError } = await supabase
+        .from('leaves')
+        .update({
+          status: 'approved',
+          approved_by: approvedBy,
+          approval_date: new Date().toISOString(),
+          approval_comments: approvalComments,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', leaveId)
+        .select()
+        .single();
+
+      if (updateError) throw updateError;
+
+      // Update leave allocation
+      if (leave && data) {
+        const { data: allocation } = await supabase
+          .from('leave_allocations')
+          .select('*')
+          .eq('employee_id', leave.employee_id)
+          .eq('leave_type_id', leave.leave_type_id)
+          .eq('financial_year', getFinancialYear())
+          .single();
+
+        if (allocation) {
+          await supabase
+            .from('leave_allocations')
+            .update({
+              used_days: allocation.used_days + leave.total_days,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', allocation.id);
+        }
+      }
+
+      return data;
+    } catch (error) {
+      console.error('Error approving leave:', error);
+      return null;
+    }
+  },
+
+  /**
+   * Reject leave request (Admin)
+   */
+  async rejectLeave(
+    leaveId: string,
+    approvedBy: string,
+    reason: string
+  ): Promise<Leave | null> {
+    try {
+      const { data, error } = await supabase
+        .from('leaves')
+        .update({
+          status: 'rejected',
+          approved_by: approvedBy,
+          approval_date: new Date().toISOString(),
+          approval_comments: reason,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', leaveId)
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      return data;
+    } catch (error) {
+      console.error('Error rejecting leave:', error);
+      return null;
+    }
+  },
+
+  /**
+   * Cancel leave request
+   */
+  async cancelLeave(leaveId: string, cancelledBy: string, reason: string): Promise<Leave | null> {
+    try {
+      // Get leave details
+      const { data: leave } = await supabase
+        .from('leaves')
+        .select('*')
+        .eq('id', leaveId)
+        .single();
+
+      const { data, error } = await supabase
+        .from('leaves')
+        .update({
+          status: 'cancelled',
+          cancelled_by: cancelledBy,
+          cancellation_date: new Date().toISOString(),
+          cancellation_reason: reason,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', leaveId)
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      // Update leave allocation if it was approved
+      if (leave && leave.status === 'approved') {
+        const { data: allocation } = await supabase
+          .from('leave_allocations')
+          .select('*')
+          .eq('employee_id', leave.employee_id)
+          .eq('leave_type_id', leave.leave_type_id)
+          .eq('financial_year', getFinancialYear())
+          .single();
+
+        if (allocation && allocation.used_days >= leave.total_days) {
+          await supabase
+            .from('leave_allocations')
+            .update({
+              used_days: allocation.used_days - leave.total_days,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', allocation.id);
+        }
+      }
+
+      return data;
+    } catch (error) {
+      console.error('Error cancelling leave:', error);
+      return null;
+    }
+  },
+
+  /**
+   * Get upcoming leaves for a department
+   */
+  async getUpcomingLeavesByDepartment(department: string): Promise<any[] | null> {
+    try {
+      const today = new Date().toISOString().split('T')[0];
+
+      const { data, error } = await supabase
+        .from('leaves')
+        .select('*, employees(first_name, last_name, department), leave_types(name)')
+        .eq('employees.department', department)
+        .eq('status', 'approved')
+        .gte('start_date', today)
+        .order('start_date');
+
+      if (error) throw error;
+
+      return data || [];
+    } catch (error) {
+      console.error('Error fetching upcoming leaves:', error);
+      return null;
+    }
+  },
+};
+
+/**
+ * Calculate financial year (April - March)
+ */
+function getFinancialYear(): number {
+  const today = new Date();
+  const month = today.getMonth();
+  const year = today.getFullYear();
+
+  // April (month 3) onwards is current financial year
+  return month >= 3 ? year : year - 1;
+}
+
+export default leaveService;
