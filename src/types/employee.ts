@@ -55,6 +55,15 @@ export interface Employee {
   bank_account_number?: string;
   bank_ifsc_code?: string;
 
+  // Authentication
+  password_hash?: string;
+  is_first_login?: boolean;
+  last_login_at?: string;
+  password_changed_at?: string;
+  account_locked?: boolean;
+  failed_login_attempts?: number;
+  locked_until?: string;
+
   // Metadata
   created_by?: string;
   created_at?: string;
@@ -511,19 +520,28 @@ export interface CreateSettlementInput {
 // ============================================
 
 // Attendance Types
-export type AttendanceStatus = 'present' | 'absent' | 'half_day' | 'work_from_home' | 'leave';
+export type AttendanceStatus = 'present' | 'absent' | 'half-day' | 'on-leave' | 'holiday' | 'week-off';
 
 export interface Attendance {
   id: string;
   employee_id: string;
-  date: string;
+  attendance_date: string;
   check_in_time?: string;
   check_out_time?: string;
-  duration_minutes?: number;
+  breaks?: any; // jsonb
+  total_hours?: number;
+  work_hours?: number;
+  break_hours?: number;
+  overtime_hours?: number;
   status: AttendanceStatus;
-  notes?: string;
-  verified_by?: string;
-  admin_comments?: string;
+  check_in_location?: string;
+  check_out_location?: string;
+  check_in_ip?: string;
+  remarks?: string;
+  is_regularized?: boolean;
+  regularized_by?: string;
+  regularized_at?: string;
+  regularization_reason?: string;
   created_at?: string;
   updated_at?: string;
 }
@@ -574,17 +592,19 @@ export interface Leave {
   id: string;
   employee_id: string;
   leave_type_id: string;
-  start_date: string;
-  end_date: string;
+  from_date: string;
+  to_date: string;
+  half_day?: boolean;
   total_days: number;
-  reason?: string;
+  reason: string;
+  contact_during_leave?: string;
   status: LeaveStatus;
-  requested_at: string;
+  applied_by: string;
+  applied_at: string;
   approved_by?: string;
-  approval_date?: string;
-  approval_comments?: string;
-  cancelled_by?: string;
-  cancellation_date?: string;
+  approved_at?: string;
+  approval_remarks?: string;
+  cancelled_at?: string;
   cancellation_reason?: string;
   created_at?: string;
   updated_at?: string;
@@ -605,9 +625,11 @@ export interface LeaveAllocation {
 export interface LeaveRequest {
   employee_id: string;
   leave_type_id: string;
-  start_date: string;
-  end_date: string;
-  reason?: string;
+  from_date: string;
+  to_date: string;
+  half_day?: boolean;
+  reason: string;
+  contact_during_leave?: string;
 }
 
 export interface LeaveFilter {

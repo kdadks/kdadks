@@ -35,7 +35,7 @@ export const documentService = {
 
       // Create document record in database
       const { data, error } = await supabase
-        .from('employee_documents')
+        .from('employment_documents')
         .insert({
           employee_id: employeeId,
           document_type: formData.document_type,
@@ -65,7 +65,7 @@ export const documentService = {
   async getEmployeeDocuments(employeeId: string): Promise<EmployeeDocument[] | null> {
     try {
       const { data, error } = await supabase
-        .from('employee_documents')
+        .from('employment_documents')
         .select('*')
         .eq('employee_id', employeeId)
         .order('created_at', { ascending: false });
@@ -85,7 +85,7 @@ export const documentService = {
   async getDocumentsByType(employeeId: string, documentType: string): Promise<EmployeeDocument[] | null> {
     try {
       const { data, error } = await supabase
-        .from('employee_documents')
+        .from('employment_documents')
         .select('*')
         .eq('employee_id', employeeId)
         .eq('document_type', documentType)
@@ -106,7 +106,7 @@ export const documentService = {
   async getPendingDocuments(): Promise<EmployeeDocument[] | null> {
     try {
       const { data, error } = await supabase
-        .from('employee_documents')
+        .from('employment_documents')
         .select('*, employees(id, first_name, last_name, email)')
         .eq('verified', false)
         .order('created_at');
@@ -130,7 +130,7 @@ export const documentService = {
   ): Promise<EmployeeDocument | null> {
     try {
       const { data, error } = await supabase
-        .from('employee_documents')
+        .from('employment_documents')
         .update({
           verified: true,
           verified_by: verifiedBy,
@@ -158,7 +158,7 @@ export const documentService = {
     try {
       // Get document to find file path
       const { data: document, error: fetchError } = await supabase
-        .from('employee_documents')
+        .from('employment_documents')
         .select('file_path')
         .eq('id', documentId)
         .single();
@@ -176,7 +176,7 @@ export const documentService = {
 
       // Delete from database
       const { error } = await supabase
-        .from('employee_documents')
+        .from('employment_documents')
         .delete()
         .eq('id', documentId);
 
@@ -198,7 +198,7 @@ export const documentService = {
       const expiryDate = new Date(today.getTime() + daysUntilExpiry * 24 * 60 * 60 * 1000);
 
       const { data, error } = await supabase
-        .from('employee_documents')
+        .from('employment_documents')
         .select('*')
         .eq('employee_id', employeeId)
         .not('expiry_date', 'is', null)
@@ -220,7 +220,7 @@ export const documentService = {
   async updateDocument(documentId: string, updates: Partial<EmployeeDocument>): Promise<EmployeeDocument | null> {
     try {
       const { data, error } = await supabase
-        .from('employee_documents')
+        .from('employment_documents')
         .update({
           ...updates,
           updated_at: new Date().toISOString(),
@@ -262,3 +262,4 @@ export const documentService = {
 };
 
 export default documentService;
+

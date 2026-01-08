@@ -236,7 +236,7 @@ export const salaryService = {
       const lastDay = new Date(year, month, 0).toISOString().split('T')[0];
 
       const { data, error } = await supabase
-        .from('company_holidays')
+        .from('holidays')
         .select('*')
         .gte('holiday_date', firstDay)
         .lte('holiday_date', lastDay)

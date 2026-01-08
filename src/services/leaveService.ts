@@ -31,7 +31,7 @@ export const leaveService = {
   async getLeaveAllocation(employeeId: string, financialYear: number): Promise<LeaveAllocation[] | null> {
     try {
       const { data, error } = await supabase
-        .from('leave_allocations')
+        .from('employee_leave_balance')
         .select('*, leave_types(*)')
         .eq('employee_id', employeeId)
         .eq('financial_year', financialYear);
@@ -86,21 +86,24 @@ export const leaveService = {
   async requestLeave(leaveRequest: LeaveRequest): Promise<Leave | null> {
     try {
       // Calculate total days
-      const startDate = new Date(leaveRequest.start_date);
-      const endDate = new Date(leaveRequest.end_date);
+      const startDate = new Date(leaveRequest.from_date);
+      const endDate = new Date(leaveRequest.to_date);
       const totalDays = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
 
       const { data, error } = await supabase
-        .from('leaves')
+        .from('leave_applications')
         .insert({
           employee_id: leaveRequest.employee_id,
           leave_type_id: leaveRequest.leave_type_id,
-          start_date: leaveRequest.start_date,
-          end_date: leaveRequest.end_date,
+          from_date: leaveRequest.from_date,
+          to_date: leaveRequest.to_date,
+          half_day: leaveRequest.half_day || false,
           total_days: totalDays,
           reason: leaveRequest.reason,
+          contact_during_leave: leaveRequest.contact_during_leave,
           status: 'pending',
-          requested_at: new Date().toISOString(),
+          applied_by: leaveRequest.employee_id,
+          applied_at: new Date().toISOString(),
         })
         .select()
         .single();
@@ -120,7 +123,7 @@ export const leaveService = {
   async getEmployeeLeaves(employeeId: string, filters?: { status?: LeaveStatus }): Promise<Leave[] | null> {
     try {
       let query = supabase
-        .from('leaves')
+        .from('leave_applications')
         .select('*')
         .eq('employee_id', employeeId);
 
@@ -128,7 +131,7 @@ export const leaveService = {
         query = query.eq('status', filters.status);
       }
 
-      const { data, error } = await query.order('start_date', { ascending: false });
+      const { data, error } = await query.order('from_date', { ascending: false });
 
       if (error) throw error;
 
@@ -145,10 +148,10 @@ export const leaveService = {
   async getPendingLeaveRequests(): Promise<any[] | null> {
     try {
       const { data, error } = await supabase
-        .from('leaves')
+        .from('leave_applications')
         .select('*, employees(id, first_name, last_name, email, department), leave_types(name)')
         .eq('status', 'pending')
-        .order('requested_at', { ascending: false });
+        .order('applied_at', { ascending: false });
 
       if (error) throw error;
 
@@ -169,7 +172,7 @@ export const leaveService = {
   ): Promise<{ leaves: any[], total: number } | null> {
     try {
       let query = supabase
-        .from('leaves')
+        .from('leave_applications')
         .select('*, employees(first_name, last_name, email, department), leave_types(name)', { count: 'exact' });
 
       if (filters.employee_id) {
@@ -185,15 +188,15 @@ export const leaveService = {
       }
 
       if (filters.from_date) {
-        query = query.gte('start_date', filters.from_date);
+        query = query.gte('from_date', filters.from_date);
       }
 
       if (filters.to_date) {
-        query = query.lte('end_date', filters.to_date);
+        query = query.lte('to_date', filters.to_date);
       }
 
       const { data, count, error } = await query
-        .order('requested_at', { ascending: false })
+        .order('applied_at', { ascending: false })
         .range(offset, offset + limit - 1);
 
       if (error) throw error;
@@ -219,7 +222,7 @@ export const leaveService = {
     try {
       // Get leave details
       const { data: leave, error: fetchError } = await supabase
-        .from('leaves')
+        .from('leave_applications')
         .select('*')
         .eq('id', leaveId)
         .single();
@@ -228,12 +231,12 @@ export const leaveService = {
 
       // Update leave status
       const { data, error: updateError } = await supabase
-        .from('leaves')
+        .from('leave_applications')
         .update({
           status: 'approved',
           approved_by: approvedBy,
-          approval_date: new Date().toISOString(),
-          approval_comments: approvalComments,
+          approved_at: new Date().toISOString(),
+          approval_remarks: approvalComments,
           updated_at: new Date().toISOString(),
         })
         .eq('id', leaveId)
@@ -245,7 +248,7 @@ export const leaveService = {
       // Update leave allocation
       if (leave && data) {
         const { data: allocation } = await supabase
-          .from('leave_allocations')
+          .from('employee_leave_balance')
           .select('*')
           .eq('employee_id', leave.employee_id)
           .eq('leave_type_id', leave.leave_type_id)
@@ -254,7 +257,7 @@ export const leaveService = {
 
         if (allocation) {
           await supabase
-            .from('leave_allocations')
+            .from('employee_leave_balance')
             .update({
               used_days: allocation.used_days + leave.total_days,
               updated_at: new Date().toISOString(),
@@ -280,12 +283,12 @@ export const leaveService = {
   ): Promise<Leave | null> {
     try {
       const { data, error } = await supabase
-        .from('leaves')
+        .from('leave_applications')
         .update({
           status: 'rejected',
           approved_by: approvedBy,
-          approval_date: new Date().toISOString(),
-          approval_comments: reason,
+          approved_at: new Date().toISOString(),
+          approval_remarks: reason,
           updated_at: new Date().toISOString(),
         })
         .eq('id', leaveId)
@@ -308,17 +311,16 @@ export const leaveService = {
     try {
       // Get leave details
       const { data: leave } = await supabase
-        .from('leaves')
+        .from('leave_applications')
         .select('*')
         .eq('id', leaveId)
         .single();
 
       const { data, error } = await supabase
-        .from('leaves')
+        .from('leave_applications')
         .update({
           status: 'cancelled',
-          cancelled_by: cancelledBy,
-          cancellation_date: new Date().toISOString(),
+          cancelled_at: new Date().toISOString(),
           cancellation_reason: reason,
           updated_at: new Date().toISOString(),
         })
@@ -331,7 +333,7 @@ export const leaveService = {
       // Update leave allocation if it was approved
       if (leave && leave.status === 'approved') {
         const { data: allocation } = await supabase
-          .from('leave_allocations')
+          .from('employee_leave_balance')
           .select('*')
           .eq('employee_id', leave.employee_id)
           .eq('leave_type_id', leave.leave_type_id)
@@ -340,7 +342,7 @@ export const leaveService = {
 
         if (allocation && allocation.used_days >= leave.total_days) {
           await supabase
-            .from('leave_allocations')
+            .from('employee_leave_balance')
             .update({
               used_days: allocation.used_days - leave.total_days,
               updated_at: new Date().toISOString(),
@@ -364,12 +366,12 @@ export const leaveService = {
       const today = new Date().toISOString().split('T')[0];
 
       const { data, error } = await supabase
-        .from('leaves')
+        .from('leave_applications')
         .select('*, employees(first_name, last_name, department), leave_types(name)')
         .eq('employees.department', department)
         .eq('status', 'approved')
-        .gte('start_date', today)
-        .order('start_date');
+        .gte('from_date', today)
+        .order('from_date');
 
       if (error) throw error;
 
@@ -394,3 +396,4 @@ function getFinancialYear(): number {
 }
 
 export default leaveService;
+

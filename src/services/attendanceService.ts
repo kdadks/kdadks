@@ -22,14 +22,14 @@ export const attendanceService = {
         : undefined;
 
       const { data, error } = await supabase
-        .from('attendance')
+        .from('attendance_records')
         .upsert({
           employee_id: employeeId,
           attendance_date: attendanceDate,
           status,
           check_in_time: checkInTime,
           check_out_time: checkOutTime,
-          duration_hours: durationHours,
+          total_hours: durationHours,
           updated_at: new Date().toISOString(),
         }, { onConflict: 'employee_id,attendance_date' })
         .select()
@@ -54,7 +54,7 @@ export const attendanceService = {
   ): Promise<Attendance[] | null> {
     try {
       const { data, error } = await supabase
-        .from('attendance')
+        .from('attendance_records')
         .select('*')
         .eq('employee_id', employeeId)
         .gte('attendance_date', fromDate)
@@ -83,7 +83,7 @@ export const attendanceService = {
       const lastDay = new Date(year, month, 0).toISOString().split('T')[0];
 
       const { data, error } = await supabase
-        .from('attendance')
+        .from('attendance_records')
         .select('status')
         .eq('employee_id', employeeId)
         .gte('attendance_date', firstDay)
@@ -95,8 +95,8 @@ export const attendanceService = {
       const totalWorkingDays = attendance.length;
       const daysPresent = attendance.filter(a => a.status === 'present').length;
       const daysAbsent = attendance.filter(a => a.status === 'absent').length;
-      const daysHalfDay = attendance.filter(a => a.status === 'half_day').length;
-      const daysOnLeave = attendance.filter(a => a.status === 'on_leave').length;
+      const daysHalfDay = attendance.filter(a => a.status === 'half-day').length;
+      const daysOnLeave = attendance.filter(a => a.status === 'on-leave').length;
 
       return {
         employee_id: employeeId,
@@ -132,7 +132,7 @@ export const attendanceService = {
     offset = 0
   ): Promise<{ attendance: Attendance[], total: number } | null> {
     try {
-      let query = supabase.from('attendance').select('*', { count: 'exact' });
+      let query = supabase.from('attendance_records').select('*', { count: 'exact' });
 
       if (filters.employee_id) {
         query = query.eq('employee_id', filters.employee_id);
@@ -176,7 +176,7 @@ export const attendanceService = {
   ): Promise<Attendance | null> {
     try {
       const { data, error } = await supabase
-        .from('attendance')
+        .from('attendance_records')
         .update({
           reviewed_by: reviewedBy,
           review_comments: reviewComments,
@@ -235,7 +235,7 @@ export const attendanceService = {
     try {
       for (const update of updates) {
         const { error } = await supabase
-          .from('attendance')
+          .from('attendance_records')
           .update({ status: update.status, updated_at: new Date().toISOString() })
           .eq('id', update.id);
 
@@ -264,3 +264,4 @@ function calculateDuration(checkIn: string, checkOut: string): number {
 }
 
 export default attendanceService;
+

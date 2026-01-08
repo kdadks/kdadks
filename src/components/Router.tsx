@@ -24,6 +24,15 @@ import AdminLogin from './admin/AdminLogin'
 import SimpleAdminDashboard from './admin/SimpleAdminDashboard'
 import { ToastProvider } from './ui/ToastProvider'
 
+// Employee Portal Components
+import EmployeeLayout from './employee/EmployeeLayout'
+import EmployeeDashboard from './employee/EmployeeDashboard'
+import LeaveManagement from './employee/LeaveManagement'
+import AttendanceMarking from './employee/AttendanceMarking'
+import EmployeeProfile from './employee/EmployeeProfile'
+import EmployeeLogin from './employee/EmployeeLogin'
+import ChangePassword from './employee/ChangePassword'
+
 // Payment Gateway Components (Lazy loaded)
 import { CheckoutPage } from './payment/CheckoutPage'
 import { PaymentSuccessPage } from './payment/PaymentSuccessPage'
@@ -160,6 +169,16 @@ const Router = () => {
           {/* Admin routes */}
           <Route path="/admin/login" element={<AdminLogin />} />
           <Route path="/admin" element={<SimpleAdminDashboard />} />
+          
+          {/* Employee Portal routes */}
+          <Route path="/employee/login" element={<EmployeeLogin />} />
+          <Route path="/employee/change-password" element={<ChangePassword />} />
+          <Route path="/employee" element={<EmployeeLayout><EmployeeDashboard /></EmployeeLayout>} />
+          <Route path="/employee/leaves" element={<EmployeeLayout><LeaveManagement /></EmployeeLayout>} />
+          <Route path="/employee/attendance" element={<EmployeeLayout><AttendanceMarking /></EmployeeLayout>} />
+          <Route path="/employee/profile" element={<EmployeeLayout><EmployeeProfile /></EmployeeLayout>} />
+          <Route path="/employee/salary" element={<EmployeeLayout><div className="p-8 text-center text-gray-500">Salary module coming soon...</div></EmployeeLayout>} />
+          <Route path="/employee/documents" element={<EmployeeLayout><div className="p-8 text-center text-gray-500">Documents module coming soon...</div></EmployeeLayout>} />
           
           {/* Payment routes */}
           <Route path="/payment/:token" element={<CheckoutPage />} />

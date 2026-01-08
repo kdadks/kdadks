@@ -15,9 +15,12 @@ import {
   Briefcase,
   Receipt,
   Mail,
-  CheckCircle
+  CheckCircle,
+  AlertCircle,
+  Key
 } from 'lucide-react';
 import { employeeService } from '../../services/employeeService';
+import { employeeAuthService } from '../../services/employeeAuthService';
 import { PDFBrandingUtils } from '../../utils/pdfBrandingUtils';
 import { generateSalarySlipPDF } from '../../utils/salarySlipPDFGenerator';
 import { EmailService } from '../../services/emailService';
@@ -91,6 +94,15 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
   const [editedSalarySlipData, setEditedSalarySlipData] = useState<Partial<SalarySlip>>({});
   const [isSavingSalarySlip, setIsSavingSalarySlip] = useState(false);
 
+  // Temporary password modal state
+  const [showTempPasswordModal, setShowTempPasswordModal] = useState(false);
+  const [tempPasswordData, setTempPasswordData] = useState<{ email: string; password: string; name: string } | null>(null);
+  const [passwordCopied, setPasswordCopied] = useState(false);
+
+  // Delete confirmation modal state
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [employeeToDelete, setEmployeeToDelete] = useState<Employee | null>(null);
+
   // Salary slip generation state
   const [salarySlipInput, setSalarySlipInput] = useState<CreateSalarySlipInput>({
     employee_id: '',
@@ -147,6 +159,21 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
     }
   };
 
+  const handleDeleteEmployee = async () => {
+    if (!employeeToDelete) return;
+
+    try {
+      await employeeService.deleteEmployee(employeeToDelete.id);
+      showSuccess('Employee deleted successfully');
+      setShowDeleteModal(false);
+      setEmployeeToDelete(null);
+      loadData();
+    } catch (err) {
+      console.error('Error deleting employee:', err);
+      showError('Failed to delete employee');
+    }
+  };
+
   const handleCreateEmployee = async () => {
     try {
       if (!employeeForm.employee_number || !employeeForm.first_name || !employeeForm.last_name || !employeeForm.email) {
@@ -162,8 +189,20 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
         gross_salary: (employeeForm.basic_salary || 0) + (employeeForm.hra || 0) + (employeeForm.special_allowance || 0) + (employeeForm.other_allowances || 0)
       } as Omit<Employee, 'id' | 'created_at' | 'updated_at'>);
 
+      // Generate and set temporary password
+      const tempPassword = employeeAuthService.generateTemporaryPassword();
+      await employeeAuthService.setTemporaryPassword(newEmployee.id, tempPassword);
+
+      // Show temporary password modal
+      setTempPasswordData({
+        email: newEmployee.email,
+        password: tempPassword,
+        name: fullName
+      });
+      setShowTempPasswordModal(true);
+      setPasswordCopied(false);
+      
       setEmployees([newEmployee, ...employees]);
-      showSuccess('Employee created successfully');
       setEmployeeView('list');
       resetEmployeeForm();
     } catch (err) {
@@ -1803,15 +1842,29 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
                         </button>
                         <button
                           onClick={async () => {
-                            if (window.confirm(`Are you sure you want to delete ${employee.full_name}?`)) {
-                              try {
-                                await employeeService.deleteEmployee(employee.id);
-                                showSuccess('Employee deleted successfully');
-                                loadData();
-                              } catch (err) {
-                                showError('Failed to delete employee');
-                              }
+                            const tempPassword = employeeAuthService.generateTemporaryPassword();
+                            const result = await employeeAuthService.setTemporaryPassword(employee.id, tempPassword);
+                            if (result.success) {
+                              setTempPasswordData({
+                                email: employee.email,
+                                password: tempPassword,
+                                name: employee.full_name
+                              });
+                              setShowTempPasswordModal(true);
+                              setPasswordCopied(false);
+                            } else {
+                              showError('Failed to reset password');
                             }
+                          }}
+                          className="text-orange-600 hover:text-orange-900 mr-3"
+                          title="Reset Password"
+                        >
+                          <Key className="w-5 h-5 inline" />
+                        </button>
+                        <button
+                          onClick={() => {
+                            setEmployeeToDelete(employee);
+                            setShowDeleteModal(true);
                           }}
                           className="text-red-600 hover:text-red-900"
                           title="Delete Employee"
@@ -5029,7 +5082,7 @@ Any other duties assigned by management from time to time`}
                       </select>
                     </div>
                     <div className="col-span-2">
-                      <label className="block text-sm font-medium text-gray-700 mb-2 text-lg">Net Salary (Gross - Deductions)</label>
+                      <label className="block text-lg font-medium text-gray-700 mb-2">Net Salary (Gross - Deductions)</label>
                       <input
                         type="number"
                         value={editedSalarySlipData.net_salary || ''}
@@ -5099,6 +5152,144 @@ Any other duties assigned by management from time to time`}
                 className="w-full h-full"
                 title="PDF Preview"
               />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Temporary Password Modal */}
+      {showTempPasswordModal && tempPasswordData && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-5">
+            <div className="flex items-center mb-4">
+              <div className="flex-shrink-0 w-10 h-10 bg-green-100 rounded-full flex items-center justify-center mr-3">
+                <CheckCircle className="w-5 h-5 text-green-600" />
+              </div>
+              <div>
+                <h2 className="text-lg font-bold text-gray-900">Employee Created</h2>
+                <p className="text-xs text-gray-600">Save temporary password</p>
+              </div>
+            </div>
+
+            <div className="space-y-2.5 mb-4">
+              <div className="bg-gray-50 rounded p-2.5">
+                <label className="block text-xs font-medium text-gray-600 mb-0.5">Employee</label>
+                <p className="text-sm font-semibold text-gray-900">{tempPasswordData.name}</p>
+                <p className="text-xs font-mono text-gray-600 mt-0.5">{tempPasswordData.email}</p>
+              </div>
+
+              <div className="bg-yellow-50 border border-yellow-400 rounded p-2.5">
+                <label className="flex items-center text-xs font-medium text-yellow-800 mb-1.5">
+                  <AlertCircle className="w-3 h-3 mr-1" />
+                  Temporary Password
+                </label>
+                <div className="flex items-center justify-between bg-white rounded p-2 border border-yellow-300">
+                  <code className="text-base font-bold text-gray-900 tracking-wide">{tempPasswordData.password}</code>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(tempPasswordData.password);
+                      setPasswordCopied(true);
+                      setTimeout(() => setPasswordCopied(false), 2000);
+                    }}
+                    className="ml-2 px-2 py-1 bg-yellow-500 hover:bg-yellow-600 text-white text-xs rounded"
+                  >
+                    {passwordCopied ? '✓' : 'Copy'}
+                  </button>
+                </div>
+              </div>
+
+              <div className="bg-blue-50 border border-blue-200 rounded p-2.5">
+                <p className="text-xs text-blue-800">
+                  Share this password securely. Employee must change it on first login.
+                </p>
+              </div>
+
+              <div className="bg-gray-50 rounded p-2.5">
+                <label className="block text-xs font-medium text-gray-600 mb-1">Login URL</label>
+                <div className="flex items-center justify-between bg-white rounded p-1.5 border border-gray-300">
+                  <code className="text-xs text-gray-700">/employee/login</code>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(window.location.origin + '/employee/login');
+                      showSuccess('Login URL copied');
+                    }}
+                    className="ml-2 px-2 py-0.5 bg-gray-500 hover:bg-gray-600 text-white text-xs rounded"
+                  >
+                    Copy
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <button
+              onClick={() => {
+                setShowTempPasswordModal(false);
+                setTempPasswordData(null);
+                showSuccess('Employee created successfully');
+              }}
+              className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded transition-colors"
+            >
+              Done
+            </button>
+
+            <p className="text-center text-xs text-gray-500 mt-2">
+              Password shown once only
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteModal && employeeToDelete && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
+            <div className="flex items-start mb-4">
+              <div className="flex-shrink-0 w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
+                <AlertCircle className="w-6 h-6 text-red-600" />
+              </div>
+              <div className="ml-4 flex-1">
+                <h3 className="text-lg font-semibold text-gray-900 mb-1">Delete Employee</h3>
+                <p className="text-sm text-gray-600">
+                  Are you sure you want to delete this employee? This action cannot be undone.
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-gray-50 rounded-lg p-4 mb-6">
+              <div className="flex items-start">
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-gray-700">Employee Details</p>
+                  <p className="text-lg font-semibold text-gray-900 mt-1">{employeeToDelete.full_name}</p>
+                  <p className="text-sm text-gray-600 mt-1">{employeeToDelete.email}</p>
+                  <p className="text-sm text-gray-600">{employeeToDelete.designation}</p>
+                  <p className="text-xs text-gray-500 mt-1">Employee ID: {employeeToDelete.employee_number}</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-6">
+              <p className="text-sm text-red-800">
+                <strong>Warning:</strong> Deleting this employee will remove all associated records including documents, salary slips, and attendance data.
+              </p>
+            </div>
+
+            <div className="flex space-x-3">
+              <button
+                onClick={() => {
+                  setShowDeleteModal(false);
+                  setEmployeeToDelete(null);
+                }}
+                className="flex-1 px-4 py-2.5 border border-gray-300 rounded-lg text-gray-700 font-medium hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteEmployee}
+                className="flex-1 px-4 py-2.5 bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg transition-colors flex items-center justify-center"
+              >
+                <Trash2 className="w-4 h-4 mr-2" />
+                Delete Employee
+              </button>
             </div>
           </div>
         </div>
