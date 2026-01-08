@@ -68,7 +68,7 @@ export const salaryService = {
       // Calculate working days
       const totalCalendarDays = new Date(year, month, 0).getDate();
       const weekendDays = Math.ceil(totalCalendarDays / 7) * 2; // Assuming 5-day week
-      const totalWorkingDays = totalCalendarDays - weekendDays - holidayCount;
+      let totalWorkingDays = totalCalendarDays - weekendDays - holidayCount;
 
       // Calculate earnings
       const baseSalary = structure.base_salary;
@@ -79,7 +79,14 @@ export const salaryService = {
       const grossSalary = baseSalary + hra + da + otherAllowances;
 
       // Prorate salary based on attendance
-      const attendanceRatio = Math.min(attendance.days_present + (attendance.days_half_day * 0.5), totalWorkingDays) / totalWorkingDays;
+      const presentDays = attendance?.present_days ?? attendance?.days_present ?? 0;
+      const halfDays = attendance?.half_days ?? attendance?.days_half_day ?? 0;
+      const attendanceWorkingDays = attendance?.total_days ?? attendance?.total_working_days ?? 22; // Default working days
+      // Use either attendance working days or calculated working days (prefer attendance)
+      if (attendanceWorkingDays && attendanceWorkingDays !== 22) {
+        totalWorkingDays = attendanceWorkingDays;
+      }
+      const attendanceRatio = Math.min(presentDays + (halfDays * 0.5), totalWorkingDays) / totalWorkingDays;
       const proratedGrossSalary = grossSalary * attendanceRatio;
 
       // Calculate deductions
@@ -96,21 +103,20 @@ export const salaryService = {
         .from('salary_slips')
         .upsert({
           employee_id: employeeId,
-          month,
-          year,
-          total_working_days: totalWorkingDays,
-          days_present: attendance.days_present,
-          days_absent: attendance.days_absent,
-          days_half_day: attendance.days_half_day,
-          days_on_leave: attendance.days_on_leave,
-          base_salary: baseSalary,
+          salary_month: month,
+          salary_year: year,
+          working_days: totalWorkingDays,
+          paid_days: Math.round(presentDays + (halfDays * 0.5)),
+          lop_days: (attendance?.absent_days ?? 0),
+          leaves_taken: attendance?.leaves ?? 0,
+          basic_salary: baseSalary,
           hra,
           dearness_allowance: da,
           other_allowances: otherAllowances,
           gross_salary: grossSalary,
           provident_fund: pf,
-          employee_state_insurance: esi,
-          income_tax: incomeTax,
+          esic: esi,
+          tds: incomeTax,
           other_deductions: otherDeductions,
           total_deductions: totalDeductions,
           net_salary: netSalary,
@@ -197,7 +203,7 @@ export const salaryService = {
 
       if (empError) throw empError;
 
-      const results = { success: 0, failed: 0, errors: [] };
+      const results: { success: number; failed: number; errors: string[] } = { success: 0, failed: 0, errors: [] };
 
       for (const emp of employees || []) {
         try {
@@ -330,7 +336,7 @@ export const salaryService = {
 
       if (slips.length > 0) {
         summary.avg_attendance = slips.reduce((sum: number, slip: SalarySlip) => 
-          sum + (slip.days_present / slip.total_working_days * 100), 0
+          sum + (slip.paid_days / slip.working_days * 100), 0
         ) / slips.length;
       }
 

@@ -40,13 +40,12 @@ export const documentService = {
           employee_id: employeeId,
           document_type: formData.document_type,
           document_name: formData.document_name,
-          file_path: fileName,
-          file_url: publicUrl,
+          document_path: fileName,
+          document_url: publicUrl,
           file_size: file.size,
           mime_type: file.type,
-          issue_date: formData.issue_date,
           expiry_date: formData.expiry_date,
-          verified: false,
+          verification_status: 'pending',
         })
         .select()
         .single();

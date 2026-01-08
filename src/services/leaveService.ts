@@ -53,14 +53,27 @@ export const leaveService = {
       const allocations = await this.getLeaveAllocation(employeeId, financialYear);
       if (!allocations) return null;
 
-      return allocations.map(alloc => ({
-        leave_type: alloc.leave_type?.name,
-        allocated: alloc.allocated_days,
-        used: alloc.used_days,
-        carried_forward: alloc.carried_forward_days,
-        total_available: alloc.allocated_days + alloc.carried_forward_days,
-        remaining: (alloc.allocated_days + alloc.carried_forward_days) - alloc.used_days,
-      }));
+      // Fetch leave type names for each allocation
+      const mappedAllocations = await Promise.all(
+        allocations.map(async (alloc) => {
+          const { data: leaveType } = await supabase
+            .from('leave_types')
+            .select('name')
+            .eq('id', alloc.leave_type_id)
+            .single();
+          
+          return {
+            leave_type: leaveType?.name || 'Unknown',
+            allocated: alloc.allocated_days,
+            used: alloc.used_days,
+            carried_forward: alloc.carried_forward_days,
+            total_available: alloc.allocated_days + alloc.carried_forward_days,
+            remaining: (alloc.allocated_days + alloc.carried_forward_days) - alloc.used_days,
+          };
+        })
+      );
+
+      return mappedAllocations;
     } catch (error) {
       console.error('Error calculating remaining leaves:', error);
       return null;

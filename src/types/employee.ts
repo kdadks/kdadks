@@ -505,3 +505,180 @@ export interface CreateSettlementInput {
   asset_clearance_remarks?: string;
   remarks?: string;
 }
+
+// ============================================
+// EMPLOYEE MANAGEMENT SYSTEM TYPES
+// ============================================
+
+// Attendance Types
+export type AttendanceStatus = 'present' | 'absent' | 'half_day' | 'work_from_home' | 'leave';
+
+export interface Attendance {
+  id: string;
+  employee_id: string;
+  date: string;
+  check_in_time?: string;
+  check_out_time?: string;
+  duration_minutes?: number;
+  status: AttendanceStatus;
+  notes?: string;
+  verified_by?: string;
+  admin_comments?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface AttendanceSummary {
+  total_days: number;
+  present_days: number;
+  absent_days: number;
+  half_days: number;
+  leaves: number;
+  work_from_home: number;
+  attendance_percentage: number;
+  employee_id?: string;
+  month?: number;
+  year?: number;
+  total_working_days?: number;
+  days_present?: number;
+  days_absent?: number;
+  days_half_day?: number;
+  days_on_leave?: number;
+}
+
+export interface AttendanceFilter {
+  employee_id?: string;
+  from_date?: string;
+  to_date?: string;
+  status?: AttendanceStatus;
+  limit?: number;
+  offset?: number;
+}
+
+// Leave Types
+export type LeaveStatus = 'pending' | 'approved' | 'rejected' | 'cancelled';
+
+export interface LeaveType {
+  id: string;
+  name: string;
+  description?: string;
+  annual_limit: number;
+  is_paid: boolean;
+  requires_approval: boolean;
+  color_code: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface Leave {
+  id: string;
+  employee_id: string;
+  leave_type_id: string;
+  start_date: string;
+  end_date: string;
+  total_days: number;
+  reason?: string;
+  status: LeaveStatus;
+  requested_at: string;
+  approved_by?: string;
+  approval_date?: string;
+  approval_comments?: string;
+  cancelled_by?: string;
+  cancellation_date?: string;
+  cancellation_reason?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface LeaveAllocation {
+  id: string;
+  employee_id: string;
+  leave_type_id: string;
+  financial_year: number;
+  allocated_days: number;
+  used_days: number;
+  carried_forward_days: number;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface LeaveRequest {
+  employee_id: string;
+  leave_type_id: string;
+  start_date: string;
+  end_date: string;
+  reason?: string;
+}
+
+export interface LeaveFilter {
+  employee_id?: string;
+  leave_type_id?: string;
+  status?: LeaveStatus;
+  from_date?: string;
+  to_date?: string;
+  limit?: number;
+  offset?: number;
+}
+
+// Document Types for Employee Management
+export type DocumentVerificationStatus = 'pending' | 'verified' | 'rejected' | 'expired';
+
+export interface EmployeeDocument {
+  id: string;
+  employee_id: string;
+  document_type: string;
+  document_name: string;
+  document_url: string;
+  document_path: string;
+  file_size: number;
+  mime_type: string;
+  verification_status: DocumentVerificationStatus;
+  verified_by?: string;
+  verification_date?: string;
+  expiry_date?: string;
+  verification_comments?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface DocumentUploadFormData {
+  employee_id: string;
+  document_type: string;
+  document_name: string;
+  file: File;
+  expiry_date?: string;
+}
+
+// Salary Structure and Slip for Employee Management
+export interface SalaryStructure {
+  id: string;
+  employee_id: string;
+  effective_from: string;
+  base_salary: number;
+  hra_percentage: number;
+  dearness_allowance_percentage: number;
+  other_allowances: number;
+  pf_percentage: number;
+  esi_percentage: number;
+  created_at?: string;
+  updated_at?: string;
+}
+
+// Enhanced SalarySlip with employee management fields
+export interface EmployeeSalarySlip extends SalarySlip {
+  days_present: number;
+  working_days: number;
+  attendance_percentage: number;
+}
+
+// Salary Summary for dashboard
+export interface SalarySummary {
+  total_slips: number;
+  total_gross: number;
+  total_deductions: number;
+  total_net: number;
+  average_gross: number;
+  average_net: number;
+  highest_net: number;
+  lowest_net: number;
+}

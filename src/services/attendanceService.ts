@@ -103,10 +103,16 @@ export const attendanceService = {
         month,
         year,
         total_working_days: totalWorkingDays,
+        total_days: totalWorkingDays,
         days_present: daysPresent,
+        present_days: daysPresent,
         days_absent: daysAbsent,
+        absent_days: daysAbsent,
         days_half_day: daysHalfDay,
+        half_days: daysHalfDay,
         days_on_leave: daysOnLeave,
+        leaves: daysOnLeave,
+        work_from_home: 0,
         attendance_percentage: totalWorkingDays > 0 
           ? ((daysPresent + daysHalfDay * 0.5) / totalWorkingDays) * 100 
           : 0,
