@@ -9,7 +9,6 @@ import {
   Briefcase,
   Calendar,
   Clock,
-  Building2,
   ChevronDown,
   ChevronRight,
   Menu,
@@ -38,7 +37,6 @@ import LeaveManagement from '../hr/LeaveManagement'
 import AttendanceManagement from '../hr/AttendanceManagement'
 import FullFinalSettlement from '../hr/FullFinalSettlement'
 import TDSReport from '../hr/TDSReport'
-import OrganizationSettings from '../settings/OrganizationSettings'
 import RateCardManagement from './RateCardManagement'
 import type { InvoiceStats } from '../../types/invoice'
 import type { QuoteStats } from '../../types/quote'
@@ -63,7 +61,7 @@ interface DashboardStats {
   settlements: number;
 }
 
-type ActiveView = 'dashboard' | 'invoices' | 'payments' | 'quotes' | 'contracts' | 'rate-cards' | 'hr-employees' | 'hr-leave' | 'hr-attendance' | 'hr-settlement' | 'hr-tds-report' | 'hr-organization';
+type ActiveView = 'dashboard' | 'invoices' | 'payments' | 'quotes' | 'contracts' | 'rate-cards' | 'hr-employees' | 'hr-leave' | 'hr-attendance' | 'hr-settlement' | 'hr-tds-report';
 
 const SimpleAdminDashboard: React.FC = () => {
   const [user, setUser] = useState<SimpleUser | null>(null)
@@ -296,15 +294,13 @@ const SimpleAdminDashboard: React.FC = () => {
       case 'hr-employees':
         return <EmploymentDocuments />;
       case 'hr-leave':
-        return <LeaveManagement />;
+        return <LeaveManagement currentUserId={user?.id} />;
       case 'hr-settlement':
         return <FullFinalSettlement />;
       case 'hr-tds-report':
         return <TDSReport />;
       case 'hr-attendance':
         return <AttendanceManagement />;
-      case 'hr-organization':
-        return <OrganizationSettings />;
       case 'dashboard':
       default:
         return null;
@@ -504,19 +500,6 @@ const SimpleAdminDashboard: React.FC = () => {
                     >
                       <FileText className="w-4 h-4 flex-shrink-0" />
                       <span className="ml-3">TDS Report</span>
-                    </button>
-                  </li>
-                  <li>
-                    <button
-                      onClick={() => setActiveView('hr-organization')}
-                      className={`w-full flex items-center px-3 py-2 text-sm rounded-md transition-colors ${
-                        activeView === 'hr-organization'
-                          ? 'bg-blue-100 text-blue-700'
-                          : 'text-gray-600 hover:bg-gray-50'
-                      }`}
-                    >
-                      <Building2 className="w-4 h-4 flex-shrink-0" />
-                      <span className="ml-3">Organization</span>
                     </button>
                   </li>
                 </ul>

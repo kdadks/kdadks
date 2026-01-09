@@ -84,7 +84,7 @@ export const CreateInvoice: React.FC<CreateInvoiceProps> = ({
             <div className="flex items-center space-x-3">
               <button
                 onClick={onCloseInvoice}
-                className="inline-flex items-center px-4 py-2 border border-slate-300 rounded-lg shadow-sm text-sm font-medium text-slate-700 bg-white hover:bg-slate-50 transition-colors"
+                className="inline-flex items-center px-4 py-2 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-lg shadow-sm text-sm font-medium hover:from-red-600 hover:to-red-700 transition-all"
               >
                 <X className="w-4 h-4 mr-2" />
                 Cancel

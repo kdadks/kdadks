@@ -124,7 +124,7 @@ export const leaveService = {
     try {
       let query = supabase
         .from('leave_applications')
-        .select('*')
+        .select('*, leave_types(id, name, code)')
         .eq('employee_id', employeeId);
 
       if (filters?.status) {

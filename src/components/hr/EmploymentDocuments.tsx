@@ -57,6 +57,7 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
   const [companySettings, setCompanySettings] = useState<CompanySettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<ActiveTab>('employees');
+  const [previousTab, setPreviousTab] = useState<ActiveTab>('employees');
   const [employeeView, setEmployeeView] = useState<EmployeeView>('list');
   const [searchTerm, setSearchTerm] = useState('');
   const { showSuccess, showError } = useToast();
@@ -87,6 +88,14 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
   const [showEditModal, setShowEditModal] = useState(false);
   const [editedDocumentData, setEditedDocumentData] = useState<any>({});
   const [isSavingDocument, setIsSavingDocument] = useState(false);
+
+  // Document viewing state
+  const [viewingDocument, setViewingDocument] = useState<EmploymentDocument | null>(null);
+  const [showViewModal, setShowViewModal] = useState(false);
+
+  // Document delete state
+  const [showDeleteDocumentModal, setShowDeleteDocumentModal] = useState(false);
+  const [documentToDelete, setDocumentToDelete] = useState<EmploymentDocument | null>(null);
 
   // Salary slip editing state
   const [editingSalarySlip, setEditingSalarySlip] = useState<SalarySlip | null>(null);
@@ -1413,6 +1422,83 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
   };
 
   // Edit and save document handlers
+  const handleViewDocument = async (document: EmploymentDocument) => {
+    try {
+      const employee = employees.find(emp => emp.id === document.employee_id);
+      if (!employee) {
+        showError('Employee not found');
+        return;
+      }
+
+      setViewingDocument(document);
+      setSelectedEmployee(employee);
+      setShowViewModal(true);
+    } catch (err) {
+      console.error('Error opening document for view:', err);
+      showError('Failed to open document');
+    }
+  };
+
+  const handleDeleteDocument = async () => {
+    if (!documentToDelete) return;
+
+    try {
+      await employeeService.deleteEmploymentDocument(documentToDelete.id);
+      showSuccess('Document deleted successfully');
+      setShowDeleteDocumentModal(false);
+      setDocumentToDelete(null);
+      loadData();
+    } catch (err) {
+      console.error('Error deleting document:', err);
+      showError('Failed to delete document');
+    }
+  };
+
+  const handleDownloadDocument = async (document: EmploymentDocument) => {
+    try {
+      const employee = employees.find(emp => emp.id === document.employee_id);
+      if (!employee) {
+        showError('Employee not found');
+        return;
+      }
+
+      let pdf: jsPDF;
+      const docData = document.document_data;
+
+      // Generate PDF based on document type
+      switch (document.document_type) {
+        case 'offer_letter':
+          pdf = await generateOfferLetterPDF(employee, docData as OfferLetterData);
+          break;
+        case 'salary_certificate':
+          pdf = await generateSalaryCertificatePDF(employee, docData as SalaryCertificateData);
+          break;
+        case 'experience_certificate':
+          pdf = await generateExperienceCertificatePDF(employee, docData as ExperienceCertificateData);
+          break;
+        case 'relieving_letter':
+          pdf = await generateRelievingLetterPDF(employee, docData as RelievingLetterData);
+          break;
+        case 'form_16':
+          pdf = await generateForm16PDF(employee, docData as Form16Data);
+          break;
+        case 'form_24q':
+          pdf = await generateForm24QPDF(docData as Form24QData);
+          break;
+        default:
+          throw new Error('Unsupported document type');
+      }
+
+      // Download the PDF
+      const fileName = `${document.document_number}_${employee.full_name.replace(/\s+/g, '_')}.pdf`;
+      pdf.save(fileName);
+      showSuccess('Document downloaded successfully');
+    } catch (err) {
+      console.error('Error downloading document:', err);
+      showError('Failed to download document');
+    }
+  };
+
   const handleEditDocument = async (document: EmploymentDocument) => {
     try {
       // Find the employee for this document
@@ -1629,6 +1715,13 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <h1 className="text-xl font-semibold text-gray-900">HR & Employment Documents</h1>
+            <button
+              onClick={loadData}
+              className="flex items-center px-4 py-2 bg-gray-100 text-gray-700 text-sm rounded-md hover:bg-gray-200 border border-gray-300"
+            >
+              <Eye className="w-4 h-4 mr-2" />
+              Refresh Data
+            </button>
           </div>
         </div>
       </header>
@@ -1670,28 +1763,6 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
               <Receipt className="w-4 h-4 mr-2" />
               Salary Slips
             </button>
-            <button
-              onClick={() => setActiveTab('generate-document')}
-              className={`flex items-center px-3 py-2 text-sm font-medium rounded-md ${
-                activeTab === 'generate-document'
-                  ? 'bg-blue-100 text-blue-700'
-                  : 'text-gray-600 hover:text-gray-900'
-              }`}
-            >
-              <Briefcase className="w-4 h-4 mr-2" />
-              Generate Document
-            </button>
-            <button
-              onClick={() => setActiveTab('generate-salary-slip')}
-              className={`flex items-center px-3 py-2 text-sm font-medium rounded-md ${
-                activeTab === 'generate-salary-slip'
-                  ? 'bg-blue-100 text-blue-700'
-                  : 'text-gray-600 hover:text-gray-900'
-              }`}
-            >
-              <Receipt className="w-4 h-4 mr-2" />
-              Generate Salary Slip
-            </button>
           </nav>
         </div>
       </div>
@@ -1701,41 +1772,6 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
         {/* Employees Tab */}
         {activeTab === 'employees' && employeeView === 'list' && (
           <div>
-            {/* Quick Actions for Employees */}
-            <div className="bg-white shadow-sm rounded-lg p-4 mb-6 border border-gray-200">
-              <h3 className="text-sm font-semibold text-gray-700 mb-3">Quick Actions</h3>
-              <div className="flex flex-wrap gap-3">
-                <button
-                  onClick={() => setEmployeeView('add')}
-                  className="flex items-center px-3 py-2 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700"
-                >
-                  <Plus className="w-4 h-4 mr-2" />
-                  Add Employee
-                </button>
-                <button
-                  onClick={() => setActiveTab('generate-document')}
-                  className="flex items-center px-3 py-2 bg-indigo-600 text-white text-sm rounded-md hover:bg-indigo-700"
-                >
-                  <FileText className="w-4 h-4 mr-2" />
-                  Generate Document
-                </button>
-                <button
-                  onClick={() => setActiveTab('generate-salary-slip')}
-                  className="flex items-center px-3 py-2 bg-teal-600 text-white text-sm rounded-md hover:bg-teal-700"
-                >
-                  <Receipt className="w-4 h-4 mr-2" />
-                  Generate Salary Slip
-                </button>
-                <button
-                  onClick={loadData}
-                  className="flex items-center px-3 py-2 bg-gray-100 text-gray-700 text-sm rounded-md hover:bg-gray-200 border border-gray-300"
-                >
-                  <Eye className="w-4 h-4 mr-2" />
-                  Refresh Data
-                </button>
-              </div>
-            </div>
-
             <div className="mb-6 flex items-center justify-between">
               <div className="flex-1 max-w-md">
                 <div className="relative">
@@ -1883,32 +1919,29 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
         {/* Salary Slips Tab */}
         {activeTab === 'salary-slips' && (
           <div>
-            {/* Quick Actions for Salary Slips */}
-            <div className="bg-white shadow-sm rounded-lg p-4 mb-6 border border-gray-200">
-              <h3 className="text-sm font-semibold text-gray-700 mb-3">Quick Actions</h3>
-              <div className="flex flex-wrap gap-3">
-                <button
-                  onClick={() => setActiveTab('generate-salary-slip')}
-                  className="flex items-center px-3 py-2 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700"
-                >
-                  <Plus className="w-4 h-4 mr-2" />
-                  Generate New Salary Slip
-                </button>
-                <button
-                  onClick={() => setActiveTab('employees')}
-                  className="flex items-center px-3 py-2 bg-orange-600 text-white text-sm rounded-md hover:bg-orange-700"
-                >
-                  <Users className="w-4 h-4 mr-2" />
-                  View Employees
-                </button>
-                <button
-                  onClick={loadData}
-                  className="flex items-center px-3 py-2 bg-gray-100 text-gray-700 text-sm rounded-md hover:bg-gray-200 border border-gray-300"
-                >
-                  <Eye className="w-4 h-4 mr-2" />
-                  Refresh Data
-                </button>
+            <div className="mb-6 flex items-center justify-between">
+              <div className="flex-1 max-w-md">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+                  <input
+                    type="text"
+                    placeholder="Search salary slips..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
               </div>
+              <button
+                onClick={() => {
+                  setPreviousTab('salary-slips');
+                  setActiveTab('generate-salary-slip');
+                }}
+                className="ml-4 flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+              >
+                <Plus className="w-5 h-5 mr-2" />
+                Generate Salary Slip
+              </button>
             </div>
 
             <div className="bg-white shadow-md rounded-lg overflow-hidden">
@@ -2182,7 +2215,7 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
               <div className="flex justify-end space-x-3 pt-4 border-t mt-6">
                 <button
                   onClick={() => setActiveTab('salary-slips')}
-                  className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
+                  className="px-4 py-2 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-md hover:from-red-600 hover:to-red-700 transition-all"
                 >
                   Cancel
                 </button>
@@ -2210,32 +2243,29 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
         {/* Documents Tab */}
         {activeTab === 'documents' && (
           <div>
-            {/* Quick Actions for Documents */}
-            <div className="bg-white shadow-sm rounded-lg p-4 mb-6 border border-gray-200">
-              <h3 className="text-sm font-semibold text-gray-700 mb-3">Quick Actions</h3>
-              <div className="flex flex-wrap gap-3">
-                <button
-                  onClick={() => setActiveTab('generate-document')}
-                  className="flex items-center px-3 py-2 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700"
-                >
-                  <Plus className="w-4 h-4 mr-2" />
-                  Generate New Document
-                </button>
-                <button
-                  onClick={() => setActiveTab('employees')}
-                  className="flex items-center px-3 py-2 bg-orange-600 text-white text-sm rounded-md hover:bg-orange-700"
-                >
-                  <Users className="w-4 h-4 mr-2" />
-                  View Employees
-                </button>
-                <button
-                  onClick={loadData}
-                  className="flex items-center px-3 py-2 bg-gray-100 text-gray-700 text-sm rounded-md hover:bg-gray-200 border border-gray-300"
-                >
-                  <Eye className="w-4 h-4 mr-2" />
-                  Refresh Data
-                </button>
+            <div className="mb-6 flex items-center justify-between">
+              <div className="flex-1 max-w-md">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+                  <input
+                    type="text"
+                    placeholder="Search documents..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
               </div>
+              <button
+                onClick={() => {
+                  setPreviousTab('documents');
+                  setActiveTab('generate-document');
+                }}
+                className="ml-4 flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+              >
+                <Plus className="w-5 h-5 mr-2" />
+                Generate Document
+              </button>
             </div>
 
             <div className="bg-white shadow-md rounded-lg overflow-hidden">
@@ -2278,18 +2308,35 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                         <button
-                          onClick={() => handleEditDocument(doc)}
-                          className="text-blue-600 hover:text-blue-900 mr-4"
-                          title="Edit Document"
+                          onClick={() => handleViewDocument(doc)}
+                          className="text-indigo-600 hover:text-indigo-900 mr-3"
+                          title="View Document"
                         >
-                          <Edit className="w-4 h-4 inline" />
+                          <Eye className="w-5 h-5 inline" />
                         </button>
                         <button
-                          onClick={() => {/* TODO: Add download handler */}}
-                          className="text-green-600 hover:text-green-900"
+                          onClick={() => handleEditDocument(doc)}
+                          className="text-blue-600 hover:text-blue-900 mr-3"
+                          title="Edit Document"
+                        >
+                          <Edit className="w-5 h-5 inline" />
+                        </button>
+                        <button
+                          onClick={() => handleDownloadDocument(doc)}
+                          className="text-green-600 hover:text-green-900 mr-3"
                           title="Download PDF"
                         >
-                          <Download className="w-4 h-4 inline" />
+                          <Download className="w-5 h-5 inline" />
+                        </button>
+                        <button
+                          onClick={() => {
+                            setDocumentToDelete(doc);
+                            setShowDeleteDocumentModal(true);
+                          }}
+                          className="text-red-600 hover:text-red-900"
+                          title="Delete Document"
+                        >
+                          <Trash2 className="w-5 h-5 inline" />
                         </button>
                       </td>
                     </tr>
@@ -2676,7 +2723,7 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
                   resetEmployeeForm();
                   setEmployeeView('list');
                 }}
-                className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
+                className="px-4 py-2 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-md hover:from-red-600 hover:to-red-700 transition-all"
               >
                 Cancel
               </button>
@@ -3080,7 +3127,7 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
                   resetEmployeeForm();
                   setEmployeeView('list');
                 }}
-                className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
+                className="px-4 py-2 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-md hover:from-red-600 hover:to-red-700 transition-all"
               >
                 Cancel
               </button>
@@ -3940,8 +3987,8 @@ Any other duties assigned by management from time to time`}
 
               <div className="flex justify-end space-x-3 pt-4">
                 <button
-                  onClick={() => setActiveTab('employees')}
-                  className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
+                  onClick={() => setActiveTab(previousTab)}
+                  className="px-4 py-2 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-md hover:from-red-600 hover:to-red-700 transition-all"
                 >
                   Cancel
                 </button>
@@ -4866,7 +4913,7 @@ Any other duties assigned by management from time to time`}
                   setEditedDocumentData({});
                   setSelectedEmployee(null);
                 }}
-                className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
+                className="px-4 py-2 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-md hover:from-red-600 hover:to-red-700 transition-all"
               >
                 Cancel
               </button>
@@ -5102,7 +5149,7 @@ Any other duties assigned by management from time to time`}
                   setEditingSalarySlip(null);
                   setEditedSalarySlipData({});
                 }}
-                className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
+                className="px-4 py-2 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-md hover:from-red-600 hover:to-red-700 transition-all"
               >
                 Cancel
               </button>
@@ -5279,7 +5326,7 @@ Any other duties assigned by management from time to time`}
                   setShowDeleteModal(false);
                   setEmployeeToDelete(null);
                 }}
-                className="flex-1 px-4 py-2.5 border border-gray-300 rounded-lg text-gray-700 font-medium hover:bg-gray-50 transition-colors"
+                className="flex-1 px-4 py-2.5 bg-gradient-to-r from-red-500 to-red-600 text-white font-medium rounded-lg hover:from-red-600 hover:to-red-700 transition-all"
               >
                 Cancel
               </button>
@@ -5289,6 +5336,132 @@ Any other duties assigned by management from time to time`}
               >
                 <Trash2 className="w-4 h-4 mr-2" />
                 Delete Employee
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* View Document Modal */}
+      {showViewModal && viewingDocument && selectedEmployee && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 overflow-y-auto">
+          <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full my-8">
+            <div className="flex items-center justify-between p-6 border-b">
+              <div>
+                <h2 className="text-xl font-semibold">View Document</h2>
+                <p className="text-sm text-gray-500 mt-1">
+                  {viewingDocument.document_type.replace('_', ' ').toUpperCase()} - {viewingDocument.document_number}
+                </p>
+                <p className="text-sm text-gray-600 mt-1">
+                  Employee: {selectedEmployee.first_name} {selectedEmployee.last_name} ({selectedEmployee.employee_number})
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  setShowViewModal(false);
+                  setViewingDocument(null);
+                  setSelectedEmployee(null);
+                }}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            <div className="p-6 max-h-[70vh] overflow-y-auto">
+              <div className="bg-gray-50 p-4 rounded-lg">
+                <h3 className="font-medium text-gray-700 mb-3">Document Details</h3>
+                <div className="space-y-3">
+                  {Object.entries(viewingDocument.document_data || {}).map(([key, value]) => (
+                    <div key={key} className="grid grid-cols-3 gap-2">
+                      <div className="text-sm font-medium text-gray-600">
+                        {key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}:
+                      </div>
+                      <div className="col-span-2 text-sm text-gray-900">
+                        {typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value)}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end space-x-3 p-6 border-t bg-gray-50">
+              <button
+                onClick={() => {
+                  setShowViewModal(false);
+                  setViewingDocument(null);
+                  setSelectedEmployee(null);
+                }}
+                className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
+              >
+                Close
+              </button>
+              <button
+                onClick={() => handleDownloadDocument(viewingDocument)}
+                className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 flex items-center"
+              >
+                <Download className="w-4 h-4 mr-2" />
+                Download PDF
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Document Confirmation Modal */}
+      {showDeleteDocumentModal && documentToDelete && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
+            <div className="flex items-start mb-4">
+              <div className="flex-shrink-0 w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
+                <AlertCircle className="w-6 h-6 text-red-600" />
+              </div>
+              <div className="ml-4 flex-1">
+                <h3 className="text-lg font-semibold text-gray-900 mb-1">Delete Document</h3>
+                <p className="text-sm text-gray-600">
+                  Are you sure you want to delete this document? This action cannot be undone.
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-gray-50 rounded-lg p-4 mb-6">
+              <div className="flex items-start">
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-gray-700">Document Details</p>
+                  <p className="text-lg font-semibold text-gray-900 mt-1">{documentToDelete.document_number}</p>
+                  <p className="text-sm text-gray-600 mt-1">
+                    {documentToDelete.document_type.replace('_', ' ').toUpperCase()}
+                  </p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Date: {new Date(documentToDelete.document_date).toLocaleDateString('en-GB')}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-6">
+              <p className="text-sm text-red-800">
+                <strong>Warning:</strong> This will permanently delete the document and its associated data.
+              </p>
+            </div>
+
+            <div className="flex space-x-3">
+              <button
+                onClick={() => {
+                  setShowDeleteDocumentModal(false);
+                  setDocumentToDelete(null);
+                }}
+                className="flex-1 px-4 py-2.5 bg-gradient-to-r from-red-500 to-red-600 text-white font-medium rounded-lg hover:from-red-600 hover:to-red-700 transition-all"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteDocument}
+                className="flex-1 px-4 py-2.5 bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg transition-colors flex items-center justify-center"
+              >
+                <Trash2 className="w-4 h-4 mr-2" />
+                Delete Document
               </button>
             </div>
           </div>

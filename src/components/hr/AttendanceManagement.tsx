@@ -7,74 +7,99 @@ import {
   XCircle,
   ArrowLeft,
   Download,
-  Filter
+  Filter,
+  Plus,
+  Trash2,
+  Edit,
+  Save,
+  X
 } from 'lucide-react';
 import { leaveAttendanceService } from '../../services/leaveAttendanceService';
 import { employeeService } from '../../services/employeeService';
 import { useToast } from '../ui/ToastProvider';
 import type { AttendanceRecord, MonthlyAttendanceSummary } from '../../types/payroll';
 import type { Employee } from '../../types/employee';
+import { supabase } from '../../config/supabase';
 
 interface AttendanceManagementProps {
   onBackToDashboard?: () => void;
 }
 
-type ActiveTab = 'mark-attendance' | 'view-records' | 'monthly-summary';
+interface CompanyHoliday {
+  id: string;
+  holiday_name: string;
+  holiday_date: string;
+  holiday_type: 'national' | 'regional' | 'company';
+  is_mandatory: boolean;
+  description?: string;
+  created_at?: string;
+}
+
+type ActiveTab = 'holiday-calendar' | 'view-records' | 'monthly-summary';
 
 const AttendanceManagement: React.FC<AttendanceManagementProps> = ({ onBackToDashboard }) => {
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<ActiveTab>('mark-attendance');
+  const [activeTab, setActiveTab] = useState<ActiveTab>('holiday-calendar');
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([]);
   const [monthlySummary, setMonthlySummary] = useState<MonthlyAttendanceSummary[]>([]);
+  const [holidays, setHolidays] = useState<CompanyHoliday[]>([]);
+  const [selectedEmployee, setSelectedEmployee] = useState<string>('');
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const { showSuccess, showError } = useToast();
 
-  // Attendance marking state
-  const [bulkAttendance, setBulkAttendance] = useState<{
-    [key: string]: {
-      status: 'present' | 'absent' | 'half-day' | 'leave';
-      check_in_time?: string;
-      check_out_time?: string;
-      notes?: string;
-    };
-  }>({});
+  // Holiday form state
+  const [showHolidayForm, setShowHolidayForm] = useState(false);
+  const [editingHoliday, setEditingHoliday] = useState<CompanyHoliday | null>(null);
+  const [holidayForm, setHolidayForm] = useState<Partial<CompanyHoliday>>({
+    holiday_name: '',
+    holiday_date: '',
+    holiday_type: 'national',
+    is_mandatory: true,
+    description: ''
+  });
 
   useEffect(() => {
     loadData();
   }, []);
 
   useEffect(() => {
-    if (activeTab === 'view-records') {
+    if (activeTab === 'holiday-calendar') {
+      loadHolidays();
+    } else if (activeTab === 'view-records') {
       loadAttendanceRecords();
-    } else if (activeTab === 'monthly-summary') {
-      loadMonthlySummary();
+    } else if (activeTab === 'monthly-summary' && selectedEmployee) {
+      loadMonthlySummaryForEmployee();
     }
-  }, [activeTab, selectedDate, selectedMonth, selectedYear]);
+  }, [activeTab, selectedDate, selectedMonth, selectedYear, selectedEmployee]);
 
   const loadData = async () => {
     try {
       setLoading(true);
       const emps = await employeeService.getEmployees();
       setEmployees(emps.filter(e => e.employment_status === 'active'));
-
-      // Initialize bulk attendance with default values
-      const initial: typeof bulkAttendance = {};
-      emps.forEach(emp => {
-        initial[emp.id] = {
-          status: 'present',
-          check_in_time: '09:00',
-          check_out_time: '18:00'
-        };
-      });
-      setBulkAttendance(initial);
     } catch (error) {
       console.error('Error loading data:', error);
       showError('Failed to load employee data');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadHolidays = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('company_holidays')
+        .select('*')
+        .order('holiday_date', { ascending: true });
+
+      if (error) throw error;
+      setHolidays(data || []);
+    } catch (error) {
+      console.error('Error loading holidays:', error);
+      showError('Failed to load holidays');
     }
   };
 
@@ -87,60 +112,121 @@ const AttendanceManagement: React.FC<AttendanceManagementProps> = ({ onBackToDas
     }
   };
 
-  const loadMonthlySummary = async () => {
+  const loadMonthlySummaryForEmployee = async () => {
     try {
+      if (!selectedEmployee) return;
+      
       const summary = await leaveAttendanceService.getMonthlyAttendanceSummary(
         selectedYear,
         selectedMonth
       );
-      setMonthlySummary(summary);
+      
+      // Filter for selected employee
+      const employeeSummary = summary.filter(s => s.employee_id === selectedEmployee);
+      setMonthlySummary(employeeSummary);
+
+      // Load all attendance records for the month for this employee
+      const firstDay = new Date(selectedYear, selectedMonth - 1, 1).toISOString().split('T')[0];
+      const lastDay = new Date(selectedYear, selectedMonth, 0).toISOString().split('T')[0];
+      
+      const { data: records, error } = await supabase
+        .from('attendance_records')
+        .select('*')
+        .eq('employee_id', selectedEmployee)
+        .gte('attendance_date', firstDay)
+        .lte('attendance_date', lastDay)
+        .order('attendance_date', { ascending: true });
+
+      if (error) throw error;
+      setAttendanceRecords(records || []);
     } catch (error) {
       console.error('Error loading monthly summary:', error);
+      showError('Failed to load monthly summary');
     }
   };
 
-  const handleMarkAttendance = async (employeeId: string) => {
+  const handleSaveHoliday = async () => {
     try {
-      const data = bulkAttendance[employeeId];
-      if (!data) return;
+      if (!holidayForm.holiday_name || !holidayForm.holiday_date) {
+        showError('Please fill all required fields');
+        return;
+      }
 
-      await leaveAttendanceService.markAttendance({
-        employee_id: employeeId,
-        attendance_date: selectedDate,
-        status: data.status,
-        check_in_time: data.check_in_time,
-        check_out_time: data.check_out_time,
-        notes: data.notes
+      if (editingHoliday) {
+        // Update existing holiday
+        const { error } = await supabase
+          .from('company_holidays')
+          .update({
+            holiday_name: holidayForm.holiday_name,
+            holiday_date: holidayForm.holiday_date,
+            holiday_type: holidayForm.holiday_type,
+            is_mandatory: holidayForm.is_mandatory,
+            description: holidayForm.description
+          })
+          .eq('id', editingHoliday.id);
+
+        if (error) throw error;
+        showSuccess('Holiday updated successfully');
+      } else {
+        // Create new holiday
+        const { error } = await supabase
+          .from('company_holidays')
+          .insert({
+            holiday_name: holidayForm.holiday_name,
+            holiday_date: holidayForm.holiday_date,
+            holiday_type: holidayForm.holiday_type,
+            is_mandatory: holidayForm.is_mandatory,
+            description: holidayForm.description
+          });
+
+        if (error) throw error;
+        showSuccess('Holiday added successfully');
+      }
+
+      setShowHolidayForm(false);
+      setEditingHoliday(null);
+      setHolidayForm({
+        holiday_name: '',
+        holiday_date: '',
+        holiday_type: 'national',
+        is_mandatory: true,
+        description: ''
       });
-
-      showSuccess('Attendance marked successfully');
+      loadHolidays();
     } catch (error: any) {
-      console.error('Error marking attendance:', error);
-      showError(error.message || 'Failed to mark attendance');
+      console.error('Error saving holiday:', error);
+      showError(error.message || 'Failed to save holiday');
     }
   };
 
-  const handleBulkMarkAttendance = async () => {
-    try {
-      const promises = employees.map(emp => {
-        const data = bulkAttendance[emp.id];
-        return leaveAttendanceService.markAttendance({
-          employee_id: emp.id,
-          attendance_date: selectedDate,
-          status: data.status,
-          check_in_time: data.check_in_time,
-          check_out_time: data.check_out_time,
-          notes: data.notes
-        });
-      });
+  const handleDeleteHoliday = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this holiday?')) return;
 
-      await Promise.all(promises);
-      showSuccess(`Attendance marked for ${employees.length} employees`);
-      setActiveTab('view-records');
-    } catch (error: any) {
-      console.error('Error marking bulk attendance:', error);
-      showError(error.message || 'Failed to mark attendance');
+    try {
+      const { error } = await supabase
+        .from('company_holidays')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+      showSuccess('Holiday deleted successfully');
+      loadHolidays();
+    } catch (error) {
+      console.error('Error deleting holiday:', error);
+      showError('Failed to delete holiday');
     }
+  };
+
+  const handleEditHoliday = (holiday: CompanyHoliday) => {
+    setEditingHoliday(holiday);
+    setHolidayForm({
+      holiday_name: holiday.holiday_name,
+      holiday_date: holiday.holiday_date,
+      holiday_type: holiday.holiday_type,
+      is_mandatory: holiday.is_mandatory,
+      description: holiday.description
+    });
+    setShowHolidayForm(true);
   };
 
   const getStatusBadge = (status: string) => {
@@ -191,15 +277,15 @@ const AttendanceManagement: React.FC<AttendanceManagementProps> = ({ onBackToDas
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <nav className="flex space-x-4 py-4">
             <button
-              onClick={() => setActiveTab('mark-attendance')}
+              onClick={() => setActiveTab('holiday-calendar')}
               className={`flex items-center px-3 py-2 text-sm font-medium rounded-md ${
-                activeTab === 'mark-attendance'
+                activeTab === 'holiday-calendar'
                   ? 'bg-blue-100 text-blue-700'
                   : 'text-gray-600 hover:text-gray-900'
               }`}
             >
-              <Clock className="w-4 h-4 mr-2" />
-              Mark Attendance
+              <Calendar className="w-4 h-4 mr-2" />
+              Holiday Calendar
             </button>
             <button
               onClick={() => setActiveTab('view-records')}
@@ -209,7 +295,7 @@ const AttendanceManagement: React.FC<AttendanceManagementProps> = ({ onBackToDas
                   : 'text-gray-600 hover:text-gray-900'
               }`}
             >
-              <Calendar className="w-4 h-4 mr-2" />
+              <Clock className="w-4 h-4 mr-2" />
               View Records
             </button>
             <button
@@ -229,137 +315,226 @@ const AttendanceManagement: React.FC<AttendanceManagementProps> = ({ onBackToDas
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
-        {/* Mark Attendance Tab */}
-        {activeTab === 'mark-attendance' && (
+        {/* Holiday Calendar Tab */}
+        {activeTab === 'holiday-calendar' && (
           <div>
             <div className="mb-6 flex items-center justify-between">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Attendance Date
-                </label>
-                <input
-                  type="date"
-                  value={selectedDate}
-                  onChange={(e) => setSelectedDate(e.target.value)}
-                  className="px-4 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-                />
-              </div>
+              <h2 className="text-lg font-semibold text-gray-900">Company Holiday Calendar</h2>
               <button
-                onClick={handleBulkMarkAttendance}
-                className="bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-700 flex items-center"
+                onClick={() => {
+                  setShowHolidayForm(true);
+                  setEditingHoliday(null);
+                  setHolidayForm({
+                    holiday_name: '',
+                    holiday_date: '',
+                    holiday_type: 'national',
+                    is_mandatory: true,
+                    description: ''
+                  });
+                }}
+                className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
               >
-                <CheckCircle className="w-4 h-4 mr-2" />
-                Mark All Attendance
+                <Plus className="w-4 h-4 mr-2" />
+                Add Holiday
               </button>
             </div>
 
+            {/* Holiday Form Modal */}
+            {showHolidayForm && (
+              <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-lg font-semibold">
+                      {editingHoliday ? 'Edit Holiday' : 'Add New Holiday'}
+                    </h3>
+                    <button
+                      onClick={() => {
+                        setShowHolidayForm(false);
+                        setEditingHoliday(null);
+                      }}
+                      className="text-gray-400 hover:text-gray-600"
+                    >
+                      <X className="w-6 h-6" />
+                    </button>
+                  </div>
+
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Holiday Name *
+                      </label>
+                      <input
+                        type="text"
+                        value={holidayForm.holiday_name}
+                        onChange={(e) => setHolidayForm({ ...holidayForm, holiday_name: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                        placeholder="e.g., Republic Day"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Date *
+                      </label>
+                      <input
+                        type="date"
+                        value={holidayForm.holiday_date}
+                        onChange={(e) => setHolidayForm({ ...holidayForm, holiday_date: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Holiday Type
+                      </label>
+                      <select
+                        value={holidayForm.holiday_type}
+                        onChange={(e) => setHolidayForm({ ...holidayForm, holiday_type: e.target.value as any })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                      >
+                        <option value="national">National Holiday</option>
+                        <option value="regional">Regional Holiday</option>
+                        <option value="company">Company Holiday</option>
+                      </select>
+                    </div>
+
+                    <div className="flex items-center">
+                      <input
+                        type="checkbox"
+                        id="is_mandatory"
+                        checked={holidayForm.is_mandatory}
+                        onChange={(e) => setHolidayForm({ ...holidayForm, is_mandatory: e.target.checked })}
+                        className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                      />
+                      <label htmlFor="is_mandatory" className="ml-2 text-sm text-gray-700">
+                        Mandatory Holiday (Office Closed)
+                      </label>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Description
+                      </label>
+                      <textarea
+                        value={holidayForm.description}
+                        onChange={(e) => setHolidayForm({ ...holidayForm, description: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                        rows={3}
+                        placeholder="Optional description..."
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end space-x-3 mt-6">
+                    <button
+                      onClick={() => {
+                        setShowHolidayForm(false);
+                        setEditingHoliday(null);
+                      }}
+                      className="px-4 py-2 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-md hover:from-red-600 hover:to-red-700 transition-all"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleSaveHoliday}
+                      className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 flex items-center"
+                    >
+                      <Save className="w-4 h-4 mr-2" />
+                      {editingHoliday ? 'Update' : 'Add'} Holiday
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Holidays List */}
             <div className="bg-white shadow-md rounded-lg overflow-hidden">
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Employee
+                      Holiday Name
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Date
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Type
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Status
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Check In
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Check Out
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Notes
+                      Description
                     </th>
                     <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Action
+                      Actions
                     </th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {employees.map((emp) => (
-                    <tr key={emp.id} className="hover:bg-gray-50">
+                  {holidays.map((holiday) => (
+                    <tr key={holiday.id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm font-medium text-gray-900">{emp.full_name}</div>
-                        <div className="text-sm text-gray-500">{emp.employee_number}</div>
+                        <div className="text-sm font-medium text-gray-900">{holiday.holiday_name}</div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <select
-                          value={bulkAttendance[emp.id]?.status || 'present'}
-                          onChange={(e) => setBulkAttendance({
-                            ...bulkAttendance,
-                            [emp.id]: {
-                              ...bulkAttendance[emp.id],
-                              status: e.target.value as any
-                            }
-                          })}
-                          className="text-sm border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-                        >
-                          <option value="present">Present</option>
-                          <option value="absent">Absent</option>
-                          <option value="half-day">Half Day</option>
-                          <option value="leave">On Leave</option>
-                        </select>
+                        <div className="text-sm text-gray-900">
+                          {new Date(holiday.holiday_date).toLocaleDateString('en-GB')}
+                        </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <input
-                          type="time"
-                          value={bulkAttendance[emp.id]?.check_in_time || '09:00'}
-                          onChange={(e) => setBulkAttendance({
-                            ...bulkAttendance,
-                            [emp.id]: {
-                              ...bulkAttendance[emp.id],
-                              check_in_time: e.target.value
-                            }
-                          })}
-                          className="text-sm border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-                        />
+                        <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                          holiday.holiday_type === 'national' ? 'bg-red-100 text-red-800' :
+                          holiday.holiday_type === 'regional' ? 'bg-yellow-100 text-yellow-800' :
+                          'bg-blue-100 text-blue-800'
+                        }`}>
+                          {holiday.holiday_type}
+                        </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <input
-                          type="time"
-                          value={bulkAttendance[emp.id]?.check_out_time || '18:00'}
-                          onChange={(e) => setBulkAttendance({
-                            ...bulkAttendance,
-                            [emp.id]: {
-                              ...bulkAttendance[emp.id],
-                              check_out_time: e.target.value
-                            }
-                          })}
-                          className="text-sm border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-                        />
+                        <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                          holiday.is_mandatory ? 'bg-purple-100 text-purple-800' : 'bg-gray-100 text-gray-800'
+                        }`}>
+                          {holiday.is_mandatory ? 'Mandatory' : 'Optional'}
+                        </span>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <input
-                          type="text"
-                          value={bulkAttendance[emp.id]?.notes || ''}
-                          onChange={(e) => setBulkAttendance({
-                            ...bulkAttendance,
-                            [emp.id]: {
-                              ...bulkAttendance[emp.id],
-                              notes: e.target.value
-                            }
-                          })}
-                          placeholder="Notes..."
-                          className="text-sm border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 w-full"
-                        />
+                      <td className="px-6 py-4 text-sm text-gray-500">
+                        {holiday.description || '-'}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right">
+                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                         <button
-                          onClick={() => handleMarkAttendance(emp.id)}
-                          className="text-blue-600 hover:text-blue-900 text-sm font-medium"
+                          onClick={() => handleEditHoliday(holiday)}
+                          className="text-blue-600 hover:text-blue-900 mr-3"
+                          title="Edit Holiday"
                         >
-                          Mark
+                          <Edit className="w-5 h-5 inline" />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteHoliday(holiday.id)}
+                          className="text-red-600 hover:text-red-900"
+                          title="Delete Holiday"
+                        >
+                          <Trash2 className="w-5 h-5 inline" />
                         </button>
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
+
+              {holidays.length === 0 && (
+                <div className="text-center py-12">
+                  <Calendar className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                  <p className="text-gray-600">No holidays added yet. Click "Add Holiday" to create one.</p>
+                </div>
+              )}
             </div>
           </div>
         )}
+
+        {/* Mark Attendance Tab - REMOVED */}
 
         {/* View Records Tab */}
         {activeTab === 'view-records' && (
@@ -439,6 +614,23 @@ const AttendanceManagement: React.FC<AttendanceManagementProps> = ({ onBackToDas
             <div className="mb-6 flex space-x-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Select Employee *
+                </label>
+                <select
+                  value={selectedEmployee}
+                  onChange={(e) => setSelectedEmployee(e.target.value)}
+                  className="px-4 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 min-w-[250px]"
+                >
+                  <option value="">-- Select Employee --</option>
+                  {employees.map(emp => (
+                    <option key={emp.id} value={emp.id}>
+                      {emp.full_name} ({emp.employee_number})
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
                   Month
                 </label>
                 <select
@@ -466,133 +658,166 @@ const AttendanceManagement: React.FC<AttendanceManagementProps> = ({ onBackToDas
               </div>
             </div>
 
-            {/* Legend */}
-            <div className="mb-6 bg-white shadow-md rounded-lg p-4">
-              <h3 className="text-sm font-medium text-gray-700 mb-3">Legend:</h3>
-              <div className="flex flex-wrap gap-4">
-                <div className="flex items-center">
-                  <div className="w-4 h-4 bg-green-500 rounded mr-2"></div>
-                  <span className="text-sm text-gray-700">Present</span>
-                </div>
-                <div className="flex items-center">
-                  <div className="w-4 h-4 bg-red-500 rounded mr-2"></div>
-                  <span className="text-sm text-gray-700">Absent</span>
-                </div>
-                <div className="flex items-center">
-                  <div className="w-4 h-4 bg-yellow-500 rounded mr-2"></div>
-                  <span className="text-sm text-gray-700">Half Day</span>
-                </div>
-                <div className="flex items-center">
-                  <div className="w-4 h-4 bg-blue-500 rounded mr-2"></div>
-                  <span className="text-sm text-gray-700">On Leave</span>
-                </div>
-                <div className="flex items-center">
-                  <div className="w-4 h-4 bg-gray-200 rounded mr-2"></div>
-                  <span className="text-sm text-gray-700">Not Marked</span>
-                </div>
+            {!selectedEmployee ? (
+              <div className="bg-white shadow-md rounded-lg p-12 text-center">
+                <Users className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                <p className="text-gray-600">Please select an employee to view their monthly attendance summary.</p>
               </div>
-            </div>
-
-            {/* Calendar View for Each Employee */}
-            <div className="space-y-6">
-              {monthlySummary.map((summary) => {
-                const employee = employees.find(e => e.id === summary.employee_id);
-                const daysInMonth = new Date(selectedYear, selectedMonth, 0).getDate();
-                const firstDayOfMonth = new Date(selectedYear, selectedMonth - 1, 1).getDay();
-
-                return (
-                  <div key={summary.employee_id} className="bg-white shadow-md rounded-lg p-6">
-                    {/* Employee Header */}
-                    <div className="mb-4 flex justify-between items-center">
-                      <div>
-                        <h3 className="text-lg font-semibold text-gray-900">{employee?.full_name}</h3>
-                        <p className="text-sm text-gray-500">{employee?.employee_number}</p>
-                      </div>
-                      <div className="text-right">
-                        <div className="text-sm text-gray-600">
-                          <span className="text-green-600 font-medium">{summary.present_days}P</span>
-                          {' / '}
-                          <span className="text-red-600 font-medium">{summary.absent_days}A</span>
-                          {' / '}
-                          <span className="text-yellow-600 font-medium">{summary.half_days}H</span>
-                          {' / '}
-                          <span className="text-blue-600 font-medium">{summary.leave_days}L</span>
-                        </div>
-                        <div className="text-sm text-gray-600 mt-1">
-                          Total: {summary.work_hours.toFixed(2)} hrs
-                        </div>
-                      </div>
+            ) : (
+              <>
+                {/* Legend */}
+                <div className="mb-6 bg-white shadow-md rounded-lg p-4">
+                  <h3 className="text-sm font-medium text-gray-700 mb-3">Legend:</h3>
+                  <div className="flex flex-wrap gap-4">
+                    <div className="flex items-center">
+                      <div className="w-4 h-4 bg-green-500 rounded mr-2"></div>
+                      <span className="text-sm text-gray-700">Present</span>
                     </div>
-
-                    {/* Calendar Grid */}
-                    <div className="grid grid-cols-7 gap-2">
-                      {/* Day Headers */}
-                      {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
-                        <div key={day} className="text-center text-xs font-semibold text-gray-600 py-2">
-                          {day}
-                        </div>
-                      ))}
-
-                      {/* Empty cells for days before month starts */}
-                      {Array.from({ length: firstDayOfMonth }).map((_, index) => (
-                        <div key={`empty-${index}`} className="aspect-square"></div>
-                      ))}
-
-                      {/* Calendar Days */}
-                      {Array.from({ length: daysInMonth }).map((_, index) => {
-                        const day = index + 1;
-                        const dateStr = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-                        const record = attendanceRecords.find(
-                          r => r.employee_id === summary.employee_id && r.attendance_date === dateStr
-                        );
-
-                        const getStatusColor = () => {
-                          if (!record) return 'bg-gray-200 text-gray-700';
-                          switch (record.status) {
-                            case 'present': return 'bg-green-500 text-white';
-                            case 'absent': return 'bg-red-500 text-white';
-                            case 'half-day': return 'bg-yellow-500 text-white';
-                            case 'on-leave': return 'bg-blue-500 text-white';
-                            default: return 'bg-gray-200 text-gray-700';
-                          }
-                        };
-
-                        const getStatusLabel = () => {
-                          if (!record) return '';
-                          switch (record.status) {
-                            case 'present': return 'P';
-                            case 'absent': return 'A';
-                            case 'half-day': return 'H';
-                            case 'on-leave': return 'L';
-                            default: return '';
-                          }
-                        };
-
-                        return (
-                          <div
-                            key={day}
-                            className={`aspect-square flex flex-col items-center justify-center rounded-md ${getStatusColor()} text-sm font-medium cursor-pointer hover:opacity-80 transition-opacity`}
-                            title={record ? `${record.status} - ${record.check_in_time || ''} to ${record.check_out_time || ''}` : 'Not marked'}
-                          >
-                            <div className="text-xs">{day}</div>
-                            {getStatusLabel() && (
-                              <div className="text-xs mt-0.5 font-bold">{getStatusLabel()}</div>
-                            )}
-                          </div>
-                        );
-                      })}
+                    <div className="flex items-center">
+                      <div className="w-4 h-4 bg-red-500 rounded mr-2"></div>
+                      <span className="text-sm text-gray-700">Absent</span>
+                    </div>
+                    <div className="flex items-center">
+                      <div className="w-4 h-4 bg-yellow-500 rounded mr-2"></div>
+                      <span className="text-sm text-gray-700">Half Day</span>
+                    </div>
+                    <div className="flex items-center">
+                      <div className="w-4 h-4 bg-blue-500 rounded mr-2"></div>
+                      <span className="text-sm text-gray-700">On Leave</span>
+                    </div>
+                    <div className="flex items-center">
+                      <div className="w-4 h-4 bg-purple-500 rounded mr-2"></div>
+                      <span className="text-sm text-gray-700">Holiday</span>
+                    </div>
+                    <div className="flex items-center">
+                      <div className="w-4 h-4 bg-gray-200 rounded mr-2"></div>
+                      <span className="text-sm text-gray-700">Not Marked</span>
                     </div>
                   </div>
-                );
-              })}
-
-              {monthlySummary.length === 0 && (
-                <div className="bg-white shadow-md rounded-lg p-12 text-center">
-                  <Calendar className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                  <p className="text-gray-600">No attendance records found for this month.</p>
                 </div>
-              )}
-            </div>
+
+                {/* Calendar View for Selected Employee */}
+                <div className="space-y-6">
+                  {monthlySummary.map((summary) => {
+                    const employee = employees.find(e => e.id === summary.employee_id);
+                    const daysInMonth = new Date(selectedYear, selectedMonth, 0).getDate();
+                    const firstDayOfMonth = new Date(selectedYear, selectedMonth - 1, 1).getDay();
+
+                    return (
+                      <div key={summary.employee_id} className="bg-white shadow-md rounded-lg p-6">
+                        {/* Employee Header */}
+                        <div className="mb-4 flex justify-between items-center">
+                          <div>
+                            <h3 className="text-lg font-semibold text-gray-900">{employee?.full_name}</h3>
+                            <p className="text-sm text-gray-500">{employee?.employee_number}</p>
+                          </div>
+                          <div className="text-right">
+                            <div className="text-sm text-gray-600">
+                              <span className="text-green-600 font-medium">{summary.present_days}P</span>
+                              {' / '}
+                              <span className="text-red-600 font-medium">{summary.absent_days}A</span>
+                              {' / '}
+                              <span className="text-yellow-600 font-medium">{summary.half_days}H</span>
+                              {' / '}
+                              <span className="text-blue-600 font-medium">{summary.leave_days}L</span>
+                            </div>
+                            <div className="text-sm text-gray-600 mt-1">
+                              Total Hours: {summary.work_hours.toFixed(2)} hrs
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Calendar Grid */}
+                        <div className="grid grid-cols-7 gap-1">
+                          {/* Day Headers */}
+                          {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
+                            <div key={day} className="text-center text-xs font-semibold text-gray-600 py-1">
+                              {day}
+                            </div>
+                          ))}
+
+                          {/* Empty cells for days before month starts */}
+                          {Array.from({ length: firstDayOfMonth }).map((_, index) => (
+                            <div key={`empty-${index}`} className="h-10"></div>
+                          ))}
+
+                          {/* Calendar Days */}
+                          {Array.from({ length: daysInMonth }).map((_, index) => {
+                            const day = index + 1;
+                            const dateStr = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                            const record = attendanceRecords.find(
+                              r => r.employee_id === summary.employee_id && r.attendance_date === dateStr
+                            );
+
+                            // Check if this date is a holiday
+                            const isHoliday = holidays.some(h => h.holiday_date === dateStr);
+                            const holiday = holidays.find(h => h.holiday_date === dateStr);
+
+                            const getStatusColor = () => {
+                              if (isHoliday) return 'bg-purple-500 text-white';
+                              if (!record) return 'bg-gray-200 text-gray-700';
+                              switch (record.status) {
+                                case 'present': return 'bg-green-500 text-white';
+                                case 'absent': return 'bg-red-500 text-white';
+                                case 'half-day': return 'bg-yellow-500 text-white';
+                                case 'on-leave': return 'bg-blue-500 text-white';
+                                default: return 'bg-gray-200 text-gray-700';
+                              }
+                            };
+
+                            const getStatusLabel = () => {
+                              if (isHoliday) return 'H';
+                              if (!record) return '';
+                              switch (record.status) {
+                                case 'present': return 'P';
+                                case 'absent': return 'A';
+                                case 'half-day': return 'H';
+                                case 'on-leave': return 'L';
+                                default: return '';
+                              }
+                            };
+
+                            const getTitle = () => {
+                              if (isHoliday) return `Holiday: ${holiday?.holiday_name}`;
+                              if (record) return `${record.status} - ${record.check_in_time || ''} to ${record.check_out_time || ''}`;
+                              return 'Not marked';
+                            };
+
+                            const getDisplayText = () => {
+                              if (isHoliday) return holiday?.holiday_name || 'Holiday';
+                              if (!record) return '';
+                              if (record.status === 'on-leave') return 'Leave';
+                              if (!record.work_hours) return '';
+                              return `${parseFloat(record.work_hours.toString()).toFixed(1)}h`;
+                            };
+
+                            return (
+                              <div
+                                key={day}
+                                className={`h-10 flex flex-col items-center justify-center rounded ${getStatusColor()} text-xs font-medium cursor-pointer hover:opacity-80 transition-opacity`}
+                                title={getTitle()}
+                              >
+                                <div className="text-xs leading-tight">{day}</div>
+                                {getDisplayText() && (
+                                  <div className="text-[10px] font-bold leading-tight truncate max-w-full px-0.5">{getDisplayText()}</div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                  {monthlySummary.length === 0 && selectedEmployee && (
+                    <div className="bg-white shadow-md rounded-lg p-12 text-center">
+                      <Calendar className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                      <p className="text-gray-600">No attendance records found for this employee in the selected month.</p>
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
           </div>
         )}
       </main>

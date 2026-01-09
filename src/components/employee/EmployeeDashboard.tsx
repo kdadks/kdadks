@@ -2,6 +2,24 @@ import { useState, useEffect } from 'react';
 import { Calendar, Clock, FileText, TrendingUp, AlertCircle, CheckCircle } from 'lucide-react';
 import { leaveService } from '../../services/leaveService';
 import { attendanceService } from '../../services/attendanceService';
+import { supabase } from '../../config/supabase';
+
+interface ActivityItem {
+  id: string;
+  type: 'attendance' | 'leave' | 'salary';
+  title: string;
+  timestamp: string;
+  icon: 'check' | 'alert' | 'file';
+  color: 'green' | 'yellow' | 'blue';
+}
+
+interface Announcement {
+  id: string;
+  title: string;
+  message: string;
+  created_at: string;
+  priority: 'low' | 'medium' | 'high';
+}
 
 interface DashboardStats {
   leavesRemaining: { [key: string]: number };
@@ -17,6 +35,8 @@ export default function EmployeeDashboard() {
     pendingLeaves: 0,
   });
   const [loading, setLoading] = useState(true);
+  const [recentActivities, setRecentActivities] = useState<ActivityItem[]>([]);
+  const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [currentUser] = useState(() => {
     // Get employee from session storage
     const session = sessionStorage.getItem('employee_session');
@@ -60,11 +80,116 @@ export default function EmployeeDashboard() {
         pendingLeaves: employeeLeaves?.length || 0,
         lastSalarySlip: undefined, // TODO: Fetch from salary service
       });
+
+      // Load recent activity
+      await loadRecentActivity();
+
+      // Load announcements
+      await loadAnnouncements();
     } catch (error) {
       console.error('Error loading dashboard data:', error);
     } finally {
       setLoading(false);
     }
+  };
+
+  const loadRecentActivity = async () => {
+    try {
+      const activities: ActivityItem[] = [];
+
+      // Get recent attendance (last 7 days)
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+      const { data: attendanceRecords } = await supabase
+        .from('attendance_records')
+        .select('attendance_date, check_in_time, status')
+        .eq('employee_id', currentUser.id)
+        .gte('attendance_date', sevenDaysAgo.toISOString().split('T')[0])
+        .order('attendance_date', { ascending: false })
+        .limit(3);
+
+      if (attendanceRecords) {
+        attendanceRecords.forEach(record => {
+          activities.push({
+            id: `attendance-${record.attendance_date}`,
+            type: 'attendance',
+            title: record.status === 'on-leave' ? 'On Leave' : 'Attendance marked',
+            timestamp: new Date(record.attendance_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+            icon: 'check',
+            color: record.status === 'on-leave' ? 'yellow' : 'green'
+          });
+        });
+      }
+
+      // Get recent leave applications (last 30 days)
+      const { data: leaveApps } = await supabase
+        .from('leave_applications')
+        .select('id, status, applied_at, from_date, to_date')
+        .eq('employee_id', currentUser.id)
+        .order('applied_at', { ascending: false })
+        .limit(3);
+
+      if (leaveApps) {
+        leaveApps.forEach(leave => {
+          const status = leave.status === 'pending' ? 'pending' : leave.status === 'approved' ? 'approved' : 'rejected';
+          activities.push({
+            id: `leave-${leave.id}`,
+            type: 'leave',
+            title: `Leave application ${status}`,
+            timestamp: new Date(leave.applied_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+            icon: status === 'pending' ? 'alert' : status === 'approved' ? 'check' : 'alert',
+            color: status === 'pending' ? 'yellow' : status === 'approved' ? 'green' : 'yellow'
+          });
+        });
+      }
+
+      // Sort all activities by timestamp (most recent first)
+      activities.sort((a, b) => {
+        const dateA = new Date(a.timestamp);
+        const dateB = new Date(b.timestamp);
+        return dateB.getTime() - dateA.getTime();
+      });
+
+      setRecentActivities(activities.slice(0, 5)); // Show only 5 most recent
+    } catch (error) {
+      console.error('Error loading recent activity:', error);
+    }
+  };
+
+  const loadAnnouncements = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('company_announcements')
+        .select('*')
+        .eq('is_active', true)
+        .order('created_at', { ascending: false })
+        .limit(5);
+
+      if (error) {
+        console.error('Error loading announcements:', error);
+        return;
+      }
+
+      setAnnouncements(data || []);
+    } catch (error) {
+      console.error('Error loading announcements:', error);
+    }
+  };
+
+  const getActivityIcon = (icon: string, color: string) => {
+    const colorClasses = {
+      green: 'bg-green-100 text-green-600',
+      yellow: 'bg-yellow-100 text-yellow-600',
+      blue: 'bg-blue-100 text-blue-600'
+    };
+
+    const IconComponent = icon === 'check' ? CheckCircle : icon === 'alert' ? AlertCircle : FileText;
+
+    return (
+      <div className={`w-8 h-8 ${colorClasses[color as keyof typeof colorClasses]} rounded-full flex items-center justify-center mr-3 mt-1`}>
+        <IconComponent className="w-4 h-4" />
+      </div>
+    );
   };
 
   if (loading) {
@@ -188,27 +313,30 @@ export default function EmployeeDashboard() {
         </div>
       </div>
 
-      {/* Leave Balance Details */}
+      {/* Company Announcements */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <div className="bg-white rounded-lg shadow-md p-4">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">Leave Balance</h2>
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">📢 Company Announcements</h2>
           <div className="space-y-3">
-            {Object.entries(stats.leavesRemaining).map(([type, remaining]) => (
-              <div key={type} className="flex items-center justify-between py-3 border-b last:border-b-0">
-                <div className="flex items-center">
-                  <div className="w-10 h-10 bg-primary-100 rounded-full flex items-center justify-center mr-3">
-                    <Calendar className="w-5 h-5 text-primary-600" />
+            {announcements.length > 0 ? (
+              announcements.map(announcement => (
+                <div key={announcement.id} className="border-l-4 border-primary-500 bg-primary-50 p-3 rounded">
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <h3 className="text-sm font-semibold text-gray-900">{announcement.title}</h3>
+                      <p className="text-xs text-gray-600 mt-1">{announcement.message}</p>
+                      <p className="text-xs text-gray-500 mt-2">
+                        {new Date(announcement.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                      </p>
+                    </div>
+                    {announcement.priority === 'high' && (
+                      <span className="ml-2 px-2 py-1 text-xs font-medium bg-red-100 text-red-700 rounded">Important</span>
+                    )}
                   </div>
-                  <span className="text-gray-700 font-medium">{type}</span>
                 </div>
-                <div className="text-right">
-                  <p className="text-2xl font-bold text-gray-900">{remaining}</p>
-                  <p className="text-xs text-gray-500">days left</p>
-                </div>
-              </div>
-            ))}
-            {Object.keys(stats.leavesRemaining).length === 0 && (
-              <p className="text-gray-500 text-center py-4">No leave balance data available</p>
+              ))
+            ) : (
+              <p className="text-gray-500 text-center py-4">No announcements at this time</p>
             )}
           </div>
         </div>
@@ -217,35 +345,19 @@ export default function EmployeeDashboard() {
         <div className="bg-white rounded-lg shadow-md p-4">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">Recent Activity</h2>
           <div className="space-y-4">
-            <div className="flex items-start">
-              <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center mr-3 mt-1">
-                <CheckCircle className="w-4 h-4 text-green-600" />
-              </div>
-              <div className="flex-1">
-                <p className="text-sm font-medium text-gray-900">Attendance marked</p>
-                <p className="text-xs text-gray-500">Today at 9:00 AM</p>
-              </div>
-            </div>
-            
-            <div className="flex items-start">
-              <div className="w-8 h-8 bg-yellow-100 rounded-full flex items-center justify-center mr-3 mt-1">
-                <AlertCircle className="w-4 h-4 text-yellow-600" />
-              </div>
-              <div className="flex-1">
-                <p className="text-sm font-medium text-gray-900">Leave application pending</p>
-                <p className="text-xs text-gray-500">2 days ago</p>
-              </div>
-            </div>
-            
-            <div className="flex items-start">
-              <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center mr-3 mt-1">
-                <FileText className="w-4 h-4 text-blue-600" />
-              </div>
-              <div className="flex-1">
-                <p className="text-sm font-medium text-gray-900">Salary slip generated</p>
-                <p className="text-xs text-gray-500">Last month</p>
-              </div>
-            </div>
+            {recentActivities.length > 0 ? (
+              recentActivities.map(activity => (
+                <div key={activity.id} className="flex items-start">
+                  {getActivityIcon(activity.icon, activity.color)}
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-gray-900">{activity.title}</p>
+                    <p className="text-xs text-gray-500">{activity.timestamp}</p>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <p className="text-sm text-gray-500">No recent activity</p>
+            )}
           </div>
         </div>
       </div>

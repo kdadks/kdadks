@@ -177,7 +177,7 @@ export default function EmployeeProfile() {
                     loadEmployeeData();
                     setMessage(null);
                   }}
-                  className="px-3 py-1.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors flex items-center space-x-2 text-sm"
+                  className="px-3 py-1.5 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-lg hover:from-red-600 hover:to-red-700 transition-all flex items-center space-x-2 text-sm"
                 >
                   <X className="w-4 h-4" />
                   <span>Cancel</span>

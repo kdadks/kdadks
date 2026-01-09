@@ -1,11 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { Calendar, Save, X, AlertCircle } from 'lucide-react';
 import { leaveService } from '../../services/leaveService';
+import { leaveAttendanceService } from '../../services/leaveAttendanceService';
+import { useToast } from '../ui/ToastProvider';
 
 interface LeaveType {
   id: string;
   name: string;
+  code: string;
   description?: string;
+  balance?: number;
 }
 
 interface LeaveBalance {
@@ -28,6 +32,7 @@ interface LeaveHistoryItem {
 }
 
 export default function LeaveManagement() {
+  const { showSuccess, showError } = useToast();
   const [leaveTypes, setLeaveTypes] = useState<LeaveType[]>([]);
   const [leaveBalance, setLeaveBalance] = useState<LeaveBalance[]>([]);
   const [leaveHistory, setLeaveHistory] = useState<LeaveHistoryItem[]>([]);
@@ -57,13 +62,37 @@ export default function LeaveManagement() {
       setLoading(true);
       const currentYear = new Date().getFullYear();
 
-      // Load leave types
-      const types = await leaveService.getLeaveTypes();
-      setLeaveTypes(types || []);
+      // Load leave types from database
+      const types = await leaveAttendanceService.getLeaveTypes();
+      
+      // Load leave balance for current employee
+      const balanceData = await leaveAttendanceService.getEmployeeLeaveBalance(currentUser.id);
+      
+      // Merge leave types with their balances
+      const typesWithBalances = types.map(type => {
+        const balance = balanceData.find(b => b.leave_type_id === type.id);
+        return {
+          ...type,
+          balance: balance ? balance.available : 0,
+          balanceDetails: balance // Store full balance details for display
+        };
+      });
+      
+      setLeaveTypes(typesWithBalances || []);
 
-      // Load leave balance
-      const balance = await leaveService.getRemainingLeaves(currentUser.id, currentYear);
-      setLeaveBalance(balance || []);
+      // Format balance data for display section
+      const formattedBalance = balanceData.map(b => {
+        const type = types.find(t => t.id === b.leave_type_id);
+        return {
+          leave_type: type?.name || 'Unknown',
+          allocated: b.opening_balance + b.earned + b.carry_forward,
+          used: b.taken,
+          carried_forward: b.carry_forward,
+          total_available: b.opening_balance + b.earned + b.carry_forward,
+          remaining: b.available
+        };
+      });
+      setLeaveBalance(formattedBalance);
 
       // Load leave history
       const history = await leaveService.getEmployeeLeaves(currentUser.id);
@@ -80,6 +109,25 @@ export default function LeaveManagement() {
     
     try {
       setLoading(true);
+      
+      // Calculate requested days
+      const requestedDays = calculateDays();
+      
+      // Find the selected leave type with balance
+      const selectedLeaveType = leaveTypes.find(lt => lt.id === formData.leave_type_id);
+      
+      // Check if employee has sufficient balance
+      if (!selectedLeaveType || selectedLeaveType.balance === undefined || selectedLeaveType.balance <= 0) {
+        alert(`You don't have any ${selectedLeaveType?.name || 'leave'} balance available. Please contact HR to allocate leaves.`);
+        setLoading(false);
+        return;
+      }
+      
+      if (selectedLeaveType.balance < requestedDays) {
+        alert(`Insufficient leave balance. You have ${selectedLeaveType.balance} days remaining, but requested ${requestedDays} days.`);
+        setLoading(false);
+        return;
+      }
       
       await leaveService.requestLeave({
         employee_id: currentUser.id,
@@ -101,10 +149,10 @@ export default function LeaveManagement() {
       // Reload data
       await loadLeaveData();
 
-      alert('Leave application submitted successfully!');
+      showSuccess('Leave application submitted successfully!');
     } catch (error) {
       console.error('Error submitting leave:', error);
-      alert('Failed to submit leave application');
+      showError('Failed to submit leave application');
     } finally {
       setLoading(false);
     }
@@ -176,10 +224,34 @@ export default function LeaveManagement() {
                   <option value="">Select leave type</option>
                   {leaveTypes.map((type) => (
                     <option key={type.id} value={type.id}>
-                      {type.name}
+                      {type.name} ({type.code}) - Balance: {type.balance || 0} days
                     </option>
                   ))}
                 </select>
+                {formData.leave_type_id && (() => {
+                  const selectedType = leaveTypes.find(lt => lt.id === formData.leave_type_id);
+                  if (!selectedType || selectedType.balance === undefined || selectedType.balance === 0) {
+                    return (
+                      <div className="mt-2 p-3 bg-red-50 border border-red-200 rounded-lg flex items-start">
+                        <AlertCircle className="w-5 h-5 text-red-600 mr-2 flex-shrink-0 mt-0.5" />
+                        <p className="text-sm text-red-700">
+                          You don't have any balance for this leave type. Please contact HR to allocate leaves.
+                        </p>
+                      </div>
+                    );
+                  }
+                  if (selectedType.balance !== undefined && selectedType.balance < calculateDays() && calculateDays() > 0) {
+                    return (
+                      <div className="mt-2 p-3 bg-yellow-50 border border-yellow-200 rounded-lg flex items-start">
+                        <AlertCircle className="w-5 h-5 text-yellow-600 mr-2 flex-shrink-0 mt-0.5" />
+                        <p className="text-sm text-yellow-700">
+                          Insufficient balance. You have {selectedType.balance} days remaining, but requesting {calculateDays()} days.
+                        </p>
+                      </div>
+                    );
+                  }
+                  return null;
+                })()}
               </div>
 
               {/* Days */}
@@ -242,17 +314,29 @@ export default function LeaveManagement() {
               <button
                 type="button"
                 onClick={() => setShowForm(false)}
-                className="px-6 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+                className="px-6 py-2 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-lg hover:from-red-600 hover:to-red-700 transition-all"
               >
                 Cancel
               </button>
               <button
                 type="submit"
-                disabled={loading}
-                className="bg-primary-600 text-white px-6 py-2 rounded-lg hover:bg-primary-700 disabled:opacity-50 flex items-center"
+                disabled={loading || (() => {
+                  const selectedType = leaveTypes.find(lt => lt.id === formData.leave_type_id);
+                  return selectedType && selectedType.balance !== undefined && selectedType.balance <= 0;
+                })()}
+                className="bg-primary-600 text-white px-6 py-2 rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
               >
-                <Save className="w-5 h-5 mr-2" />
-                {loading ? 'Submitting...' : 'Submit Application'}
+                {loading ? (
+                  <>
+                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
+                    Submitting...
+                  </>
+                ) : (
+                  <>
+                    <Save className="w-5 h-5 mr-2" />
+                    Submit Application
+                  </>
+                )}
               </button>
             </div>
           </form>

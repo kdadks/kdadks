@@ -109,13 +109,55 @@ export const leaveAttendanceService = {
     }
 
     const newTaken = (balance?.taken || 0) + taken;
-    const available = (balance?.earned || 0) + (balance?.carry_forward || 0) - newTaken;
+    const available = (balance?.opening_balance || 0) + (balance?.earned || 0) + (balance?.carry_forward || 0) - newTaken;
 
     const { error } = await supabase
       .from('employee_leave_balance')
       .update({
         taken: newTaken,
         available: Math.max(0, available)
+      })
+      .eq('employee_id', employeeId)
+      .eq('leave_type_id', leaveTypeId)
+      .eq('financial_year', fy);
+
+    if (error) throw error;
+  },
+
+  async updateLeaveAllocation(
+    employeeId: string,
+    leaveTypeId: string,
+    allocation: {
+      opening_balance: number;
+      earned: number;
+      carry_forward: number;
+      available: number;
+    },
+    financialYear?: string
+  ): Promise<void> {
+    const fy = financialYear || getFinancialYear();
+
+    // Get current balance to preserve taken value
+    const { data: currentBalance } = await supabase
+      .from('employee_leave_balance')
+      .select('taken')
+      .eq('employee_id', employeeId)
+      .eq('leave_type_id', leaveTypeId)
+      .eq('financial_year', fy)
+      .single();
+
+    // Recalculate available based on current taken value
+    const taken = currentBalance?.taken || 0;
+    const recalculatedAvailable = allocation.opening_balance + allocation.earned + allocation.carry_forward - taken;
+
+    const { error } = await supabase
+      .from('employee_leave_balance')
+      .update({
+        opening_balance: allocation.opening_balance,
+        earned: allocation.earned,
+        carry_forward: allocation.carry_forward,
+        available: Math.max(0, recalculatedAvailable),
+        updated_at: new Date().toISOString()
       })
       .eq('employee_id', employeeId)
       .eq('leave_type_id', leaveTypeId)
@@ -219,6 +261,13 @@ export const leaveAttendanceService = {
 
     if (!application) throw new Error('Leave application not found');
 
+    // Check if approverId exists in employees table
+    const { data: employeeExists } = await supabase
+      .from('employees')
+      .select('id')
+      .eq('id', approverId)
+      .single();
+
     // Update leave balance
     await this.updateLeaveBalance(
       application.employee_id,
@@ -226,14 +275,56 @@ export const leaveAttendanceService = {
       application.total_days
     );
 
+    // Create attendance records for each day of leave
+    const startDate = new Date(application.from_date);
+    const endDate = new Date(application.to_date);
+    const attendanceRecords = [];
+
+    for (let date = new Date(startDate); date <= endDate; date.setDate(date.getDate() + 1)) {
+      const dateStr = date.toISOString().split('T')[0];
+      
+      // Check if attendance record already exists for this date
+      const { data: existing } = await supabase
+        .from('attendance_records')
+        .select('id')
+        .eq('employee_id', application.employee_id)
+        .eq('attendance_date', dateStr)
+        .single();
+
+      if (!existing) {
+        attendanceRecords.push({
+          employee_id: application.employee_id,
+          attendance_date: dateStr,
+          status: 'on-leave',
+          total_hours: 0,
+          work_hours: 0,
+          break_hours: 0,
+          overtime_hours: 0,
+          remarks: `On leave: ${application.reason || 'Leave approved'}`,
+          is_regularized: false
+        });
+      }
+    }
+
+    // Insert attendance records if any
+    if (attendanceRecords.length > 0) {
+      await supabase
+        .from('attendance_records')
+        .insert(attendanceRecords);
+    }
+
     // Approve the application
+    const approvalRemarks = employeeExists 
+      ? remarks 
+      : `Approved by: Admin${remarks ? ` - ${remarks}` : ''}`;
+
     const { data, error } = await supabase
       .from('leave_applications')
       .update({
         status: 'approved',
-        approved_by: approverId,
+        approved_by: employeeExists ? approverId : null,
         approved_at: new Date().toISOString(),
-        approval_remarks: remarks
+        approval_remarks: approvalRemarks
       })
       .eq('id', applicationId)
       .select()
@@ -248,13 +339,24 @@ export const leaveAttendanceService = {
     approverId: string,
     remarks: string
   ): Promise<LeaveApplication> {
+    // Check if approverId exists in employees table
+    const { data: employeeExists } = await supabase
+      .from('employees')
+      .select('id')
+      .eq('id', approverId)
+      .single();
+
+    const rejectionRemarks = employeeExists 
+      ? remarks 
+      : `Rejected by: Admin${remarks ? ` - ${remarks}` : ''}`;
+
     const { data, error } = await supabase
       .from('leave_applications')
       .update({
         status: 'rejected',
-        approved_by: approverId,
+        approved_by: employeeExists ? approverId : null,
         approved_at: new Date().toISOString(),
-        approval_remarks: remarks
+        approval_remarks: rejectionRemarks
       })
       .eq('id', applicationId)
       .select()
@@ -277,13 +379,29 @@ export const leaveAttendanceService = {
 
     if (!application) throw new Error('Leave application not found');
 
-    // If it was approved, restore the balance
+    // If it was approved, restore the balance and remove attendance records
     if (application.status === 'approved') {
       await this.updateLeaveBalance(
         application.employee_id,
         application.leave_type_id,
         -application.total_days // Negative to add back
       );
+
+      // Remove attendance records created for this leave
+      const startDate = new Date(application.from_date);
+      const endDate = new Date(application.to_date);
+
+      for (let date = new Date(startDate); date <= endDate; date.setDate(date.getDate() + 1)) {
+        const dateStr = date.toISOString().split('T')[0];
+        
+        // Delete attendance records that were marked as 'on-leave' for this employee and date
+        await supabase
+          .from('attendance_records')
+          .delete()
+          .eq('employee_id', application.employee_id)
+          .eq('attendance_date', dateStr)
+          .eq('status', 'on-leave');
+      }
     }
 
     const { data, error } = await supabase

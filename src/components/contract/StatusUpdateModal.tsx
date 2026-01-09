@@ -150,7 +150,7 @@ const StatusUpdateModal: React.FC<StatusUpdateModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-1.5 text-sm text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
+              className="px-4 py-1.5 text-sm bg-gradient-to-r from-red-500 to-red-600 text-white rounded-md hover:from-red-600 hover:to-red-700 transition-all"
               disabled={loading}
             >
               Cancel

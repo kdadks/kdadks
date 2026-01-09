@@ -924,7 +924,7 @@ const RateCardManagement: React.FC = () => {
                     resetForm();
                     setSelectedTemplate(null);
                   }}
-                  className="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50"
+                  className="px-4 py-2 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-md hover:from-red-600 hover:to-red-700 transition-all"
                 >
                   Cancel
                 </button>

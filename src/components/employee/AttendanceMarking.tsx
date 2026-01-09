@@ -1,15 +1,35 @@
 import React, { useState, useEffect } from 'react';
-import { Clock, CheckCircle, XCircle, Calendar as CalendarIcon } from 'lucide-react';
-import { attendanceService } from '../../services/attendanceService';
-import type { AttendanceStatus, Attendance, AttendanceSummary } from '../../types/employee';
+import { Clock, ChevronLeft, ChevronRight, Save, AlertCircle } from 'lucide-react';
+import { leaveAttendanceService } from '../../services/leaveAttendanceService';
+import { leaveService } from '../../services/leaveService';
+import { supabase } from '../../config/supabase';
+
+interface DayAttendance {
+  date: string;
+  dayName: string;
+  isWeekend: boolean;
+  isHoliday: boolean;
+  holidayName?: string;
+  isOnLeave: boolean;
+  leaveTypeName?: string;
+  checkIn: string;
+  checkOut: string;
+  hours: string;
+  saved: boolean;
+}
 
 export default function AttendanceMarking() {
-  const [todayAttendance, setTodayAttendance] = useState<Attendance | null>(null);
-  const [checkInTime, setCheckInTime] = useState('');
-  const [checkOutTime, setCheckOutTime] = useState('');
+  const [currentWeekStart, setCurrentWeekStart] = useState<Date>(getWeekStart(new Date()));
+  const [weekData, setWeekData] = useState<DayAttendance[]>([]);
+  const [holidays, setHolidays] = useState<any[]>([]);
+  const [approvedLeaves, setApprovedLeaves] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
-  const [monthlyAttendance, setMonthlyAttendance] = useState<Attendance[]>([]);
-  const [summary, setSummary] = useState<AttendanceSummary | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [toast, setToast] = useState<{ show: boolean; message: string; type: 'success' | 'error' }>({ 
+    show: false, 
+    message: '', 
+    type: 'success' 
+  });
   const [currentUser] = useState(() => {
     const session = sessionStorage.getItem('employee_session');
     if (session) {
@@ -19,291 +39,516 @@ export default function AttendanceMarking() {
     return { id: '' };
   });
 
-  const today = new Date().toISOString().split('T')[0];
-  const currentMonth = new Date().getMonth() + 1;
-  const currentYear = new Date().getFullYear();
+  // Show toast notification
+  const showToast = (message: string, type: 'success' | 'error') => {
+    setToast({ show: true, message, type });
+    setTimeout(() => setToast({ show: false, message: '', type: 'success' }), 3000);
+  };
+
+  // Get the start of the week (Monday)
+  function getWeekStart(date: Date): Date {
+    const d = new Date(date);
+    const day = d.getDay();
+    const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+    return new Date(d.setDate(diff));
+  }
+
+  // Check if date is in the future
+  function isFutureDate(date: string): boolean {
+    return new Date(date) > new Date(new Date().toISOString().split('T')[0]);
+  }
+
+  // Check if week is in the future
+  function isWeekInFuture(weekStart: Date): boolean {
+    const today = new Date(new Date().toISOString().split('T')[0]);
+    const currentWeekStart = getWeekStart(today);
+    return weekStart > currentWeekStart;
+  }
 
   useEffect(() => {
-    loadAttendanceData();
+    loadWeekData();
+  }, [currentWeekStart, holidays, approvedLeaves]);
+
+  useEffect(() => {
+    loadHolidays();
+    loadApprovedLeaves();
   }, []);
 
-  const loadAttendanceData = async () => {
+  const loadHolidays = async () => {
+    try {
+      const year = currentWeekStart.getFullYear();
+      const holidaysData = await leaveAttendanceService.getHolidays(year);
+      setHolidays(holidaysData);
+    } catch (error) {
+      console.error('Error loading holidays:', error);
+    }
+  };
+
+  const loadApprovedLeaves = async () => {
+    try {
+      if (!currentUser.id) return;
+      const leavesData = await leaveService.getEmployeeLeaves(currentUser.id, { status: 'approved' });
+      setApprovedLeaves(leavesData || []);
+    } catch (error) {
+      console.error('Error loading approved leaves:', error);
+    }
+  };
+
+  const loadWeekData = async () => {
     try {
       setLoading(true);
+      const weekDays: DayAttendance[] = [];
 
-      // Get today's attendance
-      const todayData = await attendanceService.getAttendanceByDateRange(
-        currentUser.id,
-        today,
-        today
-      );
-      setTodayAttendance(todayData?.[0] || null);
+      // Generate 7 days starting from Monday
+      for (let i = 0; i < 7; i++) {
+        const date = new Date(currentWeekStart);
+        date.setDate(currentWeekStart.getDate() + i);
+        const dateStr = date.toISOString().split('T')[0];
+        const dayName = date.toLocaleDateString('en-US', { weekday: 'short' });
+        const isWeekend = dayName === 'Sat' || dayName === 'Sun';
+        
+        // Check if it's a holiday
+        const holiday = holidays.find(h => h.holiday_date === dateStr);
+        const isHoliday = !!holiday;
 
-      // Get monthly attendance
-      const firstDay = `${currentYear}-${String(currentMonth).padStart(2, '0')}-01`;
-      const lastDay = new Date(currentYear, currentMonth, 0).toISOString().split('T')[0];
-      const monthData = await attendanceService.getAttendanceByDateRange(
-        currentUser.id,
-        firstDay,
-        lastDay
-      );
-      setMonthlyAttendance(monthData || []);
+        // Check if it's an approved leave day
+        const leave = approvedLeaves.find(l => {
+          const fromDate = new Date(l.from_date);
+          const toDate = new Date(l.to_date);
+          const currentDate = new Date(dateStr);
+          return currentDate >= fromDate && currentDate <= toDate;
+        });
+        const isOnLeave = !!leave;
 
-      // Get monthly summary
-      const summaryData = await attendanceService.getMonthlyAttendanceSummary(
-        currentUser.id,
-        currentMonth,
-        currentYear
-      );
-      setSummary(summaryData);
+        weekDays.push({
+          date: dateStr,
+          dayName,
+          isWeekend,
+          isHoliday,
+          holidayName: holiday?.holiday_name,
+          isOnLeave,
+          leaveTypeName: leave?.leave_types?.name,
+          checkIn: isOnLeave ? '' : '',
+          checkOut: isOnLeave ? '' : '',
+          hours: '0.0',
+          saved: isOnLeave ? true : false
+        });
+      }
+
+      // Load existing attendance records for the week
+      const startDate = weekDays[0].date;
+      const endDate = weekDays[6].date;
+
+      const { data: attendanceRecords } = await supabase
+        .from('attendance_records')
+        .select('*')
+        .eq('employee_id', currentUser.id)
+        .gte('attendance_date', startDate)
+        .lte('attendance_date', endDate);
+
+      // Populate with existing data
+      if (attendanceRecords && attendanceRecords.length > 0) {
+        weekDays.forEach(day => {
+          const record = attendanceRecords.find(r => r.attendance_date === day.date);
+          if (record) {
+            // Extract time from timestamp without timezone conversion
+            if (record.check_in_time) {
+              // Extract HH:MM directly from the ISO string (e.g., "2026-01-09T10:00:00+00:00" -> "10:00")
+              const timeStr = record.check_in_time.toString();
+              const timeMatch = timeStr.match(/T(\d{2}:\d{2})/);
+              day.checkIn = timeMatch ? timeMatch[1] : '';
+            }
+            if (record.check_out_time) {
+              // Extract HH:MM directly from the ISO string
+              const timeStr = record.check_out_time.toString();
+              const timeMatch = timeStr.match(/T(\d{2}:\d{2})/);
+              day.checkOut = timeMatch ? timeMatch[1] : '';
+            }
+            // Try work_hours first, then total_hours as fallback
+            const hours = record.work_hours || record.total_hours || 0;
+            day.hours = hours ? parseFloat(hours).toFixed(1) : '0.0';
+            day.saved = true;
+            // Don't override with default if on leave
+            if (!day.isOnLeave && record.status === 'on-leave') {
+              day.isOnLeave = true;
+            }
+          }
+        });
+      }
+
+      setWeekData(weekDays);
     } catch (error) {
-      console.error('Error loading attendance:', error);
+      console.error('Error loading week data:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  const markAttendance = async (status: AttendanceStatus) => {
+  const calculateHours = (checkIn: string, checkOut: string): string => {
+    if (!checkIn || !checkOut) return '0.0';
+    
     try {
-      setLoading(true);
-
-      const currentTime = new Date().toTimeString().split(' ')[0];
+      const start = new Date(`1970-01-01T${checkIn}`);
+      const end = new Date(`1970-01-01T${checkOut}`);
+      const diff = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
       
-      await attendanceService.markAttendance(
-        currentUser.id,
-        today,
-        status,
-        status === 'present' || status === 'half-day' ? (checkInTime || currentTime) : undefined,
-        checkOutTime || undefined
-      );
+      if (diff < 0) return '0.0';
+      return diff.toFixed(1);
+    } catch {
+      return '0.0';
+    }
+  };
 
-      await loadAttendanceData();
-      alert(`Attendance marked as ${status}!`);
-    } catch (error) {
-      console.error('Error marking attendance:', error);
-      alert('Failed to mark attendance');
+  const handleTimeChange = (index: number, field: 'checkIn' | 'checkOut', value: string) => {
+    const newWeekData = [...weekData];
+    newWeekData[index][field] = value;
+    newWeekData[index].hours = calculateHours(newWeekData[index].checkIn, newWeekData[index].checkOut);
+    newWeekData[index].saved = false;
+    setWeekData(newWeekData);
+  };
+
+  const handleSaveDay = async (index: number) => {
+    const day = weekData[index];
+    
+    if (!day.checkIn || !day.checkOut) {
+      showToast('Please enter both check-in and check-out times', 'error');
+      return;
+    }
+
+    if (isFutureDate(day.date)) {
+      showToast('Cannot mark attendance for future dates', 'error');
+      return;
+    }
+
+    try {
+      setSaving(true);
+
+      const hours = parseFloat(day.hours);
+      const status = hours >= 8 ? 'present' : hours >= 4 ? 'half-day' : 'absent';
+
+      // Convert time strings to proper timestamps
+      const checkInTimestamp = `${day.date}T${day.checkIn}:00`;
+      const checkOutTimestamp = `${day.date}T${day.checkOut}:00`;
+
+      const { data: existing } = await supabase
+        .from('attendance_records')
+        .select('id')
+        .eq('employee_id', currentUser.id)
+        .eq('attendance_date', day.date)
+        .single();
+
+      if (existing) {
+        // Update existing record
+        const { error: updateError } = await supabase
+          .from('attendance_records')
+          .update({
+            check_in_time: checkInTimestamp,
+            check_out_time: checkOutTimestamp,
+            work_hours: hours,
+            total_hours: hours,
+            status: status,
+            break_hours: 0,
+            overtime_hours: hours > 8 ? hours - 8 : 0,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', existing.id);
+        
+        if (updateError) throw updateError;
+      } else {
+        // Create new record
+        const { error: insertError } = await supabase
+          .from('attendance_records')
+          .insert({
+            employee_id: currentUser.id,
+            attendance_date: day.date,
+            check_in_time: checkInTimestamp,
+            check_out_time: checkOutTimestamp,
+            work_hours: hours,
+            total_hours: hours,
+            status: status,
+            break_hours: 0,
+            overtime_hours: hours > 8 ? hours - 8 : 0,
+            is_regularized: false
+          });
+        
+        if (insertError) throw insertError;
+      }
+
+      // Mark as saved
+      const newWeekData = [...weekData];
+      newWeekData[index].saved = true;
+      setWeekData(newWeekData);
+
+      showToast('Attendance saved successfully!', 'success');
+    } catch (error: any) {
+      console.error('Error saving attendance:', error);
+      const errorMessage = error?.message || error?.error?.message || error?.error_description || 'Failed to save attendance';
+      showToast(errorMessage, 'error');
     } finally {
-      setLoading(false);
+      setSaving(false);
     }
   };
 
-  const getStatusColor = (status: string) => {
-    const colors: { [key: string]: string } = {
-      present: 'bg-green-100 text-green-800 border-green-300',
-      absent: 'bg-red-100 text-red-800 border-red-300',
-      half_day: 'bg-yellow-100 text-yellow-800 border-yellow-300',
-      on_leave: 'bg-blue-100 text-blue-800 border-blue-300',
-    };
-    return colors[status] || 'bg-gray-100 text-gray-800 border-gray-300';
+  const goToPreviousWeek = () => {
+    const newDate = new Date(currentWeekStart);
+    newDate.setDate(newDate.getDate() - 7);
+    setCurrentWeekStart(newDate);
   };
 
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'present':
-        return <CheckCircle className="w-4 h-4" />;
-      case 'absent':
-        return <XCircle className="w-4 h-4" />;
-      case 'half_day':
-        return <Clock className="w-4 h-4" />;
-      default:
-        return <CalendarIcon className="w-4 h-4" />;
+  const goToNextWeek = () => {
+    const newDate = new Date(currentWeekStart);
+    newDate.setDate(newDate.getDate() + 7);
+    
+    // Don't allow future weeks
+    if (!isWeekInFuture(newDate)) {
+      setCurrentWeekStart(newDate);
     }
+  };
+
+  const goToCurrentWeek = () => {
+    setCurrentWeekStart(getWeekStart(new Date()));
+  };
+
+  const getTotalWeeklyHours = () => {
+    return weekData.reduce((sum, day) => sum + parseFloat(day.hours || '0'), 0).toFixed(1);
+  };
+
+  const isCurrentWeek = () => {
+    const today = new Date();
+    const currentStart = getWeekStart(today);
+    return currentWeekStart.toDateString() === currentStart.toDateString();
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      {/* Header */}
-      <div className="mb-4">
-        <h1 className="text-3xl font-bold text-gray-900">Attendance Tracking</h1>
-        <p className="text-gray-600 mt-2">Mark your daily attendance and view attendance history</p>
-      </div>
-
-      {/* Today's Attendance */}
-      <div className="bg-white rounded-lg shadow-md p-4 mb-4">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">Today's Attendance</h2>
-        
-        {todayAttendance ? (
-          <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center">
-                <CheckCircle className="w-8 h-8 text-green-600 mr-3" />
-                <div>
-                  <p className="text-lg font-semibold text-gray-900">Attendance Marked</p>
-                  <p className="text-sm text-gray-600">
-                    Status: <span className="font-medium capitalize">{todayAttendance.status}</span>
-                  </p>
-                  {todayAttendance.check_in_time && (
-                    <p className="text-sm text-gray-600">
-                      Check-in: {todayAttendance.check_in_time}
-                      {todayAttendance.check_out_time && ` | Check-out: ${todayAttendance.check_out_time}`}
-                    </p>
-                  )}
-                </div>
-              </div>
-              <button
-                onClick={() => loadAttendanceData()}
-                className="text-primary-600 hover:text-primary-700 text-sm font-medium"
-              >
-                Refresh
-              </button>
-            </div>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Check-in Time (Optional)
-                </label>
-                <input
-                  type="time"
-                  value={checkInTime}
-                  onChange={(e) => setCheckInTime(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Check-out Time (Optional)
-                </label>
-                <input
-                  type="time"
-                  value={checkOutTime}
-                  onChange={(e) => setCheckOutTime(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <button
-                onClick={() => markAttendance('present')}
-                disabled={loading}
-                className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center justify-center"
-              >
-                <CheckCircle className="w-5 h-5 mr-2" />
-                Present
-              </button>
-              
-              <button
-                onClick={() => markAttendance('half-day')}
-                disabled={loading}
-                className="bg-yellow-600 text-white px-4 py-2 rounded-lg hover:bg-yellow-700 disabled:opacity-50 flex items-center justify-center"
-              >
-                <Clock className="w-5 h-5 mr-2" />
-                Half Day
-              </button>
-              
-              <button
-                onClick={() => markAttendance('absent')}
-                disabled={loading}
-                className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 disabled:opacity-50 flex items-center justify-center"
-              >
-                <XCircle className="w-5 h-5 mr-2" />
-                Absent
-              </button>
-              
-              <button
-                onClick={() => markAttendance('on-leave')}
-                disabled={loading}
-                className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center"
-              >
-                <CalendarIcon className="w-5 h-5 mr-2" />
-                On Leave
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Monthly Summary */}
-      {summary && (
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-4">
-          <div className="bg-white rounded-lg shadow-md p-4">
-            <p className="text-sm text-gray-600">Total Days</p>
-            <p className="text-2xl font-bold text-gray-900">{summary.total_working_days}</p>
-          </div>
-          <div className="bg-white rounded-lg shadow-md p-4">
-            <p className="text-sm text-gray-600">Present</p>
-            <p className="text-2xl font-bold text-green-600">{summary.days_present}</p>
-          </div>
-          <div className="bg-white rounded-lg shadow-md p-4">
-            <p className="text-sm text-gray-600">Absent</p>
-            <p className="text-2xl font-bold text-red-600">{summary.days_absent}</p>
-          </div>
-          <div className="bg-white rounded-lg shadow-md p-4">
-            <p className="text-sm text-gray-600">Half Day</p>
-            <p className="text-2xl font-bold text-yellow-600">{summary.days_half_day}</p>
-          </div>
-          <div className="bg-white rounded-lg shadow-md p-4">
-            <p className="text-sm text-gray-600">Attendance %</p>
-            <p className="text-2xl font-bold text-primary-600">
-              {summary.attendance_percentage?.toFixed(1)}%
-            </p>
-          </div>
+    <div className="max-w-7xl mx-auto px-4 py-4">
+      {/* Toast Notification */}
+      {toast.show && (
+        <div className={`fixed top-4 right-4 z-50 px-6 py-3 rounded-lg shadow-lg flex items-center space-x-2 ${ 
+          toast.type === 'success' ? 'bg-green-500 text-white' : 'bg-red-500 text-white'
+        }`}>
+          <span>{toast.message}</span>
         </div>
       )}
 
-      {/* Attendance History */}
-      <div className="bg-white rounded-lg shadow-md p-4">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">Attendance History</h2>
+      {/* Header */}
+      <div className="mb-4">
+        <h1 className="text-2xl font-bold text-gray-900">Attendance Markings</h1>
+        <p className="text-gray-600 mt-1 text-sm">Mark your attendance for the week by entering check-in and check-out times</p>
+      </div>
+
+      {/* Week Navigation */}
+      <div className="bg-white rounded-lg shadow-md p-3 mb-4">
+        <div className="flex items-center justify-between">
+          <button
+            onClick={goToPreviousWeek}
+            className="flex items-center px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
+          >
+            <ChevronLeft className="w-4 h-4 mr-1" />
+            Previous
+          </button>
+
+          <div className="text-center">
+            <h2 className="text-base font-semibold text-gray-900">
+              {currentWeekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+              {' - '}
+              {new Date(currentWeekStart.getTime() + 6 * 24 * 60 * 60 * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+            </h2>
+            {!isCurrentWeek() && (
+              <button
+                onClick={goToCurrentWeek}
+                className="text-xs text-primary-600 hover:text-primary-700 font-medium mt-0.5"
+              >
+                Go to Current Week
+              </button>
+            )}
+          </div>
+
+          <button
+            onClick={goToNextWeek}
+            disabled={isWeekInFuture(new Date(currentWeekStart.getTime() + 7 * 24 * 60 * 60 * 1000))}
+            className="flex items-center px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Next
+            <ChevronRight className="w-4 h-4 ml-1" />
+          </button>
+        </div>
+      </div>
+
+      {/* Weekly Hours Summary */}
+      <div className="bg-gradient-to-r from-primary-500 to-primary-600 rounded-lg shadow-md p-4 mb-4 text-white">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-primary-100 text-xs font-medium">Total Weekly Hours</p>
+            <p className="text-3xl font-bold mt-1">{getTotalWeeklyHours()}h</p>
+          </div>
+          <Clock className="w-12 h-12 text-primary-200" />
+        </div>
+      </div>
+
+      {/* Attendance Table */}
+      <div className="bg-white rounded-lg shadow-md overflow-hidden">
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Date
                 </th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
-                  Status
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Day
                 </th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
-                  Check-in
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Check-In
                 </th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
-                  Check-out
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Check-Out
                 </th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
-                  Duration
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Hours
+                </th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Action
                 </th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {monthlyAttendance.map((record) => (
-                <tr key={record.id}>
-                  <td className="px-4 py-2.5 whitespace-nowrap text-sm text-gray-900">
-                    {new Date(record.attendance_date).toLocaleDateString()}
-                  </td>
-                  <td className="px-4 py-2.5 whitespace-nowrap">
-                    <span className={`px-3 py-1 rounded-full text-xs font-semibold border flex items-center w-fit ${getStatusColor(record.status)}`}>
-                      {getStatusIcon(record.status)}
-                      <span className="ml-2 capitalize">{record.status.replace('_', ' ')}</span>
-                    </span>
-                  </td>
-                  <td className="px-4 py-2.5 whitespace-nowrap text-sm text-gray-600">
-                    {record.check_in_time || '-'}
-                  </td>
-                  <td className="px-4 py-2.5 whitespace-nowrap text-sm text-gray-600">
-                    {record.check_out_time || '-'}
-                  </td>
-                  <td className="px-4 py-2.5 whitespace-nowrap text-sm text-gray-600">
-                    {record.check_in_time && record.check_out_time ? 
-                      `${((new Date(`1970-01-01T${record.check_out_time}`).getTime() - new Date(`1970-01-01T${record.check_in_time}`).getTime()) / (1000 * 60 * 60)).toFixed(1)}h` : '-'}
-                  </td>
-                </tr>
-              ))}
-              {monthlyAttendance.length === 0 && (
+              {loading ? (
                 <tr>
-                  <td colSpan={5} className="px-6 py-8 text-center text-gray-500">
-                    No attendance records found for this month
+                  <td colSpan={6} className="px-4 py-6 text-center">
+                    <div className="flex items-center justify-center">
+                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
+                      <span className="ml-3 text-gray-600">Loading...</span>
+                    </div>
                   </td>
                 </tr>
+              ) : (
+                weekData.map((day, index) => {
+                  const isDisabled = day.isHoliday || day.isOnLeave || isFutureDate(day.date);
+                  const rowClass = day.isWeekend 
+                    ? 'bg-gray-50' 
+                    : day.isHoliday 
+                    ? 'bg-red-100 border-l-4 border-red-500'
+                    : day.isOnLeave
+                    ? 'bg-blue-100 border-l-4 border-blue-500'
+                    : '';
+
+                  return (
+                    <tr key={day.date} className={rowClass}>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
+                        {new Date(day.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600">
+                        <div className="flex flex-col">
+                          <span className={`font-medium ${day.isWeekend ? 'text-gray-500' : ''}`}>
+                            {day.dayName}
+                          </span>
+                          {day.isHoliday && (
+                            <span className="text-xs text-red-600 flex items-center mt-1">
+                              <AlertCircle className="w-3 h-3 mr-1" />
+                              {day.holidayName}
+                            </span>
+                          )}
+                          {day.isOnLeave && (
+                            <span className="text-xs text-blue-600 flex items-center mt-1">
+                              <AlertCircle className="w-3 h-3 mr-1" />
+                              On {day.leaveTypeName}
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <input
+                          type="time"
+                          value={day.checkIn}
+                          onChange={(e) => handleTimeChange(index, 'checkIn', e.target.value)}
+                          disabled={isDisabled}
+                          className={`px-3 py-2 border rounded-md focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm ${
+                            isDisabled 
+                              ? 'bg-gray-100 text-gray-400 cursor-not-allowed' 
+                              : 'bg-white border-gray-300'
+                          }`}
+                        />
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <input
+                          type="time"
+                          value={day.checkOut}
+                          onChange={(e) => handleTimeChange(index, 'checkOut', e.target.value)}
+                          disabled={isDisabled}
+                          className={`px-3 py-2 border rounded-md focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm ${
+                            isDisabled 
+                              ? 'bg-gray-100 text-gray-400 cursor-not-allowed' 
+                              : 'bg-white border-gray-300'
+                          }`}
+                        />
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <span className={`text-sm font-semibold ${
+                          parseFloat(day.hours) >= 8 
+                            ? 'text-green-600' 
+                            : parseFloat(day.hours) >= 4 
+                            ? 'text-yellow-600' 
+                            : 'text-gray-600'
+                        }`}>
+                          {day.hours}h
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        {day.saved ? (
+                          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                            ✓ Saved
+                          </span>
+                        ) : (
+                          <button
+                            onClick={() => handleSaveDay(index)}
+                            disabled={isDisabled || saving}
+                            className="inline-flex items-center px-3 py-1.5 bg-primary-600 text-white text-xs font-medium rounded-md hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            {saving ? (
+                              <>
+                                <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white mr-1"></div>
+                                Saving...
+                              </>
+                            ) : (
+                              <>
+                                <Save className="w-3 h-3 mr-1" />
+                                Save
+                              </>
+                            )}
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
         </div>
       </div>
+
+      {/* Legend */}
+      <div className="mt-4 bg-white rounded-lg shadow-md p-3">
+        <h3 className="text-sm font-medium text-gray-700 mb-3">Legend:</h3>
+        <div className="flex flex-wrap gap-4 text-sm">
+          <div className="flex items-center">
+            <div className="w-4 h-4 bg-white border border-gray-300 rounded mr-2"></div>
+            <span className="text-gray-600">Working Day</span>
+          </div>
+          <div className="flex items-center">
+            <div className="w-4 h-4 bg-gray-50 border border-gray-300 rounded mr-2"></div>
+            <span className="text-gray-600">Weekend (Editable)</span>
+          </div>
+          <div className="flex items-center">
+            <div className="w-4 h-4 bg-red-100 border-l-4 border-red-500 rounded mr-2"></div>
+            <span className="text-gray-600">Holiday (Disabled)</span>
+          </div>
+          <div className="flex items-center">
+            <div className="w-4 h-4 bg-blue-100 border-l-4 border-blue-500 rounded mr-2"></div>
+            <span className="text-gray-600">On Leave (Approved)</span>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
-

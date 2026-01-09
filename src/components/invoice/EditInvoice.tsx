@@ -504,7 +504,7 @@ export const EditInvoice: React.FC<EditInvoiceProps> = ({
             type="button"
             onClick={onCloseInvoice}
             disabled={modalLoading}
-            className="px-6 py-2 text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-6 py-2 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-lg hover:from-red-600 hover:to-red-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Cancel
           </button>
