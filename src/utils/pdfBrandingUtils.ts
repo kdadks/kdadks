@@ -252,8 +252,8 @@ export class PDFBrandingUtils {
         companySettings.header_image_data, 
         dimensions
       );
-      // Content starts right after header image with minimal gap
-      contentStartY = headerEndY + 2; // 2mm gap after header
+      // Content starts after header image with proper gap to prevent text overlap
+      contentStartY = headerEndY + 10; // 10mm gap after header to prevent content overlap
     }
     
     // Add footer image if available (edge-to-edge, affects contentEndY)
@@ -295,10 +295,10 @@ export class PDFBrandingUtils {
     return {
       pageWidth: 210,
       pageHeight: 297,
-      leftMargin: 2,
-      rightMargin: 208, // 210 - 2
-      topMargin: 2,
-      bottomMargin: 2
+      leftMargin: 15,
+      rightMargin: 195, // 210 - 15
+      topMargin: 15,
+      bottomMargin: 15
     };
   }
   
