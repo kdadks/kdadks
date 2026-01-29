@@ -30,6 +30,10 @@ import EmployeeDashboard from './employee/EmployeeDashboard'
 import LeaveManagement from './employee/LeaveManagement'
 import AttendanceMarking from './employee/AttendanceMarking'
 import EmployeeProfile from './employee/EmployeeProfile'
+import EmployeeSalarySlips from './employee/EmployeeSalarySlips'
+import EmployeeDocuments from './employee/EmployeeDocuments'
+import EmployeePerformanceFeedback from './employee/EmployeePerformanceFeedback'
+import EmployeeCompensation from './employee/EmployeeCompensation'
 import EmployeeLogin from './employee/EmployeeLogin'
 import ChangePassword from './employee/ChangePassword'
 import ProtectedEmployeeRoute from './employee/ProtectedEmployeeRoute'
@@ -178,8 +182,10 @@ const Router = () => {
           <Route path="/employee/leaves" element={<ProtectedEmployeeRoute><EmployeeLayout><LeaveManagement /></EmployeeLayout></ProtectedEmployeeRoute>} />
           <Route path="/employee/attendance" element={<ProtectedEmployeeRoute><EmployeeLayout><AttendanceMarking /></EmployeeLayout></ProtectedEmployeeRoute>} />
           <Route path="/employee/profile" element={<ProtectedEmployeeRoute><EmployeeLayout><EmployeeProfile /></EmployeeLayout></ProtectedEmployeeRoute>} />
-          <Route path="/employee/salary" element={<ProtectedEmployeeRoute><EmployeeLayout><div className="p-8 text-center text-gray-500">Salary module coming soon...</div></EmployeeLayout></ProtectedEmployeeRoute>} />
-          <Route path="/employee/documents" element={<ProtectedEmployeeRoute><EmployeeLayout><div className="p-8 text-center text-gray-500">Documents module coming soon...</div></EmployeeLayout></ProtectedEmployeeRoute>} />
+          <Route path="/employee/salary" element={<ProtectedEmployeeRoute><EmployeeLayout><EmployeeSalarySlips /></EmployeeLayout></ProtectedEmployeeRoute>} />
+          <Route path="/employee/documents" element={<ProtectedEmployeeRoute><EmployeeLayout><EmployeeDocuments /></EmployeeLayout></ProtectedEmployeeRoute>} />
+          <Route path="/employee/performance" element={<ProtectedEmployeeRoute><EmployeeLayout><EmployeePerformanceFeedback /></EmployeeLayout></ProtectedEmployeeRoute>} />
+          <Route path="/employee/compensation" element={<ProtectedEmployeeRoute><EmployeeLayout><EmployeeCompensation /></EmployeeLayout></ProtectedEmployeeRoute>} />
           
           {/* Payment routes */}
           <Route path="/payment/:token" element={<CheckoutPage />} />

@@ -650,15 +650,22 @@ export interface EmployeeDocument {
   employee_id: string;
   document_type: string;
   document_name: string;
-  document_url: string;
-  document_path: string;
+  document_description?: string;
+  document_url?: string;
+  document_path?: string;
+  file_name: string;
   file_size: number;
   mime_type: string;
+  storage_bucket?: string;
+  storage_path: string;
   verification_status: DocumentVerificationStatus;
   verified_by?: string;
   verification_date?: string;
   expiry_date?: string;
   verification_comments?: string;
+  uploaded_by: string;
+  uploaded_at?: string;
+  is_active?: boolean;
   created_at?: string;
   updated_at?: string;
 }

@@ -16,25 +16,36 @@ export async function generateSalarySlipPDF(
   const pdf = new jsPDF('p', 'mm', 'a4');
   const dimensions = PDFBrandingUtils.getStandardDimensions();
   const pageHeight = pdf.internal.pageSize.getHeight();
-  const footerMargin = 25; // Reserve space for footer
 
   let currentY = dimensions.topMargin;
-
-  // Helper function to check if new page is needed
-  const checkPageBreak = (spaceNeeded: number) => {
-    if (currentY + spaceNeeded > pageHeight - footerMargin) {
-      pdf.addPage();
-      currentY = dimensions.topMargin;
-      return true;
-    }
-    return false;
-  };
+  let contentEndY = pageHeight - dimensions.bottomMargin;
 
   // Apply branding if available
   if (companySettings) {
     const brandingResult = await PDFBrandingUtils.applyBranding(pdf, companySettings, dimensions);
     currentY = brandingResult.contentStartY;
+    contentEndY = brandingResult.contentEndY;
   }
+
+  // Helper function to check if new page is needed
+  const checkPageBreak = async (spaceNeeded: number) => {
+    if (currentY + spaceNeeded > contentEndY) {
+      pdf.addPage();
+
+      // Apply branding to new page
+      if (companySettings) {
+        const brandingResult = await PDFBrandingUtils.applyBranding(pdf, companySettings, dimensions);
+        currentY = brandingResult.contentStartY;
+        contentEndY = brandingResult.contentEndY;
+      } else {
+        currentY = dimensions.topMargin;
+        contentEndY = pageHeight - dimensions.bottomMargin;
+      }
+
+      return true;
+    }
+    return false;
+  };
 
   // Document Title
   pdf.setFontSize(14);
@@ -61,7 +72,7 @@ export async function generateSalarySlipPDF(
   currentY += 8;
 
   // Employee Information Section
-  checkPageBreak(35);
+  await checkPageBreak(35);
   pdf.setFontSize(9);
   pdf.setFont('helvetica', 'bold');
   pdf.text('EMPLOYEE INFORMATION', dimensions.leftMargin, currentY);
@@ -96,7 +107,7 @@ export async function generateSalarySlipPDF(
   currentY += 3;
 
   // Attendance Information
-  checkPageBreak(20);
+  await checkPageBreak(20);
   pdf.setFontSize(9);
   pdf.setFont('helvetica', 'bold');
   pdf.text('ATTENDANCE', dimensions.leftMargin, currentY);
@@ -130,7 +141,7 @@ export async function generateSalarySlipPDF(
   currentY += 8;
 
   // Earnings and Deductions Table
-  checkPageBreak(70);
+  await checkPageBreak(70);
   pdf.setFontSize(9);
   pdf.setFont('helvetica', 'bold');
 
@@ -212,7 +223,7 @@ export async function generateSalarySlipPDF(
   currentY += 5;
 
   // Totals
-  checkPageBreak(15);
+  await checkPageBreak(15);
   pdf.setFontSize(9);
   pdf.setFont('helvetica', 'bold');
   pdf.text('GROSS SALARY', col1X, currentY);
@@ -228,7 +239,7 @@ export async function generateSalarySlipPDF(
   currentY += 6;
 
   // Net Salary
-  checkPageBreak(20);
+  await checkPageBreak(20);
   pdf.setFontSize(10);
   pdf.setFont('helvetica', 'bold');
   pdf.text('NET SALARY PAYABLE', dimensions.leftMargin, currentY);
@@ -240,7 +251,7 @@ export async function generateSalarySlipPDF(
   currentY += 6;
 
   // Net Salary in Words
-  checkPageBreak(10);
+  await checkPageBreak(10);
   pdf.setFontSize(9);
   pdf.setFont('helvetica', 'italic');
   const netInWords = numberToWords(salarySlip.net_salary);
@@ -248,7 +259,7 @@ export async function generateSalarySlipPDF(
   currentY += 10;
 
   // Tax Information
-  checkPageBreak(30);
+  await checkPageBreak(30);
   pdf.setFontSize(9);
   pdf.setFont('helvetica', 'bold');
   pdf.text('TAX INFORMATION', dimensions.leftMargin, currentY);
@@ -261,20 +272,20 @@ export async function generateSalarySlipPDF(
     ['Annual Tax Liability (Estimated):', `₹${salarySlip.annual_tax_liability.toLocaleString('en-IN')}`]
   ];
 
-  taxInfo.forEach(([label, value]) => {
-    checkPageBreak(6);
+  for (const [label, value] of taxInfo) {
+    await checkPageBreak(6);
     pdf.setFontSize(9);
     pdf.setFont('helvetica', 'normal');
     pdf.text(label, dimensions.leftMargin, currentY);
     pdf.text(value, dimensions.leftMargin + 70, currentY);
     currentY += 5;
-  });
+  }
 
   currentY += 5;
 
   // Payment Information (if paid)
   if (salarySlip.status === 'paid' && salarySlip.payment_date) {
-    checkPageBreak(25);
+    await checkPageBreak(25);
     pdf.setFontSize(9);
     pdf.setFont('helvetica', 'bold');
     pdf.text('PAYMENT INFORMATION', dimensions.leftMargin, currentY);
@@ -286,13 +297,13 @@ export async function generateSalarySlipPDF(
     currentY += 5;
 
     if (salarySlip.payment_mode) {
-      checkPageBreak(6);
+      await checkPageBreak(6);
       pdf.text(`Payment Mode: ${salarySlip.payment_mode}`, dimensions.leftMargin, currentY);
       currentY += 5;
     }
 
     if (salarySlip.payment_reference) {
-      checkPageBreak(6);
+      await checkPageBreak(6);
       pdf.text(`Reference: ${salarySlip.payment_reference}`, dimensions.leftMargin, currentY);
       currentY += 5;
     }
@@ -302,7 +313,7 @@ export async function generateSalarySlipPDF(
 
   // Bank Details (if available)
   if (employee.bank_name) {
-    checkPageBreak(25);
+    await checkPageBreak(25);
     pdf.setFontSize(9);
     pdf.setFont('helvetica', 'bold');
     pdf.text('BANK DETAILS', dimensions.leftMargin, currentY);
@@ -314,14 +325,14 @@ export async function generateSalarySlipPDF(
     currentY += 5;
 
     if (employee.bank_account_number) {
-      checkPageBreak(6);
+      await checkPageBreak(6);
       const maskedAccount = maskAccountNumber(employee.bank_account_number);
       pdf.text(`Account Number: ${maskedAccount}`, dimensions.leftMargin, currentY);
       currentY += 5;
     }
 
     if (employee.bank_ifsc_code) {
-      checkPageBreak(6);
+      await checkPageBreak(6);
       pdf.text(`IFSC Code: ${employee.bank_ifsc_code}`, dimensions.leftMargin, currentY);
       currentY += 5;
     }
@@ -329,16 +340,15 @@ export async function generateSalarySlipPDF(
     currentY += 3;
   }
 
-  // Footer disclaimer - positioned above footer with safe margin
-  const disclaimerHeight = 20;
-  const safeBottomMargin = 30; // Increased margin to avoid footer overlap
-  
+  // Footer disclaimer - positioned above footer image
+  const disclaimerHeight = 15;
+
   // Calculate where disclaimer should start
   let disclaimerY = currentY + 8;
-  
+
   // If content is too close to footer, position disclaimer just above footer
-  if (disclaimerY + disclaimerHeight > pageHeight - safeBottomMargin) {
-    disclaimerY = pageHeight - safeBottomMargin - disclaimerHeight;
+  if (disclaimerY + disclaimerHeight > contentEndY) {
+    disclaimerY = contentEndY - disclaimerHeight;
   }
 
   // Draw separator line before disclaimer

@@ -179,16 +179,16 @@ export default function LeaveManagement() {
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div className="max-w-7xl mx-auto px-2 sm:px-4 md:px-6 lg:px-8 py-4 sm:py-6 md:py-8">
       {/* Header */}
-      <div className="flex justify-between items-center mb-4">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 sm:gap-0 mb-4">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Leave Management</h1>
-          <p className="text-gray-600 mt-2">Apply for leaves and track your leave balance</p>
+          <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-gray-900">Leave Management</h1>
+          <p className="text-sm sm:text-base text-gray-600 mt-1 sm:mt-2">Apply for leaves and track balance</p>
         </div>
         <button
           onClick={() => setShowForm(!showForm)}
-          className="bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700 transition-colors flex items-center"
+          className="bg-primary-600 text-white px-4 py-2.5 rounded-lg hover:bg-primary-700 transition-colors flex items-center justify-center touch-manipulation w-full sm:w-auto"
         >
           <Calendar className="w-5 h-5 mr-2" />
           Apply for Leave
@@ -197,19 +197,19 @@ export default function LeaveManagement() {
 
       {/* Leave Application Form */}
       {showForm && (
-        <div className="bg-white rounded-lg shadow-md p-4 mb-4">
+        <div className="bg-white rounded-lg shadow-md p-3 sm:p-4 mb-4">
           <div className="flex justify-between items-center mb-4">
-            <h2 className="text-lg font-semibold text-gray-900">New Leave Application</h2>
+            <h2 className="text-base sm:text-lg font-semibold text-gray-900">New Leave Application</h2>
             <button
               onClick={() => setShowForm(false)}
-              className="text-gray-400 hover:text-gray-600"
+              className="text-gray-400 hover:text-gray-600 p-1"
             >
-              <X className="w-6 h-6" />
+              <X className="w-5 h-5 sm:w-6 sm:h-6" />
             </button>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
               {/* Leave Type */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -310,11 +310,11 @@ export default function LeaveManagement() {
             </div>
 
             {/* Submit */}
-            <div className="flex justify-end space-x-4">
+            <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 sm:gap-4 pt-2">
               <button
                 type="button"
                 onClick={() => setShowForm(false)}
-                className="px-6 py-2 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-lg hover:from-red-600 hover:to-red-700 transition-all"
+                className="w-full sm:w-auto px-6 py-2.5 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-lg hover:from-red-600 hover:to-red-700 transition-all touch-manipulation"
               >
                 Cancel
               </button>
@@ -324,7 +324,7 @@ export default function LeaveManagement() {
                   const selectedType = leaveTypes.find(lt => lt.id === formData.leave_type_id);
                   return selectedType && selectedType.balance !== undefined && selectedType.balance <= 0;
                 })()}
-                className="bg-primary-600 text-white px-6 py-2 rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+                className="w-full sm:w-auto bg-primary-600 text-white px-6 py-2.5 rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center touch-manipulation"
               >
                 {loading ? (
                   <>
@@ -344,27 +344,27 @@ export default function LeaveManagement() {
       )}
 
       {/* Leave Balance */}
-      <div className="bg-white rounded-lg shadow-md p-4 mb-4">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">Leave Balance</h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="bg-white rounded-lg shadow-md p-3 sm:p-4 mb-4">
+        <h2 className="text-base sm:text-lg font-semibold text-gray-900 mb-3 sm:mb-4">Leave Balance</h2>
+        <div className="grid grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-4">
           {leaveBalance.map((balance, index) => (
-            <div key={index} className="border border-gray-200 rounded-lg p-4">
+            <div key={index} className="border border-gray-200 rounded-lg p-3 sm:p-4">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-gray-700 font-medium">{balance.leave_type}</span>
-                <Calendar className="w-5 h-5 text-primary-600" />
+                <span className="text-gray-700 font-medium text-xs sm:text-sm truncate mr-1">{balance.leave_type}</span>
+                <Calendar className="w-4 h-4 sm:w-5 sm:h-5 text-primary-600 flex-shrink-0" />
               </div>
-              <div className="space-y-1 text-sm">
+              <div className="space-y-1 text-xs sm:text-sm">
                 <div className="flex justify-between">
                   <span className="text-gray-600">Allocated:</span>
-                  <span className="font-semibold">{balance.allocated} days</span>
+                  <span className="font-semibold">{balance.allocated}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-600">Used:</span>
-                  <span className="font-semibold">{balance.used} days</span>
+                  <span className="font-semibold">{balance.used}</span>
                 </div>
                 <div className="flex justify-between border-t pt-1 mt-1">
-                  <span className="text-gray-900 font-medium">Remaining:</span>
-                  <span className="font-bold text-primary-600">{balance.remaining} days</span>
+                  <span className="text-gray-900 font-medium">Left:</span>
+                  <span className="font-bold text-primary-600">{balance.remaining}</span>
                 </div>
               </div>
             </div>
@@ -373,9 +373,37 @@ export default function LeaveManagement() {
       </div>
 
       {/* Leave History */}
-      <div className="bg-white rounded-lg shadow-md p-4">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">Leave History</h2>
-        <div className="overflow-x-auto">
+      <div className="bg-white rounded-lg shadow-md p-3 sm:p-4">
+        <h2 className="text-base sm:text-lg font-semibold text-gray-900 mb-3 sm:mb-4">Leave History</h2>
+        
+        {/* Mobile Cards View */}
+        <div className="sm:hidden space-y-3">
+          {leaveHistory.map((leave) => (
+            <div key={leave.id} className="border border-gray-200 rounded-lg p-3">
+              <div className="flex justify-between items-start mb-2">
+                <span className="font-medium text-gray-900 text-sm">{leave.leave_types?.name || 'N/A'}</span>
+                <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${getStatusBadge(leave.status)}`}>
+                  {leave.status}
+                </span>
+              </div>
+              <div className="text-xs text-gray-600 space-y-1">
+                <p><span className="text-gray-500">From:</span> {new Date(leave.from_date).toLocaleDateString()}</p>
+                <p><span className="text-gray-500">To:</span> {new Date(leave.to_date).toLocaleDateString()}</p>
+                <p><span className="text-gray-500">Days:</span> {leave.total_days}</p>
+                {leave.reason && <p className="text-gray-500 truncate">Reason: {leave.reason}</p>}
+              </div>
+            </div>
+          ))}
+          {leaveHistory.length === 0 && (
+            <div className="text-center py-6 text-gray-500">
+              <AlertCircle className="w-10 h-10 mx-auto mb-2 text-gray-400" />
+              <p className="text-sm">No leave history found</p>
+            </div>
+          )}
+        </div>
+
+        {/* Desktop Table View */}
+        <div className="hidden sm:block overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>

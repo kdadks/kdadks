@@ -320,43 +320,50 @@ export default function AttendanceMarking() {
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 py-4">
+    <div className="max-w-7xl mx-auto px-2 sm:px-4 py-4">
       {/* Toast Notification */}
       {toast.show && (
-        <div className={`fixed top-4 right-4 z-50 px-6 py-3 rounded-lg shadow-lg flex items-center space-x-2 ${ 
+        <div className={`fixed top-4 left-4 right-4 sm:left-auto sm:right-4 z-50 px-4 sm:px-6 py-3 rounded-lg shadow-lg flex items-center justify-center sm:justify-start space-x-2 ${ 
           toast.type === 'success' ? 'bg-green-500 text-white' : 'bg-red-500 text-white'
         }`}>
-          <span>{toast.message}</span>
+          <span className="text-sm sm:text-base">{toast.message}</span>
         </div>
       )}
 
       {/* Header */}
       <div className="mb-4">
-        <h1 className="text-2xl font-bold text-gray-900">Attendance Markings</h1>
-        <p className="text-gray-600 mt-1 text-sm">Mark your attendance for the week by entering check-in and check-out times</p>
+        <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Attendance</h1>
+        <p className="text-gray-600 mt-1 text-xs sm:text-sm">Mark your daily check-in and check-out times</p>
       </div>
 
       {/* Week Navigation */}
-      <div className="bg-white rounded-lg shadow-md p-3 mb-4">
+      <div className="bg-white rounded-lg shadow-md p-2 sm:p-3 mb-4">
         <div className="flex items-center justify-between">
           <button
             onClick={goToPreviousWeek}
-            className="flex items-center px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
+            className="flex items-center px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 touch-manipulation"
           >
-            <ChevronLeft className="w-4 h-4 mr-1" />
-            Previous
+            <ChevronLeft className="w-4 h-4 sm:mr-1" />
+            <span className="hidden sm:inline">Previous</span>
           </button>
 
-          <div className="text-center">
-            <h2 className="text-base font-semibold text-gray-900">
-              {currentWeekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-              {' - '}
-              {new Date(currentWeekStart.getTime() + 6 * 24 * 60 * 60 * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+          <div className="text-center flex-1 mx-2">
+            <h2 className="text-xs sm:text-base font-semibold text-gray-900">
+              <span className="hidden sm:inline">
+                {currentWeekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                {' - '}
+                {new Date(currentWeekStart.getTime() + 6 * 24 * 60 * 60 * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+              </span>
+              <span className="sm:hidden">
+                {currentWeekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                {' - '}
+                {new Date(currentWeekStart.getTime() + 6 * 24 * 60 * 60 * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+              </span>
             </h2>
             {!isCurrentWeek() && (
               <button
                 onClick={goToCurrentWeek}
-                className="text-xs text-primary-600 hover:text-primary-700 font-medium mt-0.5"
+                className="text-[10px] sm:text-xs text-primary-600 hover:text-primary-700 font-medium mt-0.5"
               >
                 Go to Current Week
               </button>
@@ -366,27 +373,121 @@ export default function AttendanceMarking() {
           <button
             onClick={goToNextWeek}
             disabled={isWeekInFuture(new Date(currentWeekStart.getTime() + 7 * 24 * 60 * 60 * 1000))}
-            className="flex items-center px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex items-center px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation"
           >
-            Next
-            <ChevronRight className="w-4 h-4 ml-1" />
+            <span className="hidden sm:inline">Next</span>
+            <ChevronRight className="w-4 h-4 sm:ml-1" />
           </button>
         </div>
       </div>
 
       {/* Weekly Hours Summary */}
-      <div className="bg-gradient-to-r from-primary-500 to-primary-600 rounded-lg shadow-md p-4 mb-4 text-white">
+      <div className="bg-gradient-to-r from-primary-500 to-primary-600 rounded-lg shadow-md p-3 sm:p-4 mb-4 text-white">
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-primary-100 text-xs font-medium">Total Weekly Hours</p>
-            <p className="text-3xl font-bold mt-1">{getTotalWeeklyHours()}h</p>
+            <p className="text-primary-100 text-[10px] sm:text-xs font-medium">Total Weekly Hours</p>
+            <p className="text-2xl sm:text-3xl font-bold mt-1">{getTotalWeeklyHours()}h</p>
           </div>
-          <Clock className="w-12 h-12 text-primary-200" />
+          <Clock className="w-10 h-10 sm:w-12 sm:h-12 text-primary-200" />
         </div>
       </div>
 
-      {/* Attendance Table */}
-      <div className="bg-white rounded-lg shadow-md overflow-hidden">
+      {/* Attendance - Mobile Cards View */}
+      <div className="sm:hidden space-y-3 mb-4">
+        {loading ? (
+          <div className="bg-white rounded-lg shadow-md p-6 text-center">
+            <div className="flex items-center justify-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
+              <span className="ml-3 text-gray-600">Loading...</span>
+            </div>
+          </div>
+        ) : (
+          weekData.map((day, index) => {
+            const isDisabled = day.isHoliday || day.isOnLeave || isFutureDate(day.date);
+            const cardClass = day.isHoliday 
+              ? 'border-l-4 border-red-500 bg-red-50'
+              : day.isOnLeave
+              ? 'border-l-4 border-blue-500 bg-blue-50'
+              : day.isWeekend
+              ? 'bg-gray-50'
+              : 'bg-white';
+
+            return (
+              <div key={day.date} className={`rounded-lg shadow-md p-3 ${cardClass}`}>
+                <div className="flex items-center justify-between mb-2">
+                  <div>
+                    <span className="font-semibold text-gray-900">
+                      {day.dayName}, {new Date(day.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                    </span>
+                    {day.isHoliday && (
+                      <span className="block text-xs text-red-600 flex items-center mt-0.5">
+                        <AlertCircle className="w-3 h-3 mr-1" />
+                        {day.holidayName}
+                      </span>
+                    )}
+                    {day.isOnLeave && (
+                      <span className="block text-xs text-blue-600 flex items-center mt-0.5">
+                        <AlertCircle className="w-3 h-3 mr-1" />
+                        On {day.leaveTypeName}
+                      </span>
+                    )}
+                  </div>
+                  <span className={`text-lg font-bold ${
+                    parseFloat(day.hours) >= 8 
+                      ? 'text-green-600' 
+                      : parseFloat(day.hours) >= 4 
+                      ? 'text-yellow-600' 
+                      : 'text-gray-600'
+                  }`}>
+                    {day.hours}h
+                  </span>
+                </div>
+                
+                {!isDisabled && (
+                  <div className="flex items-center gap-2 mt-2">
+                    <div className="flex-1">
+                      <label className="text-[10px] text-gray-500 uppercase">In</label>
+                      <input
+                        type="time"
+                        value={day.checkIn}
+                        onChange={(e) => handleTimeChange(index, 'checkIn', e.target.value)}
+                        className="w-full px-2 py-1.5 border border-gray-300 rounded-md text-sm touch-manipulation"
+                      />
+                    </div>
+                    <div className="flex-1">
+                      <label className="text-[10px] text-gray-500 uppercase">Out</label>
+                      <input
+                        type="time"
+                        value={day.checkOut}
+                        onChange={(e) => handleTimeChange(index, 'checkOut', e.target.value)}
+                        className="w-full px-2 py-1.5 border border-gray-300 rounded-md text-sm touch-manipulation"
+                      />
+                    </div>
+                    <div className="flex-shrink-0 pt-4">
+                      {day.saved ? (
+                        <span className="inline-flex items-center px-2 py-1.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                          ✓
+                        </span>
+                      ) : (
+                        <button
+                          onClick={() => handleSaveDay(index)}
+                          disabled={saving}
+                          className="inline-flex items-center px-3 py-1.5 bg-primary-600 text-white text-xs font-medium rounded-md hover:bg-primary-700 disabled:opacity-50 touch-manipulation"
+                        >
+                          <Save className="w-3 h-3" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      {/* Attendance Table - Desktop View */}
+      <div className="hidden sm:block bg-white rounded-lg shadow-md overflow-hidden">
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
@@ -529,23 +630,23 @@ export default function AttendanceMarking() {
 
       {/* Legend */}
       <div className="mt-4 bg-white rounded-lg shadow-md p-3">
-        <h3 className="text-sm font-medium text-gray-700 mb-3">Legend:</h3>
-        <div className="flex flex-wrap gap-4 text-sm">
+        <h3 className="text-xs sm:text-sm font-medium text-gray-700 mb-2 sm:mb-3">Legend:</h3>
+        <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-2 sm:gap-4 text-xs sm:text-sm">
           <div className="flex items-center">
-            <div className="w-4 h-4 bg-white border border-gray-300 rounded mr-2"></div>
+            <div className="w-3 h-3 sm:w-4 sm:h-4 bg-white border border-gray-300 rounded mr-1.5 sm:mr-2"></div>
             <span className="text-gray-600">Working Day</span>
           </div>
           <div className="flex items-center">
-            <div className="w-4 h-4 bg-gray-50 border border-gray-300 rounded mr-2"></div>
-            <span className="text-gray-600">Weekend (Editable)</span>
+            <div className="w-3 h-3 sm:w-4 sm:h-4 bg-gray-50 border border-gray-300 rounded mr-1.5 sm:mr-2"></div>
+            <span className="text-gray-600">Weekend</span>
           </div>
           <div className="flex items-center">
-            <div className="w-4 h-4 bg-red-100 border-l-4 border-red-500 rounded mr-2"></div>
-            <span className="text-gray-600">Holiday (Disabled)</span>
+            <div className="w-3 h-3 sm:w-4 sm:h-4 bg-red-100 border-l-2 sm:border-l-4 border-red-500 rounded mr-1.5 sm:mr-2"></div>
+            <span className="text-gray-600">Holiday</span>
           </div>
           <div className="flex items-center">
-            <div className="w-4 h-4 bg-blue-100 border-l-4 border-blue-500 rounded mr-2"></div>
-            <span className="text-gray-600">On Leave (Approved)</span>
+            <div className="w-3 h-3 sm:w-4 sm:h-4 bg-blue-100 border-l-2 sm:border-l-4 border-blue-500 rounded mr-1.5 sm:mr-2"></div>
+            <span className="text-gray-600">On Leave</span>
           </div>
         </div>
       </div>

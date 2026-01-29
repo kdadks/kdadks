@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { Calendar, Clock, FileText, TrendingUp, AlertCircle, CheckCircle } from 'lucide-react';
+import { Calendar, Clock, FileText, TrendingUp, AlertCircle, CheckCircle, Bell } from 'lucide-react';
 import { leaveService } from '../../services/leaveService';
 import { attendanceService } from '../../services/attendanceService';
+import { announcementService } from '../../services/announcementService';
 import { supabase } from '../../config/supabase';
 
 interface ActivityItem {
@@ -17,8 +18,10 @@ interface Announcement {
   id: string;
   title: string;
   message: string;
-  created_at: string;
-  priority: 'low' | 'medium' | 'high';
+  created_at?: string;
+  priority: 'low' | 'normal' | 'high' | 'urgent';
+  is_pinned?: boolean;
+  is_read?: boolean;
 }
 
 interface DashboardStats {
@@ -158,19 +161,8 @@ export default function EmployeeDashboard() {
 
   const loadAnnouncements = async () => {
     try {
-      const { data, error } = await supabase
-        .from('company_announcements')
-        .select('*')
-        .eq('is_active', true)
-        .order('created_at', { ascending: false })
-        .limit(5);
-
-      if (error) {
-        console.error('Error loading announcements:', error);
-        return;
-      }
-
-      setAnnouncements(data || []);
+      const data = await announcementService.getEmployeeAnnouncements(currentUser.id);
+      setAnnouncements(data.slice(0, 5)); // Show only 5 most recent
     } catch (error) {
       console.error('Error loading announcements:', error);
     }
@@ -201,136 +193,147 @@ export default function EmployeeDashboard() {
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div className="max-w-7xl mx-auto px-2 sm:px-4 md:px-6 lg:px-8 py-4 sm:py-6 md:py-8">
       {/* Header */}
       <div className="mb-4">
-        <h1 className="text-3xl font-bold text-gray-900">Welcome back, {currentUser.name}!</h1>
-        <p className="text-gray-600 mt-2">Here's your employee dashboard overview</p>
+        <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-gray-900">Welcome, {currentUser.name}!</h1>
+        <p className="text-sm sm:text-base text-gray-600 mt-1 sm:mt-2">Your employee dashboard overview</p>
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-4 mb-4">
         {/* Attendance Card */}
-        <div className="bg-white rounded-lg shadow-md p-4 border-l-4 border-blue-500">
+        <div className="bg-white rounded-lg shadow-md p-3 sm:p-4 border-l-4 border-blue-500">
           <div className="flex items-center justify-between">
-            <div>
-              <p className="text-gray-600 text-sm font-medium">Attendance</p>
-              <p className="text-3xl font-bold text-gray-900 mt-2">
+            <div className="min-w-0 flex-1">
+              <p className="text-gray-600 text-xs sm:text-sm font-medium truncate">Attendance</p>
+              <p className="text-xl sm:text-2xl md:text-3xl font-bold text-gray-900 mt-1 sm:mt-2">
                 {stats.attendancePercentage.toFixed(1)}%
               </p>
-              <p className="text-gray-500 text-xs mt-1">This month</p>
+              <p className="text-gray-500 text-[10px] sm:text-xs mt-1">This month</p>
             </div>
-            <div className="bg-blue-100 rounded-full p-3">
-              <Clock className="w-6 h-6 text-blue-600" />
+            <div className="bg-blue-100 rounded-full p-2 sm:p-3 flex-shrink-0 ml-2">
+              <Clock className="w-4 h-4 sm:w-6 sm:h-6 text-blue-600" />
             </div>
           </div>
         </div>
 
         {/* Casual Leaves */}
-        <div className="bg-white rounded-lg shadow-md p-4 border-l-4 border-green-500">
+        <div className="bg-white rounded-lg shadow-md p-3 sm:p-4 border-l-4 border-green-500">
           <div className="flex items-center justify-between">
-            <div>
-              <p className="text-gray-600 text-sm font-medium">Casual Leaves</p>
-              <p className="text-3xl font-bold text-gray-900 mt-2">
+            <div className="min-w-0 flex-1">
+              <p className="text-gray-600 text-xs sm:text-sm font-medium truncate">Casual</p>
+              <p className="text-xl sm:text-2xl md:text-3xl font-bold text-gray-900 mt-1 sm:mt-2">
                 {stats.leavesRemaining['Casual Leave'] || 0}
               </p>
-              <p className="text-gray-500 text-xs mt-1">Days remaining</p>
+              <p className="text-gray-500 text-[10px] sm:text-xs mt-1">Days left</p>
             </div>
-            <div className="bg-green-100 rounded-full p-3">
-              <Calendar className="w-6 h-6 text-green-600" />
+            <div className="bg-green-100 rounded-full p-2 sm:p-3 flex-shrink-0 ml-2">
+              <Calendar className="w-4 h-4 sm:w-6 sm:h-6 text-green-600" />
             </div>
           </div>
         </div>
 
         {/* Sick Leaves */}
-        <div className="bg-white rounded-lg shadow-md p-4 border-l-4 border-yellow-500">
+        <div className="bg-white rounded-lg shadow-md p-3 sm:p-4 border-l-4 border-yellow-500">
           <div className="flex items-center justify-between">
-            <div>
-              <p className="text-gray-600 text-sm font-medium">Sick Leaves</p>
-              <p className="text-3xl font-bold text-gray-900 mt-2">
+            <div className="min-w-0 flex-1">
+              <p className="text-gray-600 text-xs sm:text-sm font-medium truncate">Sick</p>
+              <p className="text-xl sm:text-2xl md:text-3xl font-bold text-gray-900 mt-1 sm:mt-2">
                 {stats.leavesRemaining['Sick Leave'] || 0}
               </p>
-              <p className="text-gray-500 text-xs mt-1">Days remaining</p>
+              <p className="text-gray-500 text-[10px] sm:text-xs mt-1">Days left</p>
             </div>
-            <div className="bg-yellow-100 rounded-full p-3">
-              <AlertCircle className="w-6 h-6 text-yellow-600" />
+            <div className="bg-yellow-100 rounded-full p-2 sm:p-3 flex-shrink-0 ml-2">
+              <AlertCircle className="w-4 h-4 sm:w-6 sm:h-6 text-yellow-600" />
             </div>
           </div>
         </div>
 
         {/* Pending Leaves */}
-        <div className="bg-white rounded-lg shadow-md p-4 border-l-4 border-purple-500">
+        <div className="bg-white rounded-lg shadow-md p-3 sm:p-4 border-l-4 border-purple-500">
           <div className="flex items-center justify-between">
-            <div>
-              <p className="text-gray-600 text-sm font-medium">Pending Approvals</p>
-              <p className="text-3xl font-bold text-gray-900 mt-2">
+            <div className="min-w-0 flex-1">
+              <p className="text-gray-600 text-xs sm:text-sm font-medium truncate">Pending</p>
+              <p className="text-xl sm:text-2xl md:text-3xl font-bold text-gray-900 mt-1 sm:mt-2">
                 {stats.pendingLeaves}
               </p>
-              <p className="text-gray-500 text-xs mt-1">Leave requests</p>
+              <p className="text-gray-500 text-[10px] sm:text-xs mt-1">Requests</p>
             </div>
-            <div className="bg-purple-100 rounded-full p-3">
-              <FileText className="w-6 h-6 text-purple-600" />
+            <div className="bg-purple-100 rounded-full p-2 sm:p-3 flex-shrink-0 ml-2">
+              <FileText className="w-4 h-4 sm:w-6 sm:h-6 text-purple-600" />
             </div>
           </div>
         </div>
       </div>
 
       {/* Quick Actions */}
-      <div className="bg-white rounded-lg shadow-md p-4 mb-4">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h2>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="bg-white rounded-lg shadow-md p-3 sm:p-4 mb-4">
+        <h2 className="text-base sm:text-lg font-semibold text-gray-900 mb-3 sm:mb-4">Quick Actions</h2>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-4">
           <button
             onClick={() => window.location.href = '/employee/leaves'}
-            className="flex flex-col items-center justify-center p-4 border-2 border-gray-200 rounded-lg hover:border-primary-500 hover:bg-primary-50 transition-colors"
+            className="flex flex-col items-center justify-center p-3 sm:p-4 border-2 border-gray-200 rounded-lg hover:border-primary-500 hover:bg-primary-50 active:bg-primary-100 transition-colors touch-manipulation"
           >
-            <Calendar className="w-8 h-8 text-primary-600 mb-2" />
-            <span className="text-sm font-medium text-gray-700">Apply Leave</span>
+            <Calendar className="w-6 h-6 sm:w-8 sm:h-8 text-primary-600 mb-1 sm:mb-2" />
+            <span className="text-xs sm:text-sm font-medium text-gray-700 text-center">Apply Leave</span>
           </button>
           
           <button
             onClick={() => window.location.href = '/employee/attendance'}
-            className="flex flex-col items-center justify-center p-4 border-2 border-gray-200 rounded-lg hover:border-primary-500 hover:bg-primary-50 transition-colors"
+            className="flex flex-col items-center justify-center p-3 sm:p-4 border-2 border-gray-200 rounded-lg hover:border-primary-500 hover:bg-primary-50 active:bg-primary-100 transition-colors touch-manipulation"
           >
-            <Clock className="w-8 h-8 text-primary-600 mb-2" />
-            <span className="text-sm font-medium text-gray-700">Mark Attendance</span>
+            <Clock className="w-6 h-6 sm:w-8 sm:h-8 text-primary-600 mb-1 sm:mb-2" />
+            <span className="text-xs sm:text-sm font-medium text-gray-700 text-center">Attendance</span>
           </button>
           
           <button
             onClick={() => window.location.href = '/employee/salary'}
-            className="flex flex-col items-center justify-center p-4 border-2 border-gray-200 rounded-lg hover:border-primary-500 hover:bg-primary-50 transition-colors"
+            className="flex flex-col items-center justify-center p-3 sm:p-4 border-2 border-gray-200 rounded-lg hover:border-primary-500 hover:bg-primary-50 active:bg-primary-100 transition-colors touch-manipulation"
           >
-            <TrendingUp className="w-8 h-8 text-primary-600 mb-2" />
-            <span className="text-sm font-medium text-gray-700">Salary Slips</span>
+            <TrendingUp className="w-6 h-6 sm:w-8 sm:h-8 text-primary-600 mb-1 sm:mb-2" />
+            <span className="text-xs sm:text-sm font-medium text-gray-700 text-center">Salary</span>
           </button>
           
           <button
             onClick={() => window.location.href = '/employee/documents'}
-            className="flex flex-col items-center justify-center p-4 border-2 border-gray-200 rounded-lg hover:border-primary-500 hover:bg-primary-50 transition-colors"
+            className="flex flex-col items-center justify-center p-3 sm:p-4 border-2 border-gray-200 rounded-lg hover:border-primary-500 hover:bg-primary-50 active:bg-primary-100 transition-colors touch-manipulation"
           >
-            <FileText className="w-8 h-8 text-primary-600 mb-2" />
-            <span className="text-sm font-medium text-gray-700">Documents</span>
+            <FileText className="w-6 h-6 sm:w-8 sm:h-8 text-primary-600 mb-1 sm:mb-2" />
+            <span className="text-xs sm:text-sm font-medium text-gray-700 text-center">Documents</span>
           </button>
         </div>
       </div>
 
       {/* Company Announcements */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <div className="bg-white rounded-lg shadow-md p-4">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">📢 Company Announcements</h2>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4">
+        <div className="bg-white rounded-lg shadow-md p-3 sm:p-4">
+          <h2 className="text-base sm:text-lg font-semibold text-gray-900 mb-3 sm:mb-4">📢 Announcements</h2>
           <div className="space-y-3">
             {announcements.length > 0 ? (
               announcements.map(announcement => (
-                <div key={announcement.id} className="border-l-4 border-primary-500 bg-primary-50 p-3 rounded">
+                <div key={announcement.id} className={`border-l-4 p-3 rounded ${
+                  announcement.priority === 'urgent' ? 'border-red-500 bg-red-50' :
+                  announcement.priority === 'high' ? 'border-orange-500 bg-orange-50' :
+                  'border-primary-500 bg-primary-50'
+                }`}>
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
-                      <h3 className="text-sm font-semibold text-gray-900">{announcement.title}</h3>
-                      <p className="text-xs text-gray-600 mt-1">{announcement.message}</p>
+                      <div className="flex items-center gap-2">
+                        {announcement.is_pinned && <Bell className="w-4 h-4 text-primary-600" />}
+                        <h3 className="text-sm font-semibold text-gray-900">{announcement.title}</h3>
+                      </div>
+                      <p className="text-xs text-gray-600 mt-1 whitespace-pre-wrap line-clamp-3">{announcement.message}</p>
                       <p className="text-xs text-gray-500 mt-2">
-                        {new Date(announcement.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                        {announcement.created_at && new Date(announcement.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                       </p>
                     </div>
-                    {announcement.priority === 'high' && (
-                      <span className="ml-2 px-2 py-1 text-xs font-medium bg-red-100 text-red-700 rounded">Important</span>
+                    {(announcement.priority === 'high' || announcement.priority === 'urgent') && (
+                      <span className={`ml-2 px-2 py-1 text-xs font-medium rounded ${
+                        announcement.priority === 'urgent' ? 'bg-red-100 text-red-700' : 'bg-orange-100 text-orange-700'
+                      }`}>
+                        {announcement.priority === 'urgent' ? 'Urgent' : 'Important'}
+                      </span>
                     )}
                   </div>
                 </div>

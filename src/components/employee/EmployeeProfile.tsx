@@ -144,27 +144,27 @@ export default function EmployeeProfile() {
   }
 
   return (
-    <div className="max-w-5xl mx-auto">
+    <div className="max-w-5xl mx-auto px-2 sm:px-0">
       {/* Header */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 mb-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-4">
-            <div className="w-20 h-20 rounded-full bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center text-white text-2xl font-bold">
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-3 sm:p-4 mb-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div className="flex items-center space-x-3 sm:space-x-4">
+            <div className="w-14 h-14 sm:w-20 sm:h-20 rounded-full bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center text-white text-lg sm:text-2xl font-bold flex-shrink-0">
               {employee.first_name[0]}{employee.last_name[0]}
             </div>
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">
+            <div className="min-w-0">
+              <h1 className="text-lg sm:text-2xl font-bold text-gray-900 truncate">
                 {employee.first_name} {employee.last_name}
               </h1>
-              <p className="text-sm text-gray-600">{employee.designation} • {employee.department}</p>
-              <p className="text-xs text-gray-500 mt-1">Employee ID: {employee.employee_id}</p>
+              <p className="text-xs sm:text-sm text-gray-600 truncate">{employee.designation} • {employee.department}</p>
+              <p className="text-[10px] sm:text-xs text-gray-500 mt-0.5 sm:mt-1">ID: {employee.employee_id}</p>
             </div>
           </div>
-          <div className="flex space-x-3">
+          <div className="flex gap-2 sm:space-x-3">
             {!editMode ? (
               <button
                 onClick={() => setEditMode(true)}
-                className="px-3 py-1.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors flex items-center space-x-2 text-sm"
+                className="flex-1 sm:flex-none px-3 py-2 sm:py-1.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors flex items-center justify-center space-x-2 text-sm touch-manipulation"
               >
                 <User className="w-4 h-4" />
                 <span>Edit Profile</span>
@@ -177,7 +177,7 @@ export default function EmployeeProfile() {
                     loadEmployeeData();
                     setMessage(null);
                   }}
-                  className="px-3 py-1.5 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-lg hover:from-red-600 hover:to-red-700 transition-all flex items-center space-x-2 text-sm"
+                  className="flex-1 sm:flex-none px-3 py-2 sm:py-1.5 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-lg hover:from-red-600 hover:to-red-700 transition-all flex items-center justify-center space-x-2 text-sm touch-manipulation"
                 >
                   <X className="w-4 h-4" />
                   <span>Cancel</span>
@@ -185,10 +185,10 @@ export default function EmployeeProfile() {
                 <button
                   onClick={handleSubmit}
                   disabled={saving}
-                  className="px-3 py-1.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors flex items-center space-x-2 disabled:opacity-50 text-sm"
+                  className="flex-1 sm:flex-none px-3 py-2 sm:py-1.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors flex items-center justify-center space-x-2 disabled:opacity-50 text-sm touch-manipulation"
                 >
                   <Save className="w-4 h-4" />
-                  <span>{saving ? 'Saving...' : 'Save Changes'}</span>
+                  <span>{saving ? 'Saving...' : 'Save'}</span>
                 </button>
               </>
             )}
@@ -196,7 +196,7 @@ export default function EmployeeProfile() {
         </div>
 
         {message && (
-          <div className={`mt-4 p-4 rounded-lg ${message.type === 'success' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
+          <div className={`mt-3 sm:mt-4 p-3 sm:p-4 rounded-lg text-sm ${message.type === 'success' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
             {message.text}
           </div>
         )}
@@ -204,13 +204,13 @@ export default function EmployeeProfile() {
 
       <form onSubmit={handleSubmit}>
         {/* Personal Information */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 mb-4">
-          <div className="flex items-center space-x-2 mb-4">
-            <User className="w-5 h-5 text-primary-600" />
-            <h2 className="text-lg font-semibold text-gray-900">Personal Information</h2>
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-3 sm:p-4 mb-4">
+          <div className="flex items-center space-x-2 mb-3 sm:mb-4">
+            <User className="w-4 h-4 sm:w-5 sm:h-5 text-primary-600" />
+            <h2 className="text-base sm:text-lg font-semibold text-gray-900">Personal Information</h2>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
             {/* Read-only fields */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">First Name</label>
@@ -322,13 +322,13 @@ export default function EmployeeProfile() {
         </div>
 
         {/* Employment Details */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 mb-4">
-          <div className="flex items-center space-x-2 mb-4">
-            <Briefcase className="w-5 h-5 text-primary-600" />
-            <h2 className="text-lg font-semibold text-gray-900">Employment Details</h2>
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-3 sm:p-4 mb-4">
+          <div className="flex items-center space-x-2 mb-3 sm:mb-4">
+            <Briefcase className="w-4 h-4 sm:w-5 sm:h-5 text-primary-600" />
+            <h2 className="text-base sm:text-lg font-semibold text-gray-900">Employment Details</h2>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Department</label>
               <div className="relative">
@@ -355,13 +355,13 @@ export default function EmployeeProfile() {
         </div>
 
         {/* Address Details */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 mb-4">
-          <div className="flex items-center space-x-2 mb-4">
-            <MapPin className="w-5 h-5 text-primary-600" />
-            <h2 className="text-lg font-semibold text-gray-900">Address Details</h2>
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-3 sm:p-4 mb-4">
+          <div className="flex items-center space-x-2 mb-3 sm:mb-4">
+            <MapPin className="w-4 h-4 sm:w-5 sm:h-5 text-primary-600" />
+            <h2 className="text-base sm:text-lg font-semibold text-gray-900">Address Details</h2>
           </div>
 
-          <div className="grid grid-cols-1 gap-4">
+          <div className="grid grid-cols-1 gap-3 sm:gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Address Line 1</label>
               <input
@@ -386,7 +386,7 @@ export default function EmployeeProfile() {
               />
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-2 gap-3 sm:gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">City</label>
                 <input
@@ -439,13 +439,13 @@ export default function EmployeeProfile() {
         </div>
 
         {/* Tax & Identity */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 mb-4">
-          <div className="flex items-center space-x-2 mb-4">
-            <Shield className="w-5 h-5 text-primary-600" />
-            <h2 className="text-lg font-semibold text-gray-900">Tax & Identity Information</h2>
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-3 sm:p-4 mb-4">
+          <div className="flex items-center space-x-2 mb-3 sm:mb-4">
+            <Shield className="w-4 h-4 sm:w-5 sm:h-5 text-primary-600" />
+            <h2 className="text-base sm:text-lg font-semibold text-gray-900">Tax & Identity</h2>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">PAN Number</label>
               <input
@@ -475,13 +475,13 @@ export default function EmployeeProfile() {
         </div>
 
         {/* Bank Details */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
-          <div className="flex items-center space-x-2 mb-4">
-            <CreditCard className="w-5 h-5 text-primary-600" />
-            <h2 className="text-lg font-semibold text-gray-900">Bank Details</h2>
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-3 sm:p-4">
+          <div className="flex items-center space-x-2 mb-3 sm:mb-4">
+            <CreditCard className="w-4 h-4 sm:w-5 sm:h-5 text-primary-600" />
+            <h2 className="text-base sm:text-lg font-semibold text-gray-900">Bank Details</h2>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Bank Name</label>
               <input

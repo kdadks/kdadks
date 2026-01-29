@@ -11,6 +11,7 @@ import {
   Clock,
   ChevronDown,
   ChevronRight,
+  ChevronLeft,
   Menu,
   X,
   Plus,
@@ -21,7 +22,10 @@ import {
   Edit,
   FileCheck,
   DollarSign,
-  Calculator
+  Calculator,
+  Bell,
+  Award,
+  Wallet
 } from 'lucide-react'
 import { simpleAuth, SimpleUser } from '../../utils/simpleAuth'
 import { isSupabaseConfigured, supabase } from '../../config/supabase'
@@ -38,6 +42,9 @@ import AttendanceManagement from '../hr/AttendanceManagement'
 import FullFinalSettlement from '../hr/FullFinalSettlement'
 import TDSReport from '../hr/TDSReport'
 import RateCardManagement from './RateCardManagement'
+import { Announcements } from './Announcements'
+import PerformanceFeedback from './PerformanceFeedback'
+import CompensationManagement from './CompensationManagement'
 import type { InvoiceStats } from '../../types/invoice'
 import type { QuoteStats } from '../../types/quote'
 
@@ -61,7 +68,7 @@ interface DashboardStats {
   settlements: number;
 }
 
-type ActiveView = 'dashboard' | 'invoices' | 'payments' | 'quotes' | 'contracts' | 'rate-cards' | 'hr-employees' | 'hr-leave' | 'hr-attendance' | 'hr-settlement' | 'hr-tds-report';
+type ActiveView = 'dashboard' | 'invoices' | 'payments' | 'quotes' | 'contracts' | 'rate-cards' | 'announcements' | 'hr-employees' | 'hr-leave' | 'hr-attendance' | 'hr-settlement' | 'hr-tds-report' | 'hr-performance' | 'hr-compensation';
 
 const SimpleAdminDashboard: React.FC = () => {
   const [user, setUser] = useState<SimpleUser | null>(null)
@@ -291,6 +298,8 @@ const SimpleAdminDashboard: React.FC = () => {
         return <ContractManagement />;
       case 'rate-cards':
         return <RateCardManagement />;
+      case 'announcements':
+        return <Announcements />;
       case 'hr-employees':
         return <EmploymentDocuments />;
       case 'hr-leave':
@@ -301,6 +310,10 @@ const SimpleAdminDashboard: React.FC = () => {
         return <TDSReport />;
       case 'hr-attendance':
         return <AttendanceManagement />;
+      case 'hr-performance':
+        return <PerformanceFeedback />;
+      case 'hr-compensation':
+        return <CompensationManagement />;
       case 'dashboard':
       default:
         return null;
@@ -316,9 +329,10 @@ const SimpleAdminDashboard: React.FC = () => {
           {sidebarOpen && <h1 className="text-lg font-semibold text-gray-900">Admin Portal</h1>}
           <button
             onClick={() => setSidebarOpen(!sidebarOpen)}
-            className="p-2 rounded-md hover:bg-gray-100"
+            className="p-2 rounded-md hover:bg-gray-100 transition-colors"
+            title={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
           >
-            {sidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+            {sidebarOpen ? <ChevronLeft className="w-5 h-5" /> : <ChevronRight className="w-5 h-5" />}
           </button>
         </div>
 
@@ -329,7 +343,8 @@ const SimpleAdminDashboard: React.FC = () => {
             <li>
               <button
                 onClick={() => setActiveView('dashboard')}
-                className={`w-full flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                title={!sidebarOpen ? 'Dashboard' : undefined}
+                className={`w-full flex items-center ${!sidebarOpen ? 'justify-center' : ''} px-3 py-2 text-sm font-medium rounded-md transition-colors ${
                   activeView === 'dashboard'
                     ? 'bg-blue-100 text-blue-700'
                     : 'text-gray-700 hover:bg-gray-100'
@@ -344,7 +359,8 @@ const SimpleAdminDashboard: React.FC = () => {
             <li>
               <button
                 onClick={() => setActiveView('invoices')}
-                className={`w-full flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                title={!sidebarOpen ? 'Invoices' : undefined}
+                className={`w-full flex items-center ${!sidebarOpen ? 'justify-center' : ''} px-3 py-2 text-sm font-medium rounded-md transition-colors ${
                   activeView === 'invoices'
                     ? 'bg-blue-100 text-blue-700'
                     : 'text-gray-700 hover:bg-gray-100'
@@ -359,7 +375,8 @@ const SimpleAdminDashboard: React.FC = () => {
             <li>
               <button
                 onClick={() => setActiveView('payments')}
-                className={`w-full flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                title={!sidebarOpen ? 'Payments' : undefined}
+                className={`w-full flex items-center ${!sidebarOpen ? 'justify-center' : ''} px-3 py-2 text-sm font-medium rounded-md transition-colors ${
                   activeView === 'payments'
                     ? 'bg-blue-100 text-blue-700'
                     : 'text-gray-700 hover:bg-gray-100'
@@ -374,7 +391,8 @@ const SimpleAdminDashboard: React.FC = () => {
             <li>
               <button
                 onClick={() => setActiveView('quotes')}
-                className={`w-full flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                title={!sidebarOpen ? 'Quotes' : undefined}
+                className={`w-full flex items-center ${!sidebarOpen ? 'justify-center' : ''} px-3 py-2 text-sm font-medium rounded-md transition-colors ${
                   activeView === 'quotes'
                     ? 'bg-blue-100 text-blue-700'
                     : 'text-gray-700 hover:bg-gray-100'
@@ -389,7 +407,8 @@ const SimpleAdminDashboard: React.FC = () => {
             <li>
               <button
                 onClick={() => setActiveView('rate-cards')}
-                className={`w-full flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                title={!sidebarOpen ? 'Rate Cards' : undefined}
+                className={`w-full flex items-center ${!sidebarOpen ? 'justify-center' : ''} px-3 py-2 text-sm font-medium rounded-md transition-colors ${
                   activeView === 'rate-cards'
                     ? 'bg-blue-100 text-blue-700'
                     : 'text-gray-700 hover:bg-gray-100'
@@ -400,11 +419,28 @@ const SimpleAdminDashboard: React.FC = () => {
               </button>
             </li>
 
+            {/* Announcements */}
+            <li>
+              <button
+                onClick={() => setActiveView('announcements')}
+                title={!sidebarOpen ? 'Announcements' : undefined}
+                className={`w-full flex items-center ${!sidebarOpen ? 'justify-center' : ''} px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                  activeView === 'announcements'
+                    ? 'bg-blue-100 text-blue-700'
+                    : 'text-gray-700 hover:bg-gray-100'
+                }`}
+              >
+                <Bell className="w-5 h-5 flex-shrink-0" />
+                {sidebarOpen && <span className="ml-3">Announcements</span>}
+              </button>
+            </li>
+
             {/* Contracts */}
             <li>
               <button
                 onClick={() => setActiveView('contracts')}
-                className={`w-full flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                title={!sidebarOpen ? 'Contracts' : undefined}
+                className={`w-full flex items-center ${!sidebarOpen ? 'justify-center' : ''} px-3 py-2 text-sm font-medium rounded-md transition-colors ${
                   activeView === 'contracts'
                     ? 'bg-blue-100 text-blue-700'
                     : 'text-gray-700 hover:bg-gray-100'
@@ -418,14 +454,15 @@ const SimpleAdminDashboard: React.FC = () => {
             {/* HR Menu (Collapsible) */}
             <li>
               <button
-                onClick={() => setHrMenuOpen(!hrMenuOpen)}
-                className={`w-full flex items-center justify-between px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                onClick={() => sidebarOpen ? setHrMenuOpen(!hrMenuOpen) : setActiveView('hr-employees')}
+                title={!sidebarOpen ? 'HR Management' : undefined}
+                className={`w-full flex items-center ${!sidebarOpen ? 'justify-center' : 'justify-between'} px-3 py-2 text-sm font-medium rounded-md transition-colors ${
                   activeView.startsWith('hr-')
                     ? 'bg-blue-50 text-blue-700'
                     : 'text-gray-700 hover:bg-gray-100'
                 }`}
               >
-                <div className="flex items-center">
+                <div className={`flex items-center ${!sidebarOpen ? 'justify-center' : ''}`}>
                   <Briefcase className="w-5 h-5 flex-shrink-0" />
                   {sidebarOpen && <span className="ml-3">HR Management</span>}
                 </div>
@@ -502,6 +539,32 @@ const SimpleAdminDashboard: React.FC = () => {
                       <span className="ml-3">TDS Report</span>
                     </button>
                   </li>
+                  <li>
+                    <button
+                      onClick={() => setActiveView('hr-performance')}
+                      className={`w-full flex items-center px-3 py-2 text-sm rounded-md transition-colors ${
+                        activeView === 'hr-performance'
+                          ? 'bg-blue-100 text-blue-700'
+                          : 'text-gray-600 hover:bg-gray-50'
+                      }`}
+                    >
+                      <Award className="w-4 h-4 flex-shrink-0" />
+                      <span className="ml-3">Performance</span>
+                    </button>
+                  </li>
+                  <li>
+                    <button
+                      onClick={() => setActiveView('hr-compensation')}
+                      className={`w-full flex items-center px-3 py-2 text-sm rounded-md transition-colors ${
+                        activeView === 'hr-compensation'
+                          ? 'bg-blue-100 text-blue-700'
+                          : 'text-gray-600 hover:bg-gray-50'
+                      }`}
+                    >
+                      <Wallet className="w-4 h-4 flex-shrink-0" />
+                      <span className="ml-3">Compensation</span>
+                    </button>
+                  </li>
                 </ul>
               )}
             </li>
@@ -518,7 +581,8 @@ const SimpleAdminDashboard: React.FC = () => {
           )}
           <button
             onClick={handleLogout}
-            className="w-full flex items-center px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-md transition-colors"
+            title={!sidebarOpen ? 'Logout' : undefined}
+            className={`w-full flex items-center ${!sidebarOpen ? 'justify-center' : ''} px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-md transition-colors`}
           >
             <LogOut className="w-5 h-5 flex-shrink-0 text-red-600" />
             {sidebarOpen && <span className="ml-3">Logout</span>}

@@ -17,10 +17,12 @@ import {
   Mail,
   CheckCircle,
   AlertCircle,
-  Key
+  Key,
+  Upload
 } from 'lucide-react';
 import { employeeService } from '../../services/employeeService';
 import { employeeAuthService } from '../../services/employeeAuthService';
+import { employeeDocumentService } from '../../services/employeeDocumentService';
 import { PDFBrandingUtils } from '../../utils/pdfBrandingUtils';
 import { generateSalarySlipPDF } from '../../utils/salarySlipPDFGenerator';
 import { EmailService } from '../../services/emailService';
@@ -123,6 +125,17 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
     tax_regime: 'new'
   });
 
+  // Employee uploaded documents state
+  const [showEmployeeDocsModal, setShowEmployeeDocsModal] = useState(false);
+  const [employeeDocuments, setEmployeeDocuments] = useState<any[]>([]);
+  const [selectedEmployeeForDocs, setSelectedEmployeeForDocs] = useState<Employee | null>(null);
+  const [loadingEmployeeDocs, setLoadingEmployeeDocs] = useState(false);
+
+  // Document preview state
+  const [showDocPreviewModal, setShowDocPreviewModal] = useState(false);
+  const [previewDocUrl, setPreviewDocUrl] = useState<string | null>(null);
+  const [previewingDoc, setPreviewingDoc] = useState<any>(null);
+
   // Deduction configuration flags
   const [applyDeductions, setApplyDeductions] = useState({
     provident_fund: true,
@@ -180,6 +193,136 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
     } catch (err) {
       console.error('Error deleting employee:', err);
       showError('Failed to delete employee');
+    }
+  };
+
+  const handleViewEmployeeDocuments = async (employee: Employee) => {
+    try {
+      setSelectedEmployeeForDocs(employee);
+      setLoadingEmployeeDocs(true);
+      setShowEmployeeDocsModal(true);
+
+      // Fetch both employee uploaded documents and admin generated documents
+      const [uploadedDocs, adminDocs] = await Promise.all([
+        employeeDocumentService.getDocuments({ employee_id: employee.id }),
+        employeeService.getEmploymentDocuments(employee.id)
+      ]);
+
+      setEmployeeDocuments([...uploadedDocs, ...adminDocs]);
+    } catch (err) {
+      console.error('Error loading employee documents:', err);
+      showError('Failed to load employee documents');
+    } finally {
+      setLoadingEmployeeDocs(false);
+    }
+  };
+
+  const handlePreviewEmployeeDocument = async (doc: any) => {
+    try {
+      setPreviewingDoc(doc);
+
+      if (doc.storage_path) {
+        // Employee uploaded document - get signed URL
+        const url = await employeeDocumentService.getDocumentUrl(doc.storage_path);
+        setPreviewDocUrl(url);
+      } else if (doc.pdf_url) {
+        // Admin generated document with stored URL
+        setPreviewDocUrl(doc.pdf_url);
+      } else if (doc.document_type && doc.document_data) {
+        // Admin generated document - regenerate PDF from document_data
+        const employee = employees.find(emp => emp.id === doc.employee_id);
+        if (!employee) {
+          showError('Employee not found');
+          return;
+        }
+
+        let pdf: jsPDF;
+        const docData = doc.document_data;
+
+        // Generate PDF based on document type
+        switch (doc.document_type) {
+          case 'offer_letter':
+            pdf = await generateOfferLetterPDF(employee, docData as OfferLetterData);
+            break;
+          case 'salary_certificate':
+            pdf = await generateSalaryCertificatePDF(employee, docData as SalaryCertificateData);
+            break;
+          case 'experience_certificate':
+            pdf = await generateExperienceCertificatePDF(employee, docData as ExperienceCertificateData);
+            break;
+          case 'relieving_letter':
+            pdf = await generateRelievingLetterPDF(employee, docData as RelievingLetterData);
+            break;
+          case 'form_16':
+            pdf = await generateForm16PDF(employee, docData as Form16Data);
+            break;
+          case 'form_24q':
+            pdf = await generateForm24QPDF(docData as Form24QData);
+            break;
+          default:
+            throw new Error('Unsupported document type');
+        }
+
+        // Create blob URL for preview
+        const pdfBlob = pdf.output('blob');
+        const pdfUrl = URL.createObjectURL(pdfBlob);
+        setPreviewDocUrl(pdfUrl);
+      } else {
+        showError('Cannot preview this document - no source available');
+        return;
+      }
+
+      setShowDocPreviewModal(true);
+    } catch (err) {
+      console.error('Error previewing document:', err);
+      showError('Failed to preview document');
+    }
+  };
+
+  const handleDownloadEmployeeDocument = async (doc: any) => {
+    try {
+      if (doc.storage_path) {
+        // Employee uploaded document
+        const blob = await employeeDocumentService.downloadDocument(doc.storage_path);
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = doc.file_name || doc.document_name;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+      } else if (doc.pdf_url) {
+        // Admin generated document - download
+        const response = await fetch(doc.pdf_url);
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${doc.document_type}_${doc.document_number}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+      }
+    } catch (err) {
+      console.error('Error downloading document:', err);
+      showError('Failed to download document');
+    }
+  };
+
+  const handleVerifyDocument = async (docId: string, status: 'verified' | 'rejected', comments?: string) => {
+    try {
+      await employeeDocumentService.updateVerificationStatus(docId, status, 'admin-user-id', comments);
+      showSuccess(`Document ${status} successfully`);
+
+      // Reload documents
+      if (selectedEmployeeForDocs) {
+        await handleViewEmployeeDocuments(selectedEmployeeForDocs);
+      }
+    } catch (err) {
+      console.error('Error verifying document:', err);
+      showError('Failed to update document status');
     }
   };
 
@@ -1846,6 +1989,13 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                         <button
+                          onClick={() => handleViewEmployeeDocuments(employee)}
+                          className="text-purple-600 hover:text-purple-900 mr-3"
+                          title="View Documents"
+                        >
+                          <Eye className="w-5 h-5 inline" />
+                        </button>
+                        <button
                           onClick={() => {
                             setEmployeeForm(employee);
                             setEmployeeView('edit');
@@ -2104,7 +2254,14 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
                   <input
                     type="number"
                     value={salarySlipInput.working_days}
-                    onChange={(e) => setSalarySlipInput({ ...salarySlipInput, working_days: parseInt(e.target.value) })}
+                    onChange={(e) => {
+                      const workingDays = parseInt(e.target.value) || 0;
+                      setSalarySlipInput({
+                        ...salarySlipInput,
+                        working_days: workingDays,
+                        paid_days: workingDays - (salarySlipInput.lop_days || 0)
+                      });
+                    }}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
                   />
                 </div>
@@ -2124,6 +2281,19 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
                         paid_days: (salarySlipInput.working_days || 26) - lop
                       });
                     }}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Paid Days
+                  </label>
+                  <input
+                    type="number"
+                    step="0.5"
+                    value={salarySlipInput.paid_days}
+                    onChange={(e) => setSalarySlipInput({ ...salarySlipInput, paid_days: parseFloat(e.target.value) || 0 })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
                   />
                 </div>
@@ -5462,6 +5632,188 @@ Any other duties assigned by management from time to time`}
               >
                 <Trash2 className="w-4 h-4 mr-2" />
                 Delete Document
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Employee Documents Modal */}
+      {showEmployeeDocsModal && selectedEmployeeForDocs && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-6xl w-full h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between p-6 border-b">
+              <div>
+                <h2 className="text-xl font-semibold">Documents - {selectedEmployeeForDocs.full_name}</h2>
+                <p className="text-sm text-gray-600 mt-1">Employee #{selectedEmployeeForDocs.employee_number}</p>
+              </div>
+              <button
+                onClick={() => {
+                  setShowEmployeeDocsModal(false);
+                  setSelectedEmployeeForDocs(null);
+                  setEmployeeDocuments([]);
+                }}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-auto p-6">
+              {loadingEmployeeDocs ? (
+                <div className="flex items-center justify-center h-64">
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
+                </div>
+              ) : employeeDocuments.length === 0 ? (
+                <div className="text-center py-12">
+                  <FileText className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                  <p className="text-gray-600">No documents found for this employee</p>
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  <div className="text-sm text-gray-600">
+                    Total Documents: {employeeDocuments.length}
+                  </div>
+                  {employeeDocuments.map(doc => (
+                    <div key={doc.id} className="border border-gray-200 rounded-lg p-4">
+                      <div className="flex justify-between">
+                        <div>
+                          <h4 className="font-medium">{doc.document_name || doc.document_type}</h4>
+                          <p className="text-sm text-gray-600">{doc.document_type}</p>
+                          {doc.verification_status && (
+                            <span className={`inline-block mt-2 px-2 py-1 text-xs rounded ${
+                              doc.verification_status === 'verified' ? 'bg-green-100 text-green-700' :
+                              doc.verification_status === 'pending' ? 'bg-yellow-100 text-yellow-700' :
+                              'bg-red-100 text-red-700'
+                            }`}>
+                              {doc.verification_status}
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <button
+                            onClick={() => handlePreviewEmployeeDocument(doc)}
+                            className="p-2 text-blue-600 hover:bg-blue-50 rounded"
+                            title="Preview"
+                          >
+                            <Eye className="w-5 h-5" />
+                          </button>
+                          <button
+                            onClick={() => handleDownloadEmployeeDocument(doc)}
+                            className="p-2 text-green-600 hover:bg-green-50 rounded"
+                            title="Download"
+                          >
+                            <Download className="w-5 h-5" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="p-6 border-t">
+              <button
+                onClick={() => {
+                  setShowEmployeeDocsModal(false);
+                  setSelectedEmployeeForDocs(null);
+                  setEmployeeDocuments([]);
+                }}
+                className="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Document Preview Modal */}
+      {showDocPreviewModal && previewDocUrl && previewingDoc && (
+        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-[60] p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-6xl w-full h-[90vh] flex flex-col">
+            {/* Preview Header */}
+            <div className="flex items-center justify-between p-4 border-b bg-gray-50">
+              <div className="flex-1">
+                <h2 className="text-lg font-semibold text-gray-900">
+                  {previewingDoc.document_name || previewingDoc.document_type}
+                </h2>
+                <p className="text-sm text-gray-600 mt-1">
+                  {previewingDoc.document_type?.replace(/_/g, ' ').toUpperCase()}
+                </p>
+              </div>
+              <div className="flex items-center space-x-3">
+                <button
+                  onClick={() => handleDownloadEmployeeDocument(previewingDoc)}
+                  className="flex items-center px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-md hover:bg-green-700 transition-colors"
+                  title="Download"
+                >
+                  <Download className="w-4 h-4 mr-2" />
+                  Download
+                </button>
+                <button
+                  onClick={() => {
+                    setShowDocPreviewModal(false);
+                    setPreviewDocUrl(null);
+                    setPreviewingDoc(null);
+                  }}
+                  className="text-gray-400 hover:text-gray-600 transition-colors"
+                  title="Close"
+                >
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+            </div>
+
+            {/* Preview Content */}
+            <div className="flex-1 overflow-auto bg-gray-100">
+              {previewingDoc.mime_type?.startsWith('image/') ||
+               previewingDoc.file_name?.match(/\.(jpg|jpeg|png|gif)$/i) ? (
+                // Image preview
+                <div className="flex items-center justify-center h-full p-4">
+                  <img
+                    src={previewDocUrl}
+                    alt={previewingDoc.document_name}
+                    className="max-w-full max-h-full object-contain rounded shadow-lg"
+                  />
+                </div>
+              ) : (
+                // PDF preview
+                <iframe
+                  src={previewDocUrl}
+                  className="w-full h-full border-0"
+                  title="Document Preview"
+                />
+              )}
+            </div>
+
+            {/* Preview Footer */}
+            <div className="flex items-center justify-between p-4 border-t bg-gray-50">
+              <div className="text-sm text-gray-600">
+                {previewingDoc.file_size && (
+                  <span>Size: {(previewingDoc.file_size / 1024).toFixed(2)} KB</span>
+                )}
+                {previewingDoc.uploaded_at && (
+                  <span className="ml-4">
+                    Uploaded: {new Date(previewingDoc.uploaded_at).toLocaleDateString('en-IN')}
+                  </span>
+                )}
+                {previewingDoc.document_date && (
+                  <span className="ml-4">
+                    Date: {new Date(previewingDoc.document_date).toLocaleDateString('en-IN')}
+                  </span>
+                )}
+              </div>
+              <button
+                onClick={() => {
+                  setShowDocPreviewModal(false);
+                  setPreviewDocUrl(null);
+                  setPreviewingDoc(null);
+                }}
+                className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+              >
+                Close Preview
               </button>
             </div>
           </div>
