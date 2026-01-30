@@ -25,7 +25,8 @@ import {
   Calculator,
   Bell,
   Award,
-  Wallet
+  Wallet,
+  BarChart3
 } from 'lucide-react'
 import { simpleAuth, SimpleUser } from '../../utils/simpleAuth'
 import { isSupabaseConfigured, supabase } from '../../config/supabase'
@@ -45,6 +46,8 @@ import RateCardManagement from './RateCardManagement'
 import { Announcements } from './Announcements'
 import PerformanceFeedback from './PerformanceFeedback'
 import CompensationManagement from './CompensationManagement'
+import ExpenseManagement from './ExpenseManagement'
+import FinanceManagement from './FinanceManagement'
 import type { InvoiceStats } from '../../types/invoice'
 import type { QuoteStats } from '../../types/quote'
 
@@ -68,7 +71,7 @@ interface DashboardStats {
   settlements: number;
 }
 
-type ActiveView = 'dashboard' | 'invoices' | 'payments' | 'quotes' | 'contracts' | 'rate-cards' | 'announcements' | 'hr-employees' | 'hr-leave' | 'hr-attendance' | 'hr-settlement' | 'hr-tds-report' | 'hr-performance' | 'hr-compensation';
+type ActiveView = 'dashboard' | 'invoices' | 'payments' | 'quotes' | 'contracts' | 'rate-cards' | 'announcements' | 'expenses' | 'finance' | 'hr-employees' | 'hr-leave' | 'hr-attendance' | 'hr-settlement' | 'hr-tds-report' | 'hr-performance' | 'hr-compensation';
 
 const SimpleAdminDashboard: React.FC = () => {
   const [user, setUser] = useState<SimpleUser | null>(null)
@@ -300,6 +303,10 @@ const SimpleAdminDashboard: React.FC = () => {
         return <RateCardManagement />;
       case 'announcements':
         return <Announcements />;
+      case 'expenses':
+        return <ExpenseManagement />;
+      case 'finance':
+        return <FinanceManagement />;
       case 'hr-employees':
         return <EmploymentDocuments />;
       case 'hr-leave':
@@ -448,6 +455,38 @@ const SimpleAdminDashboard: React.FC = () => {
               >
                 <FileCheck className="w-5 h-5 flex-shrink-0" />
                 {sidebarOpen && <span className="ml-3">Contracts</span>}
+              </button>
+            </li>
+
+            {/* Expenses */}
+            <li>
+              <button
+                onClick={() => setActiveView('expenses')}
+                title={!sidebarOpen ? 'Expenses' : undefined}
+                className={`w-full flex items-center ${!sidebarOpen ? 'justify-center' : ''} px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                  activeView === 'expenses'
+                    ? 'bg-orange-100 text-orange-700'
+                    : 'text-gray-700 hover:bg-gray-100'
+                }`}
+              >
+                <Receipt className="w-5 h-5 flex-shrink-0" />
+                {sidebarOpen && <span className="ml-3">Expenses</span>}
+              </button>
+            </li>
+
+            {/* Finance */}
+            <li>
+              <button
+                onClick={() => setActiveView('finance')}
+                title={!sidebarOpen ? 'Finance' : undefined}
+                className={`w-full flex items-center ${!sidebarOpen ? 'justify-center' : ''} px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                  activeView === 'finance'
+                    ? 'bg-green-100 text-green-700'
+                    : 'text-gray-700 hover:bg-gray-100'
+                }`}
+              >
+                <BarChart3 className="w-5 h-5 flex-shrink-0" />
+                {sidebarOpen && <span className="ml-3">Finance</span>}
               </button>
             </li>
 

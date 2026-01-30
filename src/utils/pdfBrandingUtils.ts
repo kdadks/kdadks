@@ -296,7 +296,7 @@ export class PDFBrandingUtils {
       pageWidth: 210,
       pageHeight: 297,
       leftMargin: 15,
-      rightMargin: 195, // 210 - 15
+      rightMargin: 15,
       topMargin: 15,
       bottomMargin: 15
     };
