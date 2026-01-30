@@ -26,7 +26,9 @@ import {
   Bell,
   Award,
   Wallet,
-  BarChart3
+  BarChart3,
+  Banknote,
+  LayoutDashboard
 } from 'lucide-react'
 import { simpleAuth, SimpleUser } from '../../utils/simpleAuth'
 import { isSupabaseConfigured, supabase } from '../../config/supabase'
@@ -73,13 +75,22 @@ interface DashboardStats {
 
 type ActiveView = 'dashboard' | 'invoices' | 'payments' | 'quotes' | 'contracts' | 'rate-cards' | 'announcements' | 'expenses' | 'finance' | 'hr-employees' | 'hr-leave' | 'hr-attendance' | 'hr-settlement' | 'hr-tds-report' | 'hr-performance' | 'hr-compensation';
 
+// Menu section types
+type MenuSection = 'sales' | 'finance' | 'hr' | 'communication';
+
 const SimpleAdminDashboard: React.FC = () => {
   const [user, setUser] = useState<SimpleUser | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [showSuccessMessage, setShowSuccessMessage] = useState(true)
   const [activeView, setActiveView] = useState<ActiveView>('dashboard')
-  const [hrMenuOpen, setHrMenuOpen] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(true)
+  // Collapsible menu sections - all open by default
+  const [openSections, setOpenSections] = useState<Record<MenuSection, boolean>>({
+    sales: true,
+    finance: true,
+    hr: true,
+    communication: true
+  })
   const [dashboardStats, setDashboardStats] = useState<DashboardStats>({
     invoices: null,
     quotes: null,
@@ -92,6 +103,11 @@ const SimpleAdminDashboard: React.FC = () => {
   })
   const [statsLoading, setStatsLoading] = useState(false)
   const navigate = useNavigate()
+
+  // Toggle menu section
+  const toggleSection = (section: MenuSection) => {
+    setOpenSections(prev => ({ ...prev, [section]: !prev[section] }))
+  }
 
   // If Supabase is not configured, redirect to login with message
   if (!isSupabaseConfigured) {
@@ -251,13 +267,6 @@ const SimpleAdminDashboard: React.FC = () => {
     }
   }, [showSuccessMessage])
 
-  // Auto-open HR menu if an HR view is active
-  useEffect(() => {
-    if (activeView.startsWith('hr-')) {
-      setHrMenuOpen(true)
-    }
-  }, [activeView])
-
   const handleLogout = async () => {
     try {
       await simpleAuth.logout()
@@ -357,256 +366,330 @@ const SimpleAdminDashboard: React.FC = () => {
                     : 'text-gray-700 hover:bg-gray-100'
                 }`}
               >
-                <Database className="w-5 h-5 flex-shrink-0" />
+                <LayoutDashboard className="w-5 h-5 flex-shrink-0" />
                 {sidebarOpen && <span className="ml-3">Dashboard</span>}
               </button>
             </li>
 
-            {/* Invoices */}
-            <li>
-              <button
-                onClick={() => setActiveView('invoices')}
-                title={!sidebarOpen ? 'Invoices' : undefined}
-                className={`w-full flex items-center ${!sidebarOpen ? 'justify-center' : ''} px-3 py-2 text-sm font-medium rounded-md transition-colors ${
-                  activeView === 'invoices'
-                    ? 'bg-blue-100 text-blue-700'
-                    : 'text-gray-700 hover:bg-gray-100'
-                }`}
-              >
-                <Receipt className="w-5 h-5 flex-shrink-0" />
-                {sidebarOpen && <span className="ml-3">Invoices</span>}
-              </button>
-            </li>
-
-            {/* Payments */}
-            <li>
-              <button
-                onClick={() => setActiveView('payments')}
-                title={!sidebarOpen ? 'Payments' : undefined}
-                className={`w-full flex items-center ${!sidebarOpen ? 'justify-center' : ''} px-3 py-2 text-sm font-medium rounded-md transition-colors ${
-                  activeView === 'payments'
-                    ? 'bg-blue-100 text-blue-700'
-                    : 'text-gray-700 hover:bg-gray-100'
-                }`}
-              >
-                <CreditCard className="w-5 h-5 flex-shrink-0" />
-                {sidebarOpen && <span className="ml-3">Payments</span>}
-              </button>
-            </li>
-
-            {/* Quotes */}
-            <li>
-              <button
-                onClick={() => setActiveView('quotes')}
-                title={!sidebarOpen ? 'Quotes' : undefined}
-                className={`w-full flex items-center ${!sidebarOpen ? 'justify-center' : ''} px-3 py-2 text-sm font-medium rounded-md transition-colors ${
-                  activeView === 'quotes'
-                    ? 'bg-blue-100 text-blue-700'
-                    : 'text-gray-700 hover:bg-gray-100'
-                }`}
-              >
-                <FileText className="w-5 h-5 flex-shrink-0" />
-                {sidebarOpen && <span className="ml-3">Quotes</span>}
-              </button>
-            </li>
-
-            {/* Rate Cards */}
-            <li>
-              <button
-                onClick={() => setActiveView('rate-cards')}
-                title={!sidebarOpen ? 'Rate Cards' : undefined}
-                className={`w-full flex items-center ${!sidebarOpen ? 'justify-center' : ''} px-3 py-2 text-sm font-medium rounded-md transition-colors ${
-                  activeView === 'rate-cards'
-                    ? 'bg-blue-100 text-blue-700'
-                    : 'text-gray-700 hover:bg-gray-100'
-                }`}
-              >
-                <Calculator className="w-5 h-5 flex-shrink-0" />
-                {sidebarOpen && <span className="ml-3">Rate Cards</span>}
-              </button>
-            </li>
-
-            {/* Announcements */}
-            <li>
-              <button
-                onClick={() => setActiveView('announcements')}
-                title={!sidebarOpen ? 'Announcements' : undefined}
-                className={`w-full flex items-center ${!sidebarOpen ? 'justify-center' : ''} px-3 py-2 text-sm font-medium rounded-md transition-colors ${
-                  activeView === 'announcements'
-                    ? 'bg-blue-100 text-blue-700'
-                    : 'text-gray-700 hover:bg-gray-100'
-                }`}
-              >
-                <Bell className="w-5 h-5 flex-shrink-0" />
-                {sidebarOpen && <span className="ml-3">Announcements</span>}
-              </button>
-            </li>
-
-            {/* Contracts */}
-            <li>
-              <button
-                onClick={() => setActiveView('contracts')}
-                title={!sidebarOpen ? 'Contracts' : undefined}
-                className={`w-full flex items-center ${!sidebarOpen ? 'justify-center' : ''} px-3 py-2 text-sm font-medium rounded-md transition-colors ${
-                  activeView === 'contracts'
-                    ? 'bg-blue-100 text-blue-700'
-                    : 'text-gray-700 hover:bg-gray-100'
-                }`}
-              >
-                <FileCheck className="w-5 h-5 flex-shrink-0" />
-                {sidebarOpen && <span className="ml-3">Contracts</span>}
-              </button>
-            </li>
-
-            {/* Expenses */}
-            <li>
-              <button
-                onClick={() => setActiveView('expenses')}
-                title={!sidebarOpen ? 'Expenses' : undefined}
-                className={`w-full flex items-center ${!sidebarOpen ? 'justify-center' : ''} px-3 py-2 text-sm font-medium rounded-md transition-colors ${
-                  activeView === 'expenses'
-                    ? 'bg-orange-100 text-orange-700'
-                    : 'text-gray-700 hover:bg-gray-100'
-                }`}
-              >
-                <Receipt className="w-5 h-5 flex-shrink-0" />
-                {sidebarOpen && <span className="ml-3">Expenses</span>}
-              </button>
-            </li>
-
-            {/* Finance */}
-            <li>
-              <button
-                onClick={() => setActiveView('finance')}
-                title={!sidebarOpen ? 'Finance' : undefined}
-                className={`w-full flex items-center ${!sidebarOpen ? 'justify-center' : ''} px-3 py-2 text-sm font-medium rounded-md transition-colors ${
-                  activeView === 'finance'
-                    ? 'bg-green-100 text-green-700'
-                    : 'text-gray-700 hover:bg-gray-100'
-                }`}
-              >
-                <BarChart3 className="w-5 h-5 flex-shrink-0" />
-                {sidebarOpen && <span className="ml-3">Finance</span>}
-              </button>
-            </li>
-
-            {/* HR Menu (Collapsible) */}
-            <li>
-              <button
-                onClick={() => sidebarOpen ? setHrMenuOpen(!hrMenuOpen) : setActiveView('hr-employees')}
-                title={!sidebarOpen ? 'HR Management' : undefined}
-                className={`w-full flex items-center ${!sidebarOpen ? 'justify-center' : 'justify-between'} px-3 py-2 text-sm font-medium rounded-md transition-colors ${
-                  activeView.startsWith('hr-')
-                    ? 'bg-blue-50 text-blue-700'
-                    : 'text-gray-700 hover:bg-gray-100'
-                }`}
-              >
-                <div className={`flex items-center ${!sidebarOpen ? 'justify-center' : ''}`}>
-                  <Briefcase className="w-5 h-5 flex-shrink-0" />
-                  {sidebarOpen && <span className="ml-3">HR Management</span>}
-                </div>
-                {sidebarOpen && (
-                  hrMenuOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />
-                )}
-              </button>
-
-              {/* HR Submenu */}
-              {sidebarOpen && hrMenuOpen && (
-                <ul className="mt-1 ml-4 space-y-1">
-                  <li>
-                    <button
-                      onClick={() => setActiveView('hr-employees')}
-                      className={`w-full flex items-center px-3 py-2 text-sm rounded-md transition-colors ${
-                        activeView === 'hr-employees'
-                          ? 'bg-blue-100 text-blue-700'
-                          : 'text-gray-600 hover:bg-gray-50'
-                      }`}
-                    >
-                      <Briefcase className="w-4 h-4 flex-shrink-0" />
-                      <span className="ml-3">Employees & Docs</span>
-                    </button>
-                  </li>
-                  <li>
-                    <button
-                      onClick={() => setActiveView('hr-leave')}
-                      className={`w-full flex items-center px-3 py-2 text-sm rounded-md transition-colors ${
-                        activeView === 'hr-leave'
-                          ? 'bg-blue-100 text-blue-700'
-                          : 'text-gray-600 hover:bg-gray-50'
-                      }`}
-                    >
-                      <Calendar className="w-4 h-4 flex-shrink-0" />
-                      <span className="ml-3">Leave Management</span>
-                    </button>
-                  </li>
-                  <li>
-                    <button
-                      onClick={() => setActiveView('hr-attendance')}
-                      className={`w-full flex items-center px-3 py-2 text-sm rounded-md transition-colors ${
-                        activeView === 'hr-attendance'
-                          ? 'bg-blue-100 text-blue-700'
-                          : 'text-gray-600 hover:bg-gray-50'
-                      }`}
-                    >
-                      <Clock className="w-4 h-4 flex-shrink-0" />
-                      <span className="ml-3">Attendance</span>
-                    </button>
-                  </li>
-                  <li>
-                    <button
-                      onClick={() => setActiveView('hr-settlement')}
-                      className={`w-full flex items-center px-3 py-2 text-sm rounded-md transition-colors ${
-                        activeView === 'hr-settlement'
-                          ? 'bg-blue-100 text-blue-700'
-                          : 'text-gray-600 hover:bg-gray-50'
-                      }`}
-                    >
-                      <DollarSign className="w-4 h-4 flex-shrink-0" />
-                      <span className="ml-3">F&F Settlement</span>
-                    </button>
-                  </li>
-                  <li>
-                    <button
-                      onClick={() => setActiveView('hr-tds-report')}
-                      className={`w-full flex items-center px-3 py-2 text-sm rounded-md transition-colors ${
-                        activeView === 'hr-tds-report'
-                          ? 'bg-blue-100 text-blue-700'
-                          : 'text-gray-600 hover:bg-gray-50'
-                      }`}
-                    >
-                      <FileText className="w-4 h-4 flex-shrink-0" />
-                      <span className="ml-3">TDS Report</span>
-                    </button>
-                  </li>
-                  <li>
-                    <button
-                      onClick={() => setActiveView('hr-performance')}
-                      className={`w-full flex items-center px-3 py-2 text-sm rounded-md transition-colors ${
-                        activeView === 'hr-performance'
-                          ? 'bg-blue-100 text-blue-700'
-                          : 'text-gray-600 hover:bg-gray-50'
-                      }`}
-                    >
-                      <Award className="w-4 h-4 flex-shrink-0" />
-                      <span className="ml-3">Performance</span>
-                    </button>
-                  </li>
-                  <li>
-                    <button
-                      onClick={() => setActiveView('hr-compensation')}
-                      className={`w-full flex items-center px-3 py-2 text-sm rounded-md transition-colors ${
-                        activeView === 'hr-compensation'
-                          ? 'bg-blue-100 text-blue-700'
-                          : 'text-gray-600 hover:bg-gray-50'
-                      }`}
-                    >
-                      <Wallet className="w-4 h-4 flex-shrink-0" />
-                      <span className="ml-3">Compensation</span>
-                    </button>
-                  </li>
-                </ul>
+            {/* Section: Sales & Revenue */}
+            <li className="pt-3">
+              {sidebarOpen ? (
+                <button
+                  onClick={() => toggleSection('sales')}
+                  className="w-full flex items-center justify-between px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider hover:bg-gray-50 rounded-md transition-colors"
+                >
+                  <span>Sales & Revenue</span>
+                  {openSections.sales ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                </button>
+              ) : (
+                <hr className="border-gray-200 my-2" />
               )}
             </li>
+
+            {/* Sales & Revenue Items */}
+            {(openSections.sales || !sidebarOpen) && (
+              <>
+                {/* Invoices */}
+                <li>
+                  <button
+                    onClick={() => setActiveView('invoices')}
+                    title={!sidebarOpen ? 'Invoices' : undefined}
+                    className={`w-full flex items-center ${!sidebarOpen ? 'justify-center' : ''} px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                      activeView === 'invoices'
+                        ? 'bg-blue-100 text-blue-700'
+                        : 'text-gray-700 hover:bg-gray-100'
+                    }`}
+                  >
+                    <Receipt className="w-5 h-5 flex-shrink-0" />
+                    {sidebarOpen && <span className="ml-3">Invoices</span>}
+                  </button>
+                </li>
+
+                {/* Quotes */}
+                <li>
+                  <button
+                    onClick={() => setActiveView('quotes')}
+                    title={!sidebarOpen ? 'Quotes' : undefined}
+                    className={`w-full flex items-center ${!sidebarOpen ? 'justify-center' : ''} px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                      activeView === 'quotes'
+                        ? 'bg-blue-100 text-blue-700'
+                        : 'text-gray-700 hover:bg-gray-100'
+                    }`}
+                  >
+                    <FileText className="w-5 h-5 flex-shrink-0" />
+                    {sidebarOpen && <span className="ml-3">Quotes</span>}
+                  </button>
+                </li>
+
+                {/* Rate Cards */}
+                <li>
+                  <button
+                    onClick={() => setActiveView('rate-cards')}
+                    title={!sidebarOpen ? 'Rate Cards' : undefined}
+                    className={`w-full flex items-center ${!sidebarOpen ? 'justify-center' : ''} px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                      activeView === 'rate-cards'
+                        ? 'bg-blue-100 text-blue-700'
+                        : 'text-gray-700 hover:bg-gray-100'
+                    }`}
+                  >
+                    <Calculator className="w-5 h-5 flex-shrink-0" />
+                    {sidebarOpen && <span className="ml-3">Rate Cards</span>}
+                  </button>
+                </li>
+
+                {/* Contracts */}
+                <li>
+                  <button
+                    onClick={() => setActiveView('contracts')}
+                    title={!sidebarOpen ? 'Contracts' : undefined}
+                    className={`w-full flex items-center ${!sidebarOpen ? 'justify-center' : ''} px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                      activeView === 'contracts'
+                        ? 'bg-blue-100 text-blue-700'
+                        : 'text-gray-700 hover:bg-gray-100'
+                    }`}
+                  >
+                    <FileCheck className="w-5 h-5 flex-shrink-0" />
+                    {sidebarOpen && <span className="ml-3">Contracts</span>}
+                  </button>
+                </li>
+
+                {/* Payments */}
+                <li>
+                  <button
+                    onClick={() => setActiveView('payments')}
+                    title={!sidebarOpen ? 'Payments' : undefined}
+                    className={`w-full flex items-center ${!sidebarOpen ? 'justify-center' : ''} px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                      activeView === 'payments'
+                        ? 'bg-blue-100 text-blue-700'
+                        : 'text-gray-700 hover:bg-gray-100'
+                    }`}
+                  >
+                    <CreditCard className="w-5 h-5 flex-shrink-0" />
+                    {sidebarOpen && <span className="ml-3">Payments</span>}
+                  </button>
+                </li>
+              </>
+            )}
+
+            {/* Section: Finance & Accounting */}
+            <li className="pt-3">
+              {sidebarOpen ? (
+                <button
+                  onClick={() => toggleSection('finance')}
+                  className="w-full flex items-center justify-between px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider hover:bg-gray-50 rounded-md transition-colors"
+                >
+                  <span>Finance & Accounting</span>
+                  {openSections.finance ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                </button>
+              ) : (
+                <hr className="border-gray-200 my-2" />
+              )}
+            </li>
+
+            {/* Finance & Accounting Items */}
+            {(openSections.finance || !sidebarOpen) && (
+              <>
+                {/* Finance */}
+                <li>
+                  <button
+                    onClick={() => setActiveView('finance')}
+                    title={!sidebarOpen ? 'Finance Reports' : undefined}
+                    className={`w-full flex items-center ${!sidebarOpen ? 'justify-center' : ''} px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                      activeView === 'finance'
+                        ? 'bg-green-100 text-green-700'
+                        : 'text-gray-700 hover:bg-gray-100'
+                    }`}
+                  >
+                    <BarChart3 className="w-5 h-5 flex-shrink-0" />
+                    {sidebarOpen && <span className="ml-3">Finance Reports</span>}
+                  </button>
+                </li>
+
+                {/* Expenses */}
+                <li>
+                  <button
+                    onClick={() => setActiveView('expenses')}
+                    title={!sidebarOpen ? 'Expenses' : undefined}
+                    className={`w-full flex items-center ${!sidebarOpen ? 'justify-center' : ''} px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                      activeView === 'expenses'
+                        ? 'bg-orange-100 text-orange-700'
+                        : 'text-gray-700 hover:bg-gray-100'
+                    }`}
+                  >
+                    <Wallet className="w-5 h-5 flex-shrink-0" />
+                    {sidebarOpen && <span className="ml-3">Expenses</span>}
+                  </button>
+                </li>
+              </>
+            )}
+
+            {/* Section: HR & Operations */}
+            <li className="pt-3">
+              {sidebarOpen ? (
+                <button
+                  onClick={() => toggleSection('hr')}
+                  className="w-full flex items-center justify-between px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider hover:bg-gray-50 rounded-md transition-colors"
+                >
+                  <span>HR & Operations</span>
+                  {openSections.hr ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                </button>
+              ) : (
+                <hr className="border-gray-200 my-2" />
+              )}
+            </li>
+
+            {/* HR & Operations Items */}
+            {(openSections.hr || !sidebarOpen) && (
+              <>
+                {/* Employees & Docs */}
+                <li>
+                  <button
+                    onClick={() => setActiveView('hr-employees')}
+                    title={!sidebarOpen ? 'Employees & Docs' : undefined}
+                    className={`w-full flex items-center ${!sidebarOpen ? 'justify-center' : ''} px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                      activeView === 'hr-employees'
+                        ? 'bg-blue-100 text-blue-700'
+                        : 'text-gray-700 hover:bg-gray-100'
+                    }`}
+                  >
+                    <Users className="w-5 h-5 flex-shrink-0" />
+                    {sidebarOpen && <span className="ml-3">Employees & Docs</span>}
+                  </button>
+                </li>
+
+                {/* Attendance */}
+                <li>
+                  <button
+                    onClick={() => setActiveView('hr-attendance')}
+                    title={!sidebarOpen ? 'Attendance' : undefined}
+                    className={`w-full flex items-center ${!sidebarOpen ? 'justify-center' : ''} px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                      activeView === 'hr-attendance'
+                        ? 'bg-blue-100 text-blue-700'
+                        : 'text-gray-700 hover:bg-gray-100'
+                    }`}
+                  >
+                    <Clock className="w-5 h-5 flex-shrink-0" />
+                    {sidebarOpen && <span className="ml-3">Attendance</span>}
+                  </button>
+                </li>
+
+                {/* Leave Management */}
+                <li>
+                  <button
+                    onClick={() => setActiveView('hr-leave')}
+                    title={!sidebarOpen ? 'Leave Management' : undefined}
+                    className={`w-full flex items-center ${!sidebarOpen ? 'justify-center' : ''} px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                      activeView === 'hr-leave'
+                        ? 'bg-blue-100 text-blue-700'
+                        : 'text-gray-700 hover:bg-gray-100'
+                    }`}
+                  >
+                    <Calendar className="w-5 h-5 flex-shrink-0" />
+                    {sidebarOpen && <span className="ml-3">Leave Management</span>}
+                  </button>
+                </li>
+
+                {/* Compensation */}
+                <li>
+                  <button
+                    onClick={() => setActiveView('hr-compensation')}
+                    title={!sidebarOpen ? 'Compensation' : undefined}
+                    className={`w-full flex items-center ${!sidebarOpen ? 'justify-center' : ''} px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                      activeView === 'hr-compensation'
+                        ? 'bg-blue-100 text-blue-700'
+                        : 'text-gray-700 hover:bg-gray-100'
+                    }`}
+                  >
+                    <Banknote className="w-5 h-5 flex-shrink-0" />
+                    {sidebarOpen && <span className="ml-3">Compensation</span>}
+                  </button>
+                </li>
+
+                {/* TDS Report */}
+                <li>
+                  <button
+                    onClick={() => setActiveView('hr-tds-report')}
+                    title={!sidebarOpen ? 'TDS Report' : undefined}
+                    className={`w-full flex items-center ${!sidebarOpen ? 'justify-center' : ''} px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                      activeView === 'hr-tds-report'
+                        ? 'bg-blue-100 text-blue-700'
+                        : 'text-gray-700 hover:bg-gray-100'
+                    }`}
+                  >
+                    <FileText className="w-5 h-5 flex-shrink-0" />
+                    {sidebarOpen && <span className="ml-3">TDS Report</span>}
+                  </button>
+                </li>
+
+                {/* F&F Settlement */}
+                <li>
+                  <button
+                    onClick={() => setActiveView('hr-settlement')}
+                    title={!sidebarOpen ? 'F&F Settlement' : undefined}
+                    className={`w-full flex items-center ${!sidebarOpen ? 'justify-center' : ''} px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                      activeView === 'hr-settlement'
+                        ? 'bg-blue-100 text-blue-700'
+                        : 'text-gray-700 hover:bg-gray-100'
+                    }`}
+                  >
+                    <DollarSign className="w-5 h-5 flex-shrink-0" />
+                    {sidebarOpen && <span className="ml-3">F&F Settlement</span>}
+                  </button>
+                </li>
+
+                {/* Performance */}
+                <li>
+                  <button
+                    onClick={() => setActiveView('hr-performance')}
+                    title={!sidebarOpen ? 'Reviews & Feedback' : undefined}
+                    className={`w-full flex items-center ${!sidebarOpen ? 'justify-center' : ''} px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                      activeView === 'hr-performance'
+                        ? 'bg-blue-100 text-blue-700'
+                        : 'text-gray-700 hover:bg-gray-100'
+                    }`}
+                  >
+                    <Award className="w-5 h-5 flex-shrink-0" />
+                    {sidebarOpen && <span className="ml-3">Reviews & Feedback</span>}
+                  </button>
+                </li>
+              </>
+            )}
+
+            {/* Section: Communication */}
+            <li className="pt-3">
+              {sidebarOpen ? (
+                <button
+                  onClick={() => toggleSection('communication')}
+                  className="w-full flex items-center justify-between px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider hover:bg-gray-50 rounded-md transition-colors"
+                >
+                  <span>Communication</span>
+                  {openSections.communication ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                </button>
+              ) : (
+                <hr className="border-gray-200 my-2" />
+              )}
+            </li>
+
+            {/* Communication Items */}
+            {(openSections.communication || !sidebarOpen) && (
+              <>
+                {/* Announcements */}
+                <li>
+                  <button
+                    onClick={() => setActiveView('announcements')}
+                    title={!sidebarOpen ? 'Announcements' : undefined}
+                    className={`w-full flex items-center ${!sidebarOpen ? 'justify-center' : ''} px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                      activeView === 'announcements'
+                        ? 'bg-purple-100 text-purple-700'
+                        : 'text-gray-700 hover:bg-gray-100'
+                    }`}
+                  >
+                    <Bell className="w-5 h-5 flex-shrink-0" />
+                    {sidebarOpen && <span className="ml-3">Announcements</span>}
+                  </button>
+                </li>
+              </>
+            )}
           </ul>
         </nav>
 
