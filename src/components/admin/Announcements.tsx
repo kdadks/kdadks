@@ -74,8 +74,8 @@ export const Announcements: React.FC = () => {
 
   const loadEmployees = async () => {
     try {
-      const data = await employeeService.getAllEmployees();
-      setEmployees(data.filter(emp => emp.status === 'active'));
+      const data = await employeeService.getEmployees();
+      setEmployees(data.filter((emp: Employee) => emp.employment_status === 'active'));
     } catch (err) {
       console.error('Error loading employees:', err);
     }
