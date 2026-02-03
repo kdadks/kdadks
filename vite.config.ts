@@ -16,11 +16,9 @@ export default defineConfig({
           // Core React and Router - keep lucide-react with vendor to ensure React is loaded first
           if (id.includes('node_modules/react') || 
               id.includes('node_modules/react-dom') || 
-              id.includes('node_modules/lucide-react')) {
+              id.includes('node_modules/lucide-react') ||
+              id.includes('node_modules/react-router-dom')) {
             return 'vendor';
-          }
-          if (id.includes('node_modules/react-router-dom')) {
-            return 'router';
           }
           
           // Supabase
@@ -28,9 +26,9 @@ export default defineConfig({
             return 'supabase';
           }
           
-          // UI Libraries
+          // UI Libraries that depend on React
           if (id.includes('node_modules/framer-motion')) {
-            return 'animations';
+            return 'ui-libs';
           }
           
           // PDF and Document handling
@@ -43,34 +41,18 @@ export default defineConfig({
             return 'editor';
           }
           
-          // Chart libraries
-          if (id.includes('recharts') || id.includes('chart')) {
-            return 'charts';
-          }
-          
-          // Date/Time libraries
-          if (id.includes('date-fns') || id.includes('moment')) {
-            return 'date-utils';
-          }
-          
-          // Admin modules - split further
-          if (id.includes('src/components/admin/SimpleAdminDashboard')) {
-            return 'admin-dashboard';
-          }
+          // Keep admin modules together to prevent React context issues
           if (id.includes('src/components/admin/')) {
             return 'admin';
           }
           if (id.includes('src/components/invoice/')) {
-            return 'invoice';
-          }
-          if (id.includes('src/components/contract/ContractManagement')) {
-            return 'contract-management';
+            return 'admin';
           }
           if (id.includes('src/components/contract/')) {
-            return 'contract';
+            return 'admin';
           }
           if (id.includes('src/components/quote/')) {
-            return 'quote';
+            return 'admin';
           }
           
           // Employee portal
