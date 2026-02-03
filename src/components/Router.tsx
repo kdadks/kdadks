@@ -31,28 +31,28 @@ const ServiceInquiry = lazy(() => import('./ServiceInquiry'))
 const BookConsultation = lazy(() => import('./BookConsultation'))
 const Partnership = lazy(() => import('./Partnership'))
 
-// Admin Components (lazy loaded)
-const AdminLogin = lazy(() => import('./admin/AdminLogin'))
-const SimpleAdminDashboard = lazy(() => import('./admin/SimpleAdminDashboard'))
+// Admin Components (directly imported - manual chunking handles code splitting)
+import AdminLogin from './admin/AdminLogin'
+import SimpleAdminDashboard from './admin/SimpleAdminDashboard'
 
-// Employee Portal Components (lazy loaded)
-const EmployeeLayout = lazy(() => import('./employee/EmployeeLayout'))
-const EmployeeDashboard = lazy(() => import('./employee/EmployeeDashboard'))
-const LeaveManagement = lazy(() => import('./employee/LeaveManagement'))
-const AttendanceMarking = lazy(() => import('./employee/AttendanceMarking'))
-const EmployeeProfile = lazy(() => import('./employee/EmployeeProfile'))
-const EmployeeSalarySlips = lazy(() => import('./employee/EmployeeSalarySlips'))
-const EmployeeDocuments = lazy(() => import('./employee/EmployeeDocuments'))
-const EmployeePerformanceFeedback = lazy(() => import('./employee/EmployeePerformanceFeedback'))
-const EmployeeCompensation = lazy(() => import('./employee/EmployeeCompensation'))
-const EmployeeLogin = lazy(() => import('./employee/EmployeeLogin'))
-const ChangePassword = lazy(() => import('./employee/ChangePassword'))
-const ProtectedEmployeeRoute = lazy(() => import('./employee/ProtectedEmployeeRoute'))
+// Employee Portal Components (directly imported - manual chunking handles code splitting)
+import EmployeeLayout from './employee/EmployeeLayout'
+import EmployeeDashboard from './employee/EmployeeDashboard'
+import LeaveManagement from './employee/LeaveManagement'
+import AttendanceMarking from './employee/AttendanceMarking'
+import EmployeeProfile from './employee/EmployeeProfile'
+import EmployeeSalarySlips from './employee/EmployeeSalarySlips'
+import EmployeeDocuments from './employee/EmployeeDocuments'
+import EmployeePerformanceFeedback from './employee/EmployeePerformanceFeedback'
+import EmployeeCompensation from './employee/EmployeeCompensation'
+import EmployeeLogin from './employee/EmployeeLogin'
+import ChangePassword from './employee/ChangePassword'
+import ProtectedEmployeeRoute from './employee/ProtectedEmployeeRoute'
 
-// Payment Gateway Components (lazy loaded)
-const CheckoutPage = lazy(() => import('./payment/CheckoutPage').then(m => ({ default: m.CheckoutPage })))
-const PaymentSuccessPage = lazy(() => import('./payment/PaymentSuccessPage').then(m => ({ default: m.PaymentSuccessPage })))
-const PaymentPage = lazy(() => import('./payment/PaymentPage').then(m => ({ default: m.PaymentPage })))
+// Payment Gateway Components (directly imported - manual chunking handles code splitting)
+import { CheckoutPage } from './payment/CheckoutPage'
+import { PaymentSuccessPage } from './payment/PaymentSuccessPage'
+import { PaymentPage } from './payment/PaymentPage'
 
 // Home page component
 const HomePage = () => (
