@@ -12,64 +12,6 @@ export default defineConfig({
     cssCodeSplit: true,
     rollupOptions: {
       output: {
-        manualChunks: (id) => {
-          // Core React and Router - keep lucide-react with vendor to ensure React is loaded first
-          if (id.includes('node_modules/react') || 
-              id.includes('node_modules/react-dom') || 
-              id.includes('node_modules/lucide-react') ||
-              id.includes('node_modules/react-router-dom')) {
-            return 'vendor';
-          }
-          
-          // Supabase
-          if (id.includes('node_modules/@supabase')) {
-            return 'supabase';
-          }
-          
-          // UI Libraries that depend on React
-          if (id.includes('node_modules/framer-motion')) {
-            return 'ui-libs';
-          }
-          
-          // PDF and Document handling
-          if (id.includes('html2canvas') || id.includes('jspdf')) {
-            return 'pdf-utils';
-          }
-          
-          // Rich Text Editor
-          if (id.includes('react-quill') || id.includes('quill')) {
-            return 'editor';
-          }
-          
-          // Keep admin modules together to prevent React context issues
-          if (id.includes('src/components/admin/')) {
-            return 'admin';
-          }
-          if (id.includes('src/components/invoice/')) {
-            return 'admin';
-          }
-          if (id.includes('src/components/contract/')) {
-            return 'admin';
-          }
-          if (id.includes('src/components/quote/')) {
-            return 'admin';
-          }
-          
-          // Employee portal
-          if (id.includes('src/components/employee/')) {
-            return 'employee';
-          }
-          
-          // Payment gateway
-          if (id.includes('src/components/payment/')) {
-            return 'payment';
-          }
-          
-          // Services
-          if (id.includes('src/services/')) {
-            return 'services';
-          }
-        },
         assetFileNames: (assetInfo) => {
           const info = assetInfo.name?.split('.') || [];
           let extType = info[info.length - 1];
