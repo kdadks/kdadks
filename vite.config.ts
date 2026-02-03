@@ -13,8 +13,10 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks: (id) => {
-          // Core React and Router
-          if (id.includes('node_modules/react') || id.includes('node_modules/react-dom')) {
+          // Core React and Router - keep lucide-react with vendor to ensure React is loaded first
+          if (id.includes('node_modules/react') || 
+              id.includes('node_modules/react-dom') || 
+              id.includes('node_modules/lucide-react')) {
             return 'vendor';
           }
           if (id.includes('node_modules/react-router-dom')) {
@@ -27,9 +29,6 @@ export default defineConfig({
           }
           
           // UI Libraries
-          if (id.includes('node_modules/lucide-react')) {
-            return 'icons';
-          }
           if (id.includes('node_modules/framer-motion')) {
             return 'animations';
           }
