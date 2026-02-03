@@ -11,7 +11,8 @@ import {
   Vendor,
   CreateExpenseData,
   CreateVendorData,
-  ExpenseStats
+  ExpenseStats,
+  PaginatedResponse
 } from '../../services/expenseService';
 import { invoiceService } from '../../services/invoiceService';
 import type { Country } from '../../types/invoice';
@@ -67,6 +68,12 @@ const ExpenseManagement: React.FC = () => {
     vendorId: ''
   });
   const [showFilters, setShowFilters] = useState(false);
+  
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
+  const itemsPerPage = 20;
 
   // Modal state
   const [modalType, setModalType] = useState<ModalType>(null);
@@ -91,18 +98,20 @@ const ExpenseManagement: React.FC = () => {
     if (activeTab === 'expenses') {
       loadExpenses();
     }
-  }, [filters]);
+  }, [filters, currentPage]);
 
   const loadData = async () => {
     setLoading(true);
     try {
       const [expenseData, vendorData, categoryData, statsData] = await Promise.all([
-        expenseService.getExpenses(),
+        expenseService.getExpenses({}, currentPage, itemsPerPage),
         expenseService.getVendors(),
         expenseService.getCategories(),
         expenseService.getExpenseStats()
       ]);
-      setExpenses(expenseData);
+      setExpenses(expenseData.data);
+      setTotalPages(expenseData.total_pages);
+      setTotalCount(expenseData.count);
       setVendors(vendorData);
       setCategories(categoryData);
       setStats(statsData);
@@ -115,16 +124,33 @@ const ExpenseManagement: React.FC = () => {
 
   const loadExpenses = async () => {
     try {
-      const data = await expenseService.getExpenses({
-        status: filters.status || undefined,
-        paymentStatus: filters.paymentStatus || undefined,
-        categoryId: filters.categoryId || undefined,
-        vendorId: filters.vendorId || undefined
-      });
-      setExpenses(data);
+      const data = await expenseService.getExpenses(
+        {
+          status: filters.status || undefined,
+          paymentStatus: filters.paymentStatus || undefined,
+          categoryId: filters.categoryId || undefined,
+          vendorId: filters.vendorId || undefined
+        },
+        currentPage,
+        itemsPerPage
+      );
+      setExpenses(data.data);
+      setTotalPages(data.total_pages);
+      setTotalCount(data.count);
     } catch (error) {
       console.error('Error loading expenses:', error);
     }
+  };
+
+  const clearFilters = () => {
+    setFilters({
+      status: '',
+      paymentStatus: '',
+      categoryId: '',
+      vendorId: ''
+    });
+    setCurrentPage(1);
+    setSearchTerm('');
   };
 
   const openModal = (type: ModalType, mode: 'create' | 'edit' | 'view', item?: any) => {
@@ -146,7 +172,10 @@ const ExpenseManagement: React.FC = () => {
         await expenseService.updateExpense(selectedItem.id, data);
       }
       closeModal();
-      loadData();
+      // Reload expenses with current filters to maintain filter state
+      await loadExpenses();
+      // Reload stats in the background
+      expenseService.getExpenseStats().then(setStats);
     } catch (error) {
       console.error('Error saving expense:', error);
       alert('Failed to save expense');
@@ -187,7 +216,8 @@ const ExpenseManagement: React.FC = () => {
     if (!confirm('Approve this expense?')) return;
     try {
       await expenseService.approveExpense(id);
-      loadData();
+      await loadExpenses();
+      expenseService.getExpenseStats().then(setStats);
     } catch (error) {
       console.error('Error approving expense:', error);
     }
@@ -198,7 +228,8 @@ const ExpenseManagement: React.FC = () => {
     if (!reason) return;
     try {
       await expenseService.rejectExpense(id, reason);
-      loadData();
+      await loadExpenses();
+      expenseService.getExpenseStats().then(setStats);
     } catch (error) {
       console.error('Error rejecting expense:', error);
     }
@@ -209,7 +240,8 @@ const ExpenseManagement: React.FC = () => {
     if (!paymentDate) return;
     try {
       await expenseService.markExpensePaid(id, paymentDate);
-      loadData();
+      await loadExpenses();
+      expenseService.getExpenseStats().then(setStats);
     } catch (error) {
       console.error('Error marking expense paid:', error);
     }
@@ -221,15 +253,18 @@ const ExpenseManagement: React.FC = () => {
       switch (type) {
         case 'expense':
           await expenseService.deleteExpense(id);
+          await loadExpenses();
+          expenseService.getExpenseStats().then(setStats);
           break;
         case 'vendor':
           await expenseService.deleteVendor(id);
+          loadData();
           break;
         case 'category':
           await expenseService.deleteCategory(id);
+          loadData();
           break;
       }
-      loadData();
     } catch (error) {
       console.error('Error deleting:', error);
     }
@@ -370,15 +405,27 @@ const ExpenseManagement: React.FC = () => {
               />
             </div>
             {activeTab === 'expenses' && (
-              <button
-                onClick={() => setShowFilters(!showFilters)}
-                className={`flex items-center gap-2 px-4 py-2 border rounded-lg transition-colors ${
-                  showFilters ? 'bg-orange-50 border-orange-300 text-orange-700' : 'border-gray-300 text-gray-700 hover:bg-gray-50'
-                }`}
-              >
-                <Filter className="w-5 h-5" />
-                Filters
-              </button>
+              <>
+                <button
+                  onClick={() => setShowFilters(!showFilters)}
+                  className={`flex items-center gap-2 px-4 py-2 border rounded-lg transition-colors ${
+                    showFilters ? 'bg-orange-50 border-orange-300 text-orange-700' : 'border-gray-300 text-gray-700 hover:bg-gray-50'
+                  }`}
+                >
+                  <Filter className="w-5 h-5" />
+                  Filters
+                </button>
+                {(filters.status || filters.paymentStatus || filters.categoryId || filters.vendorId || searchTerm) && (
+                  <button
+                    onClick={clearFilters}
+                    className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
+                    title="Clear all filters"
+                  >
+                    <X className="w-5 h-5" />
+                    Clear
+                  </button>
+                )}
+              </>
             )}
           </div>
 
@@ -387,7 +434,10 @@ const ExpenseManagement: React.FC = () => {
             <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4">
               <select
                 value={filters.status}
-                onChange={(e) => setFilters({ ...filters, status: e.target.value })}
+                onChange={(e) => {
+                  setFilters({ ...filters, status: e.target.value });
+                  setCurrentPage(1);
+                }}
                 className="px-3 py-2 border border-gray-300 rounded-lg"
               >
                 <option value="">All Status</option>
@@ -397,7 +447,10 @@ const ExpenseManagement: React.FC = () => {
               </select>
               <select
                 value={filters.paymentStatus}
-                onChange={(e) => setFilters({ ...filters, paymentStatus: e.target.value })}
+                onChange={(e) => {
+                  setFilters({ ...filters, paymentStatus: e.target.value });
+                  setCurrentPage(1);
+                }}
                 className="px-3 py-2 border border-gray-300 rounded-lg"
               >
                 <option value="">All Payment Status</option>
@@ -407,7 +460,10 @@ const ExpenseManagement: React.FC = () => {
               </select>
               <select
                 value={filters.categoryId}
-                onChange={(e) => setFilters({ ...filters, categoryId: e.target.value })}
+                onChange={(e) => {
+                  setFilters({ ...filters, categoryId: e.target.value });
+                  setCurrentPage(1);
+                }}
                 className="px-3 py-2 border border-gray-300 rounded-lg"
               >
                 <option value="">All Categories</option>
@@ -417,7 +473,10 @@ const ExpenseManagement: React.FC = () => {
               </select>
               <select
                 value={filters.vendorId}
-                onChange={(e) => setFilters({ ...filters, vendorId: e.target.value })}
+                onChange={(e) => {
+                  setFilters({ ...filters, vendorId: e.target.value });
+                  setCurrentPage(1);
+                }}
                 className="px-3 py-2 border border-gray-300 rounded-lg"
               >
                 <option value="">All Vendors</option>
@@ -552,6 +611,34 @@ const ExpenseManagement: React.FC = () => {
                       )}
                     </tbody>
                   </table>
+                  
+                  {/* Pagination */}
+                  {filteredExpenses.length > 0 && totalPages > 1 && (
+                    <div className="mt-4 flex items-center justify-between border-t border-gray-200 pt-4">
+                      <p className="text-sm text-gray-600">
+                        Showing {((currentPage - 1) * itemsPerPage) + 1} to {Math.min(currentPage * itemsPerPage, totalCount)} of {totalCount} expenses
+                      </p>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+                          disabled={currentPage === 1}
+                          className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          Previous
+                        </button>
+                        <span className="text-sm text-gray-600">
+                          Page {currentPage} of {totalPages}
+                        </span>
+                        <button
+                          onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
+                          disabled={currentPage === totalPages}
+                          className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          Next
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 

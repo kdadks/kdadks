@@ -12,10 +12,82 @@ export default defineConfig({
     cssCodeSplit: true,
     rollupOptions: {
       output: {
-        manualChunks: {
-          vendor: ['react', 'react-dom'],
-          icons: ['lucide-react'],
-          animations: ['framer-motion']
+        manualChunks: (id) => {
+          // Core React and Router
+          if (id.includes('node_modules/react') || id.includes('node_modules/react-dom')) {
+            return 'vendor';
+          }
+          if (id.includes('node_modules/react-router-dom')) {
+            return 'router';
+          }
+          
+          // Supabase
+          if (id.includes('node_modules/@supabase')) {
+            return 'supabase';
+          }
+          
+          // UI Libraries
+          if (id.includes('node_modules/lucide-react')) {
+            return 'icons';
+          }
+          if (id.includes('node_modules/framer-motion')) {
+            return 'animations';
+          }
+          
+          // PDF and Document handling
+          if (id.includes('html2canvas') || id.includes('jspdf')) {
+            return 'pdf-utils';
+          }
+          
+          // Rich Text Editor
+          if (id.includes('react-quill') || id.includes('quill')) {
+            return 'editor';
+          }
+          
+          // Chart libraries
+          if (id.includes('recharts') || id.includes('chart')) {
+            return 'charts';
+          }
+          
+          // Date/Time libraries
+          if (id.includes('date-fns') || id.includes('moment')) {
+            return 'date-utils';
+          }
+          
+          // Admin modules - split further
+          if (id.includes('src/components/admin/SimpleAdminDashboard')) {
+            return 'admin-dashboard';
+          }
+          if (id.includes('src/components/admin/')) {
+            return 'admin';
+          }
+          if (id.includes('src/components/invoice/')) {
+            return 'invoice';
+          }
+          if (id.includes('src/components/contract/ContractManagement')) {
+            return 'contract-management';
+          }
+          if (id.includes('src/components/contract/')) {
+            return 'contract';
+          }
+          if (id.includes('src/components/quote/')) {
+            return 'quote';
+          }
+          
+          // Employee portal
+          if (id.includes('src/components/employee/')) {
+            return 'employee';
+          }
+          
+          // Payment gateway
+          if (id.includes('src/components/payment/')) {
+            return 'payment';
+          }
+          
+          // Services
+          if (id.includes('src/services/')) {
+            return 'services';
+          }
         },
         assetFileNames: (assetInfo) => {
           const info = assetInfo.name?.split('.') || [];
@@ -31,8 +103,9 @@ export default defineConfig({
         entryFileNames: 'assets/js/[name]-[hash].js'
       }
     },
-    // Optimize chunk size
-    chunkSizeWarningLimit: 1000
+    // Optimize chunk size - increased from 1000 to 1500 after implementing comprehensive code splitting
+    // The contract module with rich text editor is inherently large
+    chunkSizeWarningLimit: 1500
   },
   server: {
     port: 3001,

@@ -2,6 +2,14 @@ import { supabase } from '../config/supabase';
 
 // ==================== TYPES ====================
 
+export interface PaginatedResponse<T> {
+  data: T[];
+  count: number;
+  page: number;
+  per_page: number;
+  total_pages: number;
+}
+
 export interface ExpenseCategory {
   id: string;
   name: string;
@@ -241,21 +249,25 @@ export const expenseService = {
 
   // ==================== EXPENSES ====================
 
-  async getExpenses(filters?: {
-    status?: string;
-    paymentStatus?: string;
-    categoryId?: string;
-    vendorId?: string;
-    startDate?: string;
-    endDate?: string;
-  }): Promise<Expense[]> {
+  async getExpenses(
+    filters?: {
+      status?: string;
+      paymentStatus?: string;
+      categoryId?: string;
+      vendorId?: string;
+      startDate?: string;
+      endDate?: string;
+    },
+    page: number = 1,
+    perPage: number = 20
+  ): Promise<PaginatedResponse<Expense>> {
     let query = supabase
       .from('expenses')
       .select(`
         *,
         expense_categories (id, name),
         vendors (id, name)
-      `)
+      `, { count: 'exact' })
       .order('expense_date', { ascending: false });
 
     if (filters?.status) query = query.eq('status', filters.status);
@@ -265,9 +277,19 @@ export const expenseService = {
     if (filters?.startDate) query = query.gte('expense_date', filters.startDate);
     if (filters?.endDate) query = query.lte('expense_date', filters.endDate);
 
-    const { data, error } = await query;
+    const from = (page - 1) * perPage;
+    const to = from + perPage - 1;
+
+    const { data, error, count } = await query.range(from, to);
     if (error) throw error;
-    return data || [];
+    
+    return {
+      data: data || [],
+      count: count || 0,
+      page,
+      per_page: perPage,
+      total_pages: Math.ceil((count || 0) / perPage)
+    };
   },
 
   async getExpenseById(id: string): Promise<Expense | null> {
