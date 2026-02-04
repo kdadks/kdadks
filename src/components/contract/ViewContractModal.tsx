@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, FileText, Calendar, DollarSign, Users, CheckCircle, XCircle } from 'lucide-react';
 import DOMPurify from 'dompurify';
+import { convertToINRAsync } from '../../utils/currencyConverter';
 import type { ContractWithDetails } from '../../types/contract';
 
 interface ViewContractModalProps {
@@ -9,16 +10,43 @@ interface ViewContractModalProps {
 }
 
 const ViewContractModal: React.FC<ViewContractModalProps> = ({ contract, onClose }) => {
+  const [convertedValue, setConvertedValue] = useState<number | null>(null);
+  const [convertedMilestones, setConvertedMilestones] = useState<Record<string, number>>({});
+
+  useEffect(() => {
+    // Convert contract value using today's exchange rate
+    const convertValues = async () => {
+      if (contract.contract_value && contract.currency_code && contract.currency_code !== 'INR') {
+        const inrValue = await convertToINRAsync(contract.contract_value, contract.currency_code);
+        setConvertedValue(inrValue);
+      }
+
+      // Convert milestone amounts
+      if (contract.milestones && contract.milestones.length > 0 && contract.currency_code !== 'INR') {
+        const converted: Record<string, number> = {};
+        for (const milestone of contract.milestones) {
+          if (milestone.payment_amount) {
+            const inrValue = await convertToINRAsync(milestone.payment_amount, contract.currency_code || 'INR');
+            converted[milestone.id] = inrValue;
+          }
+        }
+        setConvertedMilestones(converted);
+      }
+    };
+
+    convertValues();
+  }, [contract]);
+
   const formatDate = (dateStr?: string) => {
     if (!dateStr) return 'N/A';
     return new Date(dateStr).toLocaleDateString('en-IN');
   };
 
-  const formatCurrency = (amount?: number) => {
+  const formatCurrency = (amount?: number, currencyCode: string = 'INR') => {
     if (!amount) return 'N/A';
     return new Intl.NumberFormat('en-IN', {
       style: 'currency',
-      currency: 'INR' // Always show INR since values are stored in INR
+      currency: currencyCode
     }).format(amount);
   };
 
@@ -101,8 +129,18 @@ const ViewContractModal: React.FC<ViewContractModalProps> = ({ contract, onClose
                 </div>
               </div>
               <div>
-                <label className="text-sm font-medium text-gray-500">Contract Value (INR)</label>
-                <p className="text-gray-900 font-medium">{formatCurrency(contract.contract_value)}</p>
+                <label className="text-sm font-medium text-gray-500">Contract Value</label>
+                <p className="text-gray-900 font-medium">
+                  <span className="text-lg font-semibold">
+                    {formatCurrency(contract.contract_value, contract.currency_code)}
+                  </span>
+                  {convertedValue && contract.currency_code !== 'INR' && (
+                    <span className="text-sm text-gray-600 block mt-1">
+                      ≈ {formatCurrency(convertedValue, 'INR')}
+                      <span className="text-xs text-gray-500 ml-1">(today's rate)</span>
+                    </span>
+                  )}
+                </p>
               </div>
             </div>
           </div>
@@ -254,9 +292,17 @@ const ViewContractModal: React.FC<ViewContractModalProps> = ({ contract, onClose
               <div className="grid grid-cols-2 gap-4">
                 {contract.contract_value && (
                   <div>
-                    <label className="text-sm font-medium text-gray-500">Contract Value (INR)</label>
+                    <label className="text-sm font-medium text-gray-500">Contract Value</label>
                     <p className="text-gray-900 font-semibold text-lg">
-                      {formatCurrency(contract.contract_value)}
+                      <span className="block">
+                        {formatCurrency(contract.contract_value, contract.currency_code)}
+                      </span>
+                      {convertedValue && contract.currency_code !== 'INR' && (
+                        <span className="text-sm text-gray-600 font-normal block mt-1">
+                          ≈ {formatCurrency(convertedValue, 'INR')}
+                          <span className="text-xs text-gray-500 ml-1">(today's rate)</span>
+                        </span>
+                      )}
                     </p>
                   </div>
                 )}
@@ -341,7 +387,12 @@ const ViewContractModal: React.FC<ViewContractModalProps> = ({ contract, onClose
                       </div>
                       {milestone.payment_amount && (
                         <div className="font-semibold text-gray-900">
-                          {formatCurrency(milestone.payment_amount)}
+                          <span>{formatCurrency(milestone.payment_amount, contract.currency_code)}</span>
+                          {convertedMilestones[milestone.id] && contract.currency_code !== 'INR' && (
+                            <span className="text-xs text-gray-600 font-normal block">
+                              ≈ {formatCurrency(convertedMilestones[milestone.id], 'INR')}
+                            </span>
+                          )}
                         </div>
                       )}
                     </div>

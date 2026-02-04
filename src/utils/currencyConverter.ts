@@ -96,7 +96,7 @@ function getCachedRatesSync(): Record<string, number> {
 }
 
 /**
- * Convert amount from any currency to INR
+ * Convert amount from any currency to INR (synchronous - uses cached rates)
  * @param amount - Amount in source currency
  * @param fromCurrency - Source currency code (USD, EUR, etc.)
  * @returns Amount in INR
@@ -105,6 +105,29 @@ export function convertToINR(amount: number, fromCurrency: string): number {
   if (!amount || amount === 0) return 0;
   
   const rates = getCachedRatesSync();
+  const rate = rates[fromCurrency.toUpperCase()];
+  
+  if (!rate) {
+    console.warn(`Exchange rate not found for ${fromCurrency}, using fallback`);
+    const fallbackRate = FALLBACK_RATES_TO_INR[fromCurrency.toUpperCase()];
+    return fallbackRate ? Math.round(amount * fallbackRate * 100) / 100 : amount;
+  }
+  
+  return Math.round(amount * rate * 100) / 100; // Round to 2 decimal places
+}
+
+/**
+ * Convert amount from any currency to INR (async - ensures fresh rates)
+ * Use this for displaying conversions to ensure today's exchange rate is used
+ * @param amount - Amount in source currency
+ * @param fromCurrency - Source currency code (USD, EUR, etc.)
+ * @returns Promise<Amount in INR>
+ */
+export async function convertToINRAsync(amount: number, fromCurrency: string): Promise<number> {
+  if (!amount || amount === 0) return 0;
+  
+  // Ensure we have fresh rates (respects 1-hour cache)
+  const rates = await getExchangeRates();
   const rate = rates[fromCurrency.toUpperCase()];
   
   if (!rate) {

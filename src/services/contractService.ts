@@ -5,6 +5,7 @@
 
 import { supabase, isSupabaseConfigured } from '../config/supabase';
 import { simpleAuth } from '../utils/simpleAuth';
+import { convertToINR } from '../utils/currencyConverter';
 import type {
   Contract,
   ContractWithDetails,
@@ -532,7 +533,7 @@ class ContractService {
 
     const { data: contracts, error } = await supabase
       .from('contracts')
-      .select('status, contract_type, contract_value, expiry_date');
+      .select('status, contract_type, contract_value, currency_code, expiry_date');
 
     if (error) throw error;
 
@@ -574,10 +575,14 @@ class ContractService {
         }
       }
 
-      // Contract values
-      stats.total_contract_value += contract.contract_value || 0;
+      // Contract values (convert to INR for consistent totals)
+      const contractValueInINR = contract.contract_value 
+        ? convertToINR(contract.contract_value, contract.currency_code || 'INR')
+        : 0;
+      
+      stats.total_contract_value += contractValueInINR;
       if (contract.status === 'active') {
-        stats.active_contract_value += contract.contract_value || 0;
+        stats.active_contract_value += contractValueInINR;
       }
 
       // By type
