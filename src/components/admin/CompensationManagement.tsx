@@ -16,6 +16,7 @@ import {
 import { employeeService } from '../../services/employeeService';
 import { useToast } from '../ui/ToastProvider';
 import ConfirmDialog from '../ui/ConfirmDialog';
+import { calculateSalaryBreakdown, type SalaryBreakdown } from '../../utils/salaryCalculator';
 
 interface Employee {
   id: string;
@@ -211,7 +212,7 @@ const CompensationManagement: React.FC = () => {
   // Stats
   const stats = {
     totalEmployeesWithComp: new Set(compensations.filter(c => c.is_current).map(c => c.employee_id)).size,
-    totalGrossSalary: compensations.filter(c => c.is_current).reduce((sum, c) => sum + c.gross_salary, 0),
+    totalGrossSalary: compensations.filter(c => c.is_current).reduce((sum, c) => sum + (c.gross_salary * 12), 0), // Annual gross
     pendingIncrements: increments.filter(i => i.status === 'pending').length,
     pendingBonuses: bonuses.filter(b => b.payment_status === 'pending' || b.payment_status === 'approved').length,
     totalBonusesPaid: bonuses.filter(b => b.payment_status === 'paid').reduce((sum, b) => sum + b.amount, 0)
@@ -260,7 +261,7 @@ const CompensationManagement: React.FC = () => {
               <DollarSign className="w-5 h-5 text-green-600" />
             </div>
             <div>
-              <p className="text-sm text-gray-600">Total Gross</p>
+              <p className="text-sm text-gray-600">Annual Gross</p>
               <p className="text-lg font-bold text-gray-900">{formatCurrency(stats.totalGrossSalary)}</p>
             </div>
           </div>
@@ -897,8 +898,20 @@ const CompensationModal: React.FC<{
   onClose: () => void;
   onSave: (data: any) => void;
 }> = ({ mode, type, item, employees, onClose, onSave }) => {
+  const [grossSalaryInput, setGrossSalaryInput] = useState<number>(0);
+  const [salaryBreakdown, setSalaryBreakdown] = useState<SalaryBreakdown | null>(null);
+  const [autoCalculate, setAutoCalculate] = useState(true);
+
   const [formData, setFormData] = useState<any>(() => {
-    if (item && mode !== 'create') return { ...item };
+    if (item && mode !== 'create') {
+      // Calculate gross from existing data
+      const gross = item.basic_salary + (item.hra || 0) + (item.da || 0) + 
+                   (item.special_allowance || 0) + (item.transport_allowance || 0) + 
+                   (item.medical_allowance || 0) + (item.other_allowances || 0);
+      setGrossSalaryInput(gross);
+      setAutoCalculate(false);
+      return { ...item };
+    }
     
     // Default values based on type
     if (type === 'compensation') {
@@ -951,6 +964,32 @@ const CompensationModal: React.FC<{
   });
 
   const [currentComp, setCurrentComp] = useState<EmployeeCompensation | null>(null);
+
+  // Calculate salary breakdown when gross salary changes
+  useEffect(() => {
+    if (type === 'compensation' && autoCalculate && grossSalaryInput > 0) {
+      const breakdown = calculateSalaryBreakdown(grossSalaryInput, {
+        otherAllowances: formData.other_allowances || 0,
+        otherDeductions: formData.other_deductions || 0
+      });
+      setSalaryBreakdown(breakdown);
+      
+      // Update form data with calculated values
+      setFormData((prev: any) => ({
+        ...prev,
+        basic_salary: breakdown.basicSalary,
+        hra: breakdown.hra,
+        da: breakdown.da,
+        special_allowance: breakdown.specialAllowance,
+        transport_allowance: breakdown.transportAllowance,
+        medical_allowance: breakdown.medicalAllowance,
+        pf_contribution: 0, // No PF as per user requirement
+        esi_contribution: breakdown.esi,
+        professional_tax: breakdown.professionalTax,
+        tds: breakdown.tds
+      }));
+    }
+  }, [grossSalaryInput, autoCalculate, type, formData.other_allowances, formData.other_deductions]);
 
   // Load current compensation when employee changes (for increments)
   useEffect(() => {
@@ -1018,110 +1057,191 @@ const CompensationModal: React.FC<{
           {/* Compensation Form */}
           {type === 'compensation' && (
             <>
+              {/* Auto-Calculate Toggle */}
+              <div className="flex items-center justify-between p-4 bg-blue-50 rounded-lg border border-blue-200">
+                <div className="flex items-center gap-2">
+                  <Calculator className="w-5 h-5 text-blue-600" />
+                  <div>
+                    <p className="font-medium text-blue-900">Auto-Calculate Salary Breakdown</p>
+                    <p className="text-sm text-blue-600">Enter gross salary and get automatic breakdown as per Indian standards</p>
+                  </div>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={autoCalculate}
+                    onChange={(e) => setAutoCalculate(e.target.checked)}
+                    disabled={isReadOnly}
+                    className="sr-only peer"
+                  />
+                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                </label>
+              </div>
+
+              {/* Gross Salary Input (when auto-calculate is ON) */}
+              {autoCalculate && !isReadOnly && (
+                <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
+                  <label className="block text-sm font-medium text-green-900 mb-2">
+                    Monthly Gross Salary * <span className="text-green-600 font-normal">(CTC/Month)</span>
+                  </label>
+                  <input
+                    type="number"
+                    value={grossSalaryInput}
+                    onChange={(e) => setGrossSalaryInput(parseFloat(e.target.value) || 0)}
+                    className="w-full px-4 py-3 text-lg font-semibold border-2 border-green-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                    placeholder="Enter monthly gross salary"
+                    min="0"
+                    step="100"
+                  />
+                  {salaryBreakdown && (
+                    <div className="mt-3 p-3 bg-white rounded border border-green-200">
+                      <p className="text-sm font-medium text-gray-700 mb-2">Breakdown Preview:</p>
+                      <div className="grid grid-cols-2 gap-2 text-sm">
+                        <div><span className="text-gray-600">Basic (40%):</span> <span className="font-medium">₹{salaryBreakdown.basicSalary.toLocaleString('en-IN')}</span></div>
+                        <div><span className="text-gray-600">HRA (40%):</span> <span className="font-medium">₹{salaryBreakdown.hra.toLocaleString('en-IN')}</span></div>
+                        <div><span className="text-gray-600">Special (20%):</span> <span className="font-medium">₹{salaryBreakdown.specialAllowance.toLocaleString('en-IN')}</span></div>
+                        <div><span className="text-red-600">PT:</span> <span className="font-medium text-red-600">-₹{salaryBreakdown.professionalTax.toLocaleString('en-IN')}</span></div>
+                        {salaryBreakdown.esi > 0 && (
+                          <div><span className="text-red-600">ESI (0.75%):</span> <span className="font-medium text-red-600">-₹{salaryBreakdown.esi.toLocaleString('en-IN')}</span></div>
+                        )}
+                        <div><span className="text-red-600">TDS:</span> <span className="font-medium text-red-600">-₹{salaryBreakdown.tds.toLocaleString('en-IN')}</span></div>
+                        <div className="col-span-2 pt-2 border-t border-green-200">
+                          <span className="text-green-700 font-semibold">Net Salary:</span> 
+                          <span className="font-bold text-green-700 text-lg ml-2">₹{salaryBreakdown.netSalary.toLocaleString('en-IN')}</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Basic Salary *</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Basic Salary * {autoCalculate && <span className="text-blue-600 text-xs">(Auto-calculated)</span>}
+                  </label>
                   <input
                     type="number"
                     value={formData.basic_salary}
                     onChange={(e) => handleChange('basic_salary', parseFloat(e.target.value) || 0)}
-                    disabled={isReadOnly}
+                    disabled={isReadOnly || autoCalculate}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 disabled:bg-gray-100"
                     required
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">HRA</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    HRA {autoCalculate && <span className="text-blue-600 text-xs">(Auto-calculated)</span>}
+                  </label>
                   <input
                     type="number"
                     value={formData.hra}
                     onChange={(e) => handleChange('hra', parseFloat(e.target.value) || 0)}
-                    disabled={isReadOnly}
+                    disabled={isReadOnly || autoCalculate}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 disabled:bg-gray-100"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">DA</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    DA {autoCalculate && <span className="text-blue-600 text-xs">(Auto-calculated)</span>}
+                  </label>
                   <input
                     type="number"
                     value={formData.da}
                     onChange={(e) => handleChange('da', parseFloat(e.target.value) || 0)}
-                    disabled={isReadOnly}
+                    disabled={isReadOnly || autoCalculate}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 disabled:bg-gray-100"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Special Allowance</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Special Allowance {autoCalculate && <span className="text-blue-600 text-xs">(Auto-calculated)</span>}
+                  </label>
                   <input
                     type="number"
                     value={formData.special_allowance}
                     onChange={(e) => handleChange('special_allowance', parseFloat(e.target.value) || 0)}
-                    disabled={isReadOnly}
+                    disabled={isReadOnly || autoCalculate}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 disabled:bg-gray-100"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Transport Allowance</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Transport Allowance {autoCalculate && <span className="text-blue-600 text-xs">(Auto-calculated)</span>}
+                  </label>
                   <input
                     type="number"
                     value={formData.transport_allowance}
                     onChange={(e) => handleChange('transport_allowance', parseFloat(e.target.value) || 0)}
-                    disabled={isReadOnly}
+                    disabled={isReadOnly || autoCalculate}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 disabled:bg-gray-100"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Medical Allowance</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Medical Allowance {autoCalculate && <span className="text-blue-600 text-xs">(Auto-calculated)</span>}
+                  </label>
                   <input
                     type="number"
                     value={formData.medical_allowance}
                     onChange={(e) => handleChange('medical_allowance', parseFloat(e.target.value) || 0)}
-                    disabled={isReadOnly}
+                    disabled={isReadOnly || autoCalculate}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 disabled:bg-gray-100"
                   />
                 </div>
               </div>
 
               <div className="border-t border-gray-200 pt-4">
-                <h4 className="font-medium mb-3 text-red-600">Deductions</h4>
+                <h4 className="font-medium mb-3 text-red-600 flex items-center gap-2">
+                  <ArrowDownRight className="w-4 h-4" />
+                  Deductions {autoCalculate && <span className="text-xs text-blue-600 font-normal">(Auto-calculated per Indian tax laws)</span>}
+                </h4>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">PF Contribution</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      PF Contribution <span className="text-xs text-gray-500">(Not provided)</span>
+                    </label>
                     <input
                       type="number"
                       value={formData.pf_contribution}
                       onChange={(e) => handleChange('pf_contribution', parseFloat(e.target.value) || 0)}
-                      disabled={isReadOnly}
+                      disabled={isReadOnly || autoCalculate}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 disabled:bg-gray-100"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">ESI Contribution</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      ESI Contribution {autoCalculate && <span className="text-blue-600 text-xs">(0.75% if ≤₹21k)</span>}
+                    </label>
                     <input
                       type="number"
                       value={formData.esi_contribution}
                       onChange={(e) => handleChange('esi_contribution', parseFloat(e.target.value) || 0)}
-                      disabled={isReadOnly}
+                      disabled={isReadOnly || autoCalculate}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 disabled:bg-gray-100"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Professional Tax</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Professional Tax {autoCalculate && <span className="text-blue-600 text-xs">(Auto-calculated)</span>}
+                    </label>
                     <input
                       type="number"
                       value={formData.professional_tax}
                       onChange={(e) => handleChange('professional_tax', parseFloat(e.target.value) || 0)}
-                      disabled={isReadOnly}
+                      disabled={isReadOnly || autoCalculate}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 disabled:bg-gray-100"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">TDS</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      TDS {autoCalculate && <span className="text-blue-600 text-xs">(Auto-calculated per FY 2025-26)</span>}
+                    </label>
                     <input
                       type="number"
                       value={formData.tds}
                       onChange={(e) => handleChange('tds', parseFloat(e.target.value) || 0)}
-                      disabled={isReadOnly}
+                      disabled={isReadOnly || autoCalculate}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 disabled:bg-gray-100"
                     />
                   </div>

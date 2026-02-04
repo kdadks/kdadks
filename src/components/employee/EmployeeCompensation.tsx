@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   DollarSign, TrendingUp, Gift, Calendar, Wallet, ArrowUpRight,
-  ArrowDownRight, History, Eye, X, ChevronRight, Clock, CheckCircle
+  ArrowDownRight, History, Eye, X, ChevronRight, Clock, CheckCircle, Info
 } from 'lucide-react';
 import {
   compensationService,
@@ -9,6 +9,7 @@ import {
   SalaryIncrement,
   EmployeeBonus
 } from '../../services/compensationService';
+import { calculateSalaryBreakdown } from '../../utils/salaryCalculator';
 
 type TabType = 'current' | 'history' | 'increments' | 'bonuses';
 
@@ -286,27 +287,74 @@ const CurrentSalaryView: React.FC<{ compensation: EmployeeCompensation | null }>
         <span>Effective from: <strong>{formatDate(compensation.effective_from)}</strong></span>
       </div>
 
+      {/* Salary Structure Info */}
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+        <div className="flex items-start gap-3">
+          <Info className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+          <div className="text-sm text-blue-800">
+            <p className="font-medium mb-1">Indian Salary Structure (FY 2025-26)</p>
+            <p className="text-blue-700">
+              Your salary follows standard Indian compensation structure:
+              Basic (40%), HRA (40%), Special Allowance (20%).
+              Deductions include Professional Tax, ESI (if applicable), and TDS based on current tax slabs.
+            </p>
+          </div>
+        </div>
+      </div>
+
       {/* Earnings */}
       <div>
         <h3 className="font-medium text-gray-900 mb-4 flex items-center gap-2">
           <ArrowUpRight className="w-5 h-5 text-green-500" />
-          Earnings
+          Earnings Breakdown
         </h3>
         <div className="bg-green-50 rounded-lg p-4">
           <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-            <SalaryItem label="Basic Salary" amount={compensation.basic_salary} />
-            <SalaryItem label="HRA" amount={compensation.hra} />
-            <SalaryItem label="DA" amount={compensation.da} />
-            <SalaryItem label="Special Allowance" amount={compensation.special_allowance} />
-            <SalaryItem label="Transport Allowance" amount={compensation.transport_allowance} />
-            <SalaryItem label="Medical Allowance" amount={compensation.medical_allowance} />
+            <SalaryItem 
+              label="Basic Salary (40%)" 
+              amount={compensation.basic_salary}
+              percentage={(compensation.basic_salary / compensation.gross_salary * 100).toFixed(1)}
+            />
+            <SalaryItem 
+              label="HRA (40%)" 
+              amount={compensation.hra}
+              percentage={(compensation.hra / compensation.gross_salary * 100).toFixed(1)}
+            />
+            <SalaryItem 
+              label="DA" 
+              amount={compensation.da}
+              percentage={compensation.da > 0 ? (compensation.da / compensation.gross_salary * 100).toFixed(1) : undefined}
+            />
+            <SalaryItem 
+              label="Special Allowance (20%)" 
+              amount={compensation.special_allowance}
+              percentage={(compensation.special_allowance / compensation.gross_salary * 100).toFixed(1)}
+            />
+            <SalaryItem 
+              label="Transport Allowance" 
+              amount={compensation.transport_allowance}
+              percentage={compensation.transport_allowance > 0 ? (compensation.transport_allowance / compensation.gross_salary * 100).toFixed(1) : undefined}
+            />
+            <SalaryItem 
+              label="Medical Allowance" 
+              amount={compensation.medical_allowance}
+              percentage={compensation.medical_allowance > 0 ? (compensation.medical_allowance / compensation.gross_salary * 100).toFixed(1) : undefined}
+            />
             {compensation.other_allowances > 0 && (
-              <SalaryItem label="Other Allowances" amount={compensation.other_allowances} />
+              <SalaryItem 
+                label="Other Allowances" 
+                amount={compensation.other_allowances}
+                percentage={(compensation.other_allowances / compensation.gross_salary * 100).toFixed(1)}
+              />
             )}
           </div>
           <div className="mt-4 pt-4 border-t border-green-200 flex justify-between items-center">
-            <span className="font-medium text-gray-700">Gross Salary</span>
+            <span className="font-medium text-gray-700">Gross Salary (Monthly)</span>
             <span className="text-xl font-bold text-green-600">{formatCurrency(compensation.gross_salary)}</span>
+          </div>
+          <div className="mt-2 pt-2 border-t border-green-200 flex justify-between items-center">
+            <span className="text-sm text-gray-600">Annual CTC</span>
+            <span className="text-lg font-semibold text-green-700">{formatCurrency(compensation.gross_salary * 12)}</span>
           </div>
         </div>
       </div>
@@ -315,16 +363,43 @@ const CurrentSalaryView: React.FC<{ compensation: EmployeeCompensation | null }>
       <div>
         <h3 className="font-medium text-gray-900 mb-4 flex items-center gap-2">
           <ArrowDownRight className="w-5 h-5 text-red-500" />
-          Deductions
+          Statutory Deductions
         </h3>
         <div className="bg-red-50 rounded-lg p-4">
           <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-            <SalaryItem label="PF Contribution" amount={compensation.pf_contribution} isDeduction />
-            <SalaryItem label="ESI Contribution" amount={compensation.esi_contribution} isDeduction />
-            <SalaryItem label="Professional Tax" amount={compensation.professional_tax} isDeduction />
-            <SalaryItem label="TDS" amount={compensation.tds} isDeduction />
+            {compensation.pf_contribution > 0 && (
+              <SalaryItem 
+                label="PF Contribution (12%)" 
+                amount={compensation.pf_contribution} 
+                isDeduction 
+              />
+            )}
+            {compensation.esi_contribution > 0 && (
+              <SalaryItem 
+                label="ESI (0.75%)" 
+                amount={compensation.esi_contribution} 
+                isDeduction
+                info="Applicable if gross ≤ ₹21,000"
+              />
+            )}
+            <SalaryItem 
+              label="Professional Tax" 
+              amount={compensation.professional_tax} 
+              isDeduction
+              info="State-specific tax"
+            />
+            <SalaryItem 
+              label="TDS (Income Tax)" 
+              amount={compensation.tds} 
+              isDeduction
+              info="Based on new tax regime FY 2025-26"
+            />
             {compensation.other_deductions > 0 && (
-              <SalaryItem label="Other Deductions" amount={compensation.other_deductions} isDeduction />
+              <SalaryItem 
+                label="Other Deductions" 
+                amount={compensation.other_deductions} 
+                isDeduction 
+              />
             )}
           </div>
           <div className="mt-4 pt-4 border-t border-red-200 flex justify-between items-center">
@@ -341,7 +416,10 @@ const CurrentSalaryView: React.FC<{ compensation: EmployeeCompensation | null }>
             <p className="text-blue-800 font-medium">Net Salary (Take Home)</p>
             <p className="text-sm text-blue-600 mt-1">After all deductions</p>
           </div>
-          <span className="text-3xl font-bold text-blue-800">{formatCurrency(compensation.net_salary)}</span>
+          <div className="text-right">
+            <span className="text-3xl font-bold text-blue-800 block">{formatCurrency(compensation.net_salary)}</span>
+            <span className="text-sm text-blue-700">₹{(compensation.net_salary * 12).toLocaleString('en-IN')} per year</span>
+          </div>
         </div>
       </div>
     </div>
@@ -349,11 +427,23 @@ const CurrentSalaryView: React.FC<{ compensation: EmployeeCompensation | null }>
 };
 
 // Salary Item Component
-const SalaryItem: React.FC<{ label: string; amount: number; isDeduction?: boolean }> = ({ label, amount, isDeduction }) => (
+const SalaryItem: React.FC<{ 
+  label: string; 
+  amount: number; 
+  isDeduction?: boolean;
+  percentage?: string;
+  info?: string;
+}> = ({ label, amount, isDeduction, percentage, info }) => (
   <div>
-    <p className="text-sm text-gray-600">{label}</p>
+    <div className="flex items-center gap-1">
+      <p className="text-sm text-gray-600">{label}</p>
+      {info && (
+        <span className="text-xs text-gray-400" title={info}>ⓘ</span>
+      )}
+    </div>
     <p className={`font-medium ${isDeduction ? 'text-red-600' : 'text-gray-900'}`}>
       {isDeduction && amount > 0 ? '-' : ''}{formatCurrency(amount)}
+      {percentage && <span className="text-xs text-gray-500 ml-1">({percentage}%)</span>}
     </p>
   </div>
 );
