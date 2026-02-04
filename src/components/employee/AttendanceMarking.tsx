@@ -146,10 +146,45 @@ export default function AttendanceMarking() {
         .gte('attendance_date', startDate)
         .lte('attendance_date', endDate);
 
+      // Auto-create holiday attendance records for past/current days
+      const today = new Date().toISOString().split('T')[0];
+      for (const day of weekDays) {
+        if (day.isHoliday && day.date <= today && !isFutureDate(day.date)) {
+          const existingRecord = attendanceRecords?.find(r => r.attendance_date === day.date);
+          if (!existingRecord) {
+            // Create holiday attendance record
+            try {
+              await supabase
+                .from('attendance_records')
+                .insert({
+                  employee_id: currentUser.id,
+                  attendance_date: day.date,
+                  status: 'holiday',
+                  work_hours: 0,
+                  total_hours: 0,
+                  break_hours: 0,
+                  overtime_hours: 0,
+                  is_regularized: false
+                });
+            } catch (error) {
+              console.error('Error creating holiday attendance record:', error);
+            }
+          }
+        }
+      }
+
+      // Reload attendance records after auto-creation
+      const { data: updatedRecords } = await supabase
+        .from('attendance_records')
+        .select('*')
+        .eq('employee_id', currentUser.id)
+        .gte('attendance_date', startDate)
+        .lte('attendance_date', endDate);
+
       // Populate with existing data
-      if (attendanceRecords && attendanceRecords.length > 0) {
+      if (updatedRecords && updatedRecords.length > 0) {
         weekDays.forEach(day => {
-          const record = attendanceRecords.find(r => r.attendance_date === day.date);
+          const record = updatedRecords.find(r => r.attendance_date === day.date);
           if (record) {
             // Extract time from timestamp without timezone conversion
             if (record.check_in_time) {
@@ -210,6 +245,18 @@ export default function AttendanceMarking() {
   const handleSaveDay = async (index: number) => {
     const day = weekData[index];
     
+    // Prevent marking attendance on holidays
+    if (day.isHoliday) {
+      showToast('Cannot mark attendance on company holidays', 'error');
+      return;
+    }
+
+    // Prevent marking attendance when on leave
+    if (day.isOnLeave) {
+      showToast('Cannot mark attendance when on approved leave', 'error');
+      return;
+    }
+
     if (!day.checkIn || !day.checkOut) {
       showToast('Please enter both check-in and check-out times', 'error');
       return;
