@@ -154,7 +154,7 @@ const AttendanceManagement: React.FC<AttendanceManagementProps> = ({ onBackToDas
 
       if (editingHoliday) {
         // Update existing holiday
-        const { error } = await supabase
+        const { data: updatedHolidays, error } = await supabase
           .from('company_holidays')
           .update({
             holiday_name: holidayForm.holiday_name,
@@ -163,13 +163,22 @@ const AttendanceManagement: React.FC<AttendanceManagementProps> = ({ onBackToDas
             is_mandatory: holidayForm.is_mandatory,
             description: holidayForm.description
           })
-          .eq('id', editingHoliday.id);
+          .eq('id', editingHoliday.id)
+          .select('*');
 
         if (error) throw error;
+        const updatedHoliday = updatedHolidays?.[0];
+        if (updatedHoliday) {
+          setHolidays((prev) =>
+            prev.map((holiday) => (holiday.id === updatedHoliday.id ? updatedHoliday : holiday))
+          );
+        } else {
+          await loadHolidays();
+        }
         showSuccess('Holiday updated successfully');
       } else {
         // Create new holiday
-        const { error } = await supabase
+        const { data: newHolidays, error } = await supabase
           .from('company_holidays')
           .insert({
             holiday_name: holidayForm.holiday_name,
@@ -177,9 +186,16 @@ const AttendanceManagement: React.FC<AttendanceManagementProps> = ({ onBackToDas
             holiday_type: holidayForm.holiday_type,
             is_mandatory: holidayForm.is_mandatory,
             description: holidayForm.description
-          });
+          })
+          .select('*');
 
         if (error) throw error;
+        const newHoliday = newHolidays?.[0];
+        if (newHoliday) {
+          setHolidays((prev) => [...prev, newHoliday].sort((a, b) => a.holiday_date.localeCompare(b.holiday_date)));
+        } else {
+          await loadHolidays();
+        }
         showSuccess('Holiday added successfully');
       }
 

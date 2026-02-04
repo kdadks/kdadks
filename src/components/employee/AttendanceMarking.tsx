@@ -420,13 +420,13 @@ export default function AttendanceMarking() {
                       {day.dayName}, {new Date(day.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                     </span>
                     {day.isHoliday && (
-                      <span className="block text-xs text-red-600 flex items-center mt-0.5">
+                      <span className="text-xs text-red-600 flex items-center mt-0.5">
                         <AlertCircle className="w-3 h-3 mr-1" />
                         {day.holidayName}
                       </span>
                     )}
                     {day.isOnLeave && (
-                      <span className="block text-xs text-blue-600 flex items-center mt-0.5">
+                      <span className="text-xs text-blue-600 flex items-center mt-0.5">
                         <AlertCircle className="w-3 h-3 mr-1" />
                         On {day.leaveTypeName}
                       </span>
