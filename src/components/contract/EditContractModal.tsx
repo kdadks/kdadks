@@ -14,12 +14,7 @@ const EditContractModal: React.FC<EditContractModalProps> = ({ contract, onSave,
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<'basic' | 'parties' | 'sections' | 'milestones'>('basic');
   
-  // Convert contract value from INR (stored) back to original currency (for display)
-  const displayContractValue = contract.contract_value && contract.currency_code !== 'INR'
-    ? convertFromINR(contract.contract_value, contract.currency_code)
-    : contract.contract_value || 0;
-  
-  // Form state
+  // Form state - use contract values directly (no conversion needed)
   const [formData, setFormData] = useState({
     contract_title: contract.contract_title,
     contract_type: contract.contract_type,
@@ -27,7 +22,7 @@ const EditContractModal: React.FC<EditContractModalProps> = ({ contract, onSave,
     effective_date: contract.effective_date,
     expiry_date: contract.expiry_date || '',
     preamble: contract.preamble || '',
-    contract_value: displayContractValue, // Display in original currency
+    contract_value: contract.contract_value || 0, // Use original value directly
     currency_code: contract.currency_code,
     payment_terms: contract.payment_terms || '',
     notes: contract.notes || '',
@@ -148,17 +143,10 @@ const EditContractModal: React.FC<EditContractModalProps> = ({ contract, onSave,
     setLoading(true);
     
     try {
-      // Convert contract value to INR if it's in a different currency
-      const contractValueInINR = formData.contract_value && formData.currency_code
-        ? convertToINR(formData.contract_value, formData.currency_code)
-        : formData.contract_value;
-
-      // Convert milestone payment amounts to INR and clean up dates
-      const milestonesInINR = milestones.map(m => ({
+      // Keep contract value in original currency (no conversion)
+      // Clean up milestone dates
+      const cleanedMilestones = milestones.map(m => ({
         ...m,
-        payment_amount: m.payment_amount && formData.currency_code
-          ? convertToINR(m.payment_amount, formData.currency_code)
-          : m.payment_amount,
         due_date: m.due_date || undefined // Convert empty string to undefined
       }));
 
@@ -167,9 +155,9 @@ const EditContractModal: React.FC<EditContractModalProps> = ({ contract, onSave,
         ...formData,
         expiry_date: formData.expiry_date || undefined, // Convert empty string to undefined
         preamble: formData.preamble || undefined,
-        contract_value: contractValueInINR, // Save in INR
+        contract_value: formData.contract_value, // Save in original currency
         sections: sections,
-        milestones: milestonesInINR
+        milestones: cleanedMilestones
       };
       
       await onSave(updateData);
@@ -328,11 +316,7 @@ const EditContractModal: React.FC<EditContractModalProps> = ({ contract, onSave,
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-transparent"
                     step="0.01"
                   />
-                  {formData.contract_value && formData.currency_code && formData.currency_code !== 'INR' && (
-                    <p className="text-xs text-gray-500 mt-1">
-                      ≈ {formatCurrencyWithSymbol(convertToINR(formData.contract_value, formData.currency_code), 'INR')} (live rate, will be saved in INR)
-                    </p>
-                  )}
+
                 </div>
 
                 <div>

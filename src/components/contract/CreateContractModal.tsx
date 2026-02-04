@@ -139,17 +139,10 @@ const CreateContractModal: React.FC<CreateContractModalProps> = ({ onSave, onClo
     setLoading(true);
     
     try {
-      // Convert contract value to INR if it's in a different currency
-      const contractValueInINR = formData.contract_value && formData.currency_code
-        ? convertToINR(formData.contract_value, formData.currency_code)
-        : formData.contract_value;
-
-      // Convert milestone payment amounts to INR and clean up dates
-      const milestonesInINR = milestones.map(m => ({
+      // Keep contract value in original currency (no conversion)
+      // Clean up milestone dates
+      const cleanedMilestones = milestones.map(m => ({
         ...m,
-        payment_amount: m.payment_amount && formData.currency_code
-          ? convertToINR(m.payment_amount, formData.currency_code)
-          : m.payment_amount,
         due_date: m.due_date || undefined // Convert empty string to undefined
       }));
 
@@ -158,9 +151,9 @@ const CreateContractModal: React.FC<CreateContractModalProps> = ({ onSave, onClo
         ...formData,
         expiry_date: formData.expiry_date || undefined,
         preamble: formData.preamble || undefined,
-        contract_value: contractValueInINR, // Save in INR
+        contract_value: formData.contract_value, // Save in original currency
         sections: sections,
-        milestones: milestonesInINR.length > 0 ? milestonesInINR : undefined
+        milestones: cleanedMilestones.length > 0 ? cleanedMilestones : undefined
       };
       
       await onSave(contractData);
@@ -319,11 +312,6 @@ const CreateContractModal: React.FC<CreateContractModalProps> = ({ onSave, onClo
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     step="0.01"
                   />
-                  {formData.contract_value && formData.currency_code && formData.currency_code !== 'INR' && (
-                    <p className="text-xs text-gray-500 mt-1">
-                      ≈ {formatCurrencyWithSymbol(convertToINR(formData.contract_value, formData.currency_code), 'INR')} (live rate, will be saved in INR)
-                    </p>
-                  )}
                 </div>
 
                 <div>
