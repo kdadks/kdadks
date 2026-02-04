@@ -84,6 +84,7 @@ export interface EmploymentDocument {
   valid_until?: string;
   status: DocumentStatus;
   pdf_url?: string;
+  storage_path?: string; // Path to PDF in Supabase storage
   pdf_generated_at?: string;
   generated_by?: string;
   created_at?: string;

@@ -4,6 +4,7 @@ import { employeeService } from '../../services/employeeService';
 import { invoiceService } from '../../services/invoiceService';
 import type { SalarySlip, Employee } from '../../types/employee';
 import { generateSalarySlipPDF } from '../../utils/salarySlipPDFGenerator';
+import { useToast } from '../ui/ToastProvider';
 
 const MONTH_NAMES = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -11,6 +12,7 @@ const MONTH_NAMES = [
 ];
 
 export default function EmployeeSalarySlips() {
+  const { showSuccess, showError } = useToast();
   const [salarySlips, setSalarySlips] = useState<SalarySlip[]>([]);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [loading, setLoading] = useState(true);
@@ -61,7 +63,7 @@ export default function EmployeeSalarySlips() {
   const handleViewSlip = async (slip: SalarySlip) => {
     try {
       if (!currentEmployee) {
-        alert('Employee data not loaded');
+        showError('Employee data not loaded');
         return;
       }
 
@@ -79,7 +81,7 @@ export default function EmployeeSalarySlips() {
       setShowPreview(true);
     } catch (error) {
       console.error('Error previewing salary slip:', error);
-      alert('Failed to preview salary slip');
+      showError('Failed to preview salary slip');
     }
   };
 
@@ -88,7 +90,7 @@ export default function EmployeeSalarySlips() {
       setDownloading(slip.id);
 
       if (!currentEmployee) {
-        alert('Employee data not loaded');
+        showError('Employee data not loaded');
         return;
       }
 
@@ -104,7 +106,7 @@ export default function EmployeeSalarySlips() {
       pdf.save(fileName);
     } catch (error) {
       console.error('Error downloading salary slip:', error);
-      alert('Failed to download salary slip');
+      showError('Failed to download salary slip');
     } finally {
       setDownloading(null);
     }

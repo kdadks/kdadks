@@ -208,24 +208,27 @@ export const employeeDocumentService = {
         throw new Error('Document not found');
       }
 
-      if (document.verification_status !== 'pending') {
+      // Allow deletion of pending or rejected documents only
+      if (document.verification_status === 'verified') {
         throw new Error('Cannot delete verified documents');
       }
 
-      // Delete from storage
-      const { error: storageError } = await supabase.storage
-        .from(STORAGE_BUCKET)
-        .remove([document.storage_path]);
+      // Delete from storage if storage path exists
+      if (document.storage_path) {
+        const { error: storageError } = await supabase.storage
+          .from(STORAGE_BUCKET)
+          .remove([document.storage_path]);
 
-      if (storageError) {
-        console.error('Storage delete error:', storageError);
-        // Continue with database deletion even if storage delete fails
+        if (storageError) {
+          console.error('Storage delete error:', storageError);
+          throw new Error(`Failed to delete file from storage: ${storageError.message}`);
+        }
       }
 
-      // Soft delete from database
+      // Hard delete from database (completely remove record)
       const { error } = await supabase
         .from('employee_documents')
-        .update({ is_active: false })
+        .delete()
         .eq('id', id);
 
       if (error) {

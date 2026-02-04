@@ -16,6 +16,7 @@ import {
   BarChart3
 } from 'lucide-react';
 import { performanceFeedbackService, PerformanceFeedback as FeedbackType, PerformanceGoal } from '../../services/performanceFeedbackService';
+import { useToast } from '../ui/ToastProvider';
 
 const ratingLabels = [
   { value: 1, label: 'Poor', color: 'text-red-500', bg: 'bg-red-100' },
@@ -57,6 +58,7 @@ const RatingStars: React.FC<{ rating: number; size?: 'sm' | 'md' | 'lg' }> = ({ 
 };
 
 const EmployeePerformanceFeedback: React.FC = () => {
+  const { showError, showSuccess } = useToast();
   const [feedbacks, setFeedbacks] = useState<FeedbackType[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedFeedback, setSelectedFeedback] = useState<FeedbackType | null>(null);
@@ -127,9 +129,10 @@ const EmployeePerformanceFeedback: React.FC = () => {
       await performanceFeedbackService.acknowledgeFeedback(selectedFeedback.id, acknowledgeComment);
       setShowModal(false);
       loadData();
+      showSuccess('Feedback acknowledged successfully');
     } catch (error) {
       console.error('Error acknowledging feedback:', error);
-      alert('Failed to acknowledge feedback. Please try again.');
+      showError('Failed to acknowledge feedback. Please try again.');
     } finally {
       setSubmitting(false);
     }

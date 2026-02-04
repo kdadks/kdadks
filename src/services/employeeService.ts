@@ -175,6 +175,7 @@ export const employeeService = {
   // =============== Employment Document Operations ===============
 
   async getEmploymentDocuments(employeeId?: string): Promise<EmploymentDocument[]> {
+    // Query employment_documents table (admin-generated docs like offer letters)
     let query = supabase
       .from('employment_documents')
       .select('*')
@@ -188,6 +189,48 @@ export const employeeService = {
 
     if (error) {
       console.error('Error fetching employment documents:', error)
+      throw error
+    }
+
+    return data || []
+  },
+
+  async getAllEmployeeDocuments(employeeId?: string): Promise<any[]> {
+    // Query unified view that combines both employee uploads and admin documents
+    let query = supabase
+      .from('employee_documents_unified')
+      .select('*')
+      .order('created_at', { ascending: false })
+
+    if (employeeId) {
+      query = query.eq('employee_id', employeeId)
+    }
+
+    const { data, error } = await query
+
+    if (error) {
+      console.error('Error fetching all employee documents:', error)
+      throw error
+    }
+
+    return data || []
+  },
+
+  async getEmployeeUploadedDocuments(employeeId?: string): Promise<any[]> {
+    // Query employee_documents table (employee-uploaded docs)
+    let query = supabase
+      .from('employee_documents')
+      .select('*')
+      .order('created_at', { ascending: false })
+
+    if (employeeId) {
+      query = query.eq('employee_id', employeeId)
+    }
+
+    const { data, error } = await query
+
+    if (error) {
+      console.error('Error fetching employee documents:', error)
       throw error
     }
 
@@ -241,6 +284,31 @@ export const employeeService = {
   },
 
   async deleteEmploymentDocument(id: string): Promise<void> {
+    // Get document details first to access storage_path
+    const { data: document, error: fetchError } = await supabase
+      .from('employment_documents')
+      .select('storage_path')
+      .eq('id', id)
+      .single()
+
+    if (fetchError) {
+      console.error('Error fetching document for deletion:', fetchError)
+      throw fetchError
+    }
+
+    // Delete from storage if storage_path exists
+    if (document?.storage_path) {
+      const { error: storageError } = await supabase.storage
+        .from('employee-documents')
+        .remove([document.storage_path])
+
+      if (storageError) {
+        console.error('Storage delete error:', storageError)
+        throw new Error(`Failed to delete file from storage: ${storageError.message}`)
+      }
+    }
+
+    // Delete from database
     const { error } = await supabase
       .from('employment_documents')
       .delete()

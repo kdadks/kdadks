@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { performanceFeedbackService, PerformanceFeedback as FeedbackType, PerformanceGoal, CreateFeedbackData } from '../../services/performanceFeedbackService';
 import { employeeService } from '../../services/employeeService';
+import { useToast } from '../ui/ToastProvider';
 
 interface Employee {
   id: string;
@@ -99,6 +100,7 @@ const RatingStars: React.FC<{ rating: number; onChange?: (rating: number) => voi
 };
 
 const PerformanceFeedback: React.FC = () => {
+  const { showError, showSuccess } = useToast();
   const [feedbacks, setFeedbacks] = useState<FeedbackType[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(true);
@@ -254,9 +256,10 @@ const PerformanceFeedback: React.FC = () => {
 
       setShowModal(false);
       loadData();
+      showSuccess('Feedback saved successfully');
     } catch (error) {
       console.error('Error saving feedback:', error);
-      alert('Error saving feedback. Please try again.');
+      showError('Error saving feedback. Please try again.');
     }
   };
 

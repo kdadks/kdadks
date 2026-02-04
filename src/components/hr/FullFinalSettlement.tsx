@@ -23,6 +23,7 @@ import type {
   CreateSettlementInput,
   Employee
 } from '../../types/employee';
+import ConfirmDialog from '../ui/ConfirmDialog';
 
 interface FullFinalSettlementProps {
   onBackToDashboard?: () => void;
@@ -36,6 +37,9 @@ const FullFinalSettlementComponent: React.FC<FullFinalSettlementProps> = ({
   const [settlements, setSettlements] = useState<FullFinalSettlement[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(true);
+  const [deleting, setDeleting] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [settlementToDelete, setSettlementToDelete] = useState<string | null>(null);
   const [activeView, setActiveView] = useState<ActiveView>('list');
   const [selectedSettlement, setSelectedSettlement] = useState<FullFinalSettlement | null>(null);
   const [previewData, setPreviewData] = useState<Partial<FullFinalSettlement> | null>(null);
@@ -148,16 +152,26 @@ const FullFinalSettlementComponent: React.FC<FullFinalSettlementProps> = ({
     }
   };
 
-  const handleDeleteSettlement = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this settlement?')) return;
+  const handleDeleteSettlement = (id: string) => {
+    setSettlementToDelete(id);
+    setShowDeleteConfirm(true);
+  };
 
+  const confirmDeleteSettlement = async () => {
+    if (!settlementToDelete) return;
+    
+    setDeleting(true);
     try {
-      await settlementService.deleteSettlement(id);
-      setSettlements(settlements.filter(s => s.id !== id));
+      await settlementService.deleteSettlement(settlementToDelete);
+      setSettlements(settlements.filter(s => s.id !== settlementToDelete));
       showSuccess('Settlement deleted successfully');
+      setShowDeleteConfirm(false);
+      setSettlementToDelete(null);
     } catch (error) {
       console.error('Error deleting settlement:', error);
       showError('Failed to delete settlement');
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -998,6 +1012,22 @@ const FullFinalSettlementComponent: React.FC<FullFinalSettlementProps> = ({
           </div>
         </div>
       )}
+
+      {/* Delete Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={showDeleteConfirm}
+        onClose={() => {
+          setShowDeleteConfirm(false);
+          setSettlementToDelete(null);
+        }}
+        onConfirm={confirmDeleteSettlement}
+        title="Delete Settlement"
+        message="Are you sure you want to delete this settlement? This action cannot be undone."
+        confirmText="Delete"
+        cancelText="Cancel"
+        type="danger"
+        loading={deleting}
+      />
     </div>
   );
 };

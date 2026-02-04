@@ -18,8 +18,10 @@ import { EmailService } from '../../services/emailService';
 import { PaymentStatusService } from '../../services/paymentStatusService';
 import type { PaymentRequest, PaymentGateway } from '../../types/payment';
 import type { Invoice } from '../../types/invoice';
+import { useToast } from '../ui/ToastProvider';
 
 export const CheckoutPage: React.FC = () => {
+  const { showError } = useToast();
   const { requestId, token } = useParams<{ requestId?: string; token?: string }>();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -202,7 +204,7 @@ export const CheckoutPage: React.FC = () => {
       } catch (razorpayError) {
         console.error('❌ Error with Razorpay modal:', razorpayError);
         const errorMessage = razorpayError instanceof Error ? razorpayError.message : String(razorpayError);
-        alert(`Razorpay error: ${errorMessage}`);
+        showError(`Razorpay error: ${errorMessage}`);
         setProcessing(false);
         reject(new Error('Failed to open payment window. Please try again.'));
       }

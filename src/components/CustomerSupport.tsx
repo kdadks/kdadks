@@ -1,8 +1,10 @@
 import React, { useState, useRef } from 'react'
 import { Headphones, Mail, Phone, MessageCircle, Clock, ArrowLeft, Send, CheckCircle, Shield } from 'lucide-react'
 import ReCaptchaEnterprise, { ReCaptchaEnterpriseRef } from './ui/ReCaptchaEnterprise'
+import { useToast } from './ui/ToastProvider'
 
 const CustomerSupport = () => {
+  const { showError } = useToast();
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -81,7 +83,7 @@ const CustomerSupport = () => {
       }
     } catch (error) {
       console.error('Error sending email:', error)
-      alert(`Failed to send message: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      showError(`Failed to send message: ${error instanceof Error ? error.message : 'Unknown error'}`);
       // Reset reCAPTCHA on error
       setRecaptchaToken(null)
       recaptchaRef.current?.reset()

@@ -16,6 +16,7 @@ import {
 } from '../../services/expenseService';
 import { invoiceService } from '../../services/invoiceService';
 import type { Country } from '../../types/invoice';
+import { useToast } from '../ui/ToastProvider';
 
 type TabType = 'expenses' | 'vendors' | 'categories';
 type ModalType = 'expense' | 'vendor' | 'category' | null;
@@ -53,6 +54,7 @@ const formatDate = (date: string) => {
 };
 
 const ExpenseManagement: React.FC = () => {
+  const { showError, showSuccess } = useToast();
   const [activeTab, setActiveTab] = useState<TabType>('expenses');
   const [loading, setLoading] = useState(true);
   const [expenses, setExpenses] = useState<Expense[]>([]);
@@ -176,9 +178,10 @@ const ExpenseManagement: React.FC = () => {
       await loadExpenses();
       // Reload stats in the background
       expenseService.getExpenseStats().then(setStats);
+      showSuccess('Expense saved successfully');
     } catch (error) {
       console.error('Error saving expense:', error);
-      alert('Failed to save expense');
+      showError('Failed to save expense');
     }
   };
 
@@ -191,9 +194,10 @@ const ExpenseManagement: React.FC = () => {
       }
       closeModal();
       loadData();
+      showSuccess('Vendor saved successfully');
     } catch (error) {
       console.error('Error saving vendor:', error);
-      alert('Failed to save vendor');
+      showError('Failed to save vendor');
     }
   };
 
@@ -206,14 +210,15 @@ const ExpenseManagement: React.FC = () => {
       }
       closeModal();
       loadData();
+      showSuccess('Category saved successfully');
     } catch (error) {
       console.error('Error saving category:', error);
-      alert('Failed to save category');
+      showError('Failed to save category');
     }
   };
 
   const handleApprove = async (id: string) => {
-    if (!confirm('Approve this expense?')) return;
+    if (!window.confirm('Approve this expense?')) return;
     try {
       await expenseService.approveExpense(id);
       await loadExpenses();
@@ -248,7 +253,7 @@ const ExpenseManagement: React.FC = () => {
   };
 
   const handleDelete = async (type: 'expense' | 'vendor' | 'category', id: string) => {
-    if (!confirm('Are you sure you want to delete this item?')) return;
+    if (!window.confirm('Are you sure you want to delete this item?')) return;
     try {
       switch (type) {
         case 'expense':

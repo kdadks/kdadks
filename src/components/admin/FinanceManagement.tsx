@@ -17,6 +17,7 @@ import {
 import { invoiceService } from '../../services/invoiceService';
 import { PDFBrandingUtils } from '../../utils/pdfBrandingUtils';
 import type { CompanySettings, Country } from '../../types/invoice';
+import { useToast } from '../ui/ToastProvider';
 
 type ViewType = 'dashboard' | 'transactions' | 'manual-entries' | 'reports';
 type PeriodType = 'monthly' | 'quarterly' | 'yearly';
@@ -47,6 +48,7 @@ const formatDate = (date: string) => {
 };
 
 const FinanceManagement: React.FC = () => {
+  const { showError, showSuccess } = useToast();
   const [activeView, setActiveView] = useState<ViewType>('dashboard');
   const [loading, setLoading] = useState(true);
   const [periodType, setPeriodType] = useState<PeriodType>('monthly');
@@ -213,7 +215,7 @@ const FinanceManagement: React.FC = () => {
   // PDF Generation functions
   const generateFinanceReportPDF = async (action: 'download' | 'preview') => {
     if (!summary || !companySettings) {
-      alert('Please ensure data is loaded and company settings are configured.');
+      showError('Please ensure data is loaded and company settings are configured.');
       return;
     }
 
@@ -470,7 +472,7 @@ const FinanceManagement: React.FC = () => {
 
     } catch (error) {
       console.error('Error generating PDF:', error);
-      alert('Failed to generate PDF report');
+      showError('Failed to generate PDF report');
     } finally {
       setPdfGenerating(false);
     }
@@ -486,14 +488,15 @@ const FinanceManagement: React.FC = () => {
       setShowTransactionModal(false);
       setSelectedTransaction(null);
       loadDashboardData();
+      showSuccess('Transaction saved successfully');
     } catch (error) {
       console.error('Error saving transaction:', error);
-      alert('Failed to save transaction');
+      showError('Failed to save transaction');
     }
   };
 
   const handleDeleteTransaction = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this transaction?')) return;
+    if (!window.confirm('Are you sure you want to delete this transaction?')) return;
     try {
       await financeService.deleteTransaction(id);
       loadDashboardData();

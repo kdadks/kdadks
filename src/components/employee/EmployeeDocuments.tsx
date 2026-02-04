@@ -14,6 +14,8 @@ import {
 } from 'lucide-react';
 import { employeeDocumentService } from '../../services/employeeDocumentService';
 import type { EmployeeDocument } from '../../types/employee';
+import { useToast } from '../ui/ToastProvider';
+import ConfirmDialog from '../ui/ConfirmDialog';
 
 const DOCUMENT_TYPES = [
   { value: 'aadhar_card', label: 'Aadhar Card' },
@@ -31,11 +33,15 @@ const DOCUMENT_TYPES = [
 ];
 
 export default function EmployeeDocuments() {
+  const { showSuccess, showError } = useToast();
   const [documents, setDocuments] = useState<EmployeeDocument[]>([]);
   const [adminDocuments, setAdminDocuments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [showUploadModal, setShowUploadModal] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [documentToDelete, setDocumentToDelete] = useState<EmployeeDocument | null>(null);
   const [selectedDocument, setSelectedDocument] = useState<EmployeeDocument | null>(null);
   const [showPreviewModal, setShowPreviewModal] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -76,7 +82,7 @@ export default function EmployeeDocuments() {
       setAdminDocuments(adminGen);
     } catch (error) {
       console.error('Error loading documents:', error);
-      alert('Failed to load documents');
+      showError('Failed to load documents');
     } finally {
       setLoading(false);
     }
@@ -88,14 +94,14 @@ export default function EmployeeDocuments() {
 
     // Validate file size (2MB)
     if (file.size > 2 * 1024 * 1024) {
-      alert('File size exceeds 2MB limit');
+      showError('File size exceeds 2MB limit');
       return;
     }
 
     // Validate file type
     const allowedTypes = ['application/pdf', 'image/jpeg', 'image/jpg', 'image/png'];
     if (!allowedTypes.includes(file.type)) {
-      alert('Invalid file type. Allowed: PDF, JPEG, JPG, PNG');
+      showError('Invalid file type. Allowed: PDF, JPEG, JPG, PNG');
       return;
     }
 
@@ -105,7 +111,7 @@ export default function EmployeeDocuments() {
   const handleUpload = async () => {
     try {
       if (!uploadForm.file || !uploadForm.document_type || !uploadForm.document_name) {
-        alert('Please fill all required fields');
+        showError('Please fill all required fields');
         return;
       }
 
@@ -120,7 +126,7 @@ export default function EmployeeDocuments() {
         expiry_date: uploadForm.expiry_date || undefined
       });
 
-      alert('Document uploaded successfully');
+      showSuccess('Document uploaded successfully');
       setShowUploadModal(false);
       setUploadForm({
         document_type: '',
@@ -135,7 +141,7 @@ export default function EmployeeDocuments() {
       loadDocuments();
     } catch (error: any) {
       console.error('Upload error:', error);
-      alert(error.message || 'Failed to upload document');
+      showError(error.message || 'Failed to upload document');
     } finally {
       setUploading(false);
     }
@@ -149,7 +155,7 @@ export default function EmployeeDocuments() {
       setShowPreviewModal(true);
     } catch (error) {
       console.error('Preview error:', error);
-      alert('Failed to preview document');
+      showError('Failed to preview document');
     }
   };
 
@@ -166,22 +172,30 @@ export default function EmployeeDocuments() {
       document.body.removeChild(a);
     } catch (error) {
       console.error('Download error:', error);
-      alert('Failed to download document');
+      showError('Failed to download document');
     }
   };
 
-  const handleDelete = async (doc: EmployeeDocument) => {
-    if (!confirm('Are you sure you want to delete this document?')) {
-      return;
-    }
+  const handleDelete = (doc: EmployeeDocument) => {
+    setDocumentToDelete(doc);
+    setShowDeleteConfirm(true);
+  };
 
+  const confirmDelete = async () => {
+    if (!documentToDelete) return;
+    
+    setDeleting(true);
     try {
-      await employeeDocumentService.deleteDocument(doc.id);
-      alert('Document deleted successfully');
+      await employeeDocumentService.deleteDocument(documentToDelete.id);
+      showSuccess('Document deleted successfully');
+      setShowDeleteConfirm(false);
+      setDocumentToDelete(null);
       loadDocuments();
     } catch (error: any) {
       console.error('Delete error:', error);
-      alert(error.message || 'Failed to delete document');
+      showError(error.message || 'Failed to delete document');
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -313,8 +327,31 @@ export default function EmployeeDocuments() {
                           {getStatusBadge(doc.verification_status)}
                         </div>
                         {doc.verification_comments && (
-                          <div className="mt-2 p-2 bg-gray-50 rounded text-sm text-gray-600">
-                            <strong>Admin Comment:</strong> {doc.verification_comments}
+                          <div className={`mt-3 p-3 rounded-lg text-sm ${
+                            doc.verification_status === 'rejected' 
+                              ? 'bg-red-50 border border-red-200' 
+                              : 'bg-blue-50 border border-blue-200'
+                          }`}>
+                            <div className="flex items-start">
+                              {doc.verification_status === 'rejected' ? (
+                                <XCircle className="w-4 h-4 text-red-600 mt-0.5 mr-2 flex-shrink-0" />
+                              ) : (
+                                <AlertCircle className="w-4 h-4 text-blue-600 mt-0.5 mr-2 flex-shrink-0" />
+                              )}
+                              <div>
+                                <strong className={doc.verification_status === 'rejected' ? 'text-red-900' : 'text-blue-900'}>
+                                  {doc.verification_status === 'rejected' ? 'Rejection Reason:' : 'Admin Comment:'}
+                                </strong>
+                                <p className={`mt-1 ${doc.verification_status === 'rejected' ? 'text-red-800' : 'text-blue-800'}`}>
+                                  {doc.verification_comments}
+                                </p>
+                                {doc.verification_status === 'rejected' && (
+                                  <p className="mt-2 text-xs text-red-700 font-medium">
+                                    Please upload a corrected document or contact admin for clarification.
+                                  </p>
+                                )}
+                              </div>
+                            </div>
                           </div>
                         )}
                       </div>
@@ -334,7 +371,7 @@ export default function EmployeeDocuments() {
                       >
                         <Download className="w-5 h-5" />
                       </button>
-                      {doc.verification_status === 'pending' && (
+                      {(doc.verification_status === 'pending' || doc.verification_status === 'rejected') && (
                         <button
                           onClick={() => handleDelete(doc)}
                           className="p-2 text-red-600 hover:bg-red-50 rounded-md transition-colors"
@@ -559,6 +596,20 @@ export default function EmployeeDocuments() {
           </div>
         </div>
       )}
-    </div>
+      {/* Delete Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={showDeleteConfirm}
+        onClose={() => {
+          setShowDeleteConfirm(false);
+          setDocumentToDelete(null);
+        }}
+        onConfirm={confirmDelete}
+        title="Delete Document"
+        message={`Are you sure you want to delete "${documentToDelete?.document_name}"? This action cannot be undone.`}
+        confirmText="Delete"
+        cancelText="Cancel"
+        type="danger"
+        loading={deleting}
+      />    </div>
   );
 }

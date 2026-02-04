@@ -14,6 +14,8 @@ import {
   CreateBonusData
 } from '../../services/compensationService';
 import { employeeService } from '../../services/employeeService';
+import { useToast } from '../ui/ToastProvider';
+import ConfirmDialog from '../ui/ConfirmDialog';
 
 interface Employee {
   id: string;
@@ -63,9 +65,13 @@ const formatDate = (date: string) => {
 };
 
 const CompensationManagement: React.FC = () => {
+  const { showError, showSuccess } = useToast();
   const [activeTab, setActiveTab] = useState<TabType>('compensation');
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(true);
+  const [deleting, setDeleting] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [itemToDelete, setItemToDelete] = useState<string | null>(null);
   
   // Filter states
   const [filterEmployee, setFilterEmployee] = useState('');
@@ -153,25 +159,36 @@ const CompensationManagement: React.FC = () => {
     setShowModal(true);
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this record?')) return;
+  const handleDelete = (id: string) => {
+    setItemToDelete(id);
+    setShowDeleteConfirm(true);
+  };
+
+  const confirmDelete = async () => {
+    if (!itemToDelete) return;
     
+    setDeleting(true);
     try {
       switch (activeTab) {
         case 'compensation':
-          await compensationService.deleteCompensation(id);
+          await compensationService.deleteCompensation(itemToDelete);
           break;
         case 'increments':
-          await compensationService.deleteIncrement(id);
+          await compensationService.deleteIncrement(itemToDelete);
           break;
         case 'bonuses':
-          await compensationService.deleteBonus(id);
+          await compensationService.deleteBonus(itemToDelete);
           break;
       }
       loadData();
+      showSuccess('Record deleted successfully');
+      setShowDeleteConfirm(false);
+      setItemToDelete(null);
     } catch (error) {
       console.error('Error deleting:', error);
-      alert('Failed to delete record');
+      showError('Failed to delete record');
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -460,13 +477,30 @@ const CompensationManagement: React.FC = () => {
               }
               setShowModal(false);
               loadData();
+              showSuccess('Saved successfully');
             } catch (error) {
               console.error('Error saving:', error);
-              alert('Failed to save. Please try again.');
+              showError('Failed to save. Please try again.');
             }
           }}
         />
       )}
+
+      {/* Delete Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={showDeleteConfirm}
+        onClose={() => {
+          setShowDeleteConfirm(false);
+          setItemToDelete(null);
+        }}
+        onConfirm={confirmDelete}
+        title="Delete Record"
+        message="Are you sure you want to delete this record? This action cannot be undone."
+        confirmText="Delete"
+        cancelText="Cancel"
+        type="danger"
+        loading={deleting}
+      />
     </div>
   );
 };
@@ -1049,7 +1083,7 @@ const CompensationModal: React.FC<{
               </div>
 
               <div className="border-t border-gray-200 pt-4">
-                <h4 className="font-medium text-gray-900 mb-3 text-red-600">Deductions</h4>
+                <h4 className="font-medium mb-3 text-red-600">Deductions</h4>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">PF Contribution</label>

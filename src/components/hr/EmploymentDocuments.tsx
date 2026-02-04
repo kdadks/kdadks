@@ -49,7 +49,7 @@ interface EmploymentDocumentsProps {
 }
 
 type ActiveTab = 'employees' | 'documents' | 'salary-slips' | 'generate-document' | 'generate-salary-slip';
-type EmployeeView = 'list' | 'add' | 'edit';
+type EmployeeView = 'list' | 'add' | 'edit' | 'view';
 
 const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashboard }) => {
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -114,6 +114,12 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [employeeToDelete, setEmployeeToDelete] = useState<Employee | null>(null);
 
+  // Employee document verification state
+  const [showVerifyDocModal, setShowVerifyDocModal] = useState(false);
+  const [verifyingDocument, setVerifyingDocument] = useState<any | null>(null);
+  const [verificationStatus, setVerificationStatus] = useState<string>('pending');
+  const [verificationComments, setVerificationComments] = useState('');
+
   // Salary slip generation state
   const [salarySlipInput, setSalarySlipInput] = useState<CreateSalarySlipInput>({
     employee_id: '',
@@ -153,7 +159,7 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
       setLoading(true);
       const [employeesData, documentsData, salarySlipsData, hrSettingsData] = await Promise.all([
         employeeService.getEmployees(),
-        employeeService.getEmploymentDocuments(),
+        employeeService.getAllEmployeeDocuments(),
         employeeService.getSalarySlips(),
         employeeService.getHRDocumentSettings()
       ]);
@@ -202,13 +208,10 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
       setLoadingEmployeeDocs(true);
       setShowEmployeeDocsModal(true);
 
-      // Fetch both employee uploaded documents and admin generated documents
-      const [uploadedDocs, adminDocs] = await Promise.all([
-        employeeDocumentService.getDocuments({ employee_id: employee.id }),
-        employeeService.getEmploymentDocuments(employee.id)
-      ]);
+      // Fetch all documents using unified view
+      const allDocs = await employeeService.getAllEmployeeDocuments(employee.id);
 
-      setEmployeeDocuments([...uploadedDocs, ...adminDocs]);
+      setEmployeeDocuments(allDocs);
     } catch (err) {
       console.error('Error loading employee documents:', err);
       showError('Failed to load employee documents');
@@ -1451,14 +1454,37 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
           throw new Error('Unsupported document type');
       }
 
-      // Save document record
+      // Save PDF to Supabase storage
+      const pdfBlob = pdf.output('blob');
+      const fileName = `${documentType}_${selectedEmployee.employee_number}_${documentNumber}_${Date.now()}.pdf`;
+      const storagePath = `employment-documents/${selectedEmployee.id}/${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('employee-documents')
+        .upload(storagePath, pdfBlob, {
+          contentType: 'application/pdf',
+          upsert: false
+        });
+
+      if (uploadError) {
+        throw new Error(`Failed to upload PDF: ${uploadError.message}`);
+      }
+
+      // Get public URL
+      const { data: urlData } = supabase.storage
+        .from('employee-documents')
+        .getPublicUrl(storagePath);
+
+      // Save document record with storage path
       await employeeService.createEmploymentDocument({
         employee_id: selectedEmployee.id,
         document_type: documentType,
         document_number: documentNumber,
         document_date: new Date().toISOString().split('T')[0],
         document_data: documentData,
-        status: 'generated'
+        status: 'generated',
+        pdf_url: urlData.publicUrl,
+        storage_path: storagePath
       });
 
       // Download PDF
@@ -1599,6 +1625,31 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
 
   const handleDownloadDocument = async (document: EmploymentDocument) => {
     try {
+      // If document has storage_path, download from storage
+      if (document.storage_path) {
+        const { data, error } = await supabase.storage
+          .from('employee-documents')
+          .download(document.storage_path);
+
+        if (error) {
+          throw new Error(`Failed to download from storage: ${error.message}`);
+        }
+
+        // Create download link
+        const url = window.URL.createObjectURL(data);
+        const a = window.document.createElement('a');
+        a.href = url;
+        a.download = `${document.document_number}.pdf`;
+        window.document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        window.document.body.removeChild(a);
+
+        showSuccess('Document downloaded successfully');
+        return;
+      }
+
+      // Fallback: regenerate PDF if no storage_path (legacy documents)
       const employee = employees.find(emp => emp.id === document.employee_id);
       if (!employee) {
         showError('Employee not found');
@@ -1642,9 +1693,25 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
     }
   };
 
-  const handleEditDocument = async (document: EmploymentDocument) => {
+  const handleEditDocument = async (document: any) => {
     try {
-      // Find the employee for this document
+      // Check if this is an employee-uploaded document
+      if (document.document_source === 'employee_upload') {
+        // Open verification modal for employee documents
+        const employee = employees.find(emp => emp.id === document.employee_id);
+        if (!employee) {
+          showError('Employee not found');
+          return;
+        }
+        setVerifyingDocument(document);
+        setSelectedEmployee(employee);
+        setVerificationStatus(document.status || 'pending');
+        setVerificationComments(document.verification_comments || '');
+        setShowVerifyDocModal(true);
+        return;
+      }
+
+      // For admin-generated documents, open edit modal
       const employee = employees.find(emp => emp.id === document.employee_id);
       if (!employee) {
         showError('Employee not found');
@@ -1658,6 +1725,44 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
     } catch (err) {
       console.error('Error opening document for edit:', err);
       showError('Failed to open document for editing');
+    }
+  };
+
+  const handleSaveVerification = async () => {
+    try {
+      if (!verifyingDocument) {
+        showError('No document selected');
+        return;
+      }
+
+      // Validate rejection reason if status is rejected
+      if (verificationStatus === 'rejected' && !verificationComments.trim()) {
+        showError('Please provide a rejection reason');
+        return;
+      }
+
+      // Update employee_documents table with verification status
+      const { error } = await supabase
+        .from('employee_documents')
+        .update({
+          verification_status: verificationStatus,
+          verified_by: null, // Set to null for now - will be updated with actual admin ID later
+          verification_date: new Date().toISOString(),
+          verification_comments: verificationComments,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', verifyingDocument.id);
+
+      if (error) throw error;
+
+      showSuccess('Document verification status updated successfully');
+      setShowVerifyDocModal(false);
+      setVerifyingDocument(null);
+      setVerificationComments('');
+      loadData(); // Reload documents to show updated status
+    } catch (err) {
+      console.error('Error saving verification:', err);
+      showError('Failed to update verification status');
     }
   };
 
@@ -1706,6 +1811,47 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
         default:
           throw new Error('Unsupported document type');
       }
+
+      // Delete old PDF from storage if it exists
+      if (editingDocument.storage_path) {
+        await supabase.storage
+          .from('employee-documents')
+          .remove([editingDocument.storage_path]);
+      }
+
+      // Upload new PDF to storage
+      const pdfBlob = pdf.output('blob');
+      const fileName = `${editingDocument.document_type}_${selectedEmployee.employee_number}_${editingDocument.document_number}_${Date.now()}.pdf`;
+      const storagePath = `employment-documents/${selectedEmployee.id}/${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('employee-documents')
+        .upload(storagePath, pdfBlob, {
+          contentType: 'application/pdf',
+          upsert: false
+        });
+
+      if (uploadError) {
+        throw new Error(`Failed to upload PDF: ${uploadError.message}`);
+      }
+
+      // Get public URL
+      const { data: urlData } = supabase.storage
+        .from('employee-documents')
+        .getPublicUrl(storagePath);
+
+      // Update document with new storage path and URL
+      const { error: updateError } = await supabase
+        .from('employment_documents')
+        .update({
+          document_data: editedDocumentData,
+          pdf_url: urlData.publicUrl,
+          storage_path: storagePath,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', editingDocument.id);
+
+      if (updateError) throw updateError;
 
       // Download the regenerated PDF
       pdf.save(`${editingDocument.document_type}_${selectedEmployee.employee_number}_${editingDocument.document_number}_updated.pdf`);
@@ -1989,9 +2135,12 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                         <button
-                          onClick={() => handleViewEmployeeDocuments(employee)}
+                          onClick={() => {
+                            setEmployeeForm(employee);
+                            setEmployeeView('view');
+                          }}
                           className="text-purple-600 hover:text-purple-900 mr-3"
-                          title="View Documents"
+                          title="View Employee Details"
                         >
                           <Eye className="w-5 h-5 inline" />
                         </button>
@@ -2443,10 +2592,19 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
                 <thead className="bg-gray-50">
                   <tr>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Employee
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Document Title
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Document Number
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Type
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Source
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Date
@@ -2460,20 +2618,43 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {documents.map((doc) => (
+                  {documents.map((doc: any) => {
+                    const employee = employees.find(e => e.id === doc.employee_id);
+                    return (
                     <tr key={doc.id} className="hover:bg-gray-50">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {employee ? `${employee.full_name} (${employee.employee_number})` : 'Unknown'}
+                      </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                        {doc.document_number}
+                        {doc.title}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {doc.document_type.replace('_', ' ').toUpperCase()}
+                        {doc.document_number || '-'}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {new Date(doc.document_date).toLocaleDateString('en-GB')}
+                        {doc.document_type?.replace(/_/g, ' ').toUpperCase()}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
-                          {doc.status}
+                        <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                          doc.document_source === 'admin_generated' 
+                            ? 'bg-blue-100 text-blue-800' 
+                            : 'bg-purple-100 text-purple-800'
+                        }`}>
+                          {doc.document_source === 'admin_generated' ? 'Admin' : 'Employee'}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {doc.document_date ? new Date(doc.document_date).toLocaleDateString('en-GB') : '-'}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                          (doc.status === 'verified' || doc.status === 'issued') 
+                            ? 'bg-green-100 text-green-800' 
+                            : (doc.status === 'pending')
+                            ? 'bg-yellow-100 text-yellow-800'
+                            : 'bg-gray-100 text-gray-800'
+                        }`}>
+                          {doc.status || 'N/A'}
                         </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
@@ -2510,7 +2691,8 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
                         </button>
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -2903,6 +3085,281 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
               >
                 <Save className="w-4 h-4 inline mr-2" />
                 Save Employee
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* View Employee (Read-Only) */}
+        {activeTab === 'employees' && employeeView === 'view' && (
+          <div className="bg-white shadow-md rounded-lg p-6">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-lg font-semibold">Employee Details</h2>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => handleViewEmployeeDocuments(employeeForm as Employee)}
+                  className="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 flex items-center gap-2"
+                >
+                  <FileText className="w-4 h-4" />
+                  View Documents
+                </button>
+                <button
+                  onClick={() => {
+                    resetEmployeeForm();
+                    setEmployeeView('list');
+                  }}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Personal Information */}
+              <div className="md:col-span-2">
+                <h3 className="text-md font-semibold mb-4 text-gray-700 border-b pb-2">Personal Information</h3>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-500 mb-1">Employee Number</label>
+                <div className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-md text-gray-900">
+                  {employeeForm.employee_number || 'N/A'}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-500 mb-1">Full Name</label>
+                <div className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-md text-gray-900">
+                  {[employeeForm.first_name, employeeForm.middle_name, employeeForm.last_name].filter(Boolean).join(' ') || 'N/A'}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-500 mb-1">Father's Name</label>
+                <div className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-md text-gray-900">
+                  {employeeForm.fathers_name || 'N/A'}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-500 mb-1">Email</label>
+                <div className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-md text-gray-900">
+                  {employeeForm.email || 'N/A'}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-500 mb-1">Phone</label>
+                <div className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-md text-gray-900">
+                  {employeeForm.phone || 'N/A'}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-500 mb-1">Date of Birth</label>
+                <div className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-md text-gray-900">
+                  {employeeForm.date_of_birth ? new Date(employeeForm.date_of_birth).toLocaleDateString('en-GB') : 'N/A'}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-500 mb-1">Gender</label>
+                <div className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-md text-gray-900 capitalize">
+                  {employeeForm.gender || 'N/A'}
+                </div>
+              </div>
+
+              {/* Employment Information */}
+              <div className="md:col-span-2 mt-4">
+                <h3 className="text-md font-semibold mb-4 text-gray-700 border-b pb-2">Employment Information</h3>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-500 mb-1">Designation</label>
+                <div className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-md text-gray-900">
+                  {employeeForm.designation || 'N/A'}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-500 mb-1">Department</label>
+                <div className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-md text-gray-900">
+                  {employeeForm.department || 'N/A'}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-500 mb-1">Date of Joining</label>
+                <div className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-md text-gray-900">
+                  {employeeForm.date_of_joining ? new Date(employeeForm.date_of_joining).toLocaleDateString('en-GB') : 'N/A'}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-500 mb-1">Employment Type</label>
+                <div className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-md text-gray-900 capitalize">
+                  {employeeForm.employment_type?.replace('-', ' ') || 'N/A'}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-500 mb-1">Employment Status</label>
+                <div className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-md">
+                  <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                    employeeForm.employment_status === 'active' ? 'bg-green-100 text-green-800' :
+                    employeeForm.employment_status === 'on-leave' ? 'bg-yellow-100 text-yellow-800' :
+                    employeeForm.employment_status === 'resigned' ? 'bg-orange-100 text-orange-800' :
+                    'bg-red-100 text-red-800'
+                  }`}>
+                    {employeeForm.employment_status || 'N/A'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Salary Information */}
+              <div className="md:col-span-2 mt-4">
+                <h3 className="text-md font-semibold mb-4 text-gray-700 border-b pb-2">Salary Information</h3>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-500 mb-1">Basic Salary</label>
+                <div className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-md text-gray-900 font-semibold">
+                  ₹{employeeForm.basic_salary?.toLocaleString('en-IN') || '0'}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-500 mb-1">HRA</label>
+                <div className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-md text-gray-900 font-semibold">
+                  ₹{employeeForm.hra?.toLocaleString('en-IN') || '0'}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-500 mb-1">Special Allowance</label>
+                <div className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-md text-gray-900 font-semibold">
+                  ₹{employeeForm.special_allowance?.toLocaleString('en-IN') || '0'}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-500 mb-1">Gross Salary</label>
+                <div className="px-3 py-2 bg-blue-50 border border-blue-200 rounded-md text-blue-900 font-bold">
+                  ₹{((employeeForm.basic_salary || 0) + (employeeForm.hra || 0) + (employeeForm.special_allowance || 0)).toLocaleString('en-IN')}
+                </div>
+              </div>
+
+              {/* Identity Documents */}
+              <div className="md:col-span-2 mt-4">
+                <h3 className="text-md font-semibold mb-4 text-gray-700 border-b pb-2">Identity Documents</h3>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-500 mb-1">PAN Number</label>
+                <div className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-md text-gray-900 font-mono">
+                  {employeeForm.pan_number || 'N/A'}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-500 mb-1">Aadhar Number</label>
+                <div className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-md text-gray-900 font-mono">
+                  {employeeForm.aadhar_number || 'N/A'}
+                </div>
+              </div>
+
+              {/* Address Information */}
+              <div className="md:col-span-2 mt-4">
+                <h3 className="text-md font-semibold mb-4 text-gray-700 border-b pb-2">Address Information</h3>
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-500 mb-1">Address Line 1</label>
+                <div className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-md text-gray-900">
+                  {employeeForm.address_line1 || 'N/A'}
+                </div>
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-500 mb-1">Address Line 2</label>
+                <div className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-md text-gray-900">
+                  {employeeForm.address_line2 || 'N/A'}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-500 mb-1">City</label>
+                <div className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-md text-gray-900">
+                  {employeeForm.city || 'N/A'}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-500 mb-1">State</label>
+                <div className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-md text-gray-900">
+                  {employeeForm.state || 'N/A'}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-500 mb-1">Postal Code</label>
+                <div className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-md text-gray-900">
+                  {employeeForm.postal_code || 'N/A'}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-500 mb-1">Country</label>
+                <div className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-md text-gray-900">
+                  {employeeForm.country || 'N/A'}
+                </div>
+              </div>
+
+              {/* Bank Details */}
+              <div className="md:col-span-2 mt-4">
+                <h3 className="text-md font-semibold mb-4 text-gray-700 border-b pb-2">Bank Details</h3>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-500 mb-1">Bank Name</label>
+                <div className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-md text-gray-900">
+                  {employeeForm.bank_name || 'N/A'}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-500 mb-1">IFSC Code</label>
+                <div className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-md text-gray-900 font-mono">
+                  {employeeForm.bank_ifsc_code || 'N/A'}
+                </div>
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-500 mb-1">Account Number</label>
+                <div className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-md text-gray-900 font-mono">
+                  {employeeForm.bank_account_number || 'N/A'}
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-6 flex justify-between border-t pt-4">
+              <button
+                onClick={() => {
+                  resetEmployeeForm();
+                  setEmployeeView('list');
+                }}
+                className="px-6 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300"
+              >
+                <ArrowLeft className="w-4 h-4 inline mr-2" />
+                Back to List
+              </button>
+              <button
+                onClick={() => setEmployeeView('edit')}
+                className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+              >
+                <Edit className="w-4 h-4 inline mr-2" />
+                Edit Employee
               </button>
             </div>
           </div>
@@ -4183,6 +4640,144 @@ Any other duties assigned by management from time to time`}
           </div>
         )}
       </main>
+
+      {/* Employee Document Verification Modal */}
+      {showVerifyDocModal && verifyingDocument && selectedEmployee && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full">
+            <div className="flex items-center justify-between p-6 border-b">
+              <div>
+                <h2 className="text-xl font-semibold">Verify Employee Document</h2>
+                <p className="text-sm text-gray-500 mt-1">
+                  {verifyingDocument.title}
+                </p>
+                <p className="text-sm text-gray-600 mt-1">
+                  Employee: {selectedEmployee.full_name} ({selectedEmployee.employee_number})
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  setShowVerifyDocModal(false);
+                  setVerifyingDocument(null);
+                  setVerificationComments('');
+                  setSelectedEmployee(null);
+                }}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            <div className="p-6">
+              <div className="space-y-4">
+                {/* Document Details */}
+                <div className="bg-gray-50 p-4 rounded-lg">
+                  <h3 className="font-medium text-gray-700 mb-3">Document Information</h3>
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <span className="text-gray-600">Document Type:</span>
+                      <span className="ml-2 font-medium">{verifyingDocument.document_type?.replace(/_/g, ' ').toUpperCase()}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-600">Document Number:</span>
+                      <span className="ml-2 font-medium">{verifyingDocument.document_number || 'N/A'}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-600">Upload Date:</span>
+                      <span className="ml-2 font-medium">
+                        {verifyingDocument.created_at ? new Date(verifyingDocument.created_at).toLocaleDateString('en-GB') : 'N/A'}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-gray-600">File Name:</span>
+                      <span className="ml-2 font-medium">{verifyingDocument.file_reference || 'N/A'}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Verification Status */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Verification Status *
+                  </label>
+                  <select
+                    value={verificationStatus}
+                    onChange={(e) => setVerificationStatus(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                  >
+                    <option value="pending">Pending Verification</option>
+                    <option value="verified">Verified</option>
+                    <option value="rejected">Rejected</option>
+                    <option value="expired">Expired</option>
+                  </select>
+                </div>
+
+                {/* Verification Comments */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    {verificationStatus === 'rejected' ? 'Rejection Reason *' : 'Verification Comments'}
+                  </label>
+                  <textarea
+                    rows={4}
+                    value={verificationComments}
+                    onChange={(e) => setVerificationComments(e.target.value)}
+                    placeholder={
+                      verificationStatus === 'rejected' 
+                        ? "Please explain why this document is being rejected. This will be visible to the employee."
+                        : "Add any notes about this document verification..."
+                    }
+                    className={`w-full px-3 py-2 border rounded-md focus:ring-blue-500 focus:border-blue-500 ${
+                      verificationStatus === 'rejected' ? 'border-red-300 bg-red-50' : 'border-gray-300'
+                    }`}
+                    required={verificationStatus === 'rejected'}
+                  />
+                  {verificationStatus === 'rejected' && (
+                    <p className="mt-1 text-sm text-red-600">
+                      <AlertCircle className="w-4 h-4 inline mr-1" />
+                      Rejection reason is required and will be visible to the employee
+                    </p>
+                  )}
+                </div>
+
+                {/* Current Status Display */}
+                {verifyingDocument.verification_date && (
+                  <div className="bg-blue-50 p-3 rounded-lg text-sm">
+                    <p className="text-gray-700">
+                      <span className="font-medium">Last Verified:</span>{' '}
+                      {new Date(verifyingDocument.verification_date).toLocaleDateString('en-GB')}
+                    </p>
+                    {verifyingDocument.verification_comments && (
+                      <p className="text-gray-600 mt-1">
+                        <span className="font-medium">Previous Comments:</span> {verifyingDocument.verification_comments}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="flex justify-end space-x-3 p-6 border-t bg-gray-50">
+              <button
+                onClick={() => {
+                  setShowVerifyDocModal(false);
+                  setVerifyingDocument(null);
+                  setVerificationComments('');
+                }}
+                className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveVerification}
+                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 flex items-center"
+              >
+                <CheckCircle className="w-4 h-4 mr-2" />
+                Save Verification
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Edit Document Modal */}
       {showEditModal && editingDocument && selectedEmployee && (

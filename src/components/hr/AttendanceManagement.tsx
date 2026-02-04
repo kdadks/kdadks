@@ -20,6 +20,7 @@ import { useToast } from '../ui/ToastProvider';
 import type { AttendanceRecord, MonthlyAttendanceSummary } from '../../types/payroll';
 import type { Employee } from '../../types/employee';
 import { supabase } from '../../config/supabase';
+import ConfirmDialog from '../ui/ConfirmDialog';
 
 interface AttendanceManagementProps {
   onBackToDashboard?: () => void;
@@ -39,6 +40,9 @@ type ActiveTab = 'holiday-calendar' | 'view-records' | 'monthly-summary';
 
 const AttendanceManagement: React.FC<AttendanceManagementProps> = ({ onBackToDashboard }) => {
   const [loading, setLoading] = useState(true);
+  const [deleting, setDeleting] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [holidayToDelete, setHolidayToDelete] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<ActiveTab>('holiday-calendar');
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([]);
@@ -215,17 +219,25 @@ const AttendanceManagement: React.FC<AttendanceManagementProps> = ({ onBackToDas
     }
   };
 
-  const handleDeleteHoliday = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this holiday?')) return;
+  const handleDeleteHoliday = (id: string) => {
+    setHolidayToDelete(id);
+    setShowDeleteConfirm(true);
+  };
 
+  const confirmDeleteHoliday = async () => {
+    if (!holidayToDelete) return;
+    
+    setDeleting(true);
     try {
       const { error } = await supabase
         .from('company_holidays')
         .delete()
-        .eq('id', id);
+        .eq('id', holidayToDelete);
 
       if (error) throw error;
       showSuccess('Holiday deleted successfully');
+      setShowDeleteConfirm(false);
+      setHolidayToDelete(null);
       loadHolidays();
     } catch (error) {
       console.error('Error deleting holiday:', error);
@@ -837,6 +849,22 @@ const AttendanceManagement: React.FC<AttendanceManagementProps> = ({ onBackToDas
           </div>
         )}
       </main>
+
+      {/* Delete Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={showDeleteConfirm}
+        onClose={() => {
+          setShowDeleteConfirm(false);
+          setHolidayToDelete(null);
+        }}
+        onConfirm={confirmDeleteHoliday}
+        title="Delete Holiday"
+        message="Are you sure you want to delete this holiday? This action cannot be undone."
+        confirmText="Delete"
+        cancelText="Cancel"
+        type="danger"
+        loading={deleting}
+      />
     </div>
   );
 };

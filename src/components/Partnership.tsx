@@ -1,8 +1,10 @@
 import React, { useState, useRef } from 'react'
 import { Building, Target, Globe, ArrowLeft, Send, CheckCircle, TrendingUp, Users, Award, Shield } from 'lucide-react'
 import ReCaptchaEnterprise, { ReCaptchaEnterpriseRef } from './ui/ReCaptchaEnterprise'
+import { useToast } from './ui/ToastProvider'
 
 const Partnership = () => {
+  const { showError } = useToast();
   const [selectedPartnership, setSelectedPartnership] = useState('')
   const [formData, setFormData] = useState({
     name: '',
@@ -167,7 +169,7 @@ const Partnership = () => {
       }
     } catch (error) {
       console.error('Error sending email:', error)
-      alert(`Failed to send message: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      showError(`Failed to send message: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setIsSubmitting(false)
     }

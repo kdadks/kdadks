@@ -16,10 +16,14 @@ import {
 } from 'lucide-react';
 import { paymentService } from '../../services/paymentService';
 import type { PaymentGateway, PaymentGatewaySettings as GatewaySettings } from '../../types/payment';
+import ConfirmDialog from '../ui/ConfirmDialog';
 
 export const PaymentGatewaySettings: React.FC = () => {
   const [gateways, setGateways] = useState<PaymentGateway[]>([]);
   const [loading, setLoading] = useState(true);
+  const [deleting, setDeleting] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [gatewayToDelete, setGatewayToDelete] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [editingGateway, setEditingGateway] = useState<PaymentGateway | null>(null);
@@ -51,16 +55,24 @@ export const PaymentGatewaySettings: React.FC = () => {
     setShowModal(true);
   };
 
-  const handleDeleteGateway = async (gatewayId: string) => {
-    if (!confirm('Are you sure you want to delete this payment gateway?')) {
-      return;
-    }
+  const handleDeleteGateway = (gatewayId: string) => {
+    setGatewayToDelete(gatewayId);
+    setShowDeleteConfirm(true);
+  };
 
+  const confirmDeleteGateway = async () => {
+    if (!gatewayToDelete) return;
+    
+    setDeleting(true);
     try {
-      await paymentService.deletePaymentGateway(gatewayId);
+      await paymentService.deletePaymentGateway(gatewayToDelete);
+      setShowDeleteConfirm(false);
+      setGatewayToDelete(null);
       await loadGateways();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete gateway');
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -287,6 +299,22 @@ export const PaymentGatewaySettings: React.FC = () => {
           togglePasswordVisibility={togglePasswordVisibility}
         />
       )}
+
+      {/* Delete Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={showDeleteConfirm}
+        onClose={() => {
+          setShowDeleteConfirm(false);
+          setGatewayToDelete(null);
+        }}
+        onConfirm={confirmDeleteGateway}
+        title="Delete Payment Gateway"
+        message="Are you sure you want to delete this payment gateway? This action cannot be undone."
+        confirmText="Delete"
+        cancelText="Cancel"
+        type="danger"
+        loading={deleting}
+      />
     </div>
   );
 };

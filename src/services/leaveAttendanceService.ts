@@ -725,7 +725,7 @@ export const leaveAttendanceService = {
 
   async getHolidays(year?: number): Promise<Holiday[]> {
     let query = supabase
-      .from('holidays')
+      .from('company_holidays')
       .select('*')
       .order('holiday_date');
 
@@ -742,7 +742,7 @@ export const leaveAttendanceService = {
 
   async addHoliday(holiday: Omit<Holiday, 'id' | 'created_at' | 'updated_at'>): Promise<Holiday> {
     const { data, error } = await supabase
-      .from('holidays')
+      .from('company_holidays')
       .insert([holiday])
       .select()
       .single();

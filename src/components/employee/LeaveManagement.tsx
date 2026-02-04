@@ -118,13 +118,13 @@ export default function LeaveManagement() {
       
       // Check if employee has sufficient balance
       if (!selectedLeaveType || selectedLeaveType.balance === undefined || selectedLeaveType.balance <= 0) {
-        alert(`You don't have any ${selectedLeaveType?.name || 'leave'} balance available. Please contact HR to allocate leaves.`);
+        showError(`You don't have any ${selectedLeaveType?.name || 'leave'} balance available. Please contact HR to allocate leaves.`);
         setLoading(false);
         return;
       }
       
       if (selectedLeaveType.balance < requestedDays) {
-        alert(`Insufficient leave balance. You have ${selectedLeaveType.balance} days remaining, but requested ${requestedDays} days.`);
+        showError(`Insufficient leave balance. You have ${selectedLeaveType.balance} days remaining, but requested ${requestedDays} days.`);
         setLoading(false);
         return;
       }
