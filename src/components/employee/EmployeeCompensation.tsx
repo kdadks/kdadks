@@ -403,7 +403,7 @@ const CurrentSalaryView: React.FC<{ compensation: EmployeeCompensation | null }>
             )}
           </div>
           <div className="mt-4 pt-4 border-t border-red-200 flex justify-between items-center">
-            <span className="font-medium text-gray-700">Total Deductions</span>
+            <span className="font-medium text-gray-700">Total Deductions (Monthly)</span>
             <span className="text-xl font-bold text-red-600">-{formatCurrency(compensation.total_deductions)}</span>
           </div>
         </div>
@@ -413,7 +413,7 @@ const CurrentSalaryView: React.FC<{ compensation: EmployeeCompensation | null }>
       <div className="bg-blue-100 rounded-lg p-6">
         <div className="flex justify-between items-center">
           <div>
-            <p className="text-blue-800 font-medium">Net Salary (Take Home)</p>
+            <p className="text-blue-800 font-medium">Net Salary (Take Home) (Monthly)</p>
             <p className="text-sm text-blue-600 mt-1">After all deductions</p>
           </div>
           <div className="text-right">

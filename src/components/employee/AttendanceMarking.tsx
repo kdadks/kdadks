@@ -186,17 +186,15 @@ export default function AttendanceMarking() {
         weekDays.forEach(day => {
           const record = updatedRecords.find(r => r.attendance_date === day.date);
           if (record) {
-            // Extract time from timestamp without timezone conversion
+            // Extract HH:MM from timestamp (stored as IST, display as-is)
             if (record.check_in_time) {
-              // Extract HH:MM directly from the ISO string (e.g., "2026-01-09T10:00:00+00:00" -> "10:00")
               const timeStr = record.check_in_time.toString();
-              const timeMatch = timeStr.match(/T(\d{2}:\d{2})/);
+              const timeMatch = timeStr.match(/T?(\d{2}:\d{2})/);
               day.checkIn = timeMatch ? timeMatch[1] : '';
             }
             if (record.check_out_time) {
-              // Extract HH:MM directly from the ISO string
               const timeStr = record.check_out_time.toString();
-              const timeMatch = timeStr.match(/T(\d{2}:\d{2})/);
+              const timeMatch = timeStr.match(/T?(\d{2}:\d{2})/);
               day.checkOut = timeMatch ? timeMatch[1] : '';
             }
             // Try work_hours first, then total_hours as fallback
@@ -273,7 +271,7 @@ export default function AttendanceMarking() {
       const hours = parseFloat(day.hours);
       const status = hours >= 8 ? 'present' : hours >= 4 ? 'half-day' : 'absent';
 
-      // Convert time strings to proper timestamps
+      // Store timestamps as-is (user enters IST time, we store IST time)
       const checkInTimestamp = `${day.date}T${day.checkIn}:00`;
       const checkOutTimestamp = `${day.date}T${day.checkOut}:00`;
 

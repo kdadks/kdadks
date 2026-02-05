@@ -276,6 +276,20 @@ const AttendanceManagement: React.FC<AttendanceManagementProps> = ({ onBackToDas
     );
   };
 
+  // Format time to 24-hour format (HH:MM) - times are stored in IST, display as-is
+  const formatTime = (timeString?: string) => {
+    if (!timeString) return '-';
+    try {
+      // If it's already in HH:MM format, return as is
+      if (/^\d{2}:\d{2}$/.test(timeString)) return timeString;
+      // Extract HH:MM from timestamp string
+      const timeMatch = timeString.match(/T?(\d{2}:\d{2})/);
+      return timeMatch ? timeMatch[1] : '-';
+    } catch {
+      return '-';
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-100 flex items-center justify-center">
@@ -606,6 +620,14 @@ const AttendanceManagement: React.FC<AttendanceManagementProps> = ({ onBackToDas
                 <tbody className="bg-white divide-y divide-gray-200">
                   {attendanceRecords.map((record) => {
                     const employee = employees.find(e => e.id === record.employee_id);
+                    console.log('Attendance Record:', {
+                      id: record.id,
+                      employee: employee?.full_name,
+                      check_in_time: record.check_in_time,
+                      check_out_time: record.check_out_time,
+                      formatted_check_in: formatTime(record.check_in_time),
+                      formatted_check_out: formatTime(record.check_out_time)
+                    });
                     return (
                       <tr key={record.id} className="hover:bg-gray-50">
                         <td className="px-6 py-4 whitespace-nowrap">
@@ -616,10 +638,10 @@ const AttendanceManagement: React.FC<AttendanceManagementProps> = ({ onBackToDas
                           {getStatusBadge(record.status)}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {record.check_in_time || '-'}
+                          {formatTime(record.check_in_time)}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {record.check_out_time || '-'}
+                          {formatTime(record.check_out_time)}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                           {record.work_hours ? `${record.work_hours.toFixed(2)} hrs` : '-'}
@@ -805,9 +827,27 @@ const AttendanceManagement: React.FC<AttendanceManagementProps> = ({ onBackToDas
                               }
                             };
 
+                            // Format time to 24-hour format (HH:MM) - times stored in IST, display as-is
+                            const formatTime = (timeString?: string) => {
+                              if (!timeString) return '';
+                              try {
+                                // If it's already in HH:MM format, return as is
+                                if (/^\d{2}:\d{2}$/.test(timeString)) return timeString;
+                                // Extract HH:MM from timestamp string
+                                const timeMatch = timeString.match(/T?(\d{2}:\d{2})/);
+                                return timeMatch ? timeMatch[1] : '';
+                              } catch {
+                                return '';
+                              }
+                            };
+
                             const getTitle = () => {
                               if (isHoliday) return `Holiday: ${holiday?.holiday_name}`;
-                              if (record) return `${record.status} - ${record.check_in_time || ''} to ${record.check_out_time || ''}`;
+                              if (record) {
+                                const checkIn = formatTime(record.check_in_time);
+                                const checkOut = formatTime(record.check_out_time);
+                                return `${record.status}${checkIn || checkOut ? ` - ${checkIn || ''} to ${checkOut || ''}` : ''}`;
+                              }
                               return 'Not marked';
                             };
 
