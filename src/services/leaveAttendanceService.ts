@@ -71,12 +71,12 @@ export const leaveAttendanceService = {
       leave_type_id: lt.id,
       financial_year: fy,
       opening_balance: 0,
-      earned: lt.max_days_per_year,
+      earned: 0,
       taken: 0,
       carry_forward: 0,
       encashed: 0,
       lapsed: 0,
-      available: lt.max_days_per_year
+      available: 0
     }));
 
     const { error } = await supabase

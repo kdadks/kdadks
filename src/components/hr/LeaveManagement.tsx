@@ -7,7 +7,8 @@ import {
   Clock,
   Search,
   Filter,
-  ArrowLeft
+  ArrowLeft,
+  RefreshCw
 } from 'lucide-react';
 import { leaveAttendanceService } from '../../services/leaveAttendanceService';
 import { employeeService } from '../../services/employeeService';
@@ -47,6 +48,7 @@ const LeaveManagement: React.FC<LeaveManagementProps> = ({ onBackToDashboard, cu
   const [approvingLeaveId, setApprovingLeaveId] = useState<string | null>(null);
   const [rejectingLeaveId, setRejectingLeaveId] = useState<string | null>(null);
   const [updatingAllocation, setUpdatingAllocation] = useState(false);
+  const [refreshingBalance, setRefreshingBalance] = useState(false);
   const { showSuccess, showError } = useToast();
 
   useEffect(() => {
@@ -73,18 +75,38 @@ const LeaveManagement: React.FC<LeaveManagementProps> = ({ onBackToDashboard, cu
     }
   };
 
-  const loadEmployeeBalances = async (employeeId: string) => {
+  const loadEmployeeBalances = async (employeeId: string, financialYear?: string) => {
     try {
+      setRefreshingBalance(true);
       setSelectedEmployeeForBalance(employeeId);
       if (!employeeId) {
         setBalances([]);
         return;
       }
-      const balanceData = await leaveAttendanceService.getEmployeeLeaveBalance(employeeId);
+
+      const fy = financialYear || selectedFinancialYear;
+
+      // Try to get existing balances
+      let balanceData = await leaveAttendanceService.getEmployeeLeaveBalance(employeeId, fy);
+
+      // If no balances exist, initialize them
+      if (!balanceData || balanceData.length === 0) {
+        await leaveAttendanceService.initializeLeaveBalance(employeeId, fy);
+        balanceData = await leaveAttendanceService.getEmployeeLeaveBalance(employeeId, fy);
+      }
+
       setBalances(balanceData);
     } catch (error) {
       console.error('Error loading leave balances:', error);
+      showError('Failed to load leave balances');
+    } finally {
+      setRefreshingBalance(false);
     }
+  };
+
+  const refreshEmployeeBalances = async () => {
+    if (!selectedEmployeeForBalance) return;
+    await loadEmployeeBalances(selectedEmployeeForBalance);
   };
 
   const loadAllocationBalances = async (employeeId: string, financialYear?: string) => {
@@ -391,72 +413,143 @@ const LeaveManagement: React.FC<LeaveManagementProps> = ({ onBackToDashboard, cu
         {/* Leave Balances Tab */}
         {activeTab === 'balances' && (
           <div>
-            <div className="mb-6">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Select Employee
-              </label>
-              <select
-                value={selectedEmployeeForBalance}
-                onChange={(e) => loadEmployeeBalances(e.target.value)}
-                className="max-w-md px-4 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-              >
-                <option value="">Select an employee</option>
-                {employees.filter(e => e.employment_status === 'active').map(emp => (
-                  <option key={emp.id} value={emp.id}>
-                    {emp.full_name} ({emp.employee_number})
-                  </option>
-                ))}
-              </select>
+            <div className="mb-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Financial Year
+                </label>
+                <select
+                  value={selectedFinancialYear}
+                  onChange={(e) => {
+                    setSelectedFinancialYear(e.target.value);
+                    if (selectedEmployeeForBalance) {
+                      loadEmployeeBalances(selectedEmployeeForBalance, e.target.value);
+                    }
+                  }}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                >
+                  <option value="2023-24">2023-24</option>
+                  <option value="2024-25">2024-25</option>
+                  <option value="2025-26">2025-26</option>
+                  <option value="2026-27">2026-27</option>
+                </select>
+              </div>
+              <div className="flex items-end">
+                <div className="flex-1">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Select Employee
+                  </label>
+                  <select
+                    value={selectedEmployeeForBalance}
+                    onChange={(e) => loadEmployeeBalances(e.target.value)}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                  >
+                    <option value="">Select an employee</option>
+                    {employees.filter(e => e.employment_status === 'active').map(emp => (
+                      <option key={emp.id} value={emp.id}>
+                        {emp.full_name} ({emp.employee_number})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                {selectedEmployeeForBalance && (
+                  <button
+                    onClick={refreshEmployeeBalances}
+                    disabled={refreshingBalance}
+                    className="ml-3 px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+                    title="Refresh balances"
+                  >
+                    {refreshingBalance ? (
+                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                    ) : (
+                      <RefreshCw className="w-5 h-5" />
+                    )}
+                  </button>
+                )}
+              </div>
             </div>
 
             {selectedEmployeeForBalance && balances.length > 0 && (
-              <div className="bg-white shadow-md rounded-lg overflow-hidden">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Leave Type
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Opening
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Earned
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Taken
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Available
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {balances.map((balance) => {
-                      const balanceWithType = balance as typeof balance & { leave_type?: { name: string; code: string } };
-                      return (
-                      <tr key={balance.id} className="hover:bg-gray-50">
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm font-medium text-gray-900">{balanceWithType.leave_type?.name}</div>
-                          <div className="text-sm text-gray-500">{balanceWithType.leave_type?.code}</div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {balance.opening_balance}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {balance.earned}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {balance.taken}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-green-600">
-                          {balance.available}
-                        </td>
+              <div>
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4 flex items-center justify-between">
+                  <div>
+                    <h3 className="text-sm font-medium text-gray-700">
+                      {employees.find(e => e.id === selectedEmployeeForBalance)?.full_name}
+                      <span className="text-gray-500 ml-2">
+                        ({employees.find(e => e.id === selectedEmployeeForBalance)?.employee_number})
+                      </span>
+                    </h3>
+                    <p className="text-xs text-gray-600 mt-1">Financial Year: {selectedFinancialYear}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs text-gray-600">Total Available Leave</p>
+                    <p className="text-2xl font-bold text-green-600">
+                      {balances.reduce((sum, b) => sum + b.available, 0).toFixed(1)} days
+                    </p>
+                  </div>
+                </div>
+
+                <div className="bg-white shadow-md rounded-lg overflow-hidden">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Leave Type
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Opening
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Earned
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Carry Forward
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Taken
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Available
+                        </th>
                       </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {balances.map((balance) => {
+                        const balanceWithType = balance as typeof balance & { leave_type?: { name: string; code: string } };
+                        return (
+                          <tr key={balance.id} className="hover:bg-gray-50">
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="text-sm font-medium text-gray-900">{balanceWithType.leave_type?.name}</div>
+                              <div className="text-sm text-gray-500">{balanceWithType.leave_type?.code}</div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                              {balance.opening_balance}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                              {balance.earned}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                              {balance.carry_forward}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                              {balance.taken}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-green-600">
+                              {balance.available}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {selectedEmployeeForBalance && balances.length === 0 && (
+              <div className="bg-white shadow-md rounded-lg p-12 text-center">
+                <Calendar className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                <p className="text-gray-600">No leave balances found. Please configure leave types first.</p>
               </div>
             )}
           </div>
