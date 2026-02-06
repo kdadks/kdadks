@@ -82,3 +82,6 @@ deploy.sh
 
 # Development Server
 dev-server.cjs
+
+# Claude Code temporary files
+tmpclaude-*-cwd
