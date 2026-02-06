@@ -85,7 +85,7 @@ const LeaveManagement: React.FC<LeaveManagementProps> = ({ onBackToDashboard, cu
       let balanceData = await leaveAttendanceService.getEmployeeLeaveBalance(employeeId);
       
       // If no balances exist, initialize them
-      if (!balanceData || balanceData.length === 0) {
+      if (balanceData.length === 0) {
         await leaveAttendanceService.initializeLeaveBalance(employeeId);
         balanceData = await leaveAttendanceService.getEmployeeLeaveBalance(employeeId);
       }
