@@ -80,10 +80,25 @@ const LeaveManagement: React.FC<LeaveManagementProps> = ({ onBackToDashboard, cu
         setBalances([]);
         return;
       }
-      const balanceData = await leaveAttendanceService.getEmployeeLeaveBalance(employeeId);
+      
+      // Try to get existing balances
+      let balanceData = await leaveAttendanceService.getEmployeeLeaveBalance(employeeId);
+      
+      // If no balances exist, initialize them
+      if (balanceData.length === 0) {
+        await leaveAttendanceService.initializeLeaveBalance(employeeId);
+        balanceData = await leaveAttendanceService.getEmployeeLeaveBalance(employeeId);
+        
+        // If still empty after initialization, there may be no leave types configured
+        if (balanceData.length === 0) {
+          console.warn('No leave balances available after initialization. Leave types may not be configured.');
+        }
+      }
+      
       setBalances(balanceData);
     } catch (error) {
       console.error('Error loading leave balances:', error);
+      showError('Failed to load leave balances');
     }
   };
 
