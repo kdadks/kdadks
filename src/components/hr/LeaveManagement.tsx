@@ -80,10 +80,20 @@ const LeaveManagement: React.FC<LeaveManagementProps> = ({ onBackToDashboard, cu
         setBalances([]);
         return;
       }
-      const balanceData = await leaveAttendanceService.getEmployeeLeaveBalance(employeeId);
+      
+      // Try to get existing balances
+      let balanceData = await leaveAttendanceService.getEmployeeLeaveBalance(employeeId);
+      
+      // If no balances exist, initialize them
+      if (!balanceData || balanceData.length === 0) {
+        await leaveAttendanceService.initializeLeaveBalance(employeeId);
+        balanceData = await leaveAttendanceService.getEmployeeLeaveBalance(employeeId);
+      }
+      
       setBalances(balanceData);
     } catch (error) {
       console.error('Error loading leave balances:', error);
+      showError('Failed to load leave balances');
     }
   };
 
