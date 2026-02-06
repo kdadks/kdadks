@@ -88,6 +88,11 @@ const LeaveManagement: React.FC<LeaveManagementProps> = ({ onBackToDashboard, cu
       if (balanceData.length === 0) {
         await leaveAttendanceService.initializeLeaveBalance(employeeId);
         balanceData = await leaveAttendanceService.getEmployeeLeaveBalance(employeeId);
+        
+        // If still empty after initialization, there may be no leave types configured
+        if (balanceData.length === 0) {
+          console.warn('No leave balances available after initialization. Leave types may not be configured.');
+        }
       }
       
       setBalances(balanceData);
