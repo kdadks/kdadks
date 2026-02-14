@@ -197,9 +197,9 @@ export default function AttendanceMarking() {
               const timeMatch = timeStr.match(/T?(\d{2}:\d{2})/);
               day.checkOut = timeMatch ? timeMatch[1] : '';
             }
-            // Try work_hours first, then total_hours as fallback
-            const hours = record.work_hours || record.total_hours || 0;
-            day.hours = hours ? parseFloat(hours).toFixed(1) : '0.0';
+            // Recalculate hours from check-in/check-out times instead of using stored values
+            // This ensures overnight shifts are calculated correctly
+            day.hours = calculateHours(day.checkIn, day.checkOut);
             day.saved = true;
             // Don't override with default if on leave
             if (!day.isOnLeave && record.status === 'on-leave') {
@@ -222,7 +222,13 @@ export default function AttendanceMarking() {
     
     try {
       const start = new Date(`1970-01-01T${checkIn}`);
-      const end = new Date(`1970-01-01T${checkOut}`);
+      let end = new Date(`1970-01-01T${checkOut}`);
+      
+      // If check-out is before check-in, assume it crosses midnight (overnight shift)
+      if (end.getTime() < start.getTime()) {
+        end = new Date(`1970-01-02T${checkOut}`); // Add one day
+      }
+      
       const diff = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
       
       if (diff < 0) return '0.0';
@@ -242,6 +248,12 @@ export default function AttendanceMarking() {
 
   const handleSaveDay = async (index: number) => {
     const day = weekData[index];
+    
+    // Validate employee session
+    if (!currentUser.id) {
+      showToast('Session expired. Please log out and log back in.', 'error');
+      return;
+    }
     
     // Prevent marking attendance on holidays
     if (day.isHoliday) {
@@ -269,41 +281,42 @@ export default function AttendanceMarking() {
       setSaving(true);
 
       const hours = parseFloat(day.hours);
+      
+      // Validate hours
+      if (isNaN(hours) || hours < 0 || hours > 24) {
+        showToast('Invalid hours calculated. Please check your check-in and check-out times.', 'error');
+        return;
+      }
+      
       const status = hours >= 8 ? 'present' : hours >= 4 ? 'half-day' : 'absent';
 
       // Store timestamps as-is (user enters IST time, we store IST time)
+      // For overnight shifts, both timestamps are stored on the check-in date
       const checkInTimestamp = `${day.date}T${day.checkIn}:00`;
       const checkOutTimestamp = `${day.date}T${day.checkOut}:00`;
 
-      const { data: existing } = await supabase
-        .from('attendance_records')
-        .select('id')
-        .eq('employee_id', currentUser.id)
-        .eq('attendance_date', day.date)
-        .single();
+      // Validate timestamps
+      if (!checkInTimestamp || !checkOutTimestamp) {
+        showToast('Invalid time format. Please enter times in HH:MM format.', 'error');
+        return;
+      }
 
-      if (existing) {
-        // Update existing record
-        const { error: updateError } = await supabase
-          .from('attendance_records')
-          .update({
-            check_in_time: checkInTimestamp,
-            check_out_time: checkOutTimestamp,
-            work_hours: hours,
-            total_hours: hours,
-            status: status,
-            break_hours: 0,
-            overtime_hours: hours > 8 ? hours - 8 : 0,
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', existing.id);
-        
-        if (updateError) throw updateError;
-      } else {
-        // Create new record
-        const { error: insertError } = await supabase
-          .from('attendance_records')
-          .insert({
+      console.log('Saving attendance record:', {
+        employee_id: currentUser.id,
+        attendance_date: day.date,
+        check_in_time: checkInTimestamp,
+        check_out_time: checkOutTimestamp,
+        work_hours: hours,
+        total_hours: hours,
+        status: status
+      });
+
+      // Use upsert to ensure existing records are always overwritten
+      // This handles both create and update operations in one call
+      const { data: upsertData, error: upsertError } = await supabase
+        .from('attendance_records')
+        .upsert(
+          {
             employee_id: currentUser.id,
             attendance_date: day.date,
             check_in_time: checkInTimestamp,
@@ -313,11 +326,21 @@ export default function AttendanceMarking() {
             status: status,
             break_hours: 0,
             overtime_hours: hours > 8 ? hours - 8 : 0,
-            is_regularized: false
-          });
-        
-        if (insertError) throw insertError;
+            is_regularized: false,
+            updated_at: new Date().toISOString()
+          },
+          {
+            onConflict: 'employee_id,attendance_date',
+            ignoreDuplicates: false // Ensure we update existing records
+          }
+        );
+
+      if (upsertError) {
+        console.error('Upsert error details:', upsertError);
+        throw upsertError;
       }
+
+      console.log('Upsert successful:', upsertData);
 
       // Mark as saved
       const newWeekData = [...weekData];
@@ -327,7 +350,26 @@ export default function AttendanceMarking() {
       showToast('Attendance saved successfully!', 'success');
     } catch (error: any) {
       console.error('Error saving attendance:', error);
-      const errorMessage = error?.message || error?.error?.message || error?.error_description || 'Failed to save attendance';
+      
+      // Provide more specific error messages
+      let errorMessage = 'Failed to save attendance';
+      
+      if (error?.code === '23505') {
+        // Unique constraint violation
+        errorMessage = 'Attendance record already exists for this date';
+      } else if (error?.code === '23503') {
+        // Foreign key constraint violation
+        errorMessage = 'Invalid employee information. Please try logging out and back in.';
+      } else if (error?.message) {
+        errorMessage = error.message;
+      } else if (error?.error?.message) {
+        errorMessage = error.error.message;
+      } else if (error?.error_description) {
+        errorMessage = error.error_description;
+      } else if (typeof error === 'string') {
+        errorMessage = error;
+      }
+      
       showToast(errorMessage, 'error');
     } finally {
       setSaving(false);
@@ -496,6 +538,7 @@ export default function AttendanceMarking() {
                         type="time"
                         value={day.checkIn}
                         onChange={(e) => handleTimeChange(index, 'checkIn', e.target.value)}
+                        step="60"
                         className="w-full px-2 py-1.5 border border-gray-300 rounded-md text-sm touch-manipulation"
                       />
                     </div>
@@ -505,6 +548,7 @@ export default function AttendanceMarking() {
                         type="time"
                         value={day.checkOut}
                         onChange={(e) => handleTimeChange(index, 'checkOut', e.target.value)}
+                        step="60"
                         className="w-full px-2 py-1.5 border border-gray-300 rounded-md text-sm touch-manipulation"
                       />
                     </div>
@@ -608,6 +652,7 @@ export default function AttendanceMarking() {
                           value={day.checkIn}
                           onChange={(e) => handleTimeChange(index, 'checkIn', e.target.value)}
                           disabled={isDisabled}
+                          step="60"
                           className={`px-3 py-2 border rounded-md focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm ${
                             isDisabled 
                               ? 'bg-gray-100 text-gray-400 cursor-not-allowed' 
@@ -621,6 +666,7 @@ export default function AttendanceMarking() {
                           value={day.checkOut}
                           onChange={(e) => handleTimeChange(index, 'checkOut', e.target.value)}
                           disabled={isDisabled}
+                          step="60"
                           className={`px-3 py-2 border rounded-md focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm ${
                             isDisabled 
                               ? 'bg-gray-100 text-gray-400 cursor-not-allowed' 
