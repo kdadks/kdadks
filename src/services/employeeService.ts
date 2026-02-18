@@ -17,6 +17,7 @@ import {
   getFinancialYear,
   getFinancialYearMonth
 } from '../utils/indianTaxCalculator'
+import { compensationService } from './compensationService'
 
 export const employeeService = {
   // =============== Employee CRUD Operations ===============
@@ -475,13 +476,28 @@ export const employeeService = {
     // Calculate financial year
     const financialYear = getFinancialYear(new Date(input.salary_year, input.salary_month - 1))
 
-    // Use employee salary or override values
-    const basicSalary = input.basic_salary ?? employee.basic_salary
-    const hra = input.hra ?? employee.hra ?? 0
-    const specialAllowance = input.special_allowance ?? employee.special_allowance ?? 0
-    const transportAllowance = input.transport_allowance ?? 0
-    const medicalAllowance = input.medical_allowance ?? 0
-    const otherAllowances = input.other_allowances ?? employee.other_allowances ?? 0
+    // Read salary components from employee_compensation table (managed via Compensation Management).
+    // A current compensation record MUST exist before generating a salary slip.
+    const compensation = await compensationService.getCurrentCompensation(input.employee_id)
+    if (!compensation) {
+      throw new Error(
+        `No compensation record found for employee "${employee.full_name}". ` +
+        `Please set up their salary structure in Compensation Management before generating a salary slip.`
+      )
+    }
+
+    const basicSalary        = input.basic_salary         ?? compensation.basic_salary
+    const hra                = input.hra                   ?? compensation.hra                   ?? 0
+    const specialAllowance   = input.special_allowance    ?? compensation.special_allowance      ?? 0
+    const transportAllowance = input.transport_allowance  ?? compensation.transport_allowance    ?? 0
+    const medicalAllowance   = input.medical_allowance    ?? compensation.medical_allowance      ?? 0
+    const otherAllowances    = input.other_allowances     ?? compensation.other_allowances       ?? 0
+
+    // Deductions from compensation record
+    const compPF  = compensation.pf_contribution  ?? 0
+    const compESI = compensation.esi_contribution ?? 0
+    const compPT  = compensation.professional_tax ?? 0
+    const compTDS = compensation.tds              ?? 0
     const bonus = input.bonus ?? 0
     const overtime = input.overtime ?? 0
 

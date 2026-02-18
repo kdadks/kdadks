@@ -341,7 +341,10 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
       const newEmployee = await employeeService.createEmployee({
         ...employeeForm,
         full_name: fullName,
-        gross_salary: (employeeForm.basic_salary || 0) + (employeeForm.hra || 0) + (employeeForm.special_allowance || 0) + (employeeForm.other_allowances || 0)
+        gross_salary: employeeForm.basic_salary || 0,
+        hra: 0,
+        special_allowance: 0,
+        other_allowances: 0
       } as Omit<Employee, 'id' | 'created_at' | 'updated_at'>);
 
       // Generate and set temporary password
@@ -377,8 +380,7 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
 
       const updatedEmployee = await employeeService.updateEmployee(employeeForm.id, {
         ...employeeForm,
-        full_name: fullName,
-        gross_salary: (employeeForm.basic_salary || 0) + (employeeForm.hra || 0) + (employeeForm.special_allowance || 0) + (employeeForm.other_allowances || 0)
+        full_name: fullName
       } as Partial<Employee>);
 
       setEmployees(employees.map(emp => emp.id === updatedEmployee.id ? updatedEmployee : emp));
@@ -1877,6 +1879,81 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
     setShowEditSalarySlipModal(true);
   };
 
+  const handleRecalculateSalarySlip = async () => {
+    if (!editingSalarySlip) return;
+    try {
+      const freshSlipData = await employeeService.generateSalarySlip({
+        employee_id: editingSalarySlip.employee_id,
+        salary_month: editingSalarySlip.salary_month,
+        salary_year: editingSalarySlip.salary_year,
+        working_days: editedSalarySlipData.working_days ?? editingSalarySlip.working_days,
+        paid_days: editedSalarySlipData.paid_days ?? editingSalarySlip.paid_days,
+        lop_days: editedSalarySlipData.lop_days ?? editingSalarySlip.lop_days,
+        bonus: editedSalarySlipData.bonus ?? 0,
+        overtime: editedSalarySlipData.overtime ?? 0,
+        loan_repayment: editedSalarySlipData.loan_repayment ?? 0,
+        other_deductions: editedSalarySlipData.other_deductions ?? 0,
+      });
+      setEditedSalarySlipData(prev => ({
+        ...prev,
+        basic_salary: freshSlipData.basic_salary,
+        hra: freshSlipData.hra,
+        special_allowance: freshSlipData.special_allowance,
+        transport_allowance: freshSlipData.transport_allowance,
+        medical_allowance: freshSlipData.medical_allowance,
+        other_allowances: freshSlipData.other_allowances,
+        bonus: freshSlipData.bonus,
+        overtime: freshSlipData.overtime,
+        gross_salary: freshSlipData.gross_salary,
+        provident_fund: freshSlipData.provident_fund,
+        professional_tax: freshSlipData.professional_tax,
+        esic: freshSlipData.esic,
+        tds: freshSlipData.tds,
+        loan_repayment: freshSlipData.loan_repayment,
+        other_deductions: freshSlipData.other_deductions,
+        total_deductions: freshSlipData.total_deductions,
+        net_salary: freshSlipData.net_salary,
+      }));
+      showSuccess('Recalculated from employee profile');
+    } catch (err) {
+      console.error('Error recalculating salary slip:', err);
+      showError('Failed to recalculate from employee profile');
+    }
+  };
+
+  const updateEditedSalaryField = (field: keyof SalarySlip, value: number) => {
+    setEditedSalarySlipData(prev => {
+      const updated = { ...prev, [field]: value };
+
+      // Recalculate gross salary from earnings
+      const earningsFields: (keyof typeof updated)[] = [
+        'basic_salary', 'hra', 'special_allowance', 'transport_allowance',
+        'medical_allowance', 'other_allowances', 'bonus', 'overtime'
+      ];
+      const newGross = earningsFields.reduce(
+        (sum, f) => sum + (Number(updated[f]) || 0), 0
+      );
+
+      // Recalculate total deductions
+      const deductionFields: (keyof typeof updated)[] = [
+        'provident_fund', 'professional_tax', 'esic', 'tds',
+        'loan_repayment', 'other_deductions'
+      ];
+      const newTotalDeductions = deductionFields.reduce(
+        (sum, f) => sum + (Number(updated[f]) || 0), 0
+      );
+
+      const newNetSalary = newGross - newTotalDeductions;
+
+      return {
+        ...updated,
+        gross_salary: Math.round(newGross),
+        total_deductions: Math.round(newTotalDeductions),
+        net_salary: Math.round(newNetSalary)
+      };
+    });
+  };
+
   const handleSaveEditedSalarySlip = async () => {
     try {
       if (!editingSalarySlip) {
@@ -2886,41 +2963,26 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
                 </select>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Basic Salary *
-                </label>
-                <input
-                  type="number"
-                  value={employeeForm.basic_salary}
-                  onChange={(e) => setEmployeeForm({ ...employeeForm, basic_salary: parseFloat(e.target.value) || 0 })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  HRA
-                </label>
-                <input
-                  type="number"
-                  value={employeeForm.hra || 0}
-                  onChange={(e) => setEmployeeForm({ ...employeeForm, hra: parseFloat(e.target.value) || 0 })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Special Allowance
-                </label>
-                <input
-                  type="number"
-                  value={employeeForm.special_allowance || 0}
-                  onChange={(e) => setEmployeeForm({ ...employeeForm, special_allowance: parseFloat(e.target.value) || 0 })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-                />
+              {/* CTC field only - detailed salary structure managed in Compensation Management */}
+              <div className="md:col-span-2 bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <div className="flex items-start gap-3">
+                  <div className="flex-1">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      CTC / Monthly Gross (for reference)
+                    </label>
+                    <input
+                      type="number"
+                      value={employeeForm.basic_salary || ''}
+                      onChange={(e) => setEmployeeForm({ ...employeeForm, basic_salary: parseFloat(e.target.value) || 0 })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="e.g. 30000"
+                    />
+                  </div>
+                  <div className="flex-1 bg-white border border-blue-200 rounded p-3 text-sm text-blue-800">
+                    <p className="font-medium mb-1">💡 Salary Structure</p>
+                    <p className="text-xs text-gray-600">Detailed salary breakdown (Basic, HRA, Special Allowance, PF, ESI, TDS, etc.) is managed in <strong>Compensation Management</strong>. Set it up there after creating the employee.</p>
+                  </div>
+                </div>
               </div>
 
               <div>
@@ -5713,17 +5775,35 @@ Any other duties assigned by management from time to time`}
                 <p className="text-sm text-gray-600 mt-1">
                   {employees.find(e => e.id === editingSalarySlip.employee_id)?.full_name} - {['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][editingSalarySlip.salary_month - 1]} {editingSalarySlip.salary_year}
                 </p>
+                {(() => {
+                  const emp = employees.find(e => e.id === editingSalarySlip.employee_id);
+                  if (!emp) return null;
+                  return (
+                    <p className="text-xs text-blue-600 mt-1">
+                      Employee profile: Basic ₹{(emp.basic_salary || 0).toLocaleString('en-IN')} | HRA ₹{(emp.hra || 0).toLocaleString('en-IN')} | Gross ₹{(emp.gross_salary || 0).toLocaleString('en-IN')}
+                    </p>
+                  );
+                })()}
               </div>
-              <button
-                onClick={() => {
-                  setShowEditSalarySlipModal(false);
-                  setEditingSalarySlip(null);
-                  setEditedSalarySlipData({});
-                }}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                <X className="w-6 h-6" />
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleRecalculateSalarySlip}
+                  className="px-3 py-1.5 text-xs bg-yellow-100 text-yellow-800 border border-yellow-300 rounded-md hover:bg-yellow-200 font-medium"
+                  title="Recalculate all values from employee's current salary profile"
+                >
+                  ↻ Recalculate from Profile
+                </button>
+                <button
+                  onClick={() => {
+                    setShowEditSalarySlipModal(false);
+                    setEditingSalarySlip(null);
+                    setEditedSalarySlipData({});
+                  }}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
             </div>
 
             <div className="p-6 max-h-[70vh] overflow-y-auto">
@@ -5737,7 +5817,7 @@ Any other duties assigned by management from time to time`}
                       <input
                         type="number"
                         value={editedSalarySlipData.basic_salary || ''}
-                        onChange={(e) => setEditedSalarySlipData({ ...editedSalarySlipData, basic_salary: parseFloat(e.target.value) })}
+                        onChange={(e) => updateEditedSalaryField('basic_salary', parseFloat(e.target.value) || 0)}
                         className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
                       />
                     </div>
@@ -5746,7 +5826,7 @@ Any other duties assigned by management from time to time`}
                       <input
                         type="number"
                         value={editedSalarySlipData.hra || ''}
-                        onChange={(e) => setEditedSalarySlipData({ ...editedSalarySlipData, hra: parseFloat(e.target.value) })}
+                        onChange={(e) => updateEditedSalaryField('hra', parseFloat(e.target.value) || 0)}
                         className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
                       />
                     </div>
@@ -5755,7 +5835,25 @@ Any other duties assigned by management from time to time`}
                       <input
                         type="number"
                         value={editedSalarySlipData.special_allowance || ''}
-                        onChange={(e) => setEditedSalarySlipData({ ...editedSalarySlipData, special_allowance: parseFloat(e.target.value) })}
+                        onChange={(e) => updateEditedSalaryField('special_allowance', parseFloat(e.target.value) || 0)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Transport Allowance</label>
+                      <input
+                        type="number"
+                        value={editedSalarySlipData.transport_allowance || ''}
+                        onChange={(e) => updateEditedSalaryField('transport_allowance', parseFloat(e.target.value) || 0)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Medical Allowance</label>
+                      <input
+                        type="number"
+                        value={editedSalarySlipData.medical_allowance || ''}
+                        onChange={(e) => updateEditedSalaryField('medical_allowance', parseFloat(e.target.value) || 0)}
                         className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
                       />
                     </div>
@@ -5764,7 +5862,25 @@ Any other duties assigned by management from time to time`}
                       <input
                         type="number"
                         value={editedSalarySlipData.other_allowances || ''}
-                        onChange={(e) => setEditedSalarySlipData({ ...editedSalarySlipData, other_allowances: parseFloat(e.target.value) })}
+                        onChange={(e) => updateEditedSalaryField('other_allowances', parseFloat(e.target.value) || 0)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Bonus</label>
+                      <input
+                        type="number"
+                        value={editedSalarySlipData.bonus || ''}
+                        onChange={(e) => updateEditedSalaryField('bonus', parseFloat(e.target.value) || 0)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Overtime</label>
+                      <input
+                        type="number"
+                        value={editedSalarySlipData.overtime || ''}
+                        onChange={(e) => updateEditedSalaryField('overtime', parseFloat(e.target.value) || 0)}
                         className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
                       />
                     </div>
@@ -5773,8 +5889,8 @@ Any other duties assigned by management from time to time`}
                       <input
                         type="number"
                         value={editedSalarySlipData.gross_salary || ''}
-                        onChange={(e) => setEditedSalarySlipData({ ...editedSalarySlipData, gross_salary: parseFloat(e.target.value) })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm bg-gray-100"
+                        readOnly
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm bg-gray-100 cursor-not-allowed font-semibold"
                       />
                     </div>
                   </div>
@@ -5789,7 +5905,7 @@ Any other duties assigned by management from time to time`}
                       <input
                         type="number"
                         value={editedSalarySlipData.provident_fund || ''}
-                        onChange={(e) => setEditedSalarySlipData({ ...editedSalarySlipData, provident_fund: parseFloat(e.target.value) })}
+                        onChange={(e) => updateEditedSalaryField('provident_fund', parseFloat(e.target.value) || 0)}
                         className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
                       />
                     </div>
@@ -5798,7 +5914,7 @@ Any other duties assigned by management from time to time`}
                       <input
                         type="number"
                         value={editedSalarySlipData.professional_tax || ''}
-                        onChange={(e) => setEditedSalarySlipData({ ...editedSalarySlipData, professional_tax: parseFloat(e.target.value) })}
+                        onChange={(e) => updateEditedSalaryField('professional_tax', parseFloat(e.target.value) || 0)}
                         className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
                       />
                     </div>
@@ -5807,7 +5923,7 @@ Any other duties assigned by management from time to time`}
                       <input
                         type="number"
                         value={editedSalarySlipData.esic || ''}
-                        onChange={(e) => setEditedSalarySlipData({ ...editedSalarySlipData, esic: parseFloat(e.target.value) })}
+                        onChange={(e) => updateEditedSalaryField('esic', parseFloat(e.target.value) || 0)}
                         className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
                       />
                     </div>
@@ -5816,7 +5932,7 @@ Any other duties assigned by management from time to time`}
                       <input
                         type="number"
                         value={editedSalarySlipData.tds || ''}
-                        onChange={(e) => setEditedSalarySlipData({ ...editedSalarySlipData, tds: parseFloat(e.target.value) })}
+                        onChange={(e) => updateEditedSalaryField('tds', parseFloat(e.target.value) || 0)}
                         className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
                       />
                     </div>
@@ -5825,7 +5941,7 @@ Any other duties assigned by management from time to time`}
                       <input
                         type="number"
                         value={editedSalarySlipData.loan_repayment || ''}
-                        onChange={(e) => setEditedSalarySlipData({ ...editedSalarySlipData, loan_repayment: parseFloat(e.target.value) })}
+                        onChange={(e) => updateEditedSalaryField('loan_repayment', parseFloat(e.target.value) || 0)}
                         className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
                       />
                     </div>
@@ -5834,17 +5950,17 @@ Any other duties assigned by management from time to time`}
                       <input
                         type="number"
                         value={editedSalarySlipData.other_deductions || ''}
-                        onChange={(e) => setEditedSalarySlipData({ ...editedSalarySlipData, other_deductions: parseFloat(e.target.value) })}
+                        onChange={(e) => updateEditedSalaryField('other_deductions', parseFloat(e.target.value) || 0)}
                         className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
                       />
                     </div>
                     <div className="col-span-2">
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Total Deductions</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Total Deductions (Auto-calculated)</label>
                       <input
                         type="number"
                         value={editedSalarySlipData.total_deductions || ''}
-                        onChange={(e) => setEditedSalarySlipData({ ...editedSalarySlipData, total_deductions: parseFloat(e.target.value) })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm bg-gray-100"
+                        readOnly
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm bg-gray-100 cursor-not-allowed font-semibold"
                       />
                     </div>
                   </div>
@@ -5898,8 +6014,8 @@ Any other duties assigned by management from time to time`}
                       <input
                         type="number"
                         value={editedSalarySlipData.net_salary || ''}
-                        onChange={(e) => setEditedSalarySlipData({ ...editedSalarySlipData, net_salary: parseFloat(e.target.value) })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm bg-blue-100 font-bold"
+                        readOnly
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm bg-blue-100 font-bold cursor-not-allowed"
                       />
                     </div>
                   </div>

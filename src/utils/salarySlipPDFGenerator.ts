@@ -258,31 +258,6 @@ export async function generateSalarySlipPDF(
   pdf.text(`In Words: ${netInWords} Rupees Only`, dimensions.leftMargin, currentY);
   currentY += 10;
 
-  // Tax Information
-  await checkPageBreak(30);
-  pdf.setFontSize(9);
-  pdf.setFont('helvetica', 'bold');
-  pdf.text('TAX INFORMATION', dimensions.leftMargin, currentY);
-  currentY += 6;
-
-  const taxInfo = [
-    ['Year-to-Date Gross Salary:', `₹${salarySlip.ytd_gross.toLocaleString('en-IN')}`],
-    ['Year-to-Date TDS Deducted:', `₹${salarySlip.ytd_tds.toLocaleString('en-IN')}`],
-    ['Projected Annual Income:', `₹${salarySlip.projected_annual_income.toLocaleString('en-IN')}`],
-    ['Annual Tax Liability (Estimated):', `₹${salarySlip.annual_tax_liability.toLocaleString('en-IN')}`]
-  ];
-
-  for (const [label, value] of taxInfo) {
-    await checkPageBreak(6);
-    pdf.setFontSize(9);
-    pdf.setFont('helvetica', 'normal');
-    pdf.text(label, dimensions.leftMargin, currentY);
-    pdf.text(value, dimensions.leftMargin + 70, currentY);
-    currentY += 5;
-  }
-
-  currentY += 5;
-
   // Payment Information (if paid)
   if (salarySlip.status === 'paid' && salarySlip.payment_date) {
     await checkPageBreak(25);
