@@ -80,7 +80,8 @@ export const attendanceService = {
   ): Promise<AttendanceSummary | null> {
     try {
       const firstDay = `${year}-${String(month).padStart(2, '0')}-01`;
-      const lastDay = new Date(year, month, 0).toISOString().split('T')[0];
+      // Use getDate() not toISOString() to avoid UTC timezone shift for IST users
+      const lastDay = `${year}-${String(month).padStart(2, '0')}-${String(new Date(year, month, 0).getDate()).padStart(2, '0')}`;
 
       const { data, error } = await supabase
         .from('attendance_records')

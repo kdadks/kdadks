@@ -671,13 +671,14 @@ export const leaveAttendanceService = {
     year: number,
     month: number
   ): Promise<MonthlyAttendanceSummary[]> {
-    const startDate = new Date(year, month - 1, 1);
-    const endDate = new Date(year, month, 0);
+    // Use local date formatting (not toISOString) to avoid UTC timezone shift for IST users
+    const fromDate = `${year}-${String(month).padStart(2, '0')}-01`;
+    const toDate = `${year}-${String(month).padStart(2, '0')}-${String(new Date(year, month, 0).getDate()).padStart(2, '0')}`;
 
     // Get all attendance records for the month
     const records = await this.getAttendanceRecords({
-      fromDate: startDate.toISOString().split('T')[0],
-      toDate: endDate.toISOString().split('T')[0]
+      fromDate,
+      toDate
     });
 
     // Group by employee
@@ -695,7 +696,7 @@ export const leaveAttendanceService = {
         employee_id: employeeId,
         month,
         year,
-        total_working_days: endDate.getDate(),
+        total_working_days: new Date(year, month, 0).getDate(),
         present_days: empRecords.filter(r => r.status === 'present').length,
         absent_days: empRecords.filter(r => r.status === 'absent').length,
         half_days: empRecords.filter(r => r.status === 'half-day').length,

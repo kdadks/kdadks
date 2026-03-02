@@ -130,8 +130,9 @@ const AttendanceManagement: React.FC<AttendanceManagementProps> = ({ onBackToDas
       setMonthlySummary(employeeSummary);
 
       // Load all attendance records for the month for this employee
-      const firstDay = new Date(selectedYear, selectedMonth - 1, 1).toISOString().split('T')[0];
-      const lastDay = new Date(selectedYear, selectedMonth, 0).toISOString().split('T')[0];
+      // Use local date formatting (not toISOString) to avoid UTC timezone shift for IST users
+      const firstDay = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}-01`;
+      const lastDay = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}-${String(new Date(selectedYear, selectedMonth, 0).getDate()).padStart(2, '0')}`;
       
       const { data: records, error } = await supabase
         .from('attendance_records')
