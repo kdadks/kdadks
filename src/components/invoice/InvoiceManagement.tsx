@@ -1615,6 +1615,34 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
     }
   };
 
+  // Helper to load QR code image for invoice PDFs (preserves original aspect ratio)
+  const loadQRCodeImage = async (): Promise<{ dataUrl: string; width: number; height: number } | null> => {
+    try {
+      const img = new window.Image();
+      img.crossOrigin = 'anonymous';
+      const loaded = await new Promise<boolean>((resolve) => {
+        img.onload = () => resolve(true);
+        img.onerror = () => resolve(false);
+        img.src = '/bankqrcode.jpg';
+      });
+      if (!loaded) return null;
+      const canvas = document.createElement('canvas');
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return null;
+      ctx.drawImage(img, 0, 0);
+      return {
+        dataUrl: canvas.toDataURL('image/jpeg', 0.95),
+        width: img.naturalWidth,
+        height: img.naturalHeight
+      };
+    } catch {
+      console.warn('Failed to load bank QR code image');
+      return null;
+    }
+  };
+
   const handleDownloadInvoice = async (invoice: Invoice) => {
     try {
       // Load full invoice details first
@@ -2318,7 +2346,11 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
         
         const bankingYPos = bankingStartY + 5;
         downloadPdf.setFillColor(248, 250, 252);
-        const bankingBoxHeight = 20;
+        let bankFieldCount = 0;
+        if (company.bank_name) bankFieldCount++;
+        if (company.account_number) bankFieldCount++;
+        if (company.ifsc_code) bankFieldCount++;
+        const bankingBoxHeight = 4 + bankFieldCount * 4;
         const leftColWidth = 85;
         downloadPdf.rect(leftSectionStart, bankingYPos - 2, leftColWidth, bankingBoxHeight, 'F');
         downloadPdf.setDrawColor(225, 229, 235);
@@ -2353,8 +2385,21 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
           downloadPdf.text(company.ifsc_code, leftSectionStart + 15, bankingContentY);
         }
         
-        // Update yPos to ensure proper spacing after side-by-side layout
-        yPos = Math.max(yPos, bankingStartY + 25);
+        // QR code directly below banking box (side-by-side layout)
+        const bankBoxBottomY1 = bankingYPos - 2 + bankingBoxHeight + 5;
+        const dlQrData1 = await loadQRCodeImage();
+        if (dlQrData1) {
+          const qrPdfWidth = 50;
+          const qrPdfHeight = qrPdfWidth * (dlQrData1.height / dlQrData1.width);
+          downloadPdf.addImage(dlQrData1.dataUrl, 'JPEG', leftSectionStart, bankBoxBottomY1, qrPdfWidth, qrPdfHeight, undefined, 'FAST');
+          downloadPdf.setFontSize(6);
+          downloadPdf.setTextColor(100, 100, 100);
+          downloadPdf.setFont('helvetica', 'normal');
+          downloadPdf.text('Scan to Pay', leftSectionStart + qrPdfWidth / 2, bankBoxBottomY1 + qrPdfHeight + 2, { align: 'center' });
+          yPos = Math.max(yPos, bankBoxBottomY1 + qrPdfHeight + 10);
+        } else {
+          yPos = Math.max(yPos, bankBoxBottomY1);
+        }
         
       } else if (bankingDetailsAvailable) {
         // Default layout: Banking details below totals (when notes are present)
@@ -2365,7 +2410,11 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
         
         yPos += 5;
         downloadPdf.setFillColor(248, 250, 252);
-        const bankingBoxHeight = 20;
+        let bankFieldCount = 0;
+        if (company.bank_name) bankFieldCount++;
+        if (company.account_number) bankFieldCount++;
+        if (company.ifsc_code) bankFieldCount++;
+        const bankingBoxHeight = 4 + bankFieldCount * 4;
         const leftColWidth = 85;
         downloadPdf.rect(leftSectionStart, yPos - 2, leftColWidth, bankingBoxHeight, 'F');
         downloadPdf.setDrawColor(225, 229, 235);
@@ -2400,48 +2449,61 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
           downloadPdf.text(company.ifsc_code, leftSectionStart + 15, bankingYPos);
         }
         
-        yPos += 25;
+        // QR code directly below banking box (stacked layout)
+        const bankBoxBottomY2 = yPos - 2 + bankingBoxHeight + 5;
+        const dlQrData2 = await loadQRCodeImage();
+        if (dlQrData2) {
+          const qrPdfWidth = 50;
+          const qrPdfHeight = qrPdfWidth * (dlQrData2.height / dlQrData2.width);
+          downloadPdf.addImage(dlQrData2.dataUrl, 'JPEG', leftSectionStart, bankBoxBottomY2, qrPdfWidth, qrPdfHeight, undefined, 'FAST');
+          downloadPdf.setFontSize(6);
+          downloadPdf.setTextColor(100, 100, 100);
+          downloadPdf.setFont('helvetica', 'normal');
+          downloadPdf.text('Scan to Pay', leftSectionStart + qrPdfWidth / 2, bankBoxBottomY2 + qrPdfHeight + 2, { align: 'center' });
+          yPos = bankBoxBottomY2 + qrPdfHeight + 10;
+        } else {
+          yPos = bankBoxBottomY2;
+        }
       }
-      
+
       // Notes Section - compact and clean
       if (fullInvoice.notes) {
         downloadPdf.setTextColor(37, 99, 235);
-        downloadPdf.setFontSize(9);
+        downloadPdf.setFontSize(8);
         downloadPdf.setFont('helvetica', 'bold');
         downloadPdf.text('Notes', leftMargin, yPos);
         
-        yPos += 6;
-        downloadPdf.setFontSize(8);
+        yPos += 5;
+        downloadPdf.setFontSize(6);
         downloadPdf.setFont('helvetica', 'normal');
         downloadPdf.setTextColor(60, 60, 60);
         const notesLines = downloadPdf.splitTextToSize(fullInvoice.notes, 180);
         downloadPdf.text(notesLines, leftMargin, yPos);
-        yPos += notesLines.length * 4 + 8;
+        yPos += notesLines.length * 3 + 5;
       }
       
       // Terms & Conditions - compact and clean
       if (fullInvoice.terms_conditions) {
         downloadPdf.setTextColor(37, 99, 235);
-        downloadPdf.setFontSize(9);
+        downloadPdf.setFontSize(8);
         downloadPdf.setFont('helvetica', 'bold');
         downloadPdf.text('Terms & Conditions', leftMargin, yPos);
         
-        yPos += 6;
-        downloadPdf.setFontSize(8);
+        yPos += 4;
+        downloadPdf.setFontSize(5.5);
         downloadPdf.setFont('helvetica', 'normal');
         downloadPdf.setTextColor(60, 60, 60);
         const termsLines = downloadPdf.splitTextToSize(fullInvoice.terms_conditions, 180);
         downloadPdf.text(termsLines, leftMargin, yPos);
-        yPos += termsLines.length * 4 + 12;
+        yPos += termsLines.length * 2.5 + 5;
       }
       
       // Professional Footer - respect footer image positioning
       console.log(`Current yPos before footer: ${yPos.toFixed(1)}mm`);
       console.log(`contentEndY (calculated by footer image): ${contentEndY.toFixed(1)}mm`);
       
-      // Force footer text to be positioned based on contentEndY (which includes the gap calculation)
-      // Don't add a new page - use the calculated position from footer image gap
-      const footerStartY = contentEndY - 5; // Position footer text just above the calculated gap
+      // Position footer text just above the footer image area
+      const footerStartY = contentEndY - 2;
       yPos = footerStartY;
       
       console.log(`Forced footer text yPos to: ${yPos.toFixed(1)}mm (based on contentEndY with gap)`);
@@ -2450,15 +2512,15 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
       downloadPdf.setLineWidth(0.2);
       downloadPdf.line(leftMargin, yPos, rightMargin, yPos);
       
-      yPos += 5;
+      yPos += 4;
       downloadPdf.setTextColor(37, 99, 235);
-      downloadPdf.setFontSize(9);
+      downloadPdf.setFontSize(7);
       downloadPdf.setFont('helvetica', 'bold');
       downloadPdf.text('Thank you for your business!', 105, yPos, { align: 'center' });
       
-      yPos += 4;
+      yPos += 3;
       downloadPdf.setTextColor(120, 120, 120);
-      downloadPdf.setFontSize(7);
+      downloadPdf.setFontSize(5.5);
       downloadPdf.setFont('helvetica', 'normal');
       downloadPdf.text('This is a computer-generated invoice and does not require a signature.', 105, yPos, { align: 'center' });
       
@@ -3087,7 +3149,11 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
         
         const bankingYPos = bankingStartY + 5;
         emailPdf.setFillColor(248, 250, 252);
-        const bankingBoxHeight = 20;
+        let bankFieldCount = 0;
+        if (company.bank_name) bankFieldCount++;
+        if (company.account_number) bankFieldCount++;
+        if (company.ifsc_code) bankFieldCount++;
+        const bankingBoxHeight = 4 + bankFieldCount * 4;
         const leftColWidth = 85;
         emailPdf.rect(leftSectionStart, bankingYPos - 2, leftColWidth, bankingBoxHeight, 'F');
         emailPdf.setDrawColor(225, 229, 235);
@@ -3122,8 +3188,21 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
           emailPdf.text(company.ifsc_code, leftSectionStart + 15, bankingContentY);
         }
         
-        // Update yPos to ensure proper spacing after side-by-side layout
-        yPos = Math.max(yPos, bankingStartY + 25);
+        // QR code directly below banking box (side-by-side layout)
+        const emBankBoxBottomY1 = bankingYPos - 2 + bankingBoxHeight + 5;
+        const emQrData1 = await loadQRCodeImage();
+        if (emQrData1) {
+          const qrPdfWidth = 50;
+          const qrPdfHeight = qrPdfWidth * (emQrData1.height / emQrData1.width);
+          emailPdf.addImage(emQrData1.dataUrl, 'JPEG', leftSectionStart, emBankBoxBottomY1, qrPdfWidth, qrPdfHeight, undefined, 'FAST');
+          emailPdf.setFontSize(6);
+          emailPdf.setTextColor(100, 100, 100);
+          emailPdf.setFont('helvetica', 'normal');
+          emailPdf.text('Scan to Pay', leftSectionStart + qrPdfWidth / 2, emBankBoxBottomY1 + qrPdfHeight + 2, { align: 'center' });
+          yPos = Math.max(yPos, emBankBoxBottomY1 + qrPdfHeight + 10);
+        } else {
+          yPos = Math.max(yPos, emBankBoxBottomY1);
+        }
         
       } else if (bankingDetailsAvailable) {
         // Default layout: Banking details below totals (when notes are present)
@@ -3134,7 +3213,12 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
         
         yPos += 5;
         emailPdf.setFillColor(248, 250, 252);
-        const bankingBoxHeight = 20;
+        let bankFieldCount = 0;
+        if (company.bank_name) bankFieldCount++;
+        if (company.account_number) bankFieldCount++;
+        if (company.ifsc_code) bankFieldCount++;
+        if (company.branch_name) bankFieldCount++;
+        const bankingBoxHeight = 4 + bankFieldCount * 4;
         const leftColWidth = 90;
         emailPdf.rect(leftSectionStart, yPos - 2, leftColWidth, bankingBoxHeight, 'F');
         emailPdf.setDrawColor(225, 229, 235);
@@ -3177,48 +3261,61 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
           emailPdf.text(company.branch_name, leftSectionStart + 15, bankingContentY);
         }
         
-        yPos += bankingBoxHeight + 5;
+        // QR code directly below banking box (stacked layout)
+        const emBankBoxBottomY2 = yPos - 2 + bankingBoxHeight + 5;
+        const emQrData2 = await loadQRCodeImage();
+        if (emQrData2) {
+          const qrPdfWidth = 50;
+          const qrPdfHeight = qrPdfWidth * (emQrData2.height / emQrData2.width);
+          emailPdf.addImage(emQrData2.dataUrl, 'JPEG', leftSectionStart, emBankBoxBottomY2, qrPdfWidth, qrPdfHeight, undefined, 'FAST');
+          emailPdf.setFontSize(6);
+          emailPdf.setTextColor(100, 100, 100);
+          emailPdf.setFont('helvetica', 'normal');
+          emailPdf.text('Scan to Pay', leftSectionStart + qrPdfWidth / 2, emBankBoxBottomY2 + qrPdfHeight + 2, { align: 'center' });
+          yPos = emBankBoxBottomY2 + qrPdfHeight + 10;
+        } else {
+          yPos = emBankBoxBottomY2;
+        }
       }
-      
+
       // Notes Section - compact and clean
       if (fullInvoice.notes) {
         emailPdf.setTextColor(37, 99, 235);
-        emailPdf.setFontSize(9);
+        emailPdf.setFontSize(8);
         emailPdf.setFont('helvetica', 'bold');
         emailPdf.text('Notes', leftSectionStart, yPos);
         
-        yPos += 5;
-        emailPdf.setFontSize(7);
+        yPos += 4;
+        emailPdf.setFontSize(6);
         emailPdf.setFont('helvetica', 'normal');
         emailPdf.setTextColor(60, 60, 60);
         const notesLines = emailPdf.splitTextToSize(fullInvoice.notes, 90);
         emailPdf.text(notesLines, leftSectionStart, yPos);
-        yPos += notesLines.length * 3 + 5;
+        yPos += notesLines.length * 2.5 + 4;
       }
       
       // Terms & Conditions - compact and clean
       if (fullInvoice.terms_conditions) {
         emailPdf.setTextColor(37, 99, 235);
-        emailPdf.setFontSize(9);
+        emailPdf.setFontSize(8);
         emailPdf.setFont('helvetica', 'bold');
         emailPdf.text('Terms & Conditions', leftSectionStart, yPos);
         
-        yPos += 5;
-        emailPdf.setFontSize(7);
+        yPos += 4;
+        emailPdf.setFontSize(5.5);
         emailPdf.setFont('helvetica', 'normal');
         emailPdf.setTextColor(60, 60, 60);
         const termsLines = emailPdf.splitTextToSize(fullInvoice.terms_conditions, 90);
         emailPdf.text(termsLines, leftSectionStart, yPos);
-        yPos += termsLines.length * 3;
+        yPos += termsLines.length * 2.5 + 4;
       }
       
       // Professional Footer - respect footer image positioning
       console.log(`EMAIL PDF - Current yPos before footer: ${yPos.toFixed(1)}mm`);
       console.log(`EMAIL PDF - contentEndY (calculated by footer image): ${contentEndY.toFixed(1)}mm`);
       
-      // Force footer text to be positioned based on contentEndY (which includes the gap calculation)
-      // Don't add a new page - use the calculated position from footer image gap
-      const footerStartY = contentEndY - 5; // Position footer text just above the calculated gap
+      // Position footer text just above the footer image area
+      const footerStartY = contentEndY - 2;
       yPos = footerStartY;
       
       console.log(`EMAIL PDF - Forced footer text yPos to: ${yPos.toFixed(1)}mm (based on contentEndY with gap)`);
@@ -3227,15 +3324,15 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
       emailPdf.setLineWidth(0.2);
       emailPdf.line(leftMargin, yPos, rightMargin, yPos);
       
-      yPos += 5;
+      yPos += 4;
       emailPdf.setTextColor(37, 99, 235);
-      emailPdf.setFontSize(9);
+      emailPdf.setFontSize(7);
       emailPdf.setFont('helvetica', 'bold');
       emailPdf.text('Thank you for your business!', 105, yPos, { align: 'center' });
       
-      yPos += 4;
+      yPos += 3;
       emailPdf.setTextColor(120, 120, 120);
-      emailPdf.setFontSize(7);
+      emailPdf.setFontSize(5.5);
       emailPdf.setFont('helvetica', 'normal');
       emailPdf.text('This is a computer-generated invoice and does not require a signature.', 105, yPos, { align: 'center' });
 
