@@ -236,7 +236,7 @@ export interface Invoice {
   inr_total_amount?: number;
 
   // Status
-  status: 'draft' | 'sent' | 'paid' | 'cancelled' | 'overdue';
+  status: 'draft' | 'sent' | 'paid' | 'cancelled' | 'overdue' | 'completed';
   payment_status: 'pending' | 'partial' | 'paid';
 
   // Quote conversion tracking

@@ -1457,17 +1457,16 @@ class InvoiceService {
     
     if (error) throw error;
 
-    // Update invoice payment status
+    // Update invoice payment status.
+    // We intentionally never set 'partial' here — when a payment is recorded via
+    // "Mark as Paid" the actual amount paid may be slightly less than the invoice
+    // total due to forex conversion differences. Treat as 'paid' if totalPaid >= 90%
+    // of invoice total, otherwise leave as 'pending'.
     const invoice = await this.getInvoiceById(payment.invoice_id);
     if (invoice) {
       const totalPaid = (invoice.payments?.reduce((sum, p) => sum + p.amount, 0) || 0) + payment.amount;
-      let paymentStatus: Invoice['payment_status'] = 'pending';
-      
-      if (totalPaid >= invoice.total_amount) {
-        paymentStatus = 'paid';
-      } else if (totalPaid > 0) {
-        paymentStatus = 'partial';
-      }
+      const paymentStatus: Invoice['payment_status'] =
+        totalPaid >= invoice.total_amount * 0.9 ? 'paid' : 'pending';
 
       await this.updateInvoiceStatus(payment.invoice_id, 'sent', paymentStatus);
     }
@@ -1479,136 +1478,79 @@ class InvoiceService {
   async getInvoiceStats(): Promise<InvoiceStats> {
     console.log('📊 Starting getInvoiceStats calculation...');
     
-    // Always try the database view first, but prepare for fallback
-    const { data: multicurrencyStats, error: viewError } = await supabase
-      .from('invoice_stats_multicurrency')
-      .select('*')
-      .single();
-    
-    if (viewError) {
-      console.warn('📋 Multi-currency stats view not available, using fallback calculation:', viewError.message);
-    } else {
-      console.log('✅ Multi-currency view data retrieved:', multicurrencyStats);
-    }
-    
-    // Always fetch raw invoice data for verification and fallback
+    // Fetch raw invoice data
     const { data: invoices, error: invoicesError } = await supabase
       .from('invoices')
-      .select('status, payment_status, total_amount, inr_total_amount, original_currency_code, invoice_date');
+      .select('id, status, payment_status, total_amount, inr_total_amount, original_currency_code, invoice_date');
     
     if (invoicesError) {
       console.error('❌ Failed to fetch invoices for stats:', invoicesError);
       throw invoicesError;
     }
 
-    console.log(`📊 Processing ${invoices?.length || 0} invoices for stats calculation`);
+    // Fetch actual payments to get real revenue amounts
+    const { data: payments, error: paymentsError } = await supabase
+      .from('payments')
+      .select('invoice_id, amount, payment_date');
+
+    if (paymentsError) {
+      console.warn('⚠️ Could not fetch payments table, falling back to invoice amounts:', paymentsError.message);
+    }
 
     const currentDate = new Date();
     const currentMonth = currentDate.getMonth();
     const currentYear = currentDate.getFullYear();
 
-    // Calculate fallback stats using raw invoice data with INR amounts
-    const fallbackStats = {
+    // Build a set of PAID (non-cancelled) invoice IDs — only payments on paid invoices count as revenue
+    const paidInvoiceIds = new Set(
+      invoices?.filter(i => i.payment_status === 'paid' && i.status !== 'cancelled').map(i => i.id) || []
+    );
+
+    const validPayments = (payments || []).filter(p => paidInvoiceIds.has(p.invoice_id));
+
+    // Revenue = sum of actual payments received (from payments table)
+    const total_revenue = validPayments.reduce((sum, p) => sum + (p.amount || 0), 0);
+
+    const this_month_revenue = validPayments.filter(p => {
+      const d = new Date(p.payment_date);
+      return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+    }).reduce((sum, p) => sum + (p.amount || 0), 0);
+
+    const this_year_revenue = validPayments.filter(p => {
+      return new Date(p.payment_date).getFullYear() === currentYear;
+    }).reduce((sum, p) => sum + (p.amount || 0), 0);
+
+    // Pending = invoice amounts not yet paid
+    const pending_amount = invoices
+      ?.filter(i => i.payment_status !== 'paid' && i.status !== 'cancelled')
+      .reduce((sum, i) => sum + (i.inr_total_amount || i.total_amount || 0), 0) || 0;
+
+    const stats: InvoiceStats = {
       total_invoices: invoices?.length || 0,
       draft_invoices: invoices?.filter(i => i.status === 'draft').length || 0,
       sent_invoices: invoices?.filter(i => i.status === 'sent').length || 0,
       paid_invoices: invoices?.filter(i => i.payment_status === 'paid' && i.status !== 'cancelled').length || 0,
       overdue_invoices: invoices?.filter(i => i.status === 'overdue').length || 0,
       cancelled_invoices: invoices?.filter(i => i.status === 'cancelled').length || 0,
-      
-      // All calculations now use INR amounts for consistency
-      total_revenue: invoices?.filter(i => i.payment_status === 'paid' && i.status !== 'cancelled').reduce((sum, i) => sum + (i.inr_total_amount || i.total_amount || 0), 0) || 0,
-      pending_amount: invoices?.filter(i => i.payment_status !== 'paid' && i.status !== 'cancelled').reduce((sum, i) => sum + (i.inr_total_amount || i.total_amount || 0), 0) || 0,
-      this_month_revenue: invoices?.filter(i => {
-        const invoiceDate = new Date(i.invoice_date);
-        return i.payment_status === 'paid' && i.status !== 'cancelled' &&
-               invoiceDate.getMonth() === currentMonth && 
-               invoiceDate.getFullYear() === currentYear;
-      }).reduce((sum, i) => sum + (i.inr_total_amount || i.total_amount || 0), 0) || 0,
-      this_year_revenue: invoices?.filter(i => {
-        const invoiceDate = new Date(i.invoice_date);
-        return i.payment_status === 'paid' && i.status !== 'cancelled' && invoiceDate.getFullYear() === currentYear;
-      }).reduce((sum, i) => sum + (i.inr_total_amount || i.total_amount || 0), 0) || 0,
-      
-      // Multi-currency calculations (INR) - with fallback to original amounts
-      total_revenue_inr: invoices?.filter(i => i.payment_status === 'paid' && i.status !== 'cancelled').reduce((sum, i) => sum + (i.inr_total_amount || i.total_amount || 0), 0) || 0,
-      pending_amount_inr: invoices?.filter(i => i.payment_status !== 'paid' && i.status !== 'cancelled').reduce((sum, i) => sum + (i.inr_total_amount || i.total_amount || 0), 0) || 0,
-      this_month_revenue_inr: invoices?.filter(i => {
-        const invoiceDate = new Date(i.invoice_date);
-        return i.payment_status === 'paid' && i.status !== 'cancelled' &&
-               invoiceDate.getMonth() === currentMonth && 
-               invoiceDate.getFullYear() === currentYear;
-      }).reduce((sum, i) => sum + (i.inr_total_amount || i.total_amount || 0), 0) || 0,
-      this_year_revenue_inr: invoices?.filter(i => {
-        const invoiceDate = new Date(i.invoice_date);
-        return i.payment_status === 'paid' && i.status !== 'cancelled' && invoiceDate.getFullYear() === currentYear;
-      }).reduce((sum, i) => sum + (i.inr_total_amount || i.total_amount || 0), 0) || 0
+      total_revenue,
+      pending_amount,
+      this_month_revenue,
+      this_year_revenue,
+      total_revenue_inr: total_revenue,
+      pending_amount_inr: pending_amount,
+      this_month_revenue_inr: this_month_revenue,
+      currency_breakdown: {}
     };
 
-    console.log('💰 Calculated fallback stats:', {
-      pending_amount_inr: fallbackStats.pending_amount_inr,
-      total_revenue_inr: fallbackStats.total_revenue_inr,
-      total_invoices: fallbackStats.total_invoices,
-      paid_invoices: fallbackStats.paid_invoices,
-      cancelled_invoices: fallbackStats.cancelled_invoices
-    });
-
-    // If view is not available or unreliable, use fallback calculation
-    if (viewError || !multicurrencyStats) {
-      console.log('🔄 Using fallback stats calculation');
-      const stats: InvoiceStats = {
-        ...fallbackStats,
-        // Ensure multi-currency fields are properly set
-        currency_breakdown: {}
-      };
-      return stats;
-    }
-
-    // If view is available, use it but verify pending amount calculation
-    console.log('🔍 Comparing view vs fallback pending amounts:', {
-      viewPending: multicurrencyStats.pending_amount_inr,
-      fallbackPending: fallbackStats.pending_amount_inr,
-      difference: Math.abs((multicurrencyStats.pending_amount_inr || 0) - fallbackStats.pending_amount_inr)
-    });
-
-    // Use fallback calculation for pending amount if there's a significant difference
-    const useFallbackPending = Math.abs((multicurrencyStats.pending_amount_inr || 0) - fallbackStats.pending_amount_inr) > 1000;
-    
-    if (useFallbackPending) {
-      console.warn('⚠️ Large difference detected in pending amounts, using fallback calculation');
-    }
-
-    const stats: InvoiceStats = {
-      total_invoices: multicurrencyStats.total_invoices || fallbackStats.total_invoices,
-      draft_invoices: multicurrencyStats.draft_invoices || fallbackStats.draft_invoices,
-      sent_invoices: multicurrencyStats.sent_invoices || fallbackStats.sent_invoices,
-      paid_invoices: multicurrencyStats.paid_invoices || fallbackStats.paid_invoices,
-      overdue_invoices: multicurrencyStats.overdue_invoices || fallbackStats.overdue_invoices,
-      cancelled_invoices: multicurrencyStats.cancelled_invoices || fallbackStats.cancelled_invoices,
-      
-      // Use INR amounts as primary amounts for dashboard
-      total_revenue: multicurrencyStats.total_revenue_inr || fallbackStats.total_revenue_inr,
-      pending_amount: useFallbackPending ? fallbackStats.pending_amount_inr : (multicurrencyStats.pending_amount_inr || fallbackStats.pending_amount_inr),
-      this_month_revenue: multicurrencyStats.this_month_revenue_inr || fallbackStats.this_month_revenue_inr,
-      this_year_revenue: multicurrencyStats.this_year_revenue_inr || fallbackStats.this_year_revenue_inr,
-      
-      // Multi-currency specific fields
-      total_revenue_inr: multicurrencyStats.total_revenue_inr || fallbackStats.total_revenue_inr,
-      pending_amount_inr: useFallbackPending ? fallbackStats.pending_amount_inr : (multicurrencyStats.pending_amount_inr || fallbackStats.pending_amount_inr),
-      this_month_revenue_inr: multicurrencyStats.this_month_revenue_inr || fallbackStats.this_month_revenue_inr,
-      currency_breakdown: multicurrencyStats.currency_breakdown || {}
-    };
-
-    console.log('✅ Final stats calculated:', {
-      pending_amount: stats.pending_amount,
-      pending_amount_inr: stats.pending_amount_inr,
-      total_revenue_inr: stats.total_revenue_inr,
-      usedFallbackForPending: useFallbackPending
+    console.log('✅ Stats calculated from payments table:', {
+      total_revenue,
+      pending_amount,
+      this_month_revenue,
+      payment_count: validPayments.length
     });
 
     return stats;
   }
-
   // Exchange rate management methods
   async updateExchangeRates(forceUpdate: boolean = false): Promise<boolean> {
     return await exchangeRateService.updateExchangeRates(forceUpdate);

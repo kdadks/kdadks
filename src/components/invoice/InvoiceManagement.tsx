@@ -52,6 +52,15 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
   const [countries, setCountries] = useState<Country[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Mark as Paid dialog state
+  const [markAsPaidDialogOpen, setMarkAsPaidDialogOpen] = useState(false);
+  const [markAsPaidInvoice, setMarkAsPaidInvoice] = useState<Invoice | null>(null);
+  const [markAsPaidAmount, setMarkAsPaidAmount] = useState('');
+  const [markAsPaidDate, setMarkAsPaidDate] = useState(new Date().toISOString().split('T')[0]);
+  const [markAsPaidMethod, setMarkAsPaidMethod] = useState('bank_transfer');
+  const [markAsPaidReference, setMarkAsPaidReference] = useState('');
+  const [markAsPaidLoading, setMarkAsPaidLoading] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [searchTerm, setSearchTerm] = useState('');
@@ -1879,7 +1888,7 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
       downloadPdf.setTextColor(255, 255, 255);
       downloadPdf.setFontSize(7);
       downloadPdf.setFont('helvetica', 'bold');
-      downloadPdf.text(fullInvoice.payment_status.toUpperCase(), statusX + 12.5, billToYPos + 1, { align: 'center' });
+      downloadPdf.text((fullInvoice.payment_status === 'paid' ? 'COMPLETED' : fullInvoice.payment_status.toUpperCase()), statusX + 12.5, billToYPos + 1, { align: 'center' });
 
       // Set yPos to the maximum of both columns for proper spacing
       yPos = Math.max(fromYPos, billToYPos) + 10;
@@ -2811,7 +2820,7 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
       emailPdf.setTextColor(255, 255, 255);
       emailPdf.setFontSize(7);
       emailPdf.setFont('helvetica', 'bold');
-      emailPdf.text(fullInvoice.payment_status.toUpperCase(), statusX + 12.5, billToYPos + 1, { align: 'center' });
+      emailPdf.text((fullInvoice.payment_status === 'paid' ? 'COMPLETED' : fullInvoice.payment_status.toUpperCase()), statusX + 12.5, billToYPos + 1, { align: 'center' });
 
       // Set yPos to the maximum of both columns for proper spacing
       yPos = Math.max(fromYPos, billToYPos) + 10;
@@ -3538,17 +3547,42 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
     }
   };
 
-  const handleMarkAsPaid = async (invoice: Invoice) => {
-    const confirmed = await confirm({
-      title: 'Mark as Paid',
-      message: `Mark invoice "${invoice.invoice_number}" as paid?`,
-      confirmText: 'Mark as Paid',
-      cancelText: 'Cancel',
-      type: 'info'
-    });
+  const handleMarkAsPaid = (invoice: Invoice) => {
+    setMarkAsPaidInvoice(invoice);
+    // Use converted INR amount if available (foreign currency invoices), else use total_amount
+    const defaultAmount = invoice.inr_total_amount || invoice.total_amount;
+    setMarkAsPaidAmount(String(defaultAmount));
+    setMarkAsPaidDate(new Date().toISOString().split('T')[0]);
+    setMarkAsPaidMethod('bank_transfer');
+    setMarkAsPaidReference('');
+    setMarkAsPaidDialogOpen(true);
+  };
 
-    if (confirmed) {
-      await handleUpdateInvoiceStatus(invoice, 'paid', 'paid');
+  const submitMarkAsPaid = async () => {
+    if (!markAsPaidInvoice) return;
+    const amount = parseFloat(markAsPaidAmount);
+    if (!amount || amount <= 0) return;
+    setMarkAsPaidLoading(true);
+    try {
+      await invoiceService.createPayment({
+        invoice_id: markAsPaidInvoice.id,
+        payment_date: markAsPaidDate,
+        amount,
+        payment_method: markAsPaidMethod || undefined,
+        reference_number: markAsPaidReference || undefined,
+        created_by: undefined
+      });
+      // Set invoice status to 'completed' and payment_status to 'paid'
+      await invoiceService.updateInvoiceStatus(markAsPaidInvoice.id, 'completed', 'paid');
+      showSuccess(`✅ Invoice ${markAsPaidInvoice.invoice_number} marked as paid!`);
+      setMarkAsPaidDialogOpen(false);
+      setMarkAsPaidInvoice(null);
+      await loadData();
+    } catch (error) {
+      console.error('Failed to record payment:', error);
+      showError(`Failed to record payment: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setMarkAsPaidLoading(false);
     }
   };
 
@@ -3841,6 +3875,7 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
       case 'draft': return 'bg-gray-100 text-gray-800';
       case 'sent': return 'bg-blue-100 text-blue-800';
       case 'paid': return 'bg-green-100 text-green-800';
+      case 'completed': return 'bg-green-100 text-green-800';
       case 'overdue': return 'bg-red-100 text-red-800';
       case 'cancelled': return 'bg-slate-100 text-slate-600 line-through';
       default: return 'bg-gray-100 text-gray-800';
@@ -3853,6 +3888,15 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
       case 'partial': return 'bg-orange-100 text-orange-800';
       case 'paid': return 'bg-green-100 text-green-800';
       default: return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  const getPaymentStatusLabel = (status: string) => {
+    switch (status) {
+      case 'paid': return 'Paid';
+      case 'pending': return 'Pending';
+      case 'partial': return 'Partial';
+      default: return status;
     }
   };
 
@@ -4025,7 +4069,7 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
             </td>
             <td className="px-6 py-4 whitespace-nowrap">
               <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getPaymentStatusColor(invoice.payment_status)}`}>
-                {invoice.payment_status}
+                {getPaymentStatusLabel(invoice.payment_status)}
               </span>
             </td>
             <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
@@ -4180,7 +4224,7 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
             </td>
             <td className="px-6 py-4 whitespace-nowrap">
               <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getPaymentStatusColor(invoice.payment_status)}`}>
-                {invoice.payment_status}
+                {getPaymentStatusLabel(invoice.payment_status)}
               </span>
             </td>
             <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
@@ -6705,6 +6749,91 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
       
       {/* Confirmation Dialog */}
       <ConfirmDialog {...dialogProps} />
+
+      {/* Record Payment Dialog */}
+      {markAsPaidDialogOpen && markAsPaidInvoice && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md">
+            <div className="flex items-center justify-between p-6 border-b">
+              <h2 className="text-lg font-semibold text-gray-900">Record Payment</h2>
+              <button onClick={() => setMarkAsPaidDialogOpen(false)} className="text-gray-400 hover:text-gray-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <p className="text-sm text-gray-600">
+                Invoice <span className="font-semibold">{markAsPaidInvoice.invoice_number}</span>
+                {' '}— Total: <span className="font-semibold">{markAsPaidInvoice.total_amount.toLocaleString('en-IN', { style: 'currency', currency: markAsPaidInvoice.currency_code || 'INR' })}</span>
+                {markAsPaidInvoice.currency_code && markAsPaidInvoice.currency_code !== 'INR' && markAsPaidInvoice.inr_total_amount && (
+                  <span className="text-gray-500"> (≈ ₹{markAsPaidInvoice.inr_total_amount.toLocaleString('en-IN')} INR)</span>
+                )}
+              </p>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Amount Paid <span className="text-red-500">*</span></label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={markAsPaidAmount}
+                  onChange={e => setMarkAsPaidAmount(e.target.value)}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Payment Date <span className="text-red-500">*</span></label>
+                <input
+                  type="date"
+                  value={markAsPaidDate}
+                  onChange={e => setMarkAsPaidDate(e.target.value)}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Payment Method</label>
+                <select
+                  value={markAsPaidMethod}
+                  onChange={e => setMarkAsPaidMethod(e.target.value)}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                >
+                  <option value="bank_transfer">Bank Transfer</option>
+                  <option value="upi">UPI</option>
+                  <option value="cash">Cash</option>
+                  <option value="cheque">Cheque</option>
+                  <option value="credit_card">Credit Card</option>
+                  <option value="neft">NEFT / RTGS</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Reference / Transaction ID</label>
+                <input
+                  type="text"
+                  value={markAsPaidReference}
+                  onChange={e => setMarkAsPaidReference(e.target.value)}
+                  placeholder="Optional"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-3 px-6 py-4 border-t bg-gray-50 rounded-b-xl">
+              <button
+                onClick={() => setMarkAsPaidDialogOpen(false)}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={submitMarkAsPaid}
+                disabled={markAsPaidLoading || !markAsPaidAmount || parseFloat(markAsPaidAmount) <= 0}
+                className="px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                {markAsPaidLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
+                {markAsPaidLoading ? 'Recording...' : 'Record Payment'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
