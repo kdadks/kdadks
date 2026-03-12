@@ -50,6 +50,7 @@ import PerformanceFeedback from './PerformanceFeedback'
 import CompensationManagement from './CompensationManagement'
 import ExpenseManagement from './ExpenseManagement'
 import FinanceManagement from './FinanceManagement'
+import IncomeManagement from './IncomeManagement'
 import type { InvoiceStats } from '../../types/invoice'
 import type { QuoteStats } from '../../types/quote'
 
@@ -73,7 +74,7 @@ interface DashboardStats {
   settlements: number;
 }
 
-type ActiveView = 'dashboard' | 'invoices' | 'payments' | 'quotes' | 'contracts' | 'rate-cards' | 'announcements' | 'expenses' | 'finance' | 'hr-employees' | 'hr-leave' | 'hr-attendance' | 'hr-settlement' | 'hr-tds-report' | 'hr-performance' | 'hr-compensation';
+type ActiveView = 'dashboard' | 'invoices' | 'payments' | 'quotes' | 'contracts' | 'rate-cards' | 'announcements' | 'expenses' | 'income' | 'finance' | 'hr-employees' | 'hr-leave' | 'hr-attendance' | 'hr-settlement' | 'hr-tds-report' | 'hr-performance' | 'hr-compensation';
 
 // Menu section types
 type MenuSection = 'sales' | 'finance' | 'hr' | 'communication';
@@ -314,6 +315,8 @@ const SimpleAdminDashboard: React.FC = () => {
         return <Announcements />;
       case 'expenses':
         return <ExpenseManagement />;
+      case 'income':
+        return <IncomeManagement />;
       case 'finance':
         return <FinanceManagement />;
       case 'hr-employees':
@@ -518,6 +521,22 @@ const SimpleAdminDashboard: React.FC = () => {
                   >
                     <Wallet className="w-5 h-5 flex-shrink-0" />
                     {sidebarOpen && <span className="ml-3">Expenses</span>}
+                  </button>
+                </li>
+
+                {/* Income */}
+                <li>
+                  <button
+                    onClick={() => setActiveView('income')}
+                    title={!sidebarOpen ? 'Income' : undefined}
+                    className={`w-full flex items-center ${!sidebarOpen ? 'justify-center' : ''} px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                      activeView === 'income'
+                        ? 'bg-green-100 text-green-700'
+                        : 'text-gray-700 hover:bg-gray-100'
+                    }`}
+                  >
+                    <TrendingUp className="w-5 h-5 flex-shrink-0" />
+                    {sidebarOpen && <span className="ml-3">Income</span>}
                   </button>
                 </li>
               </>

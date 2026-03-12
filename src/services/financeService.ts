@@ -2,6 +2,15 @@ import { supabase } from '../config/supabase';
 
 // ==================== TYPES ====================
 
+export interface IncomeCategory {
+  id: string;
+  name: string;
+  description: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface ManualTransaction {
   id: string;
   transaction_number: string;
@@ -139,6 +148,47 @@ export interface FinancialHealth {
 // ==================== SERVICE ====================
 
 export const financeService = {
+  // ==================== INCOME CATEGORIES ====================
+
+  async getIncomeCategories(): Promise<IncomeCategory[]> {
+    const { data, error } = await supabase
+      .from('income_categories')
+      .select('*')
+      .eq('is_active', true)
+      .order('name');
+    if (error) throw error;
+    return data || [];
+  },
+
+  async createIncomeCategory(name: string, description?: string): Promise<IncomeCategory> {
+    const { data, error } = await supabase
+      .from('income_categories')
+      .insert({ name, description })
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
+  },
+
+  async updateIncomeCategory(id: string, updates: Partial<IncomeCategory>): Promise<IncomeCategory> {
+    const { data, error } = await supabase
+      .from('income_categories')
+      .update(updates)
+      .eq('id', id)
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
+  },
+
+  async deleteIncomeCategory(id: string): Promise<void> {
+    const { error } = await supabase
+      .from('income_categories')
+      .update({ is_active: false })
+      .eq('id', id);
+    if (error) throw error;
+  },
+
   // ==================== MANUAL TRANSACTIONS ====================
 
   async getTransactions(filters?: {

@@ -17,6 +17,8 @@ import {
 import { invoiceService } from '../../services/invoiceService';
 import type { Country } from '../../types/invoice';
 import { useToast } from '../ui/ToastProvider';
+import { useConfirmDialog } from '../../hooks/useConfirmDialog';
+import ConfirmDialog from '../ui/ConfirmDialog';
 
 type TabType = 'expenses' | 'vendors' | 'categories';
 type ModalType = 'expense' | 'vendor' | 'category' | null;
@@ -55,6 +57,19 @@ const formatDate = (date: string) => {
 
 const ExpenseManagement: React.FC = () => {
   const { showError, showSuccess } = useToast();
+  const { confirm, dialogProps } = useConfirmDialog();
+
+  // Reject dialog state
+  const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
+  const [rejectTargetId, setRejectTargetId] = useState('');
+  const [rejectReason, setRejectReason] = useState('');
+  const [rejectLoading, setRejectLoading] = useState(false);
+
+  // Mark paid dialog state
+  const [markPaidDialogOpen, setMarkPaidDialogOpen] = useState(false);
+  const [markPaidTargetId, setMarkPaidTargetId] = useState('');
+  const [markPaidDate, setMarkPaidDate] = useState(new Date().toISOString().split('T')[0]);
+  const [markPaidLoading, setMarkPaidLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<TabType>('expenses');
   const [loading, setLoading] = useState(true);
   const [expenses, setExpenses] = useState<Expense[]>([]);
@@ -218,7 +233,14 @@ const ExpenseManagement: React.FC = () => {
   };
 
   const handleApprove = async (id: string) => {
-    if (!window.confirm('Approve this expense?')) return;
+    const confirmed = await confirm({
+      title: 'Approve Expense',
+      message: 'Are you sure you want to approve this expense?',
+      confirmText: 'Approve',
+      cancelText: 'Cancel',
+      type: 'warning'
+    });
+    if (!confirmed) return;
     try {
       await expenseService.approveExpense(id);
       await loadExpenses();
@@ -228,32 +250,55 @@ const ExpenseManagement: React.FC = () => {
     }
   };
 
-  const handleReject = async (id: string) => {
-    const reason = prompt('Enter rejection reason:');
-    if (!reason) return;
+  const handleReject = (id: string) => {
+    setRejectTargetId(id);
+    setRejectReason('');
+    setRejectDialogOpen(true);
+  };
+
+  const submitReject = async () => {
+    if (!rejectReason.trim()) return;
+    setRejectLoading(true);
     try {
-      await expenseService.rejectExpense(id, reason);
+      await expenseService.rejectExpense(rejectTargetId, rejectReason);
       await loadExpenses();
       expenseService.getExpenseStats().then(setStats);
+      setRejectDialogOpen(false);
     } catch (error) {
       console.error('Error rejecting expense:', error);
+    } finally {
+      setRejectLoading(false);
     }
   };
 
-  const handleMarkPaid = async (id: string) => {
-    const paymentDate = prompt('Enter payment date (YYYY-MM-DD):', new Date().toISOString().split('T')[0]);
-    if (!paymentDate) return;
+  const handleMarkPaid = (id: string) => {
+    setMarkPaidTargetId(id);
+    setMarkPaidDate(new Date().toISOString().split('T')[0]);
+    setMarkPaidDialogOpen(true);
+  };
+
+  const submitMarkPaid = async () => {
+    setMarkPaidLoading(true);
     try {
-      await expenseService.markExpensePaid(id, paymentDate);
+      await expenseService.markExpensePaid(markPaidTargetId, markPaidDate);
       await loadExpenses();
       expenseService.getExpenseStats().then(setStats);
+      setMarkPaidDialogOpen(false);
     } catch (error) {
       console.error('Error marking expense paid:', error);
+    } finally {
+      setMarkPaidLoading(false);
     }
   };
 
   const handleDelete = async (type: 'expense' | 'vendor' | 'category', id: string) => {
-    if (!window.confirm('Are you sure you want to delete this item?')) return;
+    const confirmed = await confirm({
+      title: 'Delete Item',
+      message: 'Are you sure you want to delete this item? This action cannot be undone.',
+      confirmText: 'Delete',
+      type: 'danger'
+    });
+    if (!confirmed) return;
     try {
       switch (type) {
         case 'expense':
@@ -779,6 +824,81 @@ const ExpenseManagement: React.FC = () => {
           onSave={handleSaveCategory}
         />
       )}
+
+      {/* Reject Expense Dialog */}
+      {rejectDialogOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl p-6 max-w-md w-full mx-4">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">Reject Expense</h3>
+              <button onClick={() => setRejectDialogOpen(false)} className="text-gray-400 hover:text-gray-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <p className="text-gray-600 text-sm mb-4">Please provide a reason for rejecting this expense.</p>
+            <textarea
+              value={rejectReason}
+              onChange={e => setRejectReason(e.target.value)}
+              className="w-full border border-gray-300 rounded-lg p-3 text-sm focus:ring-2 focus:ring-red-500 focus:border-red-500"
+              rows={3}
+              placeholder="Enter rejection reason..."
+            />
+            <div className="flex justify-end gap-3 mt-4">
+              <button
+                onClick={() => setRejectDialogOpen(false)}
+                className="px-4 py-2 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={submitReject}
+                disabled={!rejectReason.trim() || rejectLoading}
+                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50"
+              >
+                {rejectLoading ? 'Rejecting...' : 'Reject'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Mark Paid Dialog */}
+      {markPaidDialogOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl p-6 max-w-sm w-full mx-4">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">Mark as Paid</h3>
+              <button onClick={() => setMarkPaidDialogOpen(false)} className="text-gray-400 hover:text-gray-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <p className="text-gray-600 text-sm mb-4">Select the payment date for this expense.</p>
+            <input
+              type="date"
+              value={markPaidDate}
+              onChange={e => setMarkPaidDate(e.target.value)}
+              className="w-full border border-gray-300 rounded-lg p-3 text-sm focus:ring-2 focus:ring-green-500 focus:border-green-500"
+            />
+            <div className="flex justify-end gap-3 mt-4">
+              <button
+                onClick={() => setMarkPaidDialogOpen(false)}
+                className="px-4 py-2 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={submitMarkPaid}
+                disabled={!markPaidDate || markPaidLoading}
+                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
+              >
+                {markPaidLoading ? 'Saving...' : 'Mark Paid'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <ConfirmDialog {...dialogProps} />
     </div>
   );
 };

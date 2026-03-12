@@ -23,8 +23,11 @@ import type {
 } from '../../types/rateCard';
 import { calculateTotalRate, analyzeSalaryToRate } from '../../types/rateCard';
 import SalaryRateAnalyzer from './SalaryRateAnalyzer';
+import { useConfirmDialog } from '../../hooks/useConfirmDialog';
+import ConfirmDialog from '../ui/ConfirmDialog';
 
 const RateCardManagement: React.FC = () => {
+  const { confirm, dialogProps } = useConfirmDialog();
   const [templates, setTemplates] = useState<RateCardTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -127,9 +130,13 @@ const RateCardManagement: React.FC = () => {
   };
 
   const handleDelete = async (id: string) => {
-    if (!window.confirm('Are you sure you want to delete this rate card template?')) {
-      return;
-    }
+    const confirmed = await confirm({
+      title: 'Delete Rate Card Template',
+      message: 'Are you sure you want to delete this rate card template? This action cannot be undone.',
+      confirmText: 'Delete',
+      type: 'danger'
+    });
+    if (!confirmed) return;
 
     try {
       setError(null);
@@ -1006,6 +1013,8 @@ const RateCardManagement: React.FC = () => {
           onClose={() => setAnalyzerTemplate(null)}
         />
       )}
+
+      <ConfirmDialog {...dialogProps} />
     </div>
   );
 };
