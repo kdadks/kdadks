@@ -102,6 +102,7 @@ export interface FinancialSummary {
     invoices: number;
     manualIncome: number;
     total: number;
+    breakdown: { label: string; amount: number }[];
   };
   expenses: {
     operationalExpenses: number;
@@ -109,6 +110,7 @@ export interface FinancialSummary {
     bonuses: number;
     manualExpenses: number;
     total: number;
+    breakdown: { label: string; amount: number }[];
   };
   netProfit: number;
   profitMargin: number;
@@ -441,8 +443,8 @@ export const financeService = {
       .select('*, expense_categories(name), vendors(name)')
       .eq('status', 'approved')
       .eq('payment_status', 'paid')
-      .gte('expense_date', startDate)
-      .lte('expense_date', endDate);
+      .gte('payment_date', startDate)
+      .lte('payment_date', endDate);
 
     if (expenseError) throw expenseError;
 
@@ -484,7 +486,7 @@ export const financeService = {
         source_type: 'expense',
         source_id: exp.id,
         reference_number: exp.expense_number,
-        transaction_date: exp.expense_date,
+        transaction_date: exp.payment_date || exp.expense_date,
         party_name: exp.vendors?.name || exp.vendor_name || 'Unknown',
         party_type: 'vendor',
         gross_amount: exp.amount,
@@ -573,6 +575,34 @@ export const financeService = {
     const netProfit = totalIncome - totalExpenses;
     const profitMargin = totalIncome > 0 ? (netProfit / totalIncome) * 100 : 0;
 
+    // Dynamic income breakdown grouped by category/source
+    const incomeGroups: Record<string, number> = {};
+    income.forEach(t => {
+      const label = t.source_type === 'invoice' ? 'Invoice Revenue' : (t.category || 'Other Income');
+      incomeGroups[label] = (incomeGroups[label] || 0) + t.net_amount;
+    });
+    const incomeBreakdown = Object.entries(incomeGroups)
+      .filter(([, v]) => v > 0)
+      .sort((a, b) => b[1] - a[1])
+      .map(([label, amount]) => ({ label, amount }));
+
+    // Dynamic expense breakdown grouped by category/source
+    const expenseSourceLabels: Record<string, string> = {
+      salary: 'Salaries',
+      bonus: 'Bonuses',
+      expense: 'Operational Expenses',
+      manual: 'Other Expenses',
+    };
+    const expenseGroups: Record<string, number> = {};
+    expenses.forEach(t => {
+      const label = t.category || expenseSourceLabels[t.source_type] || t.source_type;
+      expenseGroups[label] = (expenseGroups[label] || 0) + t.net_amount;
+    });
+    const expenseBreakdown = Object.entries(expenseGroups)
+      .filter(([, v]) => v > 0)
+      .sort((a, b) => b[1] - a[1])
+      .map(([label, amount]) => ({ label, amount }));
+
     return {
       period: periodName || `${startDate} to ${endDate}`,
       startDate,
@@ -580,14 +610,16 @@ export const financeService = {
       income: {
         invoices: invoiceIncome,
         manualIncome,
-        total: totalIncome
+        total: totalIncome,
+        breakdown: incomeBreakdown
       },
       expenses: {
         operationalExpenses,
         salaries,
         bonuses,
         manualExpenses,
-        total: totalExpenses
+        total: totalExpenses,
+        breakdown: expenseBreakdown
       },
       netProfit,
       profitMargin: Math.round(profitMargin * 100) / 100,

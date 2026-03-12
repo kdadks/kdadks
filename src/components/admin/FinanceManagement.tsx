@@ -93,6 +93,8 @@ const FinanceManagement: React.FC = () => {
     type: '',
     source: ''
   });
+  const [txPage, setTxPage] = useState(1);
+  const TX_PER_PAGE = 20;
 
   // PDF Report states
   const [showReportPreview, setShowReportPreview] = useState(false);
@@ -335,8 +337,9 @@ const FinanceManagement: React.FC = () => {
       currentY += 6;
       pdf.setTextColor(0, 0, 0);
 
-      drawTableRow('Invoice Revenue', formatCurrency(summary.income.invoices));
-      drawTableRow('Other Income', formatCurrency(summary.income.manualIncome));
+      summary.income.breakdown.forEach(({ label, amount }) => {
+        drawTableRow(label, formatCurrency(amount));
+      });
       pdf.setDrawColor(200, 200, 200);
       pdf.line(leftMargin, currentY - 2, pageWidth - rightMargin, currentY - 2);
       drawTableRow('Total Income', formatCurrency(summary.income.total), true);
@@ -350,10 +353,9 @@ const FinanceManagement: React.FC = () => {
       currentY += 6;
       pdf.setTextColor(0, 0, 0);
 
-      drawTableRow('Operational Expenses', formatCurrency(summary.expenses.operationalExpenses));
-      drawTableRow('Salaries', formatCurrency(summary.expenses.salaries));
-      drawTableRow('Bonuses', formatCurrency(summary.expenses.bonuses));
-      drawTableRow('Other Expenses', formatCurrency(summary.expenses.manualExpenses));
+      summary.expenses.breakdown.forEach(({ label, amount }) => {
+        drawTableRow(label, formatCurrency(amount));
+      });
       pdf.line(leftMargin, currentY - 2, pageWidth - rightMargin, currentY - 2);
       drawTableRow('Total Expenses', formatCurrency(summary.expenses.total), true);
       currentY += 8;
@@ -541,6 +543,15 @@ const FinanceManagement: React.FC = () => {
     if (transactionFilters.source && t.source_type !== transactionFilters.source) return false;
     return true;
   });
+
+  // Dynamic source options from actual transaction data
+  const dynamicSources = Array.from(
+    new Set(getAllTransactions().map(t => t.source_type).filter(Boolean))
+  ).sort();
+
+  // Paginated slice
+  const txTotalPages = Math.max(1, Math.ceil(filteredTransactions.length / TX_PER_PAGE));
+  const paginatedTransactions = filteredTransactions.slice((txPage - 1) * TX_PER_PAGE, txPage * TX_PER_PAGE);
 
   // FY month names for display
   const fyMonthNames = ['April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December', 'January', 'February', 'March'];
@@ -947,10 +958,10 @@ const FinanceManagement: React.FC = () => {
               {/* All Transactions View */}
               {activeView === 'transactions' && (
                 <div className="space-y-4">
-                  <div className="flex gap-4">
+                  <div className="flex gap-4 flex-wrap">
                     <select
                       value={transactionFilters.type}
-                      onChange={(e) => setTransactionFilters({ ...transactionFilters, type: e.target.value })}
+                      onChange={(e) => { setTransactionFilters({ ...transactionFilters, type: e.target.value }); setTxPage(1); }}
                       className="px-3 py-2 border border-gray-300 rounded-lg"
                     >
                       <option value="">All Types</option>
@@ -959,16 +970,17 @@ const FinanceManagement: React.FC = () => {
                     </select>
                     <select
                       value={transactionFilters.source}
-                      onChange={(e) => setTransactionFilters({ ...transactionFilters, source: e.target.value })}
+                      onChange={(e) => { setTransactionFilters({ ...transactionFilters, source: e.target.value }); setTxPage(1); }}
                       className="px-3 py-2 border border-gray-300 rounded-lg"
                     >
                       <option value="">All Sources</option>
-                      <option value="invoice">Invoice</option>
-                      <option value="expense">Expense</option>
-                      <option value="salary">Salary</option>
-                      <option value="bonus">Bonus</option>
-                      <option value="manual">Manual</option>
+                      {dynamicSources.map(src => (
+                        <option key={src} value={src}>{src.charAt(0).toUpperCase() + src.slice(1)}</option>
+                      ))}
                     </select>
+                    <span className="ml-auto text-sm text-gray-500 self-center">
+                      {filteredTransactions.length} transaction{filteredTransactions.length !== 1 ? 's' : ''}
+                    </span>
                   </div>
 
                   <div className="overflow-x-auto">
@@ -984,14 +996,14 @@ const FinanceManagement: React.FC = () => {
                         </tr>
                       </thead>
                       <tbody>
-                        {filteredTransactions.length === 0 ? (
+                        {paginatedTransactions.length === 0 ? (
                           <tr>
                             <td colSpan={6} className="text-center py-12 text-gray-500">
                               No transactions found
                             </td>
                           </tr>
                         ) : (
-                          filteredTransactions.map((transaction, index) => (
+                          paginatedTransactions.map((transaction, index) => (
                             <tr key={`${transaction.source_id}-${index}`} className="border-b border-gray-100 hover:bg-gray-50">
                               <td className="py-3 px-4 text-sm">{formatDate(transaction.transaction_date)}</td>
                               <td className="py-3 px-4">
@@ -1024,6 +1036,37 @@ const FinanceManagement: React.FC = () => {
                       </tbody>
                     </table>
                   </div>
+
+                  {/* Pagination */}
+                  {txTotalPages > 1 && (
+                    <div className="flex items-center justify-between pt-2">
+                      <span className="text-sm text-gray-500">
+                        Page {txPage} of {txTotalPages} &mdash; showing {((txPage - 1) * TX_PER_PAGE) + 1}–{Math.min(txPage * TX_PER_PAGE, filteredTransactions.length)} of {filteredTransactions.length}
+                      </span>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => setTxPage(1)}
+                          disabled={txPage === 1}
+                          className="px-2 py-1 text-sm border border-gray-300 rounded disabled:opacity-40 hover:bg-gray-50"
+                        >«</button>
+                        <button
+                          onClick={() => setTxPage(p => Math.max(1, p - 1))}
+                          disabled={txPage === 1}
+                          className="px-3 py-1 text-sm border border-gray-300 rounded disabled:opacity-40 hover:bg-gray-50"
+                        >Prev</button>
+                        <button
+                          onClick={() => setTxPage(p => Math.min(txTotalPages, p + 1))}
+                          disabled={txPage === txTotalPages}
+                          className="px-3 py-1 text-sm border border-gray-300 rounded disabled:opacity-40 hover:bg-gray-50"
+                        >Next</button>
+                        <button
+                          onClick={() => setTxPage(txTotalPages)}
+                          disabled={txPage === txTotalPages}
+                          className="px-2 py-1 text-sm border border-gray-300 rounded disabled:opacity-40 hover:bg-gray-50"
+                        >»</button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -1073,14 +1116,19 @@ const FinanceManagement: React.FC = () => {
                       <div>
                         <h4 className="text-sm font-semibold text-gray-700 mb-2">INCOME</h4>
                         <div className="space-y-2 pl-4">
-                          <div className="flex justify-between text-sm">
-                            <span>Invoice Revenue</span>
-                            <span>{formatCurrency(summary.income.invoices)}</span>
-                          </div>
-                          <div className="flex justify-between text-sm">
-                            <span>Other Income</span>
-                            <span>{formatCurrency(summary.income.manualIncome)}</span>
-                          </div>
+                          {summary.income.breakdown.length > 0 ? (
+                            summary.income.breakdown.map(({ label, amount }) => (
+                              <div key={label} className="flex justify-between text-sm">
+                                <span>{label}</span>
+                                <span>{formatCurrency(amount)}</span>
+                              </div>
+                            ))
+                          ) : (
+                            <div className="flex justify-between text-sm text-gray-400">
+                              <span>No income recorded</span>
+                              <span>{formatCurrency(0)}</span>
+                            </div>
+                          )}
                         </div>
                         <div className="flex justify-between font-medium text-green-600 mt-2 pt-2 border-t border-gray-200">
                           <span>Total Income</span>
@@ -1092,22 +1140,19 @@ const FinanceManagement: React.FC = () => {
                       <div>
                         <h4 className="text-sm font-semibold text-gray-700 mb-2">EXPENSES</h4>
                         <div className="space-y-2 pl-4">
-                          <div className="flex justify-between text-sm">
-                            <span>Operational Expenses</span>
-                            <span>{formatCurrency(summary.expenses.operationalExpenses)}</span>
-                          </div>
-                          <div className="flex justify-between text-sm">
-                            <span>Salaries</span>
-                            <span>{formatCurrency(summary.expenses.salaries)}</span>
-                          </div>
-                          <div className="flex justify-between text-sm">
-                            <span>Bonuses</span>
-                            <span>{formatCurrency(summary.expenses.bonuses)}</span>
-                          </div>
-                          <div className="flex justify-between text-sm">
-                            <span>Other Expenses</span>
-                            <span>{formatCurrency(summary.expenses.manualExpenses)}</span>
-                          </div>
+                          {summary.expenses.breakdown.length > 0 ? (
+                            summary.expenses.breakdown.map(({ label, amount }) => (
+                              <div key={label} className="flex justify-between text-sm">
+                                <span>{label}</span>
+                                <span>{formatCurrency(amount)}</span>
+                              </div>
+                            ))
+                          ) : (
+                            <div className="flex justify-between text-sm text-gray-400">
+                              <span>No expenses recorded</span>
+                              <span>{formatCurrency(0)}</span>
+                            </div>
+                          )}
                         </div>
                         <div className="flex justify-between font-medium text-red-600 mt-2 pt-2 border-t border-gray-200">
                           <span>Total Expenses</span>
