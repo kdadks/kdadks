@@ -2221,7 +2221,11 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
 
       // Calculate totals box height based on whether discount is present
       const hasDiscount = fullInvoice.discount_amount && fullInvoice.discount_amount > 0;
-      const totalsBoxHeight = hasDiscount ? 31 : 25; // Extra 6 for discount line
+      const inrPayments = ((fullInvoice.currency_code || '').toUpperCase() !== 'INR')
+        ? (fullInvoice.payments || [])
+        : [];
+      const hasINRPaymentLine = inrPayments.length > 0;
+      const totalsBoxHeight = (hasDiscount ? 31 : 25) + (hasINRPaymentLine ? 6 : 0); // Extra 6 for discount; extra 6 for INR line
 
       // Clean totals box
       downloadPdf.setFillColor(250, 251, 252);
@@ -2318,7 +2322,16 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
       downloadPdf.text('Total:', totalsStartX + 3, yPos + 2);
       const finalTotalWithCurrency = safeCurrencySymbol + ' ' + finalTotalText;
       downloadPdf.text(finalTotalWithCurrency, totalsStartX + totalsWidth - 3, yPos + 2, { align: 'right' });
-      
+
+      if (hasINRPaymentLine) {
+        const dlTotalINRPaid = inrPayments.reduce((sum, p) => sum + p.amount, 0);
+        yPos += 6;
+        downloadPdf.setFontSize(8);
+        downloadPdf.setFont('helvetica', 'normal');
+        downloadPdf.setTextColor(100, 100, 100);
+        downloadPdf.text('Rs. ' + formatIndianNumber(dlTotalINRPaid), totalsStartX + totalsWidth - 3, yPos + 2, { align: 'right' });
+      }
+
       yPos += 8;
       
       // Amount in Words - positioned directly below totals
@@ -2337,7 +2350,7 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
       downloadPdf.text(amountLines, totalsStartX, yPos);
       
       yPos += amountLines.length * 3 + 8;
-      
+
       // Smart layout: Banking details and Notes positioning
       const leftSectionStart = leftMargin;
       const bankingDetailsAvailable = company.bank_name || company.account_number || company.ifsc_code;
@@ -2346,7 +2359,7 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
       // If we have banking details but no notes, position banking details beside totals
       if (bankingDetailsAvailable && !notesAvailable) {
         // Position banking details to the left of totals at the same height
-        const bankingStartY = totalsStartX > 100 ? (yPos - amountLines.length * 3 - 8 - 25) : yPos; // Align with totals if space allows
+        const bankingStartY = totalsStartX > 100 ? (yPos - amountLines.length * 3 - 8 - totalsBoxHeight) : yPos; // Align with totals if space allows
         
         downloadPdf.setTextColor(37, 99, 235);
         downloadPdf.setFontSize(9);
@@ -3060,7 +3073,11 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
       
       // Calculate totals box height based on whether discount is present
       const hasDiscount = fullInvoice.discount_amount && fullInvoice.discount_amount > 0;
-      const totalsBoxHeight = hasDiscount ? 31 : 25; // Extra 6 for discount line
+      const inrPayments = ((fullInvoice.currency_code || '').toUpperCase() !== 'INR')
+        ? (fullInvoice.payments || [])
+        : [];
+      const hasINRPaymentLine = inrPayments.length > 0;
+      const totalsBoxHeight = (hasDiscount ? 31 : 25) + (hasINRPaymentLine ? 6 : 0); // Extra 6 for discount; extra 6 for INR line
 
       // Clean totals box
       emailPdf.setFillColor(250, 251, 252);
@@ -3121,7 +3138,16 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
       emailPdf.text('Total:', totalsStartX + 3, yPos + 2);
       const finalTotalWithCurrency = safeCurrencySymbol + ' ' + finalTotalText;
       emailPdf.text(finalTotalWithCurrency, totalsStartX + totalsWidth - 3, yPos + 2, { align: 'right' });
-      
+
+      if (hasINRPaymentLine) {
+        const emTotalINRPaid = inrPayments.reduce((sum, p) => sum + p.amount, 0);
+        yPos += 6;
+        emailPdf.setFontSize(8);
+        emailPdf.setFont('helvetica', 'normal');
+        emailPdf.setTextColor(100, 100, 100);
+        emailPdf.text('Rs. ' + formatIndianNumber(emTotalINRPaid), totalsStartX + totalsWidth - 3, yPos + 2, { align: 'right' });
+      }
+
       yPos += 8;
       
       // Amount in Words - positioned directly below totals
@@ -3140,7 +3166,7 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
       emailPdf.text(amountLines, totalsStartX, yPos);
       
       yPos += amountLines.length * 3 + 8;
-      
+
       // Smart layout: Banking details and Notes positioning (same as download PDF)
       const leftSectionStart = leftMargin;
       const bankingDetailsAvailable = company.bank_name || company.account_number || company.ifsc_code;
@@ -3149,7 +3175,7 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
       // If we have banking details but no notes, position banking details beside totals
       if (bankingDetailsAvailable && !notesAvailable) {
         // Position banking details to the left of totals at the same height
-        const bankingStartY = totalsStartX > 100 ? (yPos - amountLines.length * 3 - 8 - 25) : yPos; // Align with totals if space allows
+        const bankingStartY = totalsStartX > 100 ? (yPos - amountLines.length * 3 - 8 - totalsBoxHeight) : yPos; // Align with totals if space allows
         
         emailPdf.setTextColor(37, 99, 235);
         emailPdf.setFontSize(9);
@@ -3549,9 +3575,10 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
 
   const handleMarkAsPaid = (invoice: Invoice) => {
     setMarkAsPaidInvoice(invoice);
-    // Use converted INR amount if available (foreign currency invoices), else use total_amount
-    const defaultAmount = invoice.inr_total_amount || invoice.total_amount;
-    setMarkAsPaidAmount(String(defaultAmount));
+    // For non-INR invoices, leave amount blank so user explicitly enters the actual INR received
+    // For INR invoices, pre-fill with the invoice total
+    const isNonINR = invoice.currency_code && invoice.currency_code !== 'INR';
+    setMarkAsPaidAmount(isNonINR ? '' : String(invoice.total_amount));
     setMarkAsPaidDate(new Date().toISOString().split('T')[0]);
     setMarkAsPaidMethod('bank_transfer');
     setMarkAsPaidReference('');
@@ -6769,13 +6796,18 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
                 )}
               </p>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Amount Paid <span className="text-red-500">*</span></label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  {markAsPaidInvoice.currency_code && markAsPaidInvoice.currency_code !== 'INR'
+                    ? <>INR Amount Received (₹) <span className="text-red-500">*</span></>
+                    : <>Amount Paid <span className="text-red-500">*</span></>}
+                </label>
                 <input
                   type="number"
                   min="0"
                   step="0.01"
                   value={markAsPaidAmount}
                   onChange={e => setMarkAsPaidAmount(e.target.value)}
+                  placeholder={markAsPaidInvoice.currency_code && markAsPaidInvoice.currency_code !== 'INR' ? 'Enter actual INR amount received' : ''}
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
                 />
               </div>
