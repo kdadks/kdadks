@@ -104,6 +104,10 @@ export interface FinancialSummary {
     total: number;
     breakdown: { label: string; amount: number }[];
   };
+  capital: {
+    total: number;
+    breakdown: { label: string; amount: number }[];
+  };
   expenses: {
     operationalExpenses: number;
     salaries: number;
@@ -560,10 +564,18 @@ export const financeService = {
     const income = await this.getIncomeData(startDate, endDate);
     const expenses = await this.getExpenseData(startDate, endDate);
 
-    // Calculate income totals
-    const invoiceIncome = income.filter(i => i.source_type === 'invoice').reduce((sum, i) => sum + i.net_amount, 0);
-    const manualIncome = income.filter(i => i.source_type === 'manual').reduce((sum, i) => sum + i.net_amount, 0);
+    // Separate capital from income (capital is a balance-sheet item, not P&L income)
+    const isCapital = (t: FinancialTransaction) => t.source_type !== 'invoice' && t.category === 'Capital';
+    const capitalTransactions = income.filter(isCapital);
+    const nonCapitalIncome = income.filter(t => !isCapital(t));
+
+    // Calculate income totals (excluding capital)
+    const invoiceIncome = nonCapitalIncome.filter(i => i.source_type === 'invoice').reduce((sum, i) => sum + i.net_amount, 0);
+    const manualIncome = nonCapitalIncome.filter(i => i.source_type === 'manual').reduce((sum, i) => sum + i.net_amount, 0);
     const totalIncome = invoiceIncome + manualIncome;
+
+    // Capital total
+    const totalCapital = capitalTransactions.reduce((sum, i) => sum + i.net_amount, 0);
 
     // Calculate expense totals
     const operationalExpenses = expenses.filter(e => e.source_type === 'expense').reduce((sum, e) => sum + e.net_amount, 0);
@@ -575,9 +587,9 @@ export const financeService = {
     const netProfit = totalIncome - totalExpenses;
     const profitMargin = totalIncome > 0 ? (netProfit / totalIncome) * 100 : 0;
 
-    // Dynamic income breakdown grouped by category/source
+    // Dynamic income breakdown grouped by category/source (excluding capital)
     const incomeGroups: Record<string, number> = {};
-    income.forEach(t => {
+    nonCapitalIncome.forEach(t => {
       const label = t.source_type === 'invoice' ? 'Invoice Revenue' : (t.category || 'Other Income');
       incomeGroups[label] = (incomeGroups[label] || 0) + t.net_amount;
     });
@@ -585,6 +597,9 @@ export const financeService = {
       .filter(([, v]) => v > 0)
       .sort((a, b) => b[1] - a[1])
       .map(([label, amount]) => ({ label, amount }));
+
+    // Capital breakdown
+    const capitalBreakdown = totalCapital > 0 ? [{ label: 'Capital', amount: totalCapital }] : [];
 
     // Dynamic expense breakdown grouped by category/source
     const expenseSourceLabels: Record<string, string> = {
@@ -612,6 +627,10 @@ export const financeService = {
         manualIncome,
         total: totalIncome,
         breakdown: incomeBreakdown
+      },
+      capital: {
+        total: totalCapital,
+        breakdown: capitalBreakdown
       },
       expenses: {
         operationalExpenses,

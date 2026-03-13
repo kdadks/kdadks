@@ -345,6 +345,24 @@ const FinanceManagement: React.FC = () => {
       drawTableRow('Total Income', formatCurrency(summary.income.total), true);
       currentY += 6;
 
+      // Capital Section (separate from income)
+      if (summary.capital.total > 0) {
+        pdf.setFontSize(10);
+        pdf.setFont('helvetica', 'bold');
+        pdf.setTextColor(29, 78, 216);
+        pdf.text('CAPITAL', leftMargin + 5, currentY);
+        currentY += 6;
+        pdf.setTextColor(0, 0, 0);
+
+        summary.capital.breakdown.forEach(({ label, amount }) => {
+          drawTableRow(label, formatCurrency(amount));
+        });
+        pdf.setDrawColor(200, 200, 200);
+        pdf.line(leftMargin, currentY - 2, pageWidth - rightMargin, currentY - 2);
+        drawTableRow('Total Capital', formatCurrency(summary.capital.total), true);
+        currentY += 6;
+      }
+
       // Expenses Section
       pdf.setFontSize(10);
       pdf.setFont('helvetica', 'bold');
@@ -480,6 +498,8 @@ const FinanceManagement: React.FC = () => {
   const getIncomeBreakdown = (): { label: string; amount: number }[] => {
     const groups: Record<string, number> = {};
     incomeTransactions.forEach(t => {
+      // Exclude capital - it is tracked separately
+      if (t.source_type !== 'invoice' && t.category === 'Capital') return;
       const label = t.source_type === 'invoice'
         ? 'Invoice Revenue'
         : (t.category || 'Other Income');
@@ -489,6 +509,16 @@ const FinanceManagement: React.FC = () => {
       .filter(([, amt]) => amt > 0)
       .sort((a, b) => b[1] - a[1])
       .map(([label, amount]) => ({ label, amount }));
+  };
+
+  const getCapitalBreakdown = (): { label: string; amount: number }[] => {
+    let total = 0;
+    incomeTransactions.forEach(t => {
+      if (t.source_type !== 'invoice' && t.category === 'Capital') {
+        total += t.net_amount;
+      }
+    });
+    return total > 0 ? [{ label: 'Capital', amount: total }] : [];
   };
 
   const getExpenseBreakdown = (): { label: string; amount: number }[] => {
@@ -825,8 +855,8 @@ const FinanceManagement: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* Income & Expense Breakdown */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* Income, Capital & Expense Breakdown */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     {/* Income Breakdown */}
                     <div className="bg-white border border-gray-200 rounded-xl p-4">
                       <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
@@ -855,6 +885,39 @@ const FinanceManagement: React.FC = () => {
                           <div className="flex justify-between font-medium text-green-600 pt-2 border-t border-gray-200">
                             <span>Total Income</span>
                             <span>{formatCurrency(summary.income.total)}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Capital Breakdown */}
+                    <div className="bg-white border border-gray-200 rounded-xl p-4">
+                      <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                        <TrendingUp className="w-5 h-5 text-blue-600" />
+                        Capital
+                      </h3>
+                      <div className="space-y-3">
+                        {(() => {
+                          const capitalData = getCapitalBreakdown();
+                          if (capitalData.length === 0) {
+                            return <p className="text-sm text-gray-400 italic">No capital recorded for this period.</p>;
+                          }
+                          return capitalData.map(({ label, amount }, i) => (
+                            <div key={label} className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <span className={`p-1.5 rounded bg-blue-100`}>
+                                  <TrendingUp className="w-4 h-4 text-blue-700" />
+                                </span>
+                                <span className="text-sm">{label}</span>
+                              </div>
+                              <span className="font-medium">{formatCurrency(amount)}</span>
+                            </div>
+                          ));
+                        })()}
+                        {summary.capital.total > 0 && (
+                          <div className="flex justify-between font-medium text-blue-600 pt-2 border-t border-gray-200">
+                            <span>Total Capital</span>
+                            <span>{formatCurrency(summary.capital.total)}</span>
                           </div>
                         )}
                       </div>
@@ -1135,6 +1198,25 @@ const FinanceManagement: React.FC = () => {
                           <span>{formatCurrency(summary.income.total)}</span>
                         </div>
                       </div>
+
+                      {/* Capital Section */}
+                      {summary.capital.total > 0 && (
+                        <div>
+                          <h4 className="text-sm font-semibold text-gray-700 mb-2">CAPITAL</h4>
+                          <div className="space-y-2 pl-4">
+                            {summary.capital.breakdown.map(({ label, amount }) => (
+                              <div key={label} className="flex justify-between text-sm">
+                                <span>{label}</span>
+                                <span>{formatCurrency(amount)}</span>
+                              </div>
+                            ))}
+                          </div>
+                          <div className="flex justify-between font-medium text-blue-600 mt-2 pt-2 border-t border-gray-200">
+                            <span>Total Capital</span>
+                            <span>{formatCurrency(summary.capital.total)}</span>
+                          </div>
+                        </div>
+                      )}
 
                       {/* Expenses Section */}
                       <div>
