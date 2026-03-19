@@ -154,6 +154,15 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
     // Discount
     discount_type: undefined,
     discount_value: 0,
+    // International banking - populated when customer is selected
+    intl_account_name: '',
+    intl_account_number: '',
+    intl_account_type: '',
+    intl_routing_number: '',
+    intl_swift_bic: '',
+    intl_bank_address: '',
+    intl_iban: '',
+    intl_sort_code: '',
     // Additional info
     notes: '',
     terms_conditions: '',
@@ -722,6 +731,15 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
       due_date: dueDate.toISOString().split('T')[0],
       notes: '',
       terms_conditions: defaultTermsContent,
+      // International banking - populated when customer is selected
+      intl_account_name: '',
+      intl_account_number: '',
+      intl_account_type: '',
+      intl_routing_number: '',
+      intl_swift_bic: '',
+      intl_bank_address: '',
+      intl_iban: '',
+      intl_sort_code: '',
       items: [{
         product_id: undefined,
         item_name: '',
@@ -765,6 +783,51 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
         newCustomerId: value,
         timestamp: new Date().toISOString()
       });
+
+      // Auto-populate intl banking defaults based on the selected customer's currency
+      const selectedCustomer = customers.find(c => c.id === value);
+      const currencyCode = getCurrencyInfo(selectedCustomer).code;
+
+      const intlDefaults: Partial<CreateInvoiceData> = {};
+      if (currencyCode === 'EUR') {
+        intlDefaults.intl_account_name   = 'Kdadks Service Private Limited';
+        intlDefaults.intl_iban           = 'BE93905254252767';
+        intlDefaults.intl_sort_code      = '';
+        intlDefaults.intl_account_number = '';
+        intlDefaults.intl_account_type   = '';
+        intlDefaults.intl_routing_number = '';
+        intlDefaults.intl_swift_bic      = 'TRWIBEB1XXX';
+        intlDefaults.intl_bank_address   = 'Wise, Rue du Trône 100, 3rd floor, Brussels, 1050, Belgium';
+      } else if (currencyCode === 'GBP') {
+        intlDefaults.intl_account_name   = 'Kdadks Service Private Limited';
+        intlDefaults.intl_iban           = 'GB43TRWI60846460921788';
+        intlDefaults.intl_account_number = '60921788';
+        intlDefaults.intl_sort_code      = '608464';
+        intlDefaults.intl_account_type   = '';
+        intlDefaults.intl_routing_number = '';
+        intlDefaults.intl_swift_bic      = 'TRWIGB2LXXX';
+        intlDefaults.intl_bank_address   = 'Wise Payments Limited, Worship Square, 65 Clifton Street, London, EC2A 4JE, United Kingdom';
+      } else if (currencyCode === 'USD') {
+        intlDefaults.intl_account_name   = 'Kdadks Service Private Limited';
+        intlDefaults.intl_iban           = '';
+        intlDefaults.intl_sort_code      = '';
+        intlDefaults.intl_account_number = '218404409881';
+        intlDefaults.intl_account_type   = 'Checking';
+        intlDefaults.intl_routing_number = '101019628';
+        intlDefaults.intl_swift_bic      = 'TRWIUS35XXX';
+        intlDefaults.intl_bank_address   = 'Wise US Inc, 108 W 13th St, Wilmington, DE, 19801, United States';
+      } else if (currencyCode !== 'INR') {
+        // Generic non-INR — keep current values but clear region-specific fields
+        intlDefaults.intl_iban      = '';
+        intlDefaults.intl_sort_code = '';
+      }
+
+      setInvoiceFormData(prev => ({
+        ...prev,
+        customer_id: value as string,
+        ...intlDefaults
+      }));
+      return;
     }
     
     setInvoiceFormData(prev => ({
@@ -1493,6 +1556,21 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
           due_date: fullInvoice.due_date || '',
           notes: fullInvoice.notes || '',
           terms_conditions: fullInvoice.terms_conditions || '',
+          project_title: fullInvoice.project_title || '',
+          estimated_time: fullInvoice.estimated_time || '',
+          company_contact_name: fullInvoice.company_contact_name || '',
+          company_contact_email: fullInvoice.company_contact_email || '',
+          company_contact_phone: fullInvoice.company_contact_phone || '',
+          discount_type: fullInvoice.discount_type || 'percentage',
+          discount_value: fullInvoice.discount_value || 0,
+          intl_account_name: fullInvoice.intl_account_name || '',
+          intl_account_number: fullInvoice.intl_account_number || '',
+          intl_account_type: fullInvoice.intl_account_type || '',
+          intl_routing_number: fullInvoice.intl_routing_number || '',
+          intl_swift_bic: fullInvoice.intl_swift_bic || '',
+          intl_bank_address: fullInvoice.intl_bank_address || '',
+          intl_iban: fullInvoice.intl_iban || '',
+          intl_sort_code: fullInvoice.intl_sort_code || '',
           items: fullInvoice.invoice_items?.map(item => ({
             product_id: item.product_id,
             item_name: item.item_name,
@@ -2221,11 +2299,12 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
 
       // Calculate totals box height based on whether discount is present
       const hasDiscount = fullInvoice.discount_amount && fullInvoice.discount_amount > 0;
-      const inrPayments = ((fullInvoice.currency_code || '').toUpperCase() !== 'INR')
-        ? (fullInvoice.payments || [])
-        : [];
-      const hasINRPaymentLine = inrPayments.length > 0;
-      const totalsBoxHeight = (hasDiscount ? 31 : 25) + (hasINRPaymentLine ? 6 : 0); // Extra 6 for discount; extra 6 for INR line
+      // const inrPayments = ((fullInvoice.currency_code || '').toUpperCase() !== 'INR')
+      //   ? (fullInvoice.payments || [])
+      //   : [];
+      // const hasINRPaymentLine = inrPayments.length > 0;
+      const isIndianCurrency = (fullInvoice.currency_code || '').toUpperCase() === 'INR';
+      const totalsBoxHeight = (hasDiscount ? 31 : 25); // INR payment line removed
 
       // Clean totals box
       downloadPdf.setFillColor(250, 251, 252);
@@ -2323,14 +2402,14 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
       const finalTotalWithCurrency = safeCurrencySymbol + ' ' + finalTotalText;
       downloadPdf.text(finalTotalWithCurrency, totalsStartX + totalsWidth - 3, yPos + 2, { align: 'right' });
 
-      if (hasINRPaymentLine) {
-        const dlTotalINRPaid = inrPayments.reduce((sum, p) => sum + p.amount, 0);
-        yPos += 6;
-        downloadPdf.setFontSize(8);
-        downloadPdf.setFont('helvetica', 'normal');
-        downloadPdf.setTextColor(100, 100, 100);
-        downloadPdf.text('Rs. ' + formatIndianNumber(dlTotalINRPaid), totalsStartX + totalsWidth - 3, yPos + 2, { align: 'right' });
-      }
+      // if (hasINRPaymentLine) {
+      //   const dlTotalINRPaid = inrPayments.reduce((sum, p) => sum + p.amount, 0);
+      //   yPos += 6;
+      //   downloadPdf.setFontSize(8);
+      //   downloadPdf.setFont('helvetica', 'normal');
+      //   downloadPdf.setTextColor(100, 100, 100);
+      //   downloadPdf.text('Rs. ' + formatIndianNumber(dlTotalINRPaid), totalsStartX + totalsWidth - 3, yPos + 2, { align: 'right' });
+      // }
 
       yPos += 8;
       
@@ -2353,11 +2432,74 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
 
       // Smart layout: Banking details and Notes positioning
       const leftSectionStart = leftMargin;
-      const bankingDetailsAvailable = company.bank_name || company.account_number || company.ifsc_code;
+      const bankingDetailsAvailable = isIndianCurrency && (company.bank_name || company.account_number || company.ifsc_code);
+      const intlBankingAvailable = !isIndianCurrency && (fullInvoice.intl_account_name || fullInvoice.intl_account_number);
       const notesAvailable = fullInvoice.notes;
+
+      // Helper: render international banking box (region-specific fields, no QR)
+      const renderIntlBankingBox = (startX: number, startY: number, boxWidth: number) => {
+        const invCurrency = (fullInvoice.currency_code || '').toUpperCase();
+        let fields: Array<[string, string | undefined]>;
+        if (invCurrency === 'EUR') {
+          fields = [
+            ['Account Name:', fullInvoice.intl_account_name],
+            ['IBAN:', fullInvoice.intl_iban],
+            ['Swift/BIC:', fullInvoice.intl_swift_bic],
+            ['Address:', fullInvoice.intl_bank_address],
+          ];
+        } else if (invCurrency === 'GBP') {
+          fields = [
+            ['Account Name:', fullInvoice.intl_account_name],
+            ['IBAN:', fullInvoice.intl_iban],
+            ['Account No:', fullInvoice.intl_account_number],
+            ['Sort Code:', fullInvoice.intl_sort_code],
+            ['Swift/BIC:', fullInvoice.intl_swift_bic],
+            ['Address:', fullInvoice.intl_bank_address],
+          ];
+        } else if (invCurrency === 'USD') {
+          fields = [
+            ['Account Name:', fullInvoice.intl_account_name],
+            ['Account No:', fullInvoice.intl_account_number],
+            ['Account Type:', fullInvoice.intl_account_type],
+            ['Routing No:', fullInvoice.intl_routing_number],
+            ['Swift/BIC:', fullInvoice.intl_swift_bic],
+            ['Address:', fullInvoice.intl_bank_address],
+          ];
+        } else {
+          fields = [
+            ['Account Name:', fullInvoice.intl_account_name],
+            ['IBAN:', fullInvoice.intl_iban],
+            ['Account No:', fullInvoice.intl_account_number],
+            ['Account Type:', fullInvoice.intl_account_type],
+            ['Sort Code:', fullInvoice.intl_sort_code],
+            ['Routing No:', fullInvoice.intl_routing_number],
+            ['Swift/BIC:', fullInvoice.intl_swift_bic],
+            ['Address:', fullInvoice.intl_bank_address],
+          ];
+        }
+        const filtered = fields.filter(([, v]) => v) as Array<[string, string]>;
+        const intlBoxHeight = 4 + filtered.length * 4 + (fullInvoice.intl_bank_address ? 3 : 0);
+        downloadPdf.setFillColor(248, 250, 252);
+        downloadPdf.rect(startX, startY - 2, boxWidth, intlBoxHeight, 'F');
+        downloadPdf.setDrawColor(225, 229, 235);
+        downloadPdf.setLineWidth(0.2);
+        downloadPdf.rect(startX, startY - 2, boxWidth, intlBoxHeight);
+        downloadPdf.setFontSize(7);
+        downloadPdf.setTextColor(60, 60, 60);
+        let cy = startY + 2;
+        filtered.forEach(([label, val]) => {
+          downloadPdf.setFont('helvetica', 'bold');
+          downloadPdf.text(label, startX + 2, cy);
+          downloadPdf.setFont('helvetica', 'normal');
+          const valLines = downloadPdf.splitTextToSize(val as string, boxWidth - 28);
+          downloadPdf.text(valLines, startX + 26, cy);
+          cy += valLines.length > 1 ? valLines.length * 3 + 1 : 4;
+        });
+        return startY - 2 + intlBoxHeight;
+      };
       
       // If we have banking details but no notes, position banking details beside totals
-      if (bankingDetailsAvailable && !notesAvailable) {
+      if ((bankingDetailsAvailable || intlBankingAvailable) && !notesAvailable) {
         // Position banking details to the left of totals at the same height
         const bankingStartY = totalsStartX > 100 ? (yPos - amountLines.length * 3 - 8 - totalsBoxHeight) : yPos; // Align with totals if space allows
         
@@ -2365,7 +2507,11 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
         downloadPdf.setFontSize(9);
         downloadPdf.setFont('helvetica', 'bold');
         downloadPdf.text('Banking Details', leftSectionStart, bankingStartY);
-        
+
+        if (intlBankingAvailable) {
+          const intlBoxBottomY = renderIntlBankingBox(leftSectionStart, bankingStartY + 5, 100);
+          yPos = Math.max(yPos, intlBoxBottomY + 5);
+        } else {
         const bankingYPos = bankingStartY + 5;
         downloadPdf.setFillColor(248, 250, 252);
         let bankFieldCount = 0;
@@ -2409,7 +2555,7 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
         
         // QR code directly below banking box (side-by-side layout)
         const bankBoxBottomY1 = bankingYPos - 2 + bankingBoxHeight + 5;
-        const dlQrData1 = await loadQRCodeImage();
+        const dlQrData1 = isIndianCurrency ? await loadQRCodeImage() : null;
         if (dlQrData1) {
           const qrPdfWidth = 50;
           const qrPdfHeight = qrPdfWidth * (dlQrData1.height / dlQrData1.width);
@@ -2422,8 +2568,9 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
         } else {
           yPos = Math.max(yPos, bankBoxBottomY1);
         }
+        } // end Indian banking (side-by-side)
         
-      } else if (bankingDetailsAvailable) {
+      } else if (bankingDetailsAvailable || intlBankingAvailable) {
         // Default layout: Banking details below totals (when notes are present)
         downloadPdf.setTextColor(37, 99, 235);
         downloadPdf.setFontSize(9);
@@ -2431,6 +2578,11 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
         downloadPdf.text('Banking Details', leftSectionStart, yPos);
         
         yPos += 5;
+
+        if (intlBankingAvailable) {
+          const intlBoxBottomY = renderIntlBankingBox(leftSectionStart, yPos, 100);
+          yPos = intlBoxBottomY + 5;
+        } else {
         downloadPdf.setFillColor(248, 250, 252);
         let bankFieldCount = 0;
         if (company.bank_name) bankFieldCount++;
@@ -2473,7 +2625,7 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
         
         // QR code directly below banking box (stacked layout)
         const bankBoxBottomY2 = yPos - 2 + bankingBoxHeight + 5;
-        const dlQrData2 = await loadQRCodeImage();
+        const dlQrData2 = isIndianCurrency ? await loadQRCodeImage() : null;
         if (dlQrData2) {
           const qrPdfWidth = 50;
           const qrPdfHeight = qrPdfWidth * (dlQrData2.height / dlQrData2.width);
@@ -2486,6 +2638,7 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
         } else {
           yPos = bankBoxBottomY2;
         }
+        } // end Indian banking (stacked)
       }
 
       // Notes Section - compact and clean
@@ -3073,11 +3226,12 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
       
       // Calculate totals box height based on whether discount is present
       const hasDiscount = fullInvoice.discount_amount && fullInvoice.discount_amount > 0;
-      const inrPayments = ((fullInvoice.currency_code || '').toUpperCase() !== 'INR')
-        ? (fullInvoice.payments || [])
-        : [];
-      const hasINRPaymentLine = inrPayments.length > 0;
-      const totalsBoxHeight = (hasDiscount ? 31 : 25) + (hasINRPaymentLine ? 6 : 0); // Extra 6 for discount; extra 6 for INR line
+      // const inrPayments = ((fullInvoice.currency_code || '').toUpperCase() !== 'INR')
+      //   ? (fullInvoice.payments || [])
+      //   : [];
+      // const hasINRPaymentLine = inrPayments.length > 0;
+      const isIndianCurrency = (fullInvoice.currency_code || '').toUpperCase() === 'INR';
+      const totalsBoxHeight = (hasDiscount ? 31 : 25); // INR payment line removed
 
       // Clean totals box
       emailPdf.setFillColor(250, 251, 252);
@@ -3139,14 +3293,14 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
       const finalTotalWithCurrency = safeCurrencySymbol + ' ' + finalTotalText;
       emailPdf.text(finalTotalWithCurrency, totalsStartX + totalsWidth - 3, yPos + 2, { align: 'right' });
 
-      if (hasINRPaymentLine) {
-        const emTotalINRPaid = inrPayments.reduce((sum, p) => sum + p.amount, 0);
-        yPos += 6;
-        emailPdf.setFontSize(8);
-        emailPdf.setFont('helvetica', 'normal');
-        emailPdf.setTextColor(100, 100, 100);
-        emailPdf.text('Rs. ' + formatIndianNumber(emTotalINRPaid), totalsStartX + totalsWidth - 3, yPos + 2, { align: 'right' });
-      }
+      // if (hasINRPaymentLine) {
+      //   const emTotalINRPaid = inrPayments.reduce((sum, p) => sum + p.amount, 0);
+      //   yPos += 6;
+      //   emailPdf.setFontSize(8);
+      //   emailPdf.setFont('helvetica', 'normal');
+      //   emailPdf.setTextColor(100, 100, 100);
+      //   emailPdf.text('Rs. ' + formatIndianNumber(emTotalINRPaid), totalsStartX + totalsWidth - 3, yPos + 2, { align: 'right' });
+      // }
 
       yPos += 8;
       
@@ -3169,11 +3323,74 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
 
       // Smart layout: Banking details and Notes positioning (same as download PDF)
       const leftSectionStart = leftMargin;
-      const bankingDetailsAvailable = company.bank_name || company.account_number || company.ifsc_code;
+      const bankingDetailsAvailable = isIndianCurrency && (company.bank_name || company.account_number || company.ifsc_code);
+      const intlBankingAvailable = !isIndianCurrency && (fullInvoice.intl_account_name || fullInvoice.intl_account_number);
       const notesAvailable = fullInvoice.notes;
+
+      // Helper: render international banking box (region-specific fields, no QR)
+      const renderIntlBankingBox = (startX: number, startY: number, boxWidth: number) => {
+        const invCurrency = (fullInvoice.currency_code || '').toUpperCase();
+        let fields: Array<[string, string | undefined]>;
+        if (invCurrency === 'EUR') {
+          fields = [
+            ['Account Name:', fullInvoice.intl_account_name],
+            ['IBAN:', fullInvoice.intl_iban],
+            ['Swift/BIC:', fullInvoice.intl_swift_bic],
+            ['Address:', fullInvoice.intl_bank_address],
+          ];
+        } else if (invCurrency === 'GBP') {
+          fields = [
+            ['Account Name:', fullInvoice.intl_account_name],
+            ['IBAN:', fullInvoice.intl_iban],
+            ['Account No:', fullInvoice.intl_account_number],
+            ['Sort Code:', fullInvoice.intl_sort_code],
+            ['Swift/BIC:', fullInvoice.intl_swift_bic],
+            ['Address:', fullInvoice.intl_bank_address],
+          ];
+        } else if (invCurrency === 'USD') {
+          fields = [
+            ['Account Name:', fullInvoice.intl_account_name],
+            ['Account No:', fullInvoice.intl_account_number],
+            ['Account Type:', fullInvoice.intl_account_type],
+            ['Routing No:', fullInvoice.intl_routing_number],
+            ['Swift/BIC:', fullInvoice.intl_swift_bic],
+            ['Address:', fullInvoice.intl_bank_address],
+          ];
+        } else {
+          fields = [
+            ['Account Name:', fullInvoice.intl_account_name],
+            ['IBAN:', fullInvoice.intl_iban],
+            ['Account No:', fullInvoice.intl_account_number],
+            ['Account Type:', fullInvoice.intl_account_type],
+            ['Sort Code:', fullInvoice.intl_sort_code],
+            ['Routing No:', fullInvoice.intl_routing_number],
+            ['Swift/BIC:', fullInvoice.intl_swift_bic],
+            ['Address:', fullInvoice.intl_bank_address],
+          ];
+        }
+        const filtered = fields.filter(([, v]) => v) as Array<[string, string]>;
+        const intlBoxHeight = 4 + filtered.length * 4 + (fullInvoice.intl_bank_address ? 3 : 0);
+        emailPdf.setFillColor(248, 250, 252);
+        emailPdf.rect(startX, startY - 2, boxWidth, intlBoxHeight, 'F');
+        emailPdf.setDrawColor(225, 229, 235);
+        emailPdf.setLineWidth(0.2);
+        emailPdf.rect(startX, startY - 2, boxWidth, intlBoxHeight);
+        emailPdf.setFontSize(7);
+        emailPdf.setTextColor(60, 60, 60);
+        let cy = startY + 2;
+        filtered.forEach(([label, val]) => {
+          emailPdf.setFont('helvetica', 'bold');
+          emailPdf.text(label, startX + 2, cy);
+          emailPdf.setFont('helvetica', 'normal');
+          const valLines = emailPdf.splitTextToSize(val as string, boxWidth - 28);
+          emailPdf.text(valLines, startX + 26, cy);
+          cy += valLines.length > 1 ? valLines.length * 3 + 1 : 4;
+        });
+        return startY - 2 + intlBoxHeight;
+      };
       
       // If we have banking details but no notes, position banking details beside totals
-      if (bankingDetailsAvailable && !notesAvailable) {
+      if ((bankingDetailsAvailable || intlBankingAvailable) && !notesAvailable) {
         // Position banking details to the left of totals at the same height
         const bankingStartY = totalsStartX > 100 ? (yPos - amountLines.length * 3 - 8 - totalsBoxHeight) : yPos; // Align with totals if space allows
         
@@ -3181,7 +3398,11 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
         emailPdf.setFontSize(9);
         emailPdf.setFont('helvetica', 'bold');
         emailPdf.text('Banking Details', leftSectionStart, bankingStartY);
-        
+
+        if (intlBankingAvailable) {
+          const intlBoxBottomY = renderIntlBankingBox(leftSectionStart, bankingStartY + 5, 100);
+          yPos = Math.max(yPos, intlBoxBottomY + 5);
+        } else {
         const bankingYPos = bankingStartY + 5;
         emailPdf.setFillColor(248, 250, 252);
         let bankFieldCount = 0;
@@ -3225,7 +3446,7 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
         
         // QR code directly below banking box (side-by-side layout)
         const emBankBoxBottomY1 = bankingYPos - 2 + bankingBoxHeight + 5;
-        const emQrData1 = await loadQRCodeImage();
+        const emQrData1 = isIndianCurrency ? await loadQRCodeImage() : null;
         if (emQrData1) {
           const qrPdfWidth = 50;
           const qrPdfHeight = qrPdfWidth * (emQrData1.height / emQrData1.width);
@@ -3238,8 +3459,9 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
         } else {
           yPos = Math.max(yPos, emBankBoxBottomY1);
         }
+        } // end Indian banking (side-by-side)
         
-      } else if (bankingDetailsAvailable) {
+      } else if (bankingDetailsAvailable || intlBankingAvailable) {
         // Default layout: Banking details below totals (when notes are present)
         emailPdf.setTextColor(37, 99, 235);
         emailPdf.setFontSize(9);
@@ -3247,6 +3469,11 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
         emailPdf.text('Banking Details', leftSectionStart, yPos);
         
         yPos += 5;
+
+        if (intlBankingAvailable) {
+          const intlBoxBottomY = renderIntlBankingBox(leftSectionStart, yPos, 100);
+          yPos = intlBoxBottomY + 5;
+        } else {
         emailPdf.setFillColor(248, 250, 252);
         let bankFieldCount = 0;
         if (company.bank_name) bankFieldCount++;
@@ -3298,7 +3525,7 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
         
         // QR code directly below banking box (stacked layout)
         const emBankBoxBottomY2 = yPos - 2 + bankingBoxHeight + 5;
-        const emQrData2 = await loadQRCodeImage();
+        const emQrData2 = isIndianCurrency ? await loadQRCodeImage() : null;
         if (emQrData2) {
           const qrPdfWidth = 50;
           const qrPdfHeight = qrPdfWidth * (emQrData2.height / emQrData2.width);
@@ -3311,6 +3538,7 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
         } else {
           yPos = emBankBoxBottomY2;
         }
+        } // end Indian banking (stacked)
       }
 
       // Notes Section - compact and clean
@@ -4136,17 +4364,6 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
                   </button>
                 )}
 
-                {/* Create Payment Request Button - Only show for sent invoices that are unpaid */}
-                {invoice.status !== 'draft' && invoice.status !== 'cancelled' && invoice.payment_status !== 'paid' && (
-                  <button 
-                    onClick={() => handleCreatePaymentRequest(invoice)}
-                    className="text-orange-600 hover:text-orange-900"
-                    title="Create Payment Request"
-                  >
-                    <CreditCard className="w-4 h-4" />
-                  </button>
-                )}
-                
                 {/* Mark as Paid Button */}
                 {(invoice.status === 'sent' || invoice.status === 'draft') && invoice.payment_status !== 'paid' && (
                   <button 
@@ -4158,17 +4375,6 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
                   </button>
                 )}
 
-                {/* Sync Payment Status Button - Only show for sent invoices that are pending */}
-                {invoice.status === 'sent' && invoice.payment_status === 'pending' && (
-                  <button 
-                    onClick={() => handleSyncPaymentStatus(invoice)}
-                    className="text-blue-600 hover:text-blue-900"
-                    title="Sync Payment Status"
-                  >
-                    <RefreshCw className="w-4 h-4" />
-                  </button>
-                )}
-                
                 {/* Delete Button */}
                 {invoice.status !== 'cancelled' && (
                   <button 
@@ -4348,7 +4554,7 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
 
       {/* Invoices Table */}
       <div className="bg-white rounded-lg shadow overflow-hidden">
-        <div className="overflow-x-auto">
+        <div>
           {renderInvoiceTable()}
         </div>
         
@@ -6191,39 +6397,89 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
         </div>
 
         {/* Terms and Banking Information Section - Compact */}
-        <div className="space-y-4">
-          {/* Banking Information Logic */}
-          {company?.bank_name && (
-            <>
-              {/* Show banking info side by side with terms (or standalone if no terms) */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {invoiceFormData.terms_conditions && (
+        {(() => {
+          const isIndianCurrency = currencyInfo.code === 'INR';
+          const invCurrency = currencyInfo.code;
+          const hasIndianBanking = isIndianCurrency && !!company?.bank_name;
+          const hasIntlBanking = !isIndianCurrency && !!(invoiceFormData.intl_account_name || invoiceFormData.intl_account_number);
+          const hasBanking = hasIndianBanking || hasIntlBanking;
+
+          // Build intl field rows for preview
+          const intlFields: Array<[string, string | undefined]> = (() => {
+            if (invCurrency === 'EUR') return [
+              ['Account Name', invoiceFormData.intl_account_name],
+              ['IBAN', invoiceFormData.intl_iban],
+              ['Swift/BIC', invoiceFormData.intl_swift_bic],
+              ['Address', invoiceFormData.intl_bank_address],
+            ];
+            if (invCurrency === 'GBP') return [
+              ['Account Name', invoiceFormData.intl_account_name],
+              ['IBAN', invoiceFormData.intl_iban],
+              ['Account No', invoiceFormData.intl_account_number],
+              ['Sort Code', invoiceFormData.intl_sort_code],
+              ['Swift/BIC', invoiceFormData.intl_swift_bic],
+              ['Address', invoiceFormData.intl_bank_address],
+            ];
+            if (invCurrency === 'USD') return [
+              ['Account Name', invoiceFormData.intl_account_name],
+              ['Account No', invoiceFormData.intl_account_number],
+              ['Account Type', invoiceFormData.intl_account_type],
+              ['Routing No', invoiceFormData.intl_routing_number],
+              ['Swift/BIC', invoiceFormData.intl_swift_bic],
+              ['Address', invoiceFormData.intl_bank_address],
+            ];
+            return [
+              ['Account Name', invoiceFormData.intl_account_name],
+              ['IBAN', invoiceFormData.intl_iban],
+              ['Account No', invoiceFormData.intl_account_number],
+              ['Account Type', invoiceFormData.intl_account_type],
+              ['Sort Code', invoiceFormData.intl_sort_code],
+              ['Routing No', invoiceFormData.intl_routing_number],
+              ['Swift/BIC', invoiceFormData.intl_swift_bic],
+              ['Address', invoiceFormData.intl_bank_address],
+            ];
+          })().filter(([, v]) => v) as Array<[string, string]>;
+
+          return (
+            <div className="space-y-4">
+              {hasBanking ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {invoiceFormData.terms_conditions && (
+                    <div>
+                      <div className="font-semibold text-gray-900 mb-2 text-sm">Terms & Conditions:</div>
+                      <div className="text-xs text-gray-600 whitespace-pre-wrap leading-relaxed">{invoiceFormData.terms_conditions}</div>
+                    </div>
+                  )}
+                  <div>
+                    <div className="font-semibold text-gray-900 mb-2 text-sm">Banking Details:</div>
+                    <div className="text-xs text-gray-600 bg-gray-50 p-3 rounded leading-relaxed">
+                      {hasIndianBanking && company ? (
+                        <>
+                          <div><strong>Bank:</strong> {company.bank_name}</div>
+                          {company.account_number && <div><strong>A/C:</strong> {company.account_number}</div>}
+                          {company.ifsc_code && <div><strong>IFSC:</strong> {company.ifsc_code}</div>}
+                          {company.branch_name && <div><strong>Branch:</strong> {company.branch_name}</div>}
+                        </>
+                      ) : (
+                        intlFields.map(([label, val]) => (
+                          <div key={label}><strong>{label}:</strong> {val}</div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                invoiceFormData.terms_conditions && (
                   <div>
                     <div className="font-semibold text-gray-900 mb-2 text-sm">Terms & Conditions:</div>
                     <div className="text-xs text-gray-600 whitespace-pre-wrap leading-relaxed">{invoiceFormData.terms_conditions}</div>
                   </div>
-                )}
-                <div>
-                  <div className="font-semibold text-gray-900 mb-2 text-sm">Banking Details:</div>
-                  <div className="text-xs text-gray-600 bg-gray-50 p-3 rounded leading-relaxed">
-                    <div><strong>Bank:</strong> {company.bank_name}</div>
-                    {company.account_number && <div><strong>A/C:</strong> {company.account_number}</div>}
-                    {company.ifsc_code && <div><strong>IFSC:</strong> {company.ifsc_code}</div>}
-                    {company.branch_name && <div><strong>Branch:</strong> {company.branch_name}</div>}
-                  </div>
-                </div>
-              </div>
-            </>
-          )}
-          
-          {/* If no banking info but have terms */}
-          {!company?.bank_name && invoiceFormData.terms_conditions && (
-            <div>
-              <div className="font-semibold text-gray-900 mb-2 text-sm">Terms & Conditions:</div>
-              <div className="text-xs text-gray-600 whitespace-pre-wrap leading-relaxed">{invoiceFormData.terms_conditions}</div>
+                )
+              )}
+              {!hasBanking && !invoiceFormData.terms_conditions && null}
             </div>
-          )}
-        </div>
+          );
+        })()}
 
         {/* Disclaimer - Compact and Italic */}
         <div className="mt-6 pt-3 border-t border-gray-200 text-center">

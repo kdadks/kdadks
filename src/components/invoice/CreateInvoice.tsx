@@ -547,6 +547,198 @@ export const CreateInvoice: React.FC<CreateInvoiceProps> = ({
               </div>
             </div>
 
+            {/* International Banking Details - shown only for non-INR customers */}
+            {currencyInfo.code !== 'INR' && (
+              <div className="bg-white rounded-xl shadow-sm border border-blue-200 p-6">
+                <div className="flex items-center mb-4">
+                  <div className="w-5 h-5 mr-2 text-blue-600">🏦</div>
+                  <h3 className="text-lg font-semibold text-slate-900">International Banking Details</h3>
+                  <span className="ml-2 text-xs text-slate-500 font-normal">(shown on PDF for non-INR invoices)</span>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Account Name - common to all regions */}
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium text-slate-700 mb-2">Account Name</label>
+                    <input
+                      type="text"
+                      value={invoiceFormData.intl_account_name || ''}
+                      onChange={(e) => onFormChange('intl_account_name', e.target.value)}
+                      className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                    />
+                  </div>
+
+                  {/* EUR - IBAN + SWIFT/BIC + Address */}
+                  {currencyInfo.code === 'EUR' && (
+                    <>
+                      <div className="md:col-span-2">
+                        <label className="block text-sm font-medium text-slate-700 mb-2">IBAN</label>
+                        <input
+                          type="text"
+                          value={invoiceFormData.intl_iban || ''}
+                          onChange={(e) => onFormChange('intl_iban', e.target.value)}
+                          className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors font-mono"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-2">SWIFT / BIC</label>
+                        <input
+                          type="text"
+                          value={invoiceFormData.intl_swift_bic || ''}
+                          onChange={(e) => onFormChange('intl_swift_bic', e.target.value)}
+                          className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors font-mono"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-2">Bank Address</label>
+                        <input
+                          type="text"
+                          value={invoiceFormData.intl_bank_address || ''}
+                          onChange={(e) => onFormChange('intl_bank_address', e.target.value)}
+                          className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                        />
+                      </div>
+                    </>
+                  )}
+
+                  {/* GBP - IBAN + Account Number + Sort Code + SWIFT/BIC + Address */}
+                  {currencyInfo.code === 'GBP' && (
+                    <>
+                      <div className="md:col-span-2">
+                        <label className="block text-sm font-medium text-slate-700 mb-2">IBAN</label>
+                        <input
+                          type="text"
+                          value={invoiceFormData.intl_iban || ''}
+                          onChange={(e) => onFormChange('intl_iban', e.target.value)}
+                          className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors font-mono"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-2">Account Number</label>
+                        <input
+                          type="text"
+                          value={invoiceFormData.intl_account_number || ''}
+                          onChange={(e) => onFormChange('intl_account_number', e.target.value)}
+                          className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors font-mono"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-2">Sort Code</label>
+                        <input
+                          type="text"
+                          value={invoiceFormData.intl_sort_code || ''}
+                          onChange={(e) => onFormChange('intl_sort_code', e.target.value)}
+                          className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors font-mono"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-2">SWIFT / BIC</label>
+                        <input
+                          type="text"
+                          value={invoiceFormData.intl_swift_bic || ''}
+                          onChange={(e) => onFormChange('intl_swift_bic', e.target.value)}
+                          className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors font-mono"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-2">Bank Address</label>
+                        <input
+                          type="text"
+                          value={invoiceFormData.intl_bank_address || ''}
+                          onChange={(e) => onFormChange('intl_bank_address', e.target.value)}
+                          className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                        />
+                      </div>
+                    </>
+                  )}
+
+                  {/* USD - Account Number + Account Type + Routing Number + SWIFT/BIC + Address */}
+                  {currencyInfo.code === 'USD' && (
+                    <>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-2">Account Number</label>
+                        <input
+                          type="text"
+                          value={invoiceFormData.intl_account_number || ''}
+                          onChange={(e) => onFormChange('intl_account_number', e.target.value)}
+                          className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors font-mono"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-2">Account Type</label>
+                        <input
+                          type="text"
+                          value={invoiceFormData.intl_account_type || ''}
+                          onChange={(e) => onFormChange('intl_account_type', e.target.value)}
+                          className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-2">Routing Number</label>
+                        <input
+                          type="text"
+                          value={invoiceFormData.intl_routing_number || ''}
+                          onChange={(e) => onFormChange('intl_routing_number', e.target.value)}
+                          className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors font-mono"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-2">SWIFT / BIC</label>
+                        <input
+                          type="text"
+                          value={invoiceFormData.intl_swift_bic || ''}
+                          onChange={(e) => onFormChange('intl_swift_bic', e.target.value)}
+                          className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors font-mono"
+                        />
+                      </div>
+                      <div className="md:col-span-2">
+                        <label className="block text-sm font-medium text-slate-700 mb-2">Bank Address</label>
+                        <input
+                          type="text"
+                          value={invoiceFormData.intl_bank_address || ''}
+                          onChange={(e) => onFormChange('intl_bank_address', e.target.value)}
+                          className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                        />
+                      </div>
+                    </>
+                  )}
+
+                  {/* Other non-INR currencies - show all fields */}
+                  {currencyInfo.code !== 'EUR' && currencyInfo.code !== 'GBP' && currencyInfo.code !== 'USD' && (
+                    <>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-2">IBAN</label>
+                        <input type="text" value={invoiceFormData.intl_iban || ''} onChange={(e) => onFormChange('intl_iban', e.target.value)} className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors font-mono" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-2">Account Number</label>
+                        <input type="text" value={invoiceFormData.intl_account_number || ''} onChange={(e) => onFormChange('intl_account_number', e.target.value)} className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors font-mono" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-2">Account Type</label>
+                        <input type="text" value={invoiceFormData.intl_account_type || ''} onChange={(e) => onFormChange('intl_account_type', e.target.value)} className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-2">Sort Code</label>
+                        <input type="text" value={invoiceFormData.intl_sort_code || ''} onChange={(e) => onFormChange('intl_sort_code', e.target.value)} className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors font-mono" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-2">Routing Number</label>
+                        <input type="text" value={invoiceFormData.intl_routing_number || ''} onChange={(e) => onFormChange('intl_routing_number', e.target.value)} className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors font-mono" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-2">SWIFT / BIC</label>
+                        <input type="text" value={invoiceFormData.intl_swift_bic || ''} onChange={(e) => onFormChange('intl_swift_bic', e.target.value)} className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors font-mono" />
+                      </div>
+                      <div className="md:col-span-2">
+                        <label className="block text-sm font-medium text-slate-700 mb-2">Bank Address</label>
+                        <input type="text" value={invoiceFormData.intl_bank_address || ''} onChange={(e) => onFormChange('intl_bank_address', e.target.value)} className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors" />
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* Notes and Terms */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">

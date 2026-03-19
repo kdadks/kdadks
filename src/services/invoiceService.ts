@@ -917,6 +917,15 @@ class InvoiceService {
         // Other fields
         notes: invoiceData.notes,
         terms_conditions: invoiceData.terms_conditions,
+        // International banking details (for non-INR invoices)
+        intl_account_name: invoiceData.intl_account_name || null,
+        intl_account_number: invoiceData.intl_account_number || null,
+        intl_account_type: invoiceData.intl_account_type || null,
+        intl_routing_number: invoiceData.intl_routing_number || null,
+        intl_swift_bic: invoiceData.intl_swift_bic || null,
+        intl_bank_address: invoiceData.intl_bank_address || null,
+        intl_iban: invoiceData.intl_iban || null,
+        intl_sort_code: invoiceData.intl_sort_code || null,
         created_by: currentUser.id
       })
       .select('*')
@@ -1049,6 +1058,15 @@ class InvoiceService {
           // Additional info
           notes: invoiceData.notes,
           terms_conditions: invoiceData.terms_conditions,
+          // International banking details (for non-INR invoices)
+          intl_account_name: invoiceData.intl_account_name || null,
+          intl_account_number: invoiceData.intl_account_number || null,
+          intl_account_type: invoiceData.intl_account_type || null,
+          intl_routing_number: invoiceData.intl_routing_number || null,
+          intl_swift_bic: invoiceData.intl_swift_bic || null,
+          intl_bank_address: invoiceData.intl_bank_address || null,
+          intl_iban: invoiceData.intl_iban || null,
+          intl_sort_code: invoiceData.intl_sort_code || null,
           updated_at: new Date().toISOString()
         })
         .eq('id', id)

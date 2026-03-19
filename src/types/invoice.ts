@@ -247,6 +247,16 @@ export interface Invoice {
   notes?: string;
   terms_conditions?: string;
 
+  // International banking details (for non-INR invoices)
+  intl_account_name?: string;
+  intl_account_number?: string;
+  intl_account_type?: string;
+  intl_routing_number?: string;
+  intl_swift_bic?: string;
+  intl_bank_address?: string;
+  intl_iban?: string;
+  intl_sort_code?: string;
+
   // Tracking
   created_by?: string;
   created_at: string;
@@ -307,6 +317,15 @@ export interface CreateInvoiceData {
   // Additional info
   notes?: string;
   terms_conditions?: string;
+  // International banking details (for non-INR invoices)
+  intl_account_name?: string;
+  intl_account_number?: string;
+  intl_account_type?: string;
+  intl_routing_number?: string;
+  intl_swift_bic?: string;
+  intl_bank_address?: string;
+  intl_iban?: string;
+  intl_sort_code?: string;
   items: CreateInvoiceItemData[];
 }
 
@@ -341,6 +360,15 @@ export interface UpdateInvoiceData {
   // Additional info
   notes?: string;
   terms_conditions?: string;
+  // International banking details (for non-INR invoices)
+  intl_account_name?: string;
+  intl_account_number?: string;
+  intl_account_type?: string;
+  intl_routing_number?: string;
+  intl_swift_bic?: string;
+  intl_bank_address?: string;
+  intl_iban?: string;
+  intl_sort_code?: string;
   items?: CreateInvoiceItemData[];
   status?: Invoice['status'];
   payment_status?: Invoice['payment_status'];
