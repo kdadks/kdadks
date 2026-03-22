@@ -282,13 +282,13 @@ module.exports = async (req, res) => {
 
     // Prepare email options
     const mailOptions = {
-      from: from || 'support@kdadks.com', // Default sender
+      from: from || 'contact@kdadks.com', // Default sender
       to: to,
       subject: subject,
       text: text,
       html: html,
       // Set reply-to if different from sender
-      replyTo: from && from !== 'support@kdadks.com' ? from : undefined
+      replyTo: from && from !== 'contact@kdadks.com' ? from : undefined
     };
 
     // Add attachment support for invoice PDFs (if provided)

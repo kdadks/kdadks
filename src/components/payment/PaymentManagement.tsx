@@ -383,7 +383,7 @@ KDADKS Service Private Limited`;
             },
             body: JSON.stringify({
               to: data.customer_email,
-              from: '"KDADKS Service Private Limited" <support@kdadks.com>',
+              from: '"KDADKS Service Private Limited" <contact@kdadks.com>',
               subject: `Payment Request from KDADKS Service - ${formatCurrency(data.amount, data.currency)}`,
               text: `Dear ${data.customer_name || 'Valued Customer'},
 
@@ -466,8 +466,8 @@ KDADKS Service Private Limited`,
           
           if (errorMessage.includes('Email service configuration error')) {
             showError('Email service not configured. Please check environment variables.');
-          } else if (errorMessage.includes('HOSTINGER_SMTP')) {
-            showError('Email service authentication failed. Please check Hostinger SMTP credentials.');
+          } else if (errorMessage.includes('SMTP credentials')) {
+            showError('Email service authentication failed. Please check Microsoft 365 Exchange SMTP credentials.');
           } else {
             showWarning(`Payment request created but email sending failed: ${errorMessage}. Please resend manually.`);
           }
@@ -597,7 +597,7 @@ KDADKS Service Private Limited`,
         },
         body: JSON.stringify({
           to: request.customer_email,
-          from: '"KDADKS Service Private Limited" <support@kdadks.com>',
+          from: '"KDADKS Service Private Limited" <contact@kdadks.com>',
           subject: `Payment Reminder - ${formatCurrency(request.amount, request.currency)}`,
           text: `Dear ${request.customer_name || 'Valued Customer'},
 

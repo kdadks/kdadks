@@ -1,4 +1,4 @@
-const nodemailer = require('nodemailer');
+﻿const nodemailer = require('nodemailer');
 
 // Try to import fetch for Node.js environments that don't have it built-in
 let fetch;
@@ -144,7 +144,7 @@ exports.handler = async (event, context) => {
   const envKeys = Object.keys(process.env);
   console.log('🔍 Available environment variables:', {
     total: envKeys.length,
-    hostingerRelated: envKeys.filter(key => key.toLowerCase().includes('hostinger')),
+    smtpRelated: envKeys.filter(key => key.toLowerCase().includes('smtp')),
     recaptchaRelated: envKeys.filter(key => key.toLowerCase().includes('recaptcha')),
     nodeEnv: process.env.NODE_ENV,
     port: process.env.PORT
@@ -312,51 +312,51 @@ exports.handler = async (event, context) => {
       };
     }
 
-    // Get Hostinger SMTP credentials from environment
-    const hostingerUser = process.env.HOSTINGER_SMTP_USER;
-    const hostingerPassword = process.env.HOSTINGER_SMTP_PASSWORD;
+    // Get Microsoft 365 Exchange SMTP credentials from environment
+    const smtpUser = process.env.SMTP_USER;
+    const smtpPassword = process.env.SMTP_PASSWORD;
     console.log('🔍 Environment check:', {
-      hasHostingerUser: !!hostingerUser,
-      hasHostingerPassword: !!hostingerPassword,
-      hostingerUserLength: hostingerUser ? hostingerUser.length : 0,
-      hostingerPasswordLength: hostingerPassword ? hostingerPassword.length : 0,
+      hassmtpUser: !!smtpUser,
+      hassmtpPassword: !!smtpPassword,
+      smtpUserLength: smtpUser ? smtpUser.length : 0,
+      smtpPasswordLength: smtpPassword ? smtpPassword.length : 0,
       NODE_ENV: process.env.NODE_ENV,
-      allEnvVars: Object.keys(process.env).filter(key => key.includes('HOSTINGER') || key.includes('RECAPTCHA')),
+      allEnvVars: Object.keys(process.env).filter(key => key.includes('SMTP') || key.includes('RECAPTCHA')),
       totalEnvVars: Object.keys(process.env).length
     });
     
-    if (!hostingerUser || !hostingerPassword) {
-      console.error('❌ HOSTINGER_SMTP_USER or HOSTINGER_SMTP_PASSWORD environment variable is not accessible to function');
+    if (!smtpUser || !smtpPassword) {
+      console.error('❌ SMTP_USER or SMTP_PASSWORD environment variable is not accessible to function');
       console.log('� This might be a deployment sync issue - triggering new deployment might help');
       
       return {
         statusCode: 500,
         headers,
         body: JSON.stringify({ 
-          error: 'Email service configuration error - Hostinger SMTP credentials not accessible',
+          error: 'Email service configuration error - SMTP credentials not accessible',
           debug: {
-            environmentVariablesFound: Object.keys(process.env).filter(key => key.includes('HOSTINGER') || key.includes('RECAPTCHA')),
+            environmentVariablesFound: Object.keys(process.env).filter(key => key.includes('SMTP') || key.includes('RECAPTCHA')),
             suggestion: 'Try triggering a new deployment after adding environment variables'
           }
         })
       };
     }
 
-    // Configure Hostinger SMTP transporter
+    // Configure Microsoft 365 Exchange SMTP transporter
     const transporter = nodemailer.createTransport({
-      host: 'smtp.hostinger.com',
-      port: 465,
-      secure: true, // SSL
+      host: 'smtp.office365.com',
+      port: 587,
+      secure: false, // STARTTLS
       auth: {
-        user: hostingerUser,
-        pass: hostingerPassword
+        user: smtpUser,
+        pass: smtpPassword
       }
     });
 
     // Prepare email options with customer-friendly sender display
     const displayName = customerName || (from ? from.split('@')[0] : 'Customer');
     const mailOptions = {
-      from: '"KDADKS Service Private Limited" <support@kdadks.com>',  // Official company sender
+      from: '"KDADKS Service Private Limited" <contact@kdadks.com>',  // Official company sender
       replyTo: from,  // Set reply-to to the customer's email for easy replies
       to: to,
       subject: subject,
@@ -381,7 +381,7 @@ exports.handler = async (event, context) => {
     }
 
     // Enhanced logging before sending
-    console.log('📧 Attempting to send email via Hostinger SMTP...', {
+    console.log('📧 Attempting to send email via Microsoft 365 Exchange SMTP...', {
       from: mailOptions.from,
       replyTo: mailOptions.replyTo,
       to: mailOptions.to,
@@ -394,7 +394,7 @@ exports.handler = async (event, context) => {
     // Send email
     const info = await transporter.sendMail(mailOptions);
     
-    console.log('✅ Hostinger SMTP response:', {
+    console.log('✅ Microsoft 365 Exchange SMTP response:', {
       messageId: info.messageId,
       accepted: info.accepted,
       rejected: info.rejected,
@@ -429,7 +429,7 @@ exports.handler = async (event, context) => {
     let statusCode = 500;
 
     if (error.code === 'EAUTH') {
-      errorMessage = 'Email authentication failed - check Hostinger SMTP credentials';
+      errorMessage = 'Email authentication failed - check Microsoft 365 Exchange SMTP credentials';
       statusCode = 401;
     } else if (error.code === 'ECONNECTION') {
       errorMessage = 'Failed to connect to email server';

@@ -38,7 +38,7 @@ export class FallbackEmailService {
           email: emailData.to,
           subject: emailData.subject,
           message: emailData.text || emailData.html,
-          _replyto: emailData.from || 'support@kdadks.com'
+          _replyto: emailData.from || 'contact@kdadks.com'
         })
       });
 

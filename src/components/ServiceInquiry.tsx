@@ -109,7 +109,7 @@ const ServiceInquiry = () => {
 
       // Prepare email data
       const emailData = {
-        to: 'support@kdadks.com',
+        to: 'contact@kdadks.com',
         subject: `Service Inquiry - ${formData.serviceType || 'General'} - ${formData.name}`,
         html: generateEmailHTML(),
         recaptchaToken: token,

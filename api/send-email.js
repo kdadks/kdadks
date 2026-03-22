@@ -39,26 +39,26 @@ module.exports = async (req, res) => {
       return;
     }
 
-    // Get Hostinger SMTP credentials from environment
-    const hostingerUser = process.env.HOSTINGER_SMTP_USER;
-    const hostingerPassword = process.env.HOSTINGER_SMTP_PASSWORD;
+    // Get Microsoft 365 Exchange SMTP credentials from environment
+    const smtpUser = process.env.SMTP_USER;
+    const smtpPassword = process.env.SMTP_PASSWORD;
     
-    if (!hostingerUser || !hostingerPassword) {
-      console.error('HOSTINGER_SMTP_USER or HOSTINGER_SMTP_PASSWORD environment variable is not set');
+    if (!smtpUser || !smtpPassword) {
+      console.error('SMTP_USER or SMTP_PASSWORD environment variable is not set');
       res.status(500).json({ 
-        error: 'Email service configuration error - Hostinger SMTP credentials not set' 
+        error: 'Email service configuration error - SMTP credentials not set' 
       });
       return;
     }
 
-    // Configure Hostinger SMTP transporter
+    // Configure Microsoft 365 Exchange SMTP transporter
     const transporter = nodemailer.createTransporter({
-      host: 'smtp.hostinger.com',
-      port: 465,
-      secure: true, // SSL
+      host: 'smtp.office365.com',
+      port: 587,
+      secure: false, // STARTTLS
       auth: {
-        user: hostingerUser,
-        pass: hostingerPassword
+        user: smtpUser,
+        pass: smtpPassword
       },
       // Additional options for better reliability
       pool: true,
@@ -70,7 +70,7 @@ module.exports = async (req, res) => {
 
     // Prepare email options
     const mailOptions = {
-      from: '"KDADKS Service Private Limited" <support@kdadks.com>', // Official sender
+      from: '"KDADKS Service Private Limited" <contact@kdadks.com>', // Official sender
       to: to,
       subject: subject,
       text: text,
@@ -88,7 +88,7 @@ module.exports = async (req, res) => {
       }];
     }
 
-    console.log('📧 [LOCAL DEV] Sending email via Hostinger SMTP...');
+    console.log('📧 [LOCAL DEV] Sending email via Microsoft 365 Exchange SMTP...');
     console.log('To:', to);
     console.log('Subject:', subject);
     console.log('From:', mailOptions.from);

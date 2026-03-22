@@ -1,4 +1,4 @@
-import { ContactFormData } from '../config/hostinger'
+import { ContactFormData } from '../config/emailConfig'
 import type { Invoice, Customer, CompanySettings } from '../types/invoice'
 
 export class EmailService {
@@ -88,7 +88,7 @@ export class EmailService {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          to: 'support@kdadks.com',
+          to: 'contact@kdadks.com',
           from: formData.email,
           customerName: formData.name, // Pass customer name for display
           subject: `New Contact Form Submission from ${formData.name}`,
@@ -138,7 +138,7 @@ export class EmailService {
         },
         body: JSON.stringify({
           to: customer.email,
-          from: '"KDADKS Service Private Limited" <support@kdadks.com>',
+          from: '"KDADKS Service Private Limited" <contact@kdadks.com>',
           customerName: company.company_name, // Pass company name for display
           subject,
           text: EmailService.generateInvoiceTextEmail(invoice, customer, company, isPaidInvoice),
@@ -752,7 +752,7 @@ Sent from KDADKS Contact Form
         },
         body: JSON.stringify({
           to: customerEmail,
-          from: '"KDADKS Service Private Limited" <support@kdadks.com>',
+          from: '"KDADKS Service Private Limited" <contact@kdadks.com>',
           subject,
           text: EmailService.generatePaymentConfirmationTextEmail(paymentDetails),
           html: EmailService.generatePaymentConfirmationHtmlEmail(paymentDetails),
@@ -872,7 +872,7 @@ Lucknow, India
         
         <p>If you have any questions about this transaction, please don't hesitate to contact us:</p>
         <ul>
-            <li>Email: support@kdadks.com</li>
+            <li>Email: contact@kdadks.com</li>
             <li>Phone: +91 7982303199</li>
         </ul>
         
@@ -1012,7 +1012,7 @@ KDADKS Service Private Limited
         },
         body: JSON.stringify({
           to: recipientEmail,
-          from: '"KDADKS Service Private Limited" <support@kdadks.com>',
+          from: '"KDADKS Service Private Limited" <contact@kdadks.com>',
           subject: `Payment Request - Invoice ${details.invoiceNumber} - ${this.formatCurrency(details.amount, details.currency)}`,
           text: this.generatePaymentRequestTextEmail(details),
           html: this.generatePaymentRequestHtmlEmail(details),
@@ -1058,7 +1058,7 @@ ${details.paymentUrl}
 
 This payment request will expire in 72 hours.
 
-If you have any questions, please contact us at support@kdadks.com or +91 7982303199.
+If you have any questions, please contact us at contact@kdadks.com or +91 7982303199.
 
 Best regards,
 KDADKS Service Private Limited
@@ -1163,7 +1163,7 @@ www.kdadks.com
             
             <div class="contact-info">
                 <strong>Contact Information:</strong><br>
-                Email: support@kdadks.com<br>
+                Email: contact@kdadks.com<br>
                 Phone: +91 7982303199
             </div>
         </div>

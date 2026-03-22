@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { Mail, Phone, MapPin, Send, Clock, CheckCircle } from 'lucide-react'
-import { ContactFormData } from '../config/hostinger'
+import { ContactFormData } from '../config/emailConfig'
 
 const Contact = () => {
   const [formData, setFormData] = useState({
@@ -40,7 +40,7 @@ const Contact = () => {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            to: 'support@kdadks.com',
+            to: 'contact@kdadks.com',
             from: formData.email.trim(),
             customerName: formData.name.trim(),
             subject: `Contact Form Submission from ${formData.name}`,
@@ -97,7 +97,7 @@ const Contact = () => {
             body: JSON.stringify({
               email: formData.email,
               subject: `KDADKS Contact: ${formData.name}`,
-              message: `Contact Form Submission\n\nName: ${formData.name}\nEmail: ${formData.email}\nCompany: ${formData.company}\n\nMessage:\n${formData.message}\n\n---\nSent via contact form to support@kdadks.com`
+              message: `Contact Form Submission\n\nName: ${formData.name}\nEmail: ${formData.email}\nCompany: ${formData.company}\n\nMessage:\n${formData.message}\n\n---\nSent via contact form to contact@kdadks.com`
             })
           });
           
@@ -132,10 +132,10 @@ const Contact = () => {
       // Ultimate fallback - mailto
       const mailtoSubject = `Contact Form - ${formData.name}`;
       const mailtoBody = `Name: ${formData.name}\nEmail: ${formData.email}\nCompany: ${formData.company}\n\nMessage:\n${formData.message}`;
-      const mailtoUrl = `mailto:support@kdadks.com?subject=${encodeURIComponent(mailtoSubject)}&body=${encodeURIComponent(mailtoBody)}`;
+      const mailtoUrl = `mailto:contact@kdadks.com?subject=${encodeURIComponent(mailtoSubject)}&body=${encodeURIComponent(mailtoBody)}`;
       
       setSubmitError(
-        `Email delivery failed. Please use direct email: <a href="${mailtoUrl}" target="_blank" style="color: #3b82f6; text-decoration: underline; font-weight: bold;">📧 Click here to open your email client</a> or contact support@kdadks.com directly.`
+        `Email delivery failed. Please use direct email: <a href="${mailtoUrl}" target="_blank" style="color: #3b82f6; text-decoration: underline; font-weight: bold;">📧 Click here to open your email client</a> or contact contact@kdadks.com directly.`
       );
     } finally {
       setIsSubmitting(false)
@@ -153,8 +153,8 @@ const Contact = () => {
     {
       icon: Mail,
       title: 'Email Us',
-      details: 'support@kdadks.com',
-      link: 'mailto:support@kdadks.com',
+      details: 'contact@kdadks.com',
+      link: 'mailto:contact@kdadks.com',
     },
     {
       icon: Phone,

@@ -55,8 +55,8 @@ Successfully removed **ALL** reCAPTCHA dependencies and references from the enti
 ## 🚀 **PRODUCTION READY STATUS**
 
 ### **What's Working:**
-- ✅ **All email forms** deliver to support@kdadks.com reliably
-- ✅ **Sender display** shows customer names (e.g., "John Doe <support@kdadks.com>")
+- ✅ **All email forms** deliver to contact@kdadks.com reliably
+- ✅ **Sender display** shows customer names (e.g., "John Doe <contact@kdadks.com>")
 - ✅ **ReplyTo functionality** allows direct replies to customers
 - ✅ **Admin invoice system** protected and working
 - ✅ **Build process** completing successfully

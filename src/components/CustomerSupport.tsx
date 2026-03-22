@@ -43,7 +43,7 @@ const CustomerSupport = () => {
 
       // Prepare email data
       const emailData = {
-        to: 'support@kdadks.com',
+        to: 'contact@kdadks.com',
         subject: `Customer Support Request - ${formData.priority.toUpperCase()} - ${formData.subject}`,
         html: generateEmailHTML(),
         recaptchaToken: token
@@ -187,7 +187,7 @@ const CustomerSupport = () => {
       icon: Mail,
       title: 'Email Support',
       description: 'Send us a detailed message',
-      contact: 'support@kdadks.com',
+      contact: 'contact@kdadks.com',
       availability: 'Response within 24 hours',
       action: 'Send Email'
     },

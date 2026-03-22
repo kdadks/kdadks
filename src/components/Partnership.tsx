@@ -124,7 +124,7 @@ const Partnership = () => {
 
       // Prepare email data
       const emailData = {
-        to: 'support@kdadks.com',
+        to: 'contact@kdadks.com',
         subject: `Partnership Application - ${formData.partnershipType} - ${formData.company}`,
         html: generateEmailHTML(),
         recaptchaToken: token,

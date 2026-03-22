@@ -9,7 +9,7 @@ export class BackupEmailService {
       const formData = new FormData();
       formData.append('access_key', this.WEB3FORMS_ACCESS_KEY);
       formData.append('subject', emailData.subject);
-      formData.append('email', emailData.from || 'support@kdadks.com');
+      formData.append('email', emailData.from || 'contact@kdadks.com');
       formData.append('message', emailData.text || emailData.html?.replace(/<[^>]*>/g, ''));
       formData.append('redirect', 'false');
 
@@ -40,7 +40,7 @@ export class BackupEmailService {
     const { subject, text, html } = emailData;
     const body = text || html?.replace(/<[^>]*>/g, '') || 'Message from KDADKS website';
     
-    const mailtoUrl = `mailto:support@kdadks.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    const mailtoUrl = `mailto:contact@kdadks.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
     
     // Open in new window/tab
     window.open(mailtoUrl, '_blank');

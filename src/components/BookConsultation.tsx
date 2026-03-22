@@ -127,7 +127,7 @@ const BookConsultation = () => {
 
       // Prepare email data
       const emailData = {
-        to: 'support@kdadks.com',
+        to: 'contact@kdadks.com',
         subject: `Consultation Booking - ${selectedServiceData?.title} - ${formData.name}`,
         html: generateEmailHTML(),
         recaptchaToken: token,

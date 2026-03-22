@@ -45,11 +45,11 @@
                                  ▼
 ┌─────────────────────────────────────────────────────────────────────┐
 │                         📧 INBOX                                     │
-│                    support@kdadks.com                                │
+│                    contact@kdadks.com                                │
 ├─────────────────────────────────────────────────────────────────────┤
-│  From: KDADKS Service Private Limited <support@kdadks.com>         │
+│  From: KDADKS Service Private Limited <contact@kdadks.com>         │
 │  Reply-To: customer@example.com                                     │
-│  To: support@kdadks.com                                             │
+│  To: contact@kdadks.com                                             │
 │  Subject: [Form Type] - [Customer Name]                            │
 └─────────────────────────────────────────────────────────────────────┘
                                  │
@@ -58,7 +58,7 @@
 ┌─────────────────────────────────────────────────────────────────────┐
 │                      📨 Reply to Customer                            │
 ├─────────────────────────────────────────────────────────────────────┤
-│  From: support@kdadks.com                                           │
+│  From: contact@kdadks.com                                           │
 │  To: customer@example.com (automatically filled from Reply-To)      │
 │  Subject: Re: [Original Subject]                                    │
 └─────────────────────────────────────────────────────────────────────┘
@@ -80,11 +80,11 @@
 │  Email Headers (What the system configures)                    │
 ├────────────────────────────────────────────────────────────────┤
 │                                                                │
-│  From: "KDADKS Service Private Limited" <support@kdadks.com>  │
+│  From: "KDADKS Service Private Limited" <contact@kdadks.com>  │
 │        ↑                                                       │
 │        └─ Professional company name displayed in inbox        │
 │                                                                │
-│  To: support@kdadks.com                                        │
+│  To: contact@kdadks.com                                        │
 │      ↑                                                         │
 │      └─ All form submissions go here                          │
 │                                                                │
@@ -108,7 +108,7 @@
 │                    Netlify Dashboard                              │
 │                  Environment Variables                            │
 ├──────────────────────────────────────────────────────────────────┤
-│  HOSTINGER_SMTP_USER = support@kdadks.com                        │
+│  HOSTINGER_SMTP_USER = contact@kdadks.com                        │
 │  HOSTINGER_SMTP_PASSWORD = *********************                 │
 └──────────────────────────────────────────────────────────────────┘
                            │
@@ -157,7 +157,7 @@ User fills form                    Server processes
      │                               ▼
      │                      ┌────────────────────┐
      │                      │    Email Sent!     │
-     │                      │ support@kdadks.com │
+     │                      │ contact@kdadks.com │
      │                      └────────────────────┘
      │                               │
      ▼                               ▼
@@ -201,10 +201,10 @@ User submits form
      ▼
 ┌─────────────────────────────────────┐
 │  Email Delivered ✅                 │
-│  To: support@kdadks.com             │
+│  To: contact@kdadks.com             │
 └─────────────────────────────────────┘
 ```
 
 ---
 
-**Visual Summary**: Every contact form → Netlify Function → Hostinger SMTP → support@kdadks.com
+**Visual Summary**: Every contact form → Netlify Function → Hostinger SMTP → contact@kdadks.com
