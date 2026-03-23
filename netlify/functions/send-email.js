@@ -354,7 +354,6 @@ exports.handler = async (event, context) => {
     const payload = {
       from: `KDADKS Service Private Limited <${fromEmail}>`,
       to: [to],
-      bcc: [senderEmail],
       subject,
       ...(html ? { html } : { text })
     };
@@ -387,7 +386,7 @@ exports.handler = async (event, context) => {
     }
 
     console.log('📧 Sending email via Resend...', {
-      from: senderEmail,
+      from: fromEmail,
       to,
       subject,
       hasHtml: !!html,
@@ -396,8 +395,26 @@ exports.handler = async (event, context) => {
     });
 
     const result = await sendViaResend(resendApiKey, payload);
+    console.log('✅ Resend email sent to recipient:', result.messageId);
 
-    console.log('✅ Resend email sent:', result.messageId);
+    // Send a separate copy email to senderEmail (more reliable than BCC)
+    if (senderEmail && senderEmail !== to) {
+      try {
+        const copyPayload = {
+          from: `KDADKS Service Private Limited <${fromEmail}>`,
+          to: [senderEmail],
+          subject: `[Copy] ${subject}`,
+          ...(html ? { html } : { text })
+        };
+        if (allAttachments.length > 0) {
+          copyPayload.attachments = allAttachments;
+        }
+        const copyResult = await sendViaResend(resendApiKey, copyPayload);
+        console.log('✅ Copy email sent to sender:', copyResult.messageId);
+      } catch (copyError) {
+        console.error('⚠️ Copy email to sender failed (non-fatal):', copyError.message);
+      }
+    }
 
     return {
       statusCode: 200,
