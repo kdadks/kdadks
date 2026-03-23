@@ -1,6 +1,45 @@
-const nodemailer = require('nodemailer');
-
+// Microsoft Graph API email sender - local development proxy
 // For local development - this will be used when running on localhost:3001
+
+// Try to import fetch for older Node.js environments
+let fetch;
+try {
+  fetch = require('node-fetch');
+} catch {
+  fetch = globalThis.fetch;
+}
+
+async function getGraphToken(tenantId, clientId, clientSecret) {
+  const tokenUrl = `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`;
+  const params = new URLSearchParams({
+    client_id: clientId,
+    client_secret: clientSecret,
+    scope: 'https://graph.microsoft.com/.default',
+    grant_type: 'client_credentials'
+  });
+  const res = await fetch(tokenUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: params.toString()
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(`Token acquisition failed: ${data.error_description || data.error}`);
+  return data.access_token;
+}
+
+async function sendViaGraph(token, senderEmail, mailPayload) {
+  const url = `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(senderEmail)}/sendMail`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(mailPayload)
+  });
+  if (res.status === 202) return { messageId: `graph-${Date.now()}@kdadks.com` };
+  let errorBody;
+  try { errorBody = await res.json(); } catch { errorBody = { error: { message: res.statusText } }; }
+  throw new Error(`Graph sendMail failed: ${errorBody?.error?.message || res.status}`);
+}
+
 module.exports = async (req, res) => {
   // Enable CORS for local development
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -39,92 +78,74 @@ module.exports = async (req, res) => {
       return;
     }
 
-    // Get Microsoft 365 Exchange SMTP credentials from environment
-    const smtpUser = process.env.SMTP_USER;
-    const smtpPassword = process.env.SMTP_PASSWORD;
-    
-    if (!smtpUser || !smtpPassword) {
-      console.error('SMTP_USER or SMTP_PASSWORD environment variable is not set');
-      res.status(500).json({ 
-        error: 'Email service configuration error - SMTP credentials not set' 
-      });
+    // Get Microsoft Graph API credentials from environment
+    const tenantId = process.env.AZURE_TENANT_ID;
+    const clientId = process.env.AZURE_CLIENT_ID;
+    const clientSecret = process.env.AZURE_CLIENT_SECRET;
+    const senderEmail = process.env.SENDER_EMAIL || 'contact@kdadks.com';
+    const { attachments, attachment } = req.body;
+
+    if (!tenantId || !clientId || !clientSecret) {
+      console.error('[LOCAL DEV] AZURE_TENANT_ID, AZURE_CLIENT_ID or AZURE_CLIENT_SECRET not set');
+      res.status(500).json({ error: 'Email service configuration error - Microsoft Graph API credentials not set' });
       return;
     }
 
-    // Configure Microsoft 365 Exchange SMTP transporter
-    const transporter = nodemailer.createTransporter({
-      host: 'smtp.office365.com',
-      port: 587,
-      secure: false, // STARTTLS
-      auth: {
-        user: smtpUser,
-        pass: smtpPassword
-      },
-      // Additional options for better reliability
-      pool: true,
-      maxConnections: 1,
-      maxMessages: 3,
-      rateDelta: 1000,
-      rateLimit: 5
-    });
-
-    // Prepare email options
-    const mailOptions = {
-      from: '"KDADKS Service Private Limited" <contact@kdadks.com>', // Official sender
-      to: to,
-      subject: subject,
-      text: text,
-      html: html,
-      // Set reply-to if different from sender
-      replyTo: from || undefined
+    // Build Graph API message payload
+    const message = {
+      subject,
+      body: { contentType: html ? 'HTML' : 'Text', content: html || text },
+      toRecipients: [{ emailAddress: { address: to } }],
+      from: { emailAddress: { name: 'KDADKS Service Private Limited', address: senderEmail } }
     };
-
-    // Add attachment support for invoice PDFs (if provided)
-    if (req.body.attachment) {
-      mailOptions.attachments = [{
-        filename: req.body.attachment.filename || 'invoice.pdf',
-        content: req.body.attachment.content,
-        encoding: 'base64'
-      }];
+    if (from && from !== senderEmail) {
+      message.replyTo = [{ emailAddress: { address: from } }];
     }
 
-    console.log('📧 [LOCAL DEV] Sending email via Microsoft 365 Exchange SMTP...');
-    console.log('To:', to);
-    console.log('Subject:', subject);
-    console.log('From:', mailOptions.from);
+    const allAttachments = [];
+    if (attachments && Array.isArray(attachments)) {
+      attachments.forEach(att => allAttachments.push({
+        '@odata.type': '#microsoft.graph.fileAttachment',
+        name: att.filename || 'attachment.pdf',
+        contentType: att.type || 'application/pdf',
+        contentBytes: att.content
+      }));
+    } else if (attachment) {
+      allAttachments.push({
+        '@odata.type': '#microsoft.graph.fileAttachment',
+        name: attachment.filename || 'invoice.pdf',
+        contentType: 'application/pdf',
+        contentBytes: attachment.content
+      });
+    }
+    if (allAttachments.length > 0) message.attachments = allAttachments;
 
-    // Send email
-    const info = await transporter.sendMail(mailOptions);
+    console.log('📧 [LOCAL DEV] Sending email via Microsoft Graph API...');
+    console.log('To:', to, '| Subject:', subject);
 
-    console.log('✅ [LOCAL DEV] Email sent successfully:', info.messageId);
+    const token = await getGraphToken(tenantId, clientId, clientSecret);
+    const result = await sendViaGraph(token, senderEmail, { message, saveToSentItems: true });
 
-    // Return success response
+    console.log('✅ [LOCAL DEV] Email sent successfully:', result.messageId);
+
     res.status(200).json({
       success: true,
-      message: 'Email sent successfully',
-      messageId: info.messageId,
-      envelope: info.envelope
+      message: 'Email sent successfully via Microsoft Graph API',
+      messageId: result.messageId
     });
 
   } catch (error) {
     console.error('❌ [LOCAL DEV] Email sending failed:', error);
 
-    // Handle specific SMTP errors
     let errorMessage = 'Failed to send email';
     let statusCode = 500;
 
-    if (error.code === 'EAUTH') {
-      errorMessage = 'Email authentication failed - please check SMTP credentials';
+    if (error.message && error.message.includes('Token acquisition failed')) {
+      errorMessage = 'Microsoft Graph authentication failed - check AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_CLIENT_SECRET';
       statusCode = 401;
-    } else if (error.code === 'ECONNECTION') {
-      errorMessage = 'Failed to connect to email server';
-      statusCode = 503;
-    } else if (error.code === 'EMESSAGE') {
-      errorMessage = 'Invalid email message format';
-      statusCode = 400;
-    } else if (error.responseCode === 550) {
-      errorMessage = 'Email address rejected by recipient server';
-      statusCode = 400;
+    } else if (error.message && error.message.includes('Graph sendMail failed')) {
+      errorMessage = error.message;
+      statusCode = 502;
     } else if (error.message) {
       errorMessage = error.message;
     }

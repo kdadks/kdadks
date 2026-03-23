@@ -1,12 +1,59 @@
-﻿const nodemailer = require('nodemailer');
+﻿// Microsoft Graph API email sender - no SMTP, no IP reputation issues
+// Uses Azure AD app-only (client credentials) auth
 
-// Try to import fetch for Node.js environments that don't have it built-in
+// Try to import fetch for older Node.js environments
 let fetch;
 try {
   fetch = require('node-fetch');
 } catch {
-  // Use global fetch if available (newer Node.js or browser environment)
   fetch = globalThis.fetch;
+}
+
+// Acquire an OAuth2 access token using client credentials flow
+async function getGraphToken(tenantId, clientId, clientSecret) {
+  const tokenUrl = `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`;
+  const params = new URLSearchParams({
+    client_id: clientId,
+    client_secret: clientSecret,
+    scope: 'https://graph.microsoft.com/.default',
+    grant_type: 'client_credentials'
+  });
+
+  const res = await fetch(tokenUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: params.toString()
+  });
+
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(`Token acquisition failed: ${data.error_description || data.error || res.status}`);
+  }
+  return data.access_token;
+}
+
+// Send email via Microsoft Graph API
+async function sendViaGraph(token, senderEmail, mailPayload) {
+  const url = `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(senderEmail)}/sendMail`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(mailPayload)
+  });
+
+  if (res.status === 202) {
+    // 202 Accepted = successfully queued - no body
+    return { messageId: `graph-${Date.now()}@kdadks.com` };
+  }
+
+  // Any other status is an error
+  let errorBody;
+  try { errorBody = await res.json(); } catch { errorBody = { error: { message: res.statusText } }; }
+  const msg = errorBody?.error?.message || errorBody?.error?.code || `HTTP ${res.status}`;
+  throw new Error(`Graph sendMail failed: ${msg}`);
 }
 
 // Import Google Cloud reCAPTCHA Enterprise (optional in serverless environment)
@@ -312,129 +359,121 @@ exports.handler = async (event, context) => {
       };
     }
 
-    // Get Microsoft 365 Exchange SMTP credentials from environment
-    const smtpUser = process.env.SMTP_USER;
-    const smtpPassword = process.env.SMTP_PASSWORD;
-    console.log('🔍 Environment check:', {
-      hassmtpUser: !!smtpUser,
-      hassmtpPassword: !!smtpPassword,
-      smtpUserLength: smtpUser ? smtpUser.length : 0,
-      smtpPasswordLength: smtpPassword ? smtpPassword.length : 0,
-      NODE_ENV: process.env.NODE_ENV,
-      allEnvVars: Object.keys(process.env).filter(key => key.includes('SMTP') || key.includes('RECAPTCHA')),
-      totalEnvVars: Object.keys(process.env).length
+    // Get Microsoft Graph API credentials from environment
+    const tenantId = process.env.AZURE_TENANT_ID;
+    const clientId = process.env.AZURE_CLIENT_ID;
+    const clientSecret = process.env.AZURE_CLIENT_SECRET;
+    const senderEmail = process.env.SENDER_EMAIL || 'contact@kdadks.com';
+
+    console.log('🔍 Graph API credential check:', {
+      hasTenantId: !!tenantId,
+      hasClientId: !!clientId,
+      hasClientSecret: !!clientSecret,
+      senderEmail
     });
-    
-    if (!smtpUser || !smtpPassword) {
-      console.error('❌ SMTP_USER or SMTP_PASSWORD environment variable is not accessible to function');
-      console.log('� This might be a deployment sync issue - triggering new deployment might help');
-      
+
+    if (!tenantId || !clientId || !clientSecret) {
+      console.error('❌ AZURE_TENANT_ID, AZURE_CLIENT_ID or AZURE_CLIENT_SECRET not set');
       return {
         statusCode: 500,
         headers,
-        body: JSON.stringify({ 
-          error: 'Email service configuration error - SMTP credentials not accessible',
-          debug: {
-            environmentVariablesFound: Object.keys(process.env).filter(key => key.includes('SMTP') || key.includes('RECAPTCHA')),
-            suggestion: 'Try triggering a new deployment after adding environment variables'
-          }
+        body: JSON.stringify({
+          error: 'Email service configuration error - Microsoft Graph API credentials not set',
+          required: ['AZURE_TENANT_ID', 'AZURE_CLIENT_ID', 'AZURE_CLIENT_SECRET']
         })
       };
     }
 
-    // Configure Microsoft 365 Exchange SMTP transporter
-    const transporter = nodemailer.createTransport({
-      host: 'smtp.office365.com',
-      port: 587,
-      secure: false, // STARTTLS
-      auth: {
-        user: smtpUser,
-        pass: smtpPassword
-      }
-    });
-
-    // Prepare email options with customer-friendly sender display
-    const displayName = customerName || (from ? from.split('@')[0] : 'Customer');
-    const mailOptions = {
-      from: '"KDADKS Service Private Limited" <contact@kdadks.com>',  // Official company sender
-      replyTo: from,  // Set reply-to to the customer's email for easy replies
-      to: to,
+    // Build Graph API message payload
+    const message = {
       subject: subject,
-      text: text,
-      html: html
+      body: {
+        contentType: html ? 'HTML' : 'Text',
+        content: html || text
+      },
+      toRecipients: [
+        { emailAddress: { address: to } }
+      ],
+      from: {
+        emailAddress: {
+          name: 'KDADKS Service Private Limited',
+          address: senderEmail
+        }
+      }
     };
 
-    // Add attachment support
-    if (attachments && Array.isArray(attachments)) {
-      mailOptions.attachments = attachments.map(att => ({
-        filename: att.filename || 'attachment.pdf',
-        content: att.content,
-        encoding: att.encoding || 'base64',
-        contentType: att.type || 'application/pdf'
-      }));
-    } else if (attachment) {
-      mailOptions.attachments = [{
-        filename: attachment.filename || 'invoice.pdf',
-        content: attachment.content,
-        encoding: 'base64'
-      }];
+    // Set reply-to if a customer email was provided
+    if (from && from !== senderEmail) {
+      message.replyTo = [{ emailAddress: { address: from } }];
     }
 
-    // Enhanced logging before sending
-    console.log('📧 Attempting to send email via Microsoft 365 Exchange SMTP...', {
-      from: mailOptions.from,
-      replyTo: mailOptions.replyTo,
-      to: mailOptions.to,
-      subject: mailOptions.subject,
-      hasHtml: !!mailOptions.html,
-      hasText: !!mailOptions.text,
-      hasAttachments: !!mailOptions.attachments
+    // Add attachments (base64 encoded)
+    const allAttachments = [];
+    if (attachments && Array.isArray(attachments)) {
+      attachments.forEach(att => {
+        allAttachments.push({
+          '@odata.type': '#microsoft.graph.fileAttachment',
+          name: att.filename || 'attachment.pdf',
+          contentType: att.type || 'application/pdf',
+          contentBytes: att.content  // already base64
+        });
+      });
+    } else if (attachment) {
+      allAttachments.push({
+        '@odata.type': '#microsoft.graph.fileAttachment',
+        name: attachment.filename || 'invoice.pdf',
+        contentType: 'application/pdf',
+        contentBytes: attachment.content
+      });
+    }
+    if (allAttachments.length > 0) {
+      message.attachments = allAttachments;
+    }
+
+    console.log('📧 Sending email via Microsoft Graph API...', {
+      from: senderEmail,
+      to,
+      subject,
+      hasHtml: !!html,
+      hasText: !!text,
+      attachmentCount: allAttachments.length
     });
 
-    // Send email
-    const info = await transporter.sendMail(mailOptions);
-    
-    console.log('✅ Microsoft 365 Exchange SMTP response:', {
-      messageId: info.messageId,
-      accepted: info.accepted,
-      rejected: info.rejected,
-      pending: info.pending,
-      response: info.response
-    });
+    // Acquire token and send
+    const token = await getGraphToken(tenantId, clientId, clientSecret);
+    const result = await sendViaGraph(token, senderEmail, { message, saveToSentItems: true });
 
-    // Return success response with debugging info
+    console.log('✅ Microsoft Graph API email sent:', result.messageId);
+
     return {
       statusCode: 200,
       headers,
       body: JSON.stringify({
         success: true,
-        message: 'Email sent successfully',
-        messageId: info.messageId,
+        message: 'Email sent successfully via Microsoft Graph API',
+        messageId: result.messageId,
         recaptchaScore: recaptchaToken ? verification?.score : undefined,
-        debug: debugInfo // Include debugging information
+        debug: debugInfo
       })
     };
 
   } catch (error) {
     console.error('❌ Email sending failed:', error);
-    console.error('❌ Error stack:', error.stack);
     console.error('❌ Error details:', {
       name: error.name,
-      message: error.message,
-      code: error.code
+      message: error.message
     });
 
-    // Determine more specific error information
     let errorMessage = 'Failed to send email';
     let statusCode = 500;
 
-    if (error.code === 'EAUTH') {
-      errorMessage = 'Email authentication failed - check Microsoft 365 Exchange SMTP credentials';
+    if (error.message && error.message.includes('Token acquisition failed')) {
+      errorMessage = 'Microsoft Graph authentication failed - check AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_CLIENT_SECRET';
       statusCode = 401;
-    } else if (error.code === 'ECONNECTION') {
-      errorMessage = 'Failed to connect to email server';
-      statusCode = 503;
-    } else if (error.message.includes('JSON')) {
+    } else if (error.message && error.message.includes('Graph sendMail failed')) {
+      errorMessage = error.message;
+      statusCode = 502;
+    } else if (error.message && error.message.includes('JSON')) {
       errorMessage = 'Invalid request format';
       statusCode = 400;
     } else if (error.message) {
@@ -447,9 +486,8 @@ exports.handler = async (event, context) => {
       body: JSON.stringify({
         error: errorMessage,
         details: error.message,
-        code: error.code,
         timestamp: new Date().toISOString(),
-        functionVersion: '2.1'
+        functionVersion: '3.0'
       })
     };
   }
