@@ -69,7 +69,7 @@ The project builds successfully and is ready to deploy to Netlify!
 1. **Push to GitHub**:
    ```bash
    git add .
-   git commit -m "Migrate to Hostinger SMTP and fix build"
+   git commit -m "Migrate to Microsoft 365 Exchange SMTP and fix build"
    git push origin main
    ```
 
@@ -126,7 +126,7 @@ This creates a Netlify preview deployment
 
 ## 📝 Recent Changes Summary
 
-1. ✅ Migrated from Brevo to Hostinger SMTP
+1. ✅ Migrated from Brevo to Microsoft 365 Exchange SMTP
 2. ✅ Updated all environment variables
 3. ✅ Fixed `.env.production` configuration
 4. ✅ Installed missing dependencies
@@ -139,8 +139,8 @@ This creates a Netlify preview deployment
 
 - `NETLIFY_ENVIRONMENT_VARIABLES.md` - Environment setup
 - `PRODUCTION_DEPLOYMENT_CHECKLIST.md` - Deployment guide
-- `HOSTINGER_SMTP_MIGRATION.md` - Migration details
-- `HOSTINGER_SMTP_SETUP.md` - Email configuration
+- `EMAIL_CONFIGURATION_SUMMARY.md` - Email configuration
+- `EMAIL_FLOW_DIAGRAM.md` - Email flow details
 
 ---
 

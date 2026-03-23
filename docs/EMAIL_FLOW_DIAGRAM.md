@@ -33,12 +33,12 @@
                                  │ SMTP Connection
                                  ▼
 ┌─────────────────────────────────────────────────────────────────────┐
-│                      Hostinger SMTP Server                           │
-│                      smtp.hostinger.com:465                          │
+│                  Microsoft 365 Exchange SMTP Server                  │
+│                      smtp.office365.com:587                          │
 ├─────────────────────────────────────────────────────────────────────┤
-│  Host: smtp.hostinger.com                                           │
-│  Port: 465 (SSL)                                                    │
-│  Auth: HOSTINGER_SMTP_USER / PASSWORD                               │
+│  Host: smtp.office365.com                                           │
+│  Port: 587 (STARTTLS)                                               │
+│  Auth: SMTP_USER / SMTP_PASSWORD                                    │
 └─────────────────────────────────────────────────────────────────────┘
                                  │
                                  │ Delivers email
@@ -63,7 +63,7 @@
 │  Subject: Re: [Original Subject]                                    │
 └─────────────────────────────────────────────────────────────────────┘
                                  │
-                                 │ Sends via Hostinger SMTP
+                                 │ Sends via Microsoft 365 Exchange SMTP
                                  ▼
 ┌─────────────────────────────────────────────────────────────────────┐
 │                    👤 Customer's Inbox                               │
@@ -108,8 +108,8 @@
 │                    Netlify Dashboard                              │
 │                  Environment Variables                            │
 ├──────────────────────────────────────────────────────────────────┤
-│  HOSTINGER_SMTP_USER = contact@kdadks.com                        │
-│  HOSTINGER_SMTP_PASSWORD = *********************                 │
+│  SMTP_USER = contact@kdadks.com                                  │
+│  SMTP_PASSWORD = *********************                           │
 └──────────────────────────────────────────────────────────────────┘
                            │
                            │ Injected at runtime
@@ -118,13 +118,13 @@
 │              Netlify Serverless Function                          │
 │              (send-email.js)                                      │
 ├──────────────────────────────────────────────────────────────────┤
-│  const user = process.env.HOSTINGER_SMTP_USER;                   │
-│  const password = process.env.HOSTINGER_SMTP_PASSWORD;           │
+│  const user = process.env.SMTP_USER;                             │
+│  const password = process.env.SMTP_PASSWORD;                     │
 │                                                                   │
 │  const transporter = nodemailer.createTransport({                │
-│    host: 'smtp.hostinger.com',                                   │
-│    port: 465,                                                    │
-│    secure: true,                                                 │
+│    host: 'smtp.office365.com',                                   │
+│    port: 587,                                                    │
+│    secure: false, // STARTTLS                                    │
 │    auth: { user, pass: password }                                │
 │  });                                                             │
 └──────────────────────────────────────────────────────────────────┘
@@ -151,7 +151,7 @@ User fills form                    Server processes
      │                               ▼
      │                      ┌────────────────────┐
      │                      │   SMTP Transport   │
-     │                      │  (Hostinger SMTP)  │
+     │                      │  (Microsoft 365)   │
      │                      └────────────────────┘
      │                               │
      │                               ▼
@@ -163,7 +163,7 @@ User fills form                    Server processes
      ▼                               ▼
 ┌─────────┐                 ┌────────────────────┐
 │ Success │                 │   Email Inbox      │
-│ Message │                 │  (Hostinger Mail)  │
+│ Message │                 │  (Microsoft 365)   │
 └─────────┘                 └────────────────────┘
 ```
 
@@ -193,8 +193,8 @@ User submits form
      ▼
 ┌─────────────────────────────────────┐
 │  SMTP Authentication                │
-│  ✓ SSL/TLS encryption               │
-│  ✓ Hostinger credentials            │
+│  ✓ STARTTLS encryption             │
+│  ✓ Microsoft 365 credentials       │
 │  ✓ Authenticated sender             │
 └─────────────────────────────────────┘
      │ Authenticated
@@ -207,4 +207,4 @@ User submits form
 
 ---
 
-**Visual Summary**: Every contact form → Netlify Function → Hostinger SMTP → contact@kdadks.com
+**Visual Summary**: Every contact form → Netlify Function → Microsoft 365 Exchange SMTP → contact@kdadks.com

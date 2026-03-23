@@ -4,10 +4,10 @@
 
 Set these environment variables in your Netlify dashboard under Site Settings > Environment Variables:
 
-### Email Service (Hostinger SMTP)
+### Email Service (Microsoft 365 Exchange SMTP)
 ```bash
-HOSTINGER_SMTP_USER=your_email@yourdomain.com
-HOSTINGER_SMTP_PASSWORD=your_hostinger_email_password
+SMTP_USER=contact@kdadks.com
+SMTP_PASSWORD=your_microsoft365_app_password
 ```
 
 ### reCAPTCHA Enterprise (Google Cloud)

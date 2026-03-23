@@ -138,7 +138,7 @@ const formatted = formatCurrencyAmount(amount, currencyInfo);
 ### 🔌 External Services
 - **Supabase**: Database, authentication, real-time subscriptions
 - **Netlify**: Hosting, CI/CD, environment variables
-- **Hostinger SMTP**: Email service for contact forms and invoicing
+- **Microsoft 365 Exchange SMTP**: Email service for contact forms and invoicing
 
 ### 🔗 Internal Service Communication
 - **Router → Components**: Route-based component loading

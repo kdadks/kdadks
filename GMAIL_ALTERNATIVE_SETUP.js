@@ -1,10 +1,10 @@
 // Alternative Gmail SMTP configuration for immediate setup
-// Replace the Hostinger SMTP configuration in send-email.js with this
+// Replace the Microsoft 365 Exchange SMTP configuration in send-email.js with this
 
 // Alternative Email Setup Options
-// Replace the Hostinger SMTP configuration in send-email.js with this
+// Replace the Microsoft 365 Exchange SMTP configuration in send-email.js with this
 
-// Gmail SMTP Configuration (if you prefer Gmail over Hostinger)
+// Gmail SMTP Configuration (if you prefer Gmail over Microsoft 365)
 const transporter = nodemailer.createTransporter({
   service: 'gmail',
   auth: {

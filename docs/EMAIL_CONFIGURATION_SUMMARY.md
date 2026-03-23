@@ -80,19 +80,19 @@ All contact forms and email communications are now properly configured with:
 - **Local Development**: `http://localhost:3001/api/send-email`
 - **Production**: `/.netlify/functions/send-email`
 
-### SMTP Settings (Hostinger)
+### SMTP Settings (Microsoft 365 Exchange)
 ```
-Host: smtp.hostinger.com
-Port: 465
-Security: SSL
-Username: [HOSTINGER_SMTP_USER]
-Password: [HOSTINGER_SMTP_PASSWORD]
+Host: smtp.office365.com
+Port: 587
+Security: STARTTLS
+Username: [SMTP_USER]
+Password: [SMTP_PASSWORD]
 ```
 
 ### Environment Variables Required
 ```bash
-HOSTINGER_SMTP_USER=contact@kdadks.com
-HOSTINGER_SMTP_PASSWORD=your_email_password
+SMTP_USER=contact@kdadks.com
+SMTP_PASSWORD=your_microsoft365_password
 ```
 
 ---
@@ -198,7 +198,7 @@ This ensures:
 ## 📊 Email Tracking
 
 You can track:
-- ✅ Delivery status (check Hostinger email logs)
+- ✅ Delivery status (check Microsoft 365 message trace)
 - ✅ Bounce notifications
 - ✅ Customer email addresses for follow-up
 - ✅ Inquiry types and frequency
@@ -209,13 +209,13 @@ You can track:
 
 ### Not Receiving Emails?
 1. Check spam/junk folder in contact@kdadks.com
-2. Verify Hostinger SMTP credentials in Netlify
+2. Verify Microsoft 365 SMTP credentials in Netlify
 3. Check Netlify function logs for errors
 4. Test with emergency-contact.html form
 
 ### Emails Going to Spam?
 1. Verify SPF/DKIM records for your domain
-2. Contact Hostinger to configure email authentication
+2. Configure SPF/DKIM in Microsoft 365 admin for email authentication
 3. Ask recipients to whitelist contact@kdadks.com
 
 ### Cannot Reply to Customer?
@@ -227,13 +227,13 @@ You can track:
 
 ## 📞 Support Contacts
 
-**Email Service**: Hostinger Support  
-**Website**: https://support.hostinger.com  
-**Login**: https://hpanel.hostinger.com
+**Email Service**: Microsoft 365 Exchange  
+**Admin Portal**: https://admin.microsoft.com  
+**Service Health**: https://status.office365.com
 
 **Email Address**: contact@kdadks.com  
-**SMTP**: smtp.hostinger.com:465  
-**IMAP**: imap.hostinger.com:993
+**SMTP**: smtp.office365.com:587  
+**IMAP**: outlook.office365.com:993
 
 ---
 
@@ -242,7 +242,7 @@ You can track:
 - ✅ All contact forms send TO: contact@kdadks.com
 - ✅ All emails FROM: "KDADKS Service Private Limited" <contact@kdadks.com>
 - ✅ Reply-To set to customer's email for easy responses
-- ✅ Hostinger SMTP configured with SSL
+- ✅ Microsoft 365 Exchange SMTP configured with STARTTLS
 - ✅ Environment variables set in Netlify
 - ✅ reCAPTCHA protection enabled
 - ✅ Professional email format with branding

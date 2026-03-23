@@ -82,8 +82,8 @@ The function needs these dependencies in `netlify/functions/package.json`:
 #### If Environment Variables Are Missing
 Set these in Netlify dashboard:
 ```
-HOSTINGER_SMTP_USER=your_email@yourdomain.com
-HOSTINGER_SMTP_PASSWORD=your_smtp_password
+SMTP_USER=your_email@yourdomain.com
+SMTP_PASSWORD=your_microsoft365_smtp_password
 GOOGLE_CLOUD_PROJECT_ID=kdadks-service-p-1755602644470
 VITE_RECAPTCHA_SITE_KEY=6LdQV6srAAAAADPSVG-sDb2o2Mv3pJqYhr6QZa9r
 ```

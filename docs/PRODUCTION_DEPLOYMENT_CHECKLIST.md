@@ -7,8 +7,8 @@
 Copy and paste these into Netlify Dashboard → Environment Variables:
 
 ```
-HOSTINGER_SMTP_USER=info@kdadks.com
-HOSTINGER_SMTP_PASSWORD=your_hostinger_password
+SMTP_USER=contact@kdadks.com
+SMTP_PASSWORD=your_microsoft365_app_password
 
 VITE_SUPABASE_URL=https://npsptvuevwracyzzmktl.supabase.co
 VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
@@ -33,11 +33,10 @@ GOOGLE_APPLICATION_CREDENTIALS=./etc/credentials/google-service-account.json
 
 ### 2. Get Your Credentials
 
-#### Hostinger Email
-- [ ] Log in to [Hostinger](https://hpanel.hostinger.com)
-- [ ] Go to **Emails** section
-- [ ] Copy your email address (e.g., info@kdadks.com)
-- [ ] Use your email password
+#### Microsoft 365 Exchange SMTP
+- [ ] Ensure SMTP AUTH is enabled in [Microsoft 365 Admin Center](https://admin.microsoft.com)
+- [ ] Use `contact@kdadks.com` as `SMTP_USER`
+- [ ] Use the app password as `SMTP_PASSWORD`
 
 #### Supabase Database
 - [ ] Log in to [Supabase](https://app.supabase.com)
@@ -60,7 +59,7 @@ GOOGLE_APPLICATION_CREDENTIALS=./etc/credentials/google-service-account.json
 
 For each variable:
 1. Click **Add a variable**
-2. Enter **Key** (e.g., `HOSTINGER_SMTP_USER`)
+2. Enter **Key** (e.g., `SMTP_USER`)
 3. Enter **Value** (your actual value)
 4. Select **Scopes**: Choose **All**
 5. Click **Save**
@@ -86,8 +85,8 @@ After deployment:
 Copy this and check off as you add each one:
 
 ### Email Service
-- [ ] `HOSTINGER_SMTP_USER`
-- [ ] `HOSTINGER_SMTP_PASSWORD`
+- [ ] `SMTP_USER`
+- [ ] `SMTP_PASSWORD`
 
 ### Database
 - [ ] `VITE_SUPABASE_URL`
@@ -115,8 +114,8 @@ npm install -g netlify-cli
 netlify login
 
 # Set variables
-netlify env:set HOSTINGER_SMTP_USER "info@kdadks.com"
-netlify env:set HOSTINGER_SMTP_PASSWORD "your_password"
+netlify env:set SMTP_USER "contact@kdadks.com"
+netlify env:set SMTP_PASSWORD "your_app_password"
 netlify env:set VITE_SUPABASE_URL "https://npsptvuevwracyzzmktl.supabase.co"
 netlify env:set VITE_SUPABASE_ANON_KEY "your_anon_key"
 netlify env:set VITE_RECAPTCHA_SITE_KEY "6LdQV6srAAAAADPSVG-sDb2o2Mv3pJqYhr6QZa9r"
@@ -152,8 +151,7 @@ netlify deploy --prod
 ## 📚 Documentation
 
 - **Full Guide**: `NETLIFY_ENVIRONMENT_VARIABLES.md`
-- **Migration**: `HOSTINGER_SMTP_MIGRATION.md`
-- **Setup**: `HOSTINGER_SMTP_SETUP.md`
+- **Email Setup**: `EMAIL_CONFIGURATION_SUMMARY.md`
 
 ---
 

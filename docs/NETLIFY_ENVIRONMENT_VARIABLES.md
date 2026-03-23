@@ -22,20 +22,19 @@ All production environment variables **MUST** be configured in the Netlify Dashb
 
 ## 🔐 Environment Variables List
 
-### 1. Hostinger SMTP (Email Service)
+### 1. Microsoft 365 Exchange SMTP (Email Service)
 
 **Required for contact forms and email notifications**
 
 | Variable | Value | Scope |
 |----------|-------|-------|
-| `HOSTINGER_SMTP_USER` | `your_email@yourdomain.com` | All |
-| `HOSTINGER_SMTP_PASSWORD` | `your_hostinger_email_password` | All |
+| `SMTP_USER` | `contact@kdadks.com` | All |
+| `SMTP_PASSWORD` | `your_microsoft365_app_password` | All |
 
 **Where to find:**
-- Log in to [Hostinger Control Panel](https://hpanel.hostinger.com)
-- Go to **Emails** section
-- Use your full email address as the username
-- Use your email account password
+- Log in to [Microsoft 365 Admin Center](https://admin.microsoft.com)
+- Ensure SMTP AUTH is enabled for the account
+- Use an App Password if MFA is enabled
 
 ---
 
@@ -127,8 +126,8 @@ All production environment variables **MUST** be configured in the Netlify Dashb
 
 3. **Required Variables Checklist**
    ```
-   ✅ HOSTINGER_SMTP_USER
-   ✅ HOSTINGER_SMTP_PASSWORD
+   ✅ SMTP_USER
+   ✅ SMTP_PASSWORD
    ✅ VITE_SUPABASE_URL
    ✅ VITE_SUPABASE_ANON_KEY
    ✅ VITE_RECAPTCHA_SITE_KEY
@@ -152,8 +151,8 @@ netlify login
 netlify link
 
 # Add environment variables
-netlify env:set HOSTINGER_SMTP_USER "your_email@yourdomain.com"
-netlify env:set HOSTINGER_SMTP_PASSWORD "your_password"
+netlify env:set SMTP_USER "contact@kdadks.com"
+netlify env:set SMTP_PASSWORD "your_app_password"
 netlify env:set VITE_SUPABASE_URL "https://your-project.supabase.co"
 netlify env:set VITE_SUPABASE_ANON_KEY "your_anon_key"
 netlify env:set VITE_RECAPTCHA_SITE_KEY "6LdQV6srAAAAADPSVG-sDb2o2Mv3pJqYhr6QZa9r"
@@ -252,9 +251,9 @@ Netlify allows you to set variables for different contexts:
 Based on your project, here are your known values:
 
 ```bash
-# Email Service
-HOSTINGER_SMTP_USER=info@kdadks.com  # (Update with actual email)
-HOSTINGER_SMTP_PASSWORD=***hidden***   # (Get from Hostinger)
+# Email Service (Microsoft 365 Exchange)
+SMTP_USER=contact@kdadks.com
+SMTP_PASSWORD=***hidden***   # (Microsoft 365 app password)
 
 # Database
 VITE_SUPABASE_URL=https://npsptvuevwracyzzmktl.supabase.co
@@ -290,8 +289,8 @@ GOOGLE_CLOUD_API_KEY=***hidden***      # (Get from Google Cloud)
 
 ```bash
 # Check these variables are set:
-HOSTINGER_SMTP_USER
-HOSTINGER_SMTP_PASSWORD
+SMTP_USER
+SMTP_PASSWORD
 
 # Check Netlify function logs:
 # Dashboard → Functions → send-email → Logs
@@ -325,7 +324,7 @@ GOOGLE_CLOUD_PROJECT_ID
 - **Netlify Support**: https://www.netlify.com/support/
 - **Supabase Docs**: https://supabase.com/docs
 - **Google Cloud Console**: https://console.cloud.google.com
-- **Hostinger Support**: https://support.hostinger.com
+- **Microsoft 365 Docs**: https://docs.microsoft.com/microsoft-365
 
 ---
 

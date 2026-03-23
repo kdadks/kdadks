@@ -56,7 +56,7 @@ The website includes a secure admin console for authorized personnel:
 - **Fast Performance**: Optimized build with code splitting and lazy loading
 - **Accessibility**: WCAG compliant with keyboard navigation support
 - **🔐 Admin Console**: Secure admin panel for managing contact submissions and site content
-- **📧 Email Integration**: Professional email system with Hostinger SMTP
+- **📧 Email Integration**: Professional email system with Microsoft 365 Exchange SMTP
 - **📊 Analytics Dashboard**: Real-time contact and email statistics
 
 ## 🏢 Our Brands
@@ -136,7 +136,7 @@ For detailed documentation on the invoice system, see [docs/INVOICE_SYSTEM_SETUP
 3. **Configure environment**
    ```bash
    cp .env.example .env
-   # Edit .env with your actual Hostinger credentials and JWT secret
+   # Edit .env with your actual Microsoft 365 credentials and JWT secret
    ```
 
 4. **Start development server**
