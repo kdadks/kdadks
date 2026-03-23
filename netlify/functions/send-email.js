@@ -402,8 +402,9 @@ exports.handler = async (event, context) => {
       }
     };
 
-    // Set reply-to if a customer email was provided
-    if (from && from !== senderEmail) {
+    // Set reply-to only if from is a valid email address
+    const emailRegexSimple = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (from && emailRegexSimple.test(from) && from !== senderEmail) {
       message.replyTo = [{ emailAddress: { address: from } }];
     }
 

@@ -98,7 +98,8 @@ module.exports = async (req, res) => {
       toRecipients: [{ emailAddress: { address: to } }],
       from: { emailAddress: { name: 'KDADKS Service Private Limited', address: senderEmail } }
     };
-    if (from && from !== senderEmail) {
+    const emailRegexSimple = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (from && emailRegexSimple.test(from) && from !== senderEmail) {
       message.replyTo = [{ emailAddress: { address: from } }];
     }
 
