@@ -333,8 +333,11 @@ exports.handler = async (event, context) => {
     // Get Resend API credentials from environment
     const resendApiKey = process.env.RESEND_API_KEY;
     const senderEmail = process.env.SENDER_EMAIL || 'contact@kdadks.com';
+    // Use a dedicated sending address so BCC copy to senderEmail is delivered
+    // (Resend won't deliver BCC if from === bcc)
+    const fromEmail = process.env.FROM_EMAIL || `noreply@kdadks.com`;
 
-    console.log('🔍 Resend credential check:', { hasApiKey: !!resendApiKey, senderEmail });
+    console.log('🔍 Resend credential check:', { hasApiKey: !!resendApiKey, senderEmail, fromEmail });
 
     if (!resendApiKey) {
       console.error('❌ RESEND_API_KEY not set');
@@ -349,7 +352,7 @@ exports.handler = async (event, context) => {
 
     // Build Resend payload
     const payload = {
-      from: `KDADKS Service Private Limited <${senderEmail}>`,
+      from: `KDADKS Service Private Limited <${fromEmail}>`,
       to: [to],
       bcc: [senderEmail],
       subject,
