@@ -1,4 +1,4 @@
-// Microsoft Graph API email sender - local development proxy
+// Resend email sender - local development proxy
 // For local development - this will be used when running on localhost:3001
 
 // Try to import fetch for older Node.js environments
@@ -9,35 +9,18 @@ try {
   fetch = globalThis.fetch;
 }
 
-async function getGraphToken(tenantId, clientId, clientSecret) {
-  const tokenUrl = `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`;
-  const params = new URLSearchParams({
-    client_id: clientId,
-    client_secret: clientSecret,
-    scope: 'https://graph.microsoft.com/.default',
-    grant_type: 'client_credentials'
-  });
-  const res = await fetch(tokenUrl, {
+async function sendViaResend(apiKey, payload) {
+  const res = await fetch('https://api.resend.com/emails', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: params.toString()
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(payload)
   });
   const data = await res.json();
-  if (!res.ok) throw new Error(`Token acquisition failed: ${data.error_description || data.error}`);
-  return data.access_token;
-}
-
-async function sendViaGraph(token, senderEmail, mailPayload) {
-  const url = `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(senderEmail)}/sendMail`;
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify(mailPayload)
-  });
-  if (res.status === 202) return { messageId: `graph-${Date.now()}@kdadks.com` };
-  let errorBody;
-  try { errorBody = await res.json(); } catch { errorBody = { error: { message: res.statusText } }; }
-  throw new Error(`Graph sendMail failed: ${errorBody?.error?.message || res.status}`);
+  if (!res.ok) throw new Error(`Resend failed: ${data.message || data.name || res.status}`);
+  return { messageId: data.id };
 }
 
 module.exports = async (req, res) => {
@@ -78,60 +61,57 @@ module.exports = async (req, res) => {
       return;
     }
 
-    // Get Microsoft Graph API credentials from environment
-    const tenantId = process.env.AZURE_TENANT_ID;
-    const clientId = process.env.AZURE_CLIENT_ID;
-    const clientSecret = process.env.AZURE_CLIENT_SECRET;
+    // Get Resend API credentials from environment
+    const resendApiKey = process.env.RESEND_API_KEY;
     const senderEmail = process.env.SENDER_EMAIL || 'contact@kdadks.com';
     const { attachments, attachment } = req.body;
 
-    if (!tenantId || !clientId || !clientSecret) {
-      console.error('[LOCAL DEV] AZURE_TENANT_ID, AZURE_CLIENT_ID or AZURE_CLIENT_SECRET not set');
-      res.status(500).json({ error: 'Email service configuration error - Microsoft Graph API credentials not set' });
+    if (!resendApiKey) {
+      console.error('[LOCAL DEV] RESEND_API_KEY not set');
+      res.status(500).json({ error: 'Email service configuration error - RESEND_API_KEY not set' });
       return;
     }
 
-    // Build Graph API message payload
-    const message = {
+    // Build Resend payload
+    const payload = {
+      from: `KDADKS Service Private Limited <${senderEmail}>`,
+      to: [to],
+      bcc: [senderEmail],
       subject,
-      body: { contentType: html ? 'HTML' : 'Text', content: html || text },
-      toRecipients: [{ emailAddress: { address: to } }],
-      from: { emailAddress: { name: 'KDADKS Service Private Limited', address: senderEmail } }
+      ...(html ? { html } : { text })
     };
+
     const emailRegexSimple = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (from && emailRegexSimple.test(from) && from !== senderEmail) {
-      message.replyTo = [{ emailAddress: { address: from } }];
+      payload.reply_to = from;
     }
 
     const allAttachments = [];
     if (attachments && Array.isArray(attachments)) {
       attachments.forEach(att => allAttachments.push({
-        '@odata.type': '#microsoft.graph.fileAttachment',
-        name: att.filename || 'attachment.pdf',
-        contentType: att.type || 'application/pdf',
-        contentBytes: att.content
+        filename: att.filename || 'attachment.pdf',
+        content: att.content,
+        content_type: att.type || 'application/pdf'
       }));
     } else if (attachment) {
       allAttachments.push({
-        '@odata.type': '#microsoft.graph.fileAttachment',
-        name: attachment.filename || 'invoice.pdf',
-        contentType: 'application/pdf',
-        contentBytes: attachment.content
+        filename: attachment.filename || 'invoice.pdf',
+        content: attachment.content,
+        content_type: 'application/pdf'
       });
     }
-    if (allAttachments.length > 0) message.attachments = allAttachments;
+    if (allAttachments.length > 0) payload.attachments = allAttachments;
 
-    console.log('📧 [LOCAL DEV] Sending email via Microsoft Graph API...');
+    console.log('📧 [LOCAL DEV] Sending email via Resend...');
     console.log('To:', to, '| Subject:', subject);
 
-    const token = await getGraphToken(tenantId, clientId, clientSecret);
-    const result = await sendViaGraph(token, senderEmail, { message, saveToSentItems: true });
+    const result = await sendViaResend(resendApiKey, payload);
 
     console.log('✅ [LOCAL DEV] Email sent successfully:', result.messageId);
 
     res.status(200).json({
       success: true,
-      message: 'Email sent successfully via Microsoft Graph API',
+      message: 'Email sent successfully via Resend',
       messageId: result.messageId
     });
 
@@ -141,10 +121,7 @@ module.exports = async (req, res) => {
     let errorMessage = 'Failed to send email';
     let statusCode = 500;
 
-    if (error.message && error.message.includes('Token acquisition failed')) {
-      errorMessage = 'Microsoft Graph authentication failed - check AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_CLIENT_SECRET';
-      statusCode = 401;
-    } else if (error.message && error.message.includes('Graph sendMail failed')) {
+    if (error.message && error.message.includes('Resend failed')) {
       errorMessage = error.message;
       statusCode = 502;
     } else if (error.message) {

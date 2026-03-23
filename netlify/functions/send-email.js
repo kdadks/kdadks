@@ -1,5 +1,5 @@
-﻿// Microsoft Graph API email sender - no SMTP, no IP reputation issues
-// Uses Azure AD app-only (client credentials) auth
+﻿// Resend email sender - clean IP reputation, reliable delivery
+// Uses Resend API with BCC to sender for sent-items record
 
 // Try to import fetch for older Node.js environments
 let fetch;
@@ -9,51 +9,22 @@ try {
   fetch = globalThis.fetch;
 }
 
-// Acquire an OAuth2 access token using client credentials flow
-async function getGraphToken(tenantId, clientId, clientSecret) {
-  const tokenUrl = `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`;
-  const params = new URLSearchParams({
-    client_id: clientId,
-    client_secret: clientSecret,
-    scope: 'https://graph.microsoft.com/.default',
-    grant_type: 'client_credentials'
-  });
-
-  const res = await fetch(tokenUrl, {
+// Send email via Resend API
+async function sendViaResend(apiKey, payload) {
+  const res = await fetch('https://api.resend.com/emails', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: params.toString()
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(payload)
   });
 
   const data = await res.json();
   if (!res.ok) {
-    throw new Error(`Token acquisition failed: ${data.error_description || data.error || res.status}`);
+    throw new Error(`Resend failed: ${data.message || data.name || res.status}`);
   }
-  return data.access_token;
-}
-
-// Send email via Microsoft Graph API
-async function sendViaGraph(token, senderEmail, mailPayload) {
-  const url = `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(senderEmail)}/sendMail`;
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify(mailPayload)
-  });
-
-  if (res.status === 202) {
-    // 202 Accepted = successfully queued - no body
-    return { messageId: `graph-${Date.now()}@kdadks.com` };
-  }
-
-  // Any other status is an error
-  let errorBody;
-  try { errorBody = await res.json(); } catch { errorBody = { error: { message: res.statusText } }; }
-  const msg = errorBody?.error?.message || errorBody?.error?.code || `HTTP ${res.status}`;
-  throw new Error(`Graph sendMail failed: ${msg}`);
+  return { messageId: data.id };
 }
 
 // Import Google Cloud reCAPTCHA Enterprise (optional in serverless environment)
@@ -359,53 +330,36 @@ exports.handler = async (event, context) => {
       };
     }
 
-    // Get Microsoft Graph API credentials from environment
-    const tenantId = process.env.AZURE_TENANT_ID;
-    const clientId = process.env.AZURE_CLIENT_ID;
-    const clientSecret = process.env.AZURE_CLIENT_SECRET;
+    // Get Resend API credentials from environment
+    const resendApiKey = process.env.RESEND_API_KEY;
     const senderEmail = process.env.SENDER_EMAIL || 'contact@kdadks.com';
 
-    console.log('🔍 Graph API credential check:', {
-      hasTenantId: !!tenantId,
-      hasClientId: !!clientId,
-      hasClientSecret: !!clientSecret,
-      senderEmail
-    });
+    console.log('🔍 Resend credential check:', { hasApiKey: !!resendApiKey, senderEmail });
 
-    if (!tenantId || !clientId || !clientSecret) {
-      console.error('❌ AZURE_TENANT_ID, AZURE_CLIENT_ID or AZURE_CLIENT_SECRET not set');
+    if (!resendApiKey) {
+      console.error('❌ RESEND_API_KEY not set');
       return {
         statusCode: 500,
         headers,
         body: JSON.stringify({
-          error: 'Email service configuration error - Microsoft Graph API credentials not set',
-          required: ['AZURE_TENANT_ID', 'AZURE_CLIENT_ID', 'AZURE_CLIENT_SECRET']
+          error: 'Email service configuration error - RESEND_API_KEY not set'
         })
       };
     }
 
-    // Build Graph API message payload
-    const message = {
-      subject: subject,
-      body: {
-        contentType: html ? 'HTML' : 'Text',
-        content: html || text
-      },
-      toRecipients: [
-        { emailAddress: { address: to } }
-      ],
-      from: {
-        emailAddress: {
-          name: 'KDADKS Service Private Limited',
-          address: senderEmail
-        }
-      }
+    // Build Resend payload
+    const payload = {
+      from: `KDADKS Service Private Limited <${senderEmail}>`,
+      to: [to],
+      bcc: [senderEmail],
+      subject,
+      ...(html ? { html } : { text })
     };
 
     // Set reply-to only if from is a valid email address
     const emailRegexSimple = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (from && emailRegexSimple.test(from) && from !== senderEmail) {
-      message.replyTo = [{ emailAddress: { address: from } }];
+      payload.reply_to = from;
     }
 
     // Add attachments (base64 encoded)
@@ -413,25 +367,23 @@ exports.handler = async (event, context) => {
     if (attachments && Array.isArray(attachments)) {
       attachments.forEach(att => {
         allAttachments.push({
-          '@odata.type': '#microsoft.graph.fileAttachment',
-          name: att.filename || 'attachment.pdf',
-          contentType: att.type || 'application/pdf',
-          contentBytes: att.content  // already base64
+          filename: att.filename || 'attachment.pdf',
+          content: att.content,
+          content_type: att.type || 'application/pdf'
         });
       });
     } else if (attachment) {
       allAttachments.push({
-        '@odata.type': '#microsoft.graph.fileAttachment',
-        name: attachment.filename || 'invoice.pdf',
-        contentType: 'application/pdf',
-        contentBytes: attachment.content
+        filename: attachment.filename || 'invoice.pdf',
+        content: attachment.content,
+        content_type: 'application/pdf'
       });
     }
     if (allAttachments.length > 0) {
-      message.attachments = allAttachments;
+      payload.attachments = allAttachments;
     }
 
-    console.log('📧 Sending email via Microsoft Graph API...', {
+    console.log('📧 Sending email via Resend...', {
       from: senderEmail,
       to,
       subject,
@@ -440,18 +392,16 @@ exports.handler = async (event, context) => {
       attachmentCount: allAttachments.length
     });
 
-    // Acquire token and send
-    const token = await getGraphToken(tenantId, clientId, clientSecret);
-    const result = await sendViaGraph(token, senderEmail, { message, saveToSentItems: true });
+    const result = await sendViaResend(resendApiKey, payload);
 
-    console.log('✅ Microsoft Graph API email sent:', result.messageId);
+    console.log('✅ Resend email sent:', result.messageId);
 
     return {
       statusCode: 200,
       headers,
       body: JSON.stringify({
         success: true,
-        message: 'Email sent successfully via Microsoft Graph API',
+        message: 'Email sent successfully via Resend',
         messageId: result.messageId,
         recaptchaScore: recaptchaToken ? verification?.score : undefined,
         debug: debugInfo
@@ -468,10 +418,7 @@ exports.handler = async (event, context) => {
     let errorMessage = 'Failed to send email';
     let statusCode = 500;
 
-    if (error.message && error.message.includes('Token acquisition failed')) {
-      errorMessage = 'Microsoft Graph authentication failed - check AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_CLIENT_SECRET';
-      statusCode = 401;
-    } else if (error.message && error.message.includes('Graph sendMail failed')) {
+    if (error.message && error.message.includes('Resend failed')) {
       errorMessage = error.message;
       statusCode = 502;
     } else if (error.message && error.message.includes('JSON')) {
