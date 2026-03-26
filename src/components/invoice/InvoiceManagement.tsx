@@ -182,6 +182,8 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
   });
   const [termsTemplates, setTermsTemplates] = useState<TermsTemplate[]>([]);
   const [selectedTermsTemplateId, setSelectedTermsTemplateId] = useState<string>('');
+  // Currency override: allows billing a foreign customer in INR
+  const [useINROverride, setUseINROverride] = useState(false);
 
   // Debug customer currency changes
   useEffect(() => {
@@ -768,6 +770,7 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
     setGeneratedInvoiceNumber('');
     setShowInvoicePreview(false);
     setModalLoading(false);
+    setUseINROverride(false);
   };
 
   const handleShowPreview = () => {
@@ -783,6 +786,9 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
         newCustomerId: value,
         timestamp: new Date().toISOString()
       });
+
+      // Reset INR override when customer changes
+      setUseINROverride(false);
 
       // Auto-populate intl banking defaults based on the selected customer's currency
       const selectedCustomer = customers.find(c => c.id === value);
@@ -1308,7 +1314,9 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
         // Create invoice with the reserved invoice number
         const finalInvoiceData = {
           ...invoiceFormData,
-          items: validItems // Use only valid items
+          items: validItems, // Use only valid items
+          // Apply INR override if toggled on for a foreign customer
+          currency_code_override: useINROverride ? 'INR' : undefined
         };
         
         console.log('💾 Saving invoice with data:', {
@@ -1367,6 +1375,7 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
             due_date: invoiceFormData.due_date,
             notes: invoiceFormData.notes,
             terms_conditions: invoiceFormData.terms_conditions,
+            currency_code_override: useINROverride ? 'INR' : undefined,
             items: invoiceFormData.items.map(item => ({
               product_id: item.product_id,
               item_name: item.item_name,
@@ -6174,7 +6183,11 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
   const renderInvoicePreviewContent = () => {
     const { subtotal, discountAmount, taxAmount, total } = calculateInvoiceTotals();
     const selectedCustomer = customers.find(c => c.id === invoiceFormData.customer_id);
-    const currencyInfo = getCurrencyInfo(selectedCustomer);
+    const nativeCurrencyInfo = getCurrencyInfo(selectedCustomer);
+    // Apply INR override: bill foreign customer in INR
+    const currencyInfo = useINROverride && nativeCurrencyInfo.code !== 'INR'
+      ? { symbol: '₹', code: 'INR', name: 'Rupees' }
+      : nativeCurrencyInfo;
     const company = companySettings[0];
     
     // Get dynamic tax label based on customer's country
@@ -6560,6 +6573,8 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
             getCurrencyInfo={getCurrencyInfo}
             formatCurrencyAmount={formatCurrencyAmount}
             formatAmountInWords={formatAmountInWords}
+            useINROverride={useINROverride}
+            onCurrencyToggle={() => setUseINROverride(prev => !prev)}
           />
         )}
         {activeTab === 'customers' && renderCustomers()}
@@ -6898,6 +6913,8 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
                 formatCurrencyAmount={formatCurrencyAmount}
                 formatAmountInWords={formatAmountInWords}
                 modalLoading={modalLoading}
+                useINROverride={useINROverride}
+                onCurrencyToggle={() => setUseINROverride(prev => !prev)}
               />
             ) : invoiceModalMode === 'edit' && selectedInvoice ? (
               <EditInvoice
@@ -6925,6 +6942,8 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
                 formatCurrencyAmount={formatCurrencyAmount}
                 formatAmountInWords={formatAmountInWords}
                 getStatusColor={getStatusColor}
+                useINROverride={useINROverride}
+                onCurrencyToggle={() => setUseINROverride(prev => !prev)}
               />
             ) : null}
 

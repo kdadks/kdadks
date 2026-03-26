@@ -1,5 +1,5 @@
 import React from 'react';
-import { FileText, Package, Plus, Trash } from 'lucide-react';
+import { FileText, Package, Plus, Trash, RefreshCw } from 'lucide-react';
 import type { CreateInvoiceData, CreateInvoiceItemData, Customer, Product, TermsTemplate, CompanySettings, Invoice } from '../../types/invoice';
 import { getTaxLabel, getClassificationCodeLabel } from '../../utils/taxUtils';
 import { ExchangeRateDisplay } from '../ui/ExchangeRateDisplay';
@@ -29,6 +29,8 @@ interface EditInvoiceProps {
   formatCurrencyAmount: (amount: number, currencyInfo: { symbol: string; code: string }) => string;
   formatAmountInWords: (amount: number, currencyName: string) => string;
   getStatusColor: (status: string) => string;
+  useINROverride?: boolean;
+  onCurrencyToggle?: () => void;
 }
 
 export const EditInvoice: React.FC<EditInvoiceProps> = ({
@@ -46,7 +48,7 @@ export const EditInvoice: React.FC<EditInvoiceProps> = ({
   customers,
   products,
   termsTemplates,
-  // companySettings: _companySettings, // Unused for now
+  companySettings,
   // selectedDefaultProduct: _selectedDefaultProduct, // Unused for now
   selectedTermsTemplateId,
   globalHsnCode,
@@ -55,11 +57,19 @@ export const EditInvoice: React.FC<EditInvoiceProps> = ({
   getCurrencyInfo,
   formatCurrencyAmount,
   formatAmountInWords,
-  getStatusColor
+  getStatusColor,
+  useINROverride = false,
+  onCurrencyToggle
 }) => {
   const { subtotal, taxAmount, total } = calculateInvoiceTotals();
   const selectedCustomer = customers.find(c => c.id === invoiceFormData.customer_id);
-  const currencyInfo = getCurrencyInfo(selectedCustomer);
+  const nativeCurrencyInfo = getCurrencyInfo(selectedCustomer);
+  // Allow override to bill foreign customer in INR
+  const currencyInfo = useINROverride && nativeCurrencyInfo.code !== 'INR'
+    ? { symbol: '₹', code: 'INR', name: 'Rupees' }
+    : nativeCurrencyInfo;
+  const isNonINRCustomer = nativeCurrencyInfo.code !== 'INR';
+  const defaultCompany = companySettings.find(c => c.is_default) || companySettings[0];
   // const _activeProducts = products.filter(p => p.is_active); // Unused for now
 
   // Get dynamic tax label based on customer's country
@@ -177,6 +187,31 @@ export const EditInvoice: React.FC<EditInvoiceProps> = ({
                       </option>
                     ))}
                   </select>
+
+                  {/* Currency toggle — visible only for non-INR customers */}
+                  {isNonINRCustomer && onCurrencyToggle && (
+                    <div className="mt-2 flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={onCurrencyToggle}
+                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${
+                          useINROverride
+                            ? 'bg-orange-100 border-orange-400 text-orange-700 hover:bg-orange-200'
+                            : 'bg-slate-100 border-slate-300 text-slate-600 hover:bg-slate-200'
+                        }`}
+                      >
+                        <RefreshCw className="w-3 h-3" />
+                        {useINROverride
+                          ? `Billing in ₹ INR (override)`
+                          : `Billing in ${nativeCurrencyInfo.code} (default)`}
+                      </button>
+                      <span className="text-xs text-slate-500">
+                        {useINROverride
+                          ? `Click to revert to ${nativeCurrencyInfo.code}`
+                          : 'Click to bill this customer in INR instead'}
+                      </span>
+                    </div>
+                  )}
                 </div>
                 
                 <div>
@@ -402,6 +437,46 @@ export const EditInvoice: React.FC<EditInvoiceProps> = ({
                 )}
               </div>
             </div>
+
+            {/* Indian Banking Details - shown when billing foreign customer in INR */}
+            {useINROverride && isNonINRCustomer && defaultCompany && (
+              <div className="bg-white rounded-xl shadow-sm border border-green-200 p-6">
+                <div className="flex items-center mb-4">
+                  <div className="w-5 h-5 mr-2">🏦</div>
+                  <h3 className="text-lg font-semibold text-slate-900">Indian Banking Details</h3>
+                  <span className="ml-2 text-xs text-slate-500 font-normal">(from company settings — shown on PDF)</span>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {defaultCompany.bank_name && (
+                    <div>
+                      <label className="block text-sm font-medium text-slate-500 mb-1">Bank Name</label>
+                      <p className="px-4 py-3 bg-slate-50 border border-slate-200 rounded-lg text-slate-800 font-medium">{defaultCompany.bank_name}</p>
+                    </div>
+                  )}
+                  {defaultCompany.account_number && (
+                    <div>
+                      <label className="block text-sm font-medium text-slate-500 mb-1">Account Number</label>
+                      <p className="px-4 py-3 bg-slate-50 border border-slate-200 rounded-lg text-slate-800 font-mono">{defaultCompany.account_number}</p>
+                    </div>
+                  )}
+                  {defaultCompany.ifsc_code && (
+                    <div>
+                      <label className="block text-sm font-medium text-slate-500 mb-1">IFSC Code</label>
+                      <p className="px-4 py-3 bg-slate-50 border border-slate-200 rounded-lg text-slate-800 font-mono">{defaultCompany.ifsc_code}</p>
+                    </div>
+                  )}
+                  {defaultCompany.branch_name && (
+                    <div>
+                      <label className="block text-sm font-medium text-slate-500 mb-1">Branch</label>
+                      <p className="px-4 py-3 bg-slate-50 border border-slate-200 rounded-lg text-slate-800">{defaultCompany.branch_name}</p>
+                    </div>
+                  )}
+                  {!defaultCompany.bank_name && !defaultCompany.account_number && !defaultCompany.ifsc_code && (
+                    <p className="md:col-span-2 text-sm text-slate-500 italic">No Indian banking details configured. Add them in Company Settings.</p>
+                  )}
+                </div>
+              </div>
+            )}
 
             {/* Notes and Terms */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

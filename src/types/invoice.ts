@@ -326,6 +326,8 @@ export interface CreateInvoiceData {
   intl_bank_address?: string;
   intl_iban?: string;
   intl_sort_code?: string;
+  // Currency override: allows billing a foreign customer in INR
+  currency_code_override?: string;
   items: CreateInvoiceItemData[];
 }
 
@@ -369,6 +371,8 @@ export interface UpdateInvoiceData {
   intl_bank_address?: string;
   intl_iban?: string;
   intl_sort_code?: string;
+  // Currency override: allows billing a foreign customer in INR
+  currency_code_override?: string;
   items?: CreateInvoiceItemData[];
   status?: Invoice['status'];
   payment_status?: Invoice['payment_status'];

@@ -759,6 +759,7 @@ class InvoiceService {
     
     console.log('💱 Invoice currency determination:', {
       customerId: invoiceData.customer_id,
+      currencyOverride: invoiceData.currency_code_override,
       customer: customer ? {
         id: customer.id,
         name: customer.company_name || customer.contact_person,
@@ -766,8 +767,12 @@ class InvoiceService {
         country: customer.country
       } : null
     });
-    
-    if (customer && customer.country) {
+
+    // Allow explicit currency override (e.g. billing a foreign customer in INR)
+    if (invoiceData.currency_code_override) {
+      currencyCode = invoiceData.currency_code_override;
+      console.log('✅ Using currency override:', currencyCode);
+    } else if (customer && customer.country) {
       currencyCode = customer.country.currency_code;
       console.log('✅ Using customer country currency:', {
         countryCode: customer.country.code,
