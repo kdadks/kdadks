@@ -17,18 +17,31 @@ import {
   ArrowLeft,
   Settings,
   EyeOff,
-  RefreshCw
+  RefreshCw,
+  Copy,
+  FileText,
+  User,
+  Phone,
+  Mail,
+  ExternalLink,
+  ChevronRight,
+  Trash2
 } from 'lucide-react';
 import { paymentService } from '../../services/paymentService';
+import { invoiceService } from '../../services/invoiceService';
+import ConfirmDialog from '../ui/ConfirmDialog';
 import { supabase } from '../../config/supabase';
 import { simpleAuth } from '../../utils/simpleAuth';
 import { useToast } from '../ui/ToastProvider';
+import type { Invoice } from '../../types/invoice';
 import type { 
   PaymentRequest, 
   PaymentGateway, 
+  PaymentTransaction,
   PaymentFilters,
   PaymentAnalytics,
-  CreatePaymentRequestData 
+  CreatePaymentRequestData,
+  InvoicePaymentData
 } from '../../types/payment';
 
 interface PaymentManagementProps {
@@ -56,6 +69,8 @@ const PaymentManagement: React.FC<PaymentManagementProps> = ({
   const [showConfigModal, setShowConfigModal] = useState(false);
   const [selectedRequest, setSelectedRequest] = useState<PaymentRequest | null>(null);
   const [selectedGateway, setSelectedGateway] = useState<PaymentGateway | null>(null);
+  const [requestToDelete, setRequestToDelete] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
   
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [isAuthenticating, setIsAuthenticating] = useState(false);
@@ -699,6 +714,25 @@ KDADKS Service Private Limited`,
     loadPaymentRequests(true);
   };
 
+  const handleDeletePaymentRequest = (requestId: string) => {
+    setRequestToDelete(requestId);
+  };
+
+  const confirmDeletePaymentRequest = async () => {
+    if (!requestToDelete) return;
+    setDeleting(true);
+    try {
+      await paymentService.deletePaymentRequest(requestToDelete);
+      setRequestToDelete(null);
+      showSuccess('Payment request deleted successfully.');
+      loadPaymentRequests(false);
+    } catch (err) {
+      showError(err instanceof Error ? err.message : 'Failed to delete payment request');
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   // Filter payment requests based on search term
   const filteredPaymentRequests = paymentRequests.filter(request => {
     if (!searchTerm.trim()) return true;
@@ -1107,6 +1141,9 @@ KDADKS Service Private Limited`,
                         Customer
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Invoice #
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Amount
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -1132,6 +1169,16 @@ KDADKS Service Private Limited`,
                           </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
+                          {((request as any).invoice?.invoice_number || (request.metadata as any)?.invoice_number) ? (
+                            <span className="inline-flex items-center space-x-1 font-mono text-xs font-semibold text-blue-700 bg-blue-50 px-2 py-1 rounded-md border border-blue-200">
+                              <FileText className="w-3 h-3" />
+                              <span>{(request as any).invoice?.invoice_number || (request.metadata as any)?.invoice_number}</span>
+                            </span>
+                          ) : (
+                            <span className="text-xs text-gray-400">—</span>
+                          )}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
                           <div className="text-sm font-medium text-gray-900">
                             {formatCurrency(request.amount, request.currency)}
                           </div>
@@ -1154,6 +1201,7 @@ KDADKS Service Private Limited`,
                               setShowDetailsModal(true);
                             }}
                             className="text-blue-600 hover:text-blue-900"
+                            title="View details"
                           >
                             <Eye className="w-4 h-4" />
                           </button>
@@ -1166,6 +1214,13 @@ KDADKS Service Private Limited`,
                               <Send className="w-4 h-4" />
                             </button>
                           )}
+                          <button
+                            onClick={() => handleDeletePaymentRequest(request.id)}
+                            className="text-red-500 hover:text-red-700"
+                            title="Delete payment request"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
                         </td>
                       </tr>
                     ))}
@@ -1375,6 +1430,7 @@ KDADKS Service Private Limited`,
             setShowDetailsModal(false);
             setSelectedRequest(null);
           }}
+          onRefresh={() => loadPaymentRequests(false)}
         />
       )}
 
@@ -1407,11 +1463,24 @@ KDADKS Service Private Limited`,
           }}
         />
       )}
+
+      {/* Delete Payment Request Confirmation */}
+      <ConfirmDialog
+        isOpen={!!requestToDelete}
+        onClose={() => setRequestToDelete(null)}
+        onConfirm={confirmDeletePaymentRequest}
+        title="Delete Payment Request"
+        message="Are you sure you want to delete this payment request? This will also remove all associated payment links and transactions. This action cannot be undone."
+        confirmText="Delete"
+        cancelText="Cancel"
+        type="danger"
+        loading={deleting}
+      />
     </div>
   );
 };
 
-// Modal Components (simplified for brevity)
+// Modal Components
 interface CreatePaymentRequestModalProps {
   gateways: PaymentGateway[];
   invoices: any[];
@@ -1425,8 +1494,12 @@ const CreatePaymentRequestModal: React.FC<CreatePaymentRequestModalProps> = ({
   onClose,
   onSubmit
 }) => {
-  // Note: _gateways and _invoices are prefixed with _ to indicate they're intentionally unused for now
+  const [step, setStep] = useState<1 | 2>(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [loadingInvoices, setLoadingInvoices] = useState(true);
+  const [unpaidInvoices, setUnpaidInvoices] = useState<Invoice[]>([]);
+  const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
+  const [invoiceSearch, setInvoiceSearch] = useState('');
   const [formData, setFormData] = useState<CreatePaymentRequestData>({
     amount: 0,
     currency: 'INR',
@@ -1434,21 +1507,99 @@ const CreatePaymentRequestModal: React.FC<CreatePaymentRequestModalProps> = ({
     customer_email: '',
     customer_name: '',
     customer_phone: '',
-    expires_in_hours: 24
+    expires_in_hours: 48
   });
+
+  useEffect(() => {
+    loadUnpaidInvoices();
+  }, []);
+
+  const loadUnpaidInvoices = async () => {
+    try {
+      setLoadingInvoices(true);
+      const [pendingRes, partialRes] = await Promise.all([
+        invoiceService.getInvoices({ payment_status: 'pending' }, 1, 200),
+        invoiceService.getInvoices({ payment_status: 'partial' }, 1, 200)
+      ]);
+      const all = [...pendingRes.data, ...partialRes.data]
+        .filter(inv => inv.status !== 'cancelled' && inv.status !== 'paid' && inv.status !== 'draft')
+        .filter((inv, i, arr) => arr.findIndex(x => x.id === inv.id) === i);
+      setUnpaidInvoices(all);
+    } catch (err) {
+      console.error('Failed to load unpaid invoices:', err);
+    } finally {
+      setLoadingInvoices(false);
+    }
+  };
+
+  const filteredInvoices = unpaidInvoices.filter(inv => {
+    if (!invoiceSearch.trim()) return true;
+    const q = invoiceSearch.toLowerCase();
+    return (
+      inv.invoice_number.toLowerCase().includes(q) ||
+      ((inv.customer as any)?.name || inv.customer?.contact_person || inv.customer?.company_name || '').toLowerCase().includes(q) ||
+      (inv.customer?.email || '').toLowerCase().includes(q)
+    );
+  });
+
+  const handleSelectInvoice = (invoice: Invoice) => {
+    setSelectedInvoice(invoice);
+    const customer = invoice.customer;
+    const currency = invoice.currency_code || 'INR';
+    setFormData({
+      invoice_id: invoice.id,
+      amount: invoice.total_amount,
+      currency,
+      description: `Payment for Invoice #${invoice.invoice_number}`,
+      customer_email: customer?.email || '',
+      customer_name: (customer as any)?.name || customer?.contact_person || customer?.company_name || '',
+      customer_phone: customer?.phone || '',
+      expires_in_hours: 48,
+      metadata: {
+        invoice_id: invoice.id,
+        invoice_number: invoice.invoice_number,
+        customer_id: invoice.customer_id
+      }
+    });
+    setStep(2);
+  };
+
+  const handleStandaloneRequest = () => {
+    setSelectedInvoice(null);
+    setFormData({
+      amount: 0,
+      currency: 'INR',
+      description: '',
+      customer_email: '',
+      customer_name: '',
+      customer_phone: '',
+      expires_in_hours: 48
+    });
+    setStep(2);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
     try {
       await onSubmit(formData);
-      // onSubmit should handle closing the modal on success
     } catch (error) {
-      // Error handling is done in the parent component
       console.error('Form submission error:', error);
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const fmtAmount = (amount: number, currency: string) => {
+    const sym: Record<string, string> = { INR: '₹', USD: '$', EUR: '€', GBP: '£' };
+    return `${sym[currency] || currency + ' '}${amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
+  };
+
+  const getInvoiceBadge = (inv: Invoice) => {
+    if (inv.status === 'overdue') return { label: 'Overdue', cls: 'bg-red-100 text-red-700 border-red-200' };
+    if (inv.payment_status === 'partial') return { label: 'Partial', cls: 'bg-yellow-100 text-yellow-700 border-yellow-200' };
+    if (inv.status === 'sent') return { label: 'Sent', cls: 'bg-blue-100 text-blue-700 border-blue-200' };
+    return { label: inv.status, cls: 'bg-gray-100 text-gray-600 border-gray-200' };
   };
 
   return (
@@ -1458,103 +1609,293 @@ const CreatePaymentRequestModal: React.FC<CreatePaymentRequestModalProps> = ({
           <div className="absolute inset-0 bg-gray-500 opacity-75" onClick={onClose}></div>
         </div>
 
-        <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
-          <form onSubmit={handleSubmit} className="p-6">
-            <h3 className="text-lg font-medium text-gray-900 mb-4">Create Payment Request</h3>
-            
-            <div className="space-y-4">
+        <div className="inline-block align-bottom bg-white rounded-xl text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-3xl sm:w-full">
+          {/* Header */}
+          <div className="bg-blue-600 px-6 py-4 flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <CreditCard className="w-6 h-6 text-white" />
               <div>
-                <label className="block text-sm font-medium text-gray-700">Amount</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  required
-                  value={formData.amount}
-                  onChange={(e) => setFormData({ ...formData, amount: parseFloat(e.target.value) })}
-                  className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
+                <h3 className="text-lg font-semibold text-white">Create Payment Request</h3>
+                <p className="text-blue-200 text-sm">{step === 1 ? 'Step 1 of 2 — Select Invoice' : 'Step 2 of 2 — Review & Send'}</p>
               </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Currency</label>
-                <select
-                  value={formData.currency}
-                  onChange={(e) => setFormData({ ...formData, currency: e.target.value })}
-                  className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                >
-                  <option value="INR">INR</option>
-                  <option value="USD">USD</option>
-                  <option value="EUR">EUR</option>
-                  <option value="GBP">GBP</option>
-                </select>
+            </div>
+            <button onClick={onClose} className="text-white hover:text-blue-200 transition-colors">
+              <XCircle className="w-6 h-6" />
+            </button>
+          </div>
+
+          {/* Step Indicator */}
+          <div className="flex border-b border-gray-200">
+            {[
+              { n: 1, label: 'Select Invoice' },
+              { n: 2, label: 'Confirm & Send' }
+            ].map(s => (
+              <div
+                key={s.n}
+                className={`flex-1 flex items-center justify-center py-3 text-sm font-medium space-x-2 ${
+                  step === s.n
+                    ? 'text-blue-700 bg-blue-50 border-b-2 border-blue-600'
+                    : step > s.n
+                    ? 'text-green-600 bg-green-50'
+                    : 'text-gray-400 bg-gray-50'
+                }`}
+              >
+                <span className={`inline-flex items-center justify-center w-5 h-5 rounded-full text-xs font-bold ${
+                  step > s.n ? 'bg-green-500 text-white' :
+                  step === s.n ? 'bg-blue-600 text-white' : 'bg-gray-300 text-gray-500'
+                }`}>
+                  {step > s.n ? '✓' : s.n}
+                </span>
+                <span>{s.label}</span>
               </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Customer Email</label>
-                <input
-                  type="email"
-                  required
-                  value={formData.customer_email}
-                  onChange={(e) => setFormData({ ...formData, customer_email: e.target.value })}
-                  className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Customer Name</label>
+            ))}
+          </div>
+
+          {/* Step 1: Invoice Selection */}
+          {step === 1 && (
+            <div className="p-6">
+              <div className="relative mb-4">
+                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
                 <input
                   type="text"
-                  value={formData.customer_name}
-                  onChange={(e) => setFormData({ ...formData, customer_name: e.target.value })}
-                  className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="Search by invoice #, customer name or email..."
+                  value={invoiceSearch}
+                  onChange={e => setInvoiceSearch(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
                 />
               </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Customer Phone (Optional)</label>
-                <input
-                  type="tel"
-                  value={formData.customer_phone || ''}
-                  onChange={(e) => setFormData({ ...formData, customer_phone: e.target.value })}
-                  className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Description</label>
-                <textarea
-                  rows={3}
-                  value={formData.description}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
+
+              {loadingInvoices ? (
+                <div className="flex items-center justify-center py-16">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mr-3"></div>
+                  <span className="text-gray-500">Loading unpaid invoices...</span>
+                </div>
+              ) : filteredInvoices.length === 0 ? (
+                <div className="text-center py-12 text-gray-500">
+                  <FileText className="w-14 h-14 mx-auto mb-3 text-gray-300" />
+                  <p className="font-medium text-gray-700">No unpaid invoices found</p>
+                  <p className="text-sm text-gray-400 mt-1">
+                    {invoiceSearch ? 'Try a different search term, or' : 'All invoices are paid, or'} create a standalone request below.
+                  </p>
+                </div>
+              ) : (
+                <div className="border border-gray-200 rounded-lg overflow-hidden" style={{ maxHeight: '360px', overflowY: 'auto' }}>
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50 sticky top-0 z-10">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Invoice #</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Customer</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Amount</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Due Date</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Status</th>
+                        <th className="px-4 py-3 w-8"></th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-100">
+                      {filteredInvoices.map(inv => {
+                        const badge = getInvoiceBadge(inv);
+                        return (
+                          <tr
+                            key={inv.id}
+                            className="hover:bg-blue-50 cursor-pointer transition-colors"
+                            onClick={() => handleSelectInvoice(inv)}
+                          >
+                            <td className="px-4 py-3">
+                              <span className="font-mono text-sm font-semibold text-blue-700">{inv.invoice_number}</span>
+                            </td>
+                            <td className="px-4 py-3">
+                              <div className="text-sm font-medium text-gray-900">{(inv.customer as any)?.name || inv.customer?.contact_person || inv.customer?.company_name || 'Unknown'}</div>
+                              <div className="text-xs text-gray-500">{inv.customer?.email || ''}</div>
+                            </td>
+                            <td className="px-4 py-3">
+                              <span className="text-sm font-semibold text-gray-900">
+                                {fmtAmount(inv.total_amount, inv.currency_code || 'INR')}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-sm text-gray-600">
+                              {inv.due_date ? new Date(inv.due_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
+                            </td>
+                            <td className="px-4 py-3">
+                              <span className={`px-2 py-0.5 text-xs font-semibold rounded-full border ${badge.cls}`}>
+                                {badge.label}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3">
+                              <ChevronRight className="w-4 h-4 text-blue-400" />
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              <div className="mt-5 flex items-center justify-between">
+                <button
+                  type="button"
+                  onClick={handleStandaloneRequest}
+                  className="text-sm text-blue-600 hover:text-blue-800 font-medium underline-offset-2 hover:underline"
+                >
+                  + Create standalone payment request (without invoice)
+                </button>
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                >
+                  Cancel
+                </button>
               </div>
             </div>
-            
-            <div className="mt-6 flex justify-end space-x-3">
-              <button
-                type="button"
-                onClick={onClose}
-                disabled={isSubmitting}
-                className="px-4 py-2 text-sm font-medium bg-gradient-to-r from-red-500 to-red-600 text-white rounded-md hover:from-red-600 hover:to-red-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={isSubmitting}
-                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
-              >
-                {isSubmitting && (
-                  <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                )}
-                {isSubmitting ? 'Creating...' : 'Create & Send'}
-              </button>
-            </div>
-          </form>
+          )}
+
+          {/* Step 2: Review & Send */}
+          {step === 2 && (
+            <form onSubmit={handleSubmit} className="p-6">
+              {/* Selected invoice banner */}
+              {selectedInvoice && (
+                <div className="mb-5 bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <div className="flex items-center space-x-2 mb-3">
+                    <FileText className="w-4 h-4 text-blue-600" />
+                    <span className="text-sm font-semibold text-blue-800">Linked Invoice</span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-4 text-sm">
+                    <div>
+                      <p className="text-xs text-gray-500">Invoice #</p>
+                      <p className="font-mono font-semibold text-blue-700">{selectedInvoice.invoice_number}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500">Due Date</p>
+                      <p className="font-medium text-gray-800">
+                        {selectedInvoice.due_date
+                          ? new Date(selectedInvoice.due_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+                          : '—'}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500">Invoice Total</p>
+                      <p className="font-semibold text-green-700">
+                        {fmtAmount(selectedInvoice.total_amount, selectedInvoice.currency_code || 'INR')}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Amount *</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    required
+                    min="1"
+                    value={formData.amount || ''}
+                    onChange={e => setFormData({ ...formData, amount: parseFloat(e.target.value) || 0 })}
+                    className="block w-full border border-gray-300 rounded-lg px-3 py-2.5 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Currency</label>
+                  <select
+                    value={formData.currency}
+                    onChange={e => setFormData({ ...formData, currency: e.target.value })}
+                    className="block w-full border border-gray-300 rounded-lg px-3 py-2.5 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    <option value="INR">INR (₹)</option>
+                    <option value="USD">USD ($)</option>
+                    <option value="EUR">EUR (€)</option>
+                    <option value="GBP">GBP (£)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Customer Email *</label>
+                  <input
+                    type="email"
+                    required
+                    value={formData.customer_email}
+                    onChange={e => setFormData({ ...formData, customer_email: e.target.value })}
+                    className="block w-full border border-gray-300 rounded-lg px-3 py-2.5 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Customer Name</label>
+                  <input
+                    type="text"
+                    value={formData.customer_name}
+                    onChange={e => setFormData({ ...formData, customer_name: e.target.value })}
+                    className="block w-full border border-gray-300 rounded-lg px-3 py-2.5 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Phone (Optional)</label>
+                  <input
+                    type="tel"
+                    value={formData.customer_phone || ''}
+                    onChange={e => setFormData({ ...formData, customer_phone: e.target.value })}
+                    className="block w-full border border-gray-300 rounded-lg px-3 py-2.5 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Expires In</label>
+                  <select
+                    value={formData.expires_in_hours}
+                    onChange={e => setFormData({ ...formData, expires_in_hours: parseInt(e.target.value) })}
+                    className="block w-full border border-gray-300 rounded-lg px-3 py-2.5 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    <option value={24}>24 hours</option>
+                    <option value={48}>48 hours</option>
+                    <option value={72}>72 hours (3 days)</option>
+                    <option value={168}>168 hours (7 days)</option>
+                  </select>
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                  <textarea
+                    rows={2}
+                    value={formData.description}
+                    onChange={e => setFormData({ ...formData, description: e.target.value })}
+                    className="block w-full border border-gray-300 rounded-lg px-3 py-2.5 focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                  />
+                </div>
+              </div>
+
+              <div className="mt-6 flex justify-between items-center">
+                <button
+                  type="button"
+                  onClick={() => setStep(1)}
+                  className="px-4 py-2 text-sm font-medium text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors flex items-center space-x-1"
+                >
+                  <span>← Back to Invoice Selection</span>
+                </button>
+                <div className="flex space-x-3">
+                  <button
+                    type="button"
+                    onClick={onClose}
+                    disabled={isSubmitting}
+                    className="px-4 py-2 text-sm font-medium bg-gradient-to-r from-red-500 to-red-600 text-white rounded-lg hover:from-red-600 hover:to-red-700 transition-all disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSubmitting || !formData.customer_email || formData.amount <= 0}
+                    className="px-5 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2 transition-colors"
+                  >
+                    {isSubmitting && (
+                      <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                    )}
+                    <Send className="w-4 h-4" />
+                    <span>{isSubmitting ? 'Creating...' : 'Create & Send Payment Link'}</span>
+                  </button>
+                </div>
+              </div>
+            </form>
+          )}
         </div>
       </div>
     </div>
@@ -1564,15 +1905,113 @@ const CreatePaymentRequestModal: React.FC<CreatePaymentRequestModalProps> = ({
 interface PaymentDetailsModalProps {
   request: PaymentRequest;
   onClose: () => void;
+  onRefresh?: () => void;
 }
 
-const PaymentDetailsModal: React.FC<PaymentDetailsModalProps> = ({ request, onClose }) => {
-  // Helper function to get customer name
-  const getCustomerName = (req: any): string => {
-    if (req.customer_name) return req.customer_name;
-    if (req.invoice?.customer?.name) return req.invoice.customer.name;
-    return 'Unknown';
+const PaymentDetailsModal: React.FC<PaymentDetailsModalProps> = ({ request, onClose, onRefresh }) => {
+  const [transactions, setTransactions] = useState<PaymentTransaction[]>([]);
+  const [paymentLink, setPaymentLink] = useState('');
+  const [loadingDetails, setLoadingDetails] = useState(true);
+  const [copied, setCopied] = useState(false);
+  const [markingPaid, setMarkingPaid] = useState(false);
+  const { showSuccess, showError } = useToast();
+
+  useEffect(() => {
+    loadDetails();
+  }, [request.id]);
+
+  const loadDetails = async () => {
+    try {
+      setLoadingDetails(true);
+      const [txns, links] = await Promise.all([
+        paymentService.getTransactionsByPaymentRequest(request.id),
+        paymentService.getPaymentLinksByRequest(request.id)
+      ]);
+      setTransactions(txns);
+      if (links.length > 0) {
+        setPaymentLink(links[0].checkout_url || `${window.location.origin}/payment/${links[0].link_token}`);
+      }
+    } catch (err) {
+      console.error('Failed to load payment details:', err);
+    } finally {
+      setLoadingDetails(false);
+    }
   };
+
+  const handleCopyLink = async () => {
+    if (!paymentLink) return;
+    try {
+      await navigator.clipboard.writeText(paymentLink);
+      setCopied(true);
+      showSuccess('Payment link copied to clipboard!');
+      setTimeout(() => setCopied(false), 2500);
+    } catch {
+      showError('Failed to copy link. Please copy it manually.');
+    }
+  };
+
+  const handleMarkAsPaid = async () => {
+    if (!window.confirm('Mark this payment as received manually? This will update the payment request and linked invoice to paid status.')) return;
+    setMarkingPaid(true);
+    try {
+      const manualRef = `manual_${Date.now()}`;
+      await paymentService.updatePaymentRequestStatus(request.id, 'completed', {
+        gateway_payment_id: manualRef
+      } as any);
+
+      if ((request as any).invoice_id) {
+        const paymentData: InvoicePaymentData = {
+          amount: request.amount,
+          paymentMethod: 'manual',
+          referenceNumber: manualRef,
+          paymentDate: new Date().toISOString(),
+          currency: request.currency,
+          gateway: 'manual'
+        };
+        await paymentService.markInvoiceAsPaid((request as any).invoice_id, paymentData);
+      }
+
+      showSuccess('Payment marked as paid. Invoice updated successfully!');
+      if (onRefresh) onRefresh();
+      onClose();
+    } catch (err) {
+      showError(err instanceof Error ? err.message : 'Failed to mark as paid');
+    } finally {
+      setMarkingPaid(false);
+    }
+  };
+
+  const getCustomerDisplay = (req: PaymentRequest): { name: string; email: string; phone: string } => ({
+    name: req.customer_name || (req as any).invoice?.customer?.name || 'Unknown',
+    email: req.customer_email || '',
+    phone: req.customer_phone || ''
+  });
+
+  const fmtCurrency = (amount: number, currency: string) => {
+    const sym: Record<string, string> = { INR: '₹', USD: '$', EUR: '€', GBP: '£' };
+    return `${sym[currency] || currency + ' '}${amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
+  };
+
+  const statusConfig: Record<string, { label: string; cls: string; bg: string }> = {
+    completed: { label: 'Completed', cls: 'text-green-700', bg: 'bg-green-500' },
+    pending: { label: 'Pending', cls: 'text-yellow-700', bg: 'bg-yellow-500' },
+    processing: { label: 'Processing', cls: 'text-blue-700', bg: 'bg-blue-500' },
+    failed: { label: 'Failed', cls: 'text-red-700', bg: 'bg-red-500' },
+    cancelled: { label: 'Cancelled', cls: 'text-gray-700', bg: 'bg-gray-500' },
+    expired: { label: 'Expired', cls: 'text-orange-700', bg: 'bg-orange-500' }
+  };
+
+  const txnStatusColor: Record<string, string> = {
+    success: 'bg-green-100 text-green-800 border-green-200',
+    failed: 'bg-red-100 text-red-800 border-red-200',
+    pending: 'bg-yellow-100 text-yellow-800 border-yellow-200',
+    processing: 'bg-blue-100 text-blue-800 border-blue-200',
+    refunded: 'bg-purple-100 text-purple-800 border-purple-200'
+  };
+
+  const invoiceNumber = (request as any).invoice?.invoice_number || (request.metadata as any)?.invoice_number;
+  const customer = getCustomerDisplay(request);
+  const sc = statusConfig[request.status] || statusConfig.pending;
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto">
@@ -1581,51 +2020,213 @@ const PaymentDetailsModal: React.FC<PaymentDetailsModalProps> = ({ request, onCl
           <div className="absolute inset-0 bg-gray-500 opacity-75" onClick={onClose}></div>
         </div>
 
-        <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
-          <div className="p-6">
-            <h3 className="text-lg font-medium text-gray-900 mb-4">Payment Request Details</h3>
-            
-            <div className="space-y-4">
+        <div className="inline-block align-bottom bg-white rounded-xl text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-2xl sm:w-full">
+          {/* Header */}
+          <div className="bg-gray-900 px-6 py-4 flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <CreditCard className="w-6 h-6 text-gray-300" />
               <div>
-                <label className="block text-sm font-medium text-gray-700">Amount</label>
-                <p className="text-lg font-semibold">
-                  {new Intl.NumberFormat('en-US', {
-                    style: 'currency',
-                    currency: request.currency
-                  }).format(request.amount)}
-                </p>
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Customer</label>
-                <p>{getCustomerName(request)}</p>
-                <p className="text-sm text-gray-600">{request.customer_email}</p>
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Status</label>
-                <p className="capitalize">{request.status}</p>
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Description</label>
-                <p>{request.description || 'No description'}</p>
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Created</label>
-                <p>{new Date(request.created_at).toLocaleString()}</p>
+                <h3 className="text-lg font-semibold text-white">Payment Request Details</h3>
+                <p className="text-gray-400 text-xs font-mono truncate max-w-xs">{request.id}</p>
               </div>
             </div>
-            
-            <div className="mt-6 flex justify-end">
-              <button
-                onClick={onClose}
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
-              >
-                Close
+            <div className="flex items-center space-x-3">
+              <span className={`px-3 py-1 text-xs font-bold rounded-full text-white ${sc.bg}`}>
+                {sc.label}
+              </span>
+              <button onClick={onClose} className="text-gray-400 hover:text-white transition-colors">
+                <XCircle className="w-5 h-5" />
               </button>
             </div>
+          </div>
+
+          <div className="p-6 max-h-[78vh] overflow-y-auto space-y-5">
+            {/* Amount Hero */}
+            <div className="text-center py-5 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl border border-blue-100">
+              <p className="text-sm text-gray-500 mb-1 font-medium uppercase tracking-wide">Payment Amount</p>
+              <p className="text-4xl font-bold text-gray-900">{fmtCurrency(request.amount, request.currency)}</p>
+              {invoiceNumber && (
+                <div className="mt-2 flex items-center justify-center space-x-1.5 text-blue-600">
+                  <FileText className="w-4 h-4" />
+                  <span className="text-sm font-semibold">Invoice #{invoiceNumber}</span>
+                </div>
+              )}
+              <p className="text-xs text-gray-500 mt-1">
+                Created {new Date(request.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' })}
+              </p>
+            </div>
+
+            {/* Customer Details */}
+            <div className="bg-white border border-gray-200 rounded-lg p-4">
+              <h4 className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3">Customer Details</h4>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="flex items-start space-x-2">
+                  <User className="w-4 h-4 text-gray-400 mt-0.5 flex-shrink-0" />
+                  <div>
+                    <p className="text-xs text-gray-500">Name</p>
+                    <p className="text-sm font-medium text-gray-900">{customer.name}</p>
+                  </div>
+                </div>
+                <div className="flex items-start space-x-2">
+                  <Mail className="w-4 h-4 text-gray-400 mt-0.5 flex-shrink-0" />
+                  <div>
+                    <p className="text-xs text-gray-500">Email</p>
+                    <p className="text-sm font-medium text-gray-900 break-all">{customer.email || '—'}</p>
+                  </div>
+                </div>
+                <div className="flex items-start space-x-2">
+                  <Phone className="w-4 h-4 text-gray-400 mt-0.5 flex-shrink-0" />
+                  <div>
+                    <p className="text-xs text-gray-500">Phone</p>
+                    <p className="text-sm font-medium text-gray-900">{customer.phone || '—'}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Request Metadata */}
+            <div className="bg-white border border-gray-200 rounded-lg p-4">
+              <h4 className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3">Request Info</h4>
+              <div className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
+                {request.description && (
+                  <div className="col-span-2">
+                    <p className="text-xs text-gray-500">Description</p>
+                    <p className="font-medium text-gray-900">{request.description}</p>
+                  </div>
+                )}
+                <div>
+                  <p className="text-xs text-gray-500">Expires</p>
+                  <p className="font-medium">{request.expires_at ? new Date(request.expires_at).toLocaleString('en-IN') : 'No expiry'}</p>
+                </div>
+                {(request as any).completed_at && (
+                  <div>
+                    <p className="text-xs text-gray-500">Paid At</p>
+                    <p className="font-semibold text-green-600">{new Date((request as any).completed_at).toLocaleString('en-IN')}</p>
+                  </div>
+                )}
+                {(request as any).gateway_order_id && (
+                  <div className="col-span-2">
+                    <p className="text-xs text-gray-500">Gateway Order ID</p>
+                    <p className="font-mono text-xs text-gray-700">{(request as any).gateway_order_id}</p>
+                  </div>
+                )}
+                {(request as any).gateway_payment_id && (
+                  <div className="col-span-2">
+                    <p className="text-xs text-gray-500">Gateway Payment ID</p>
+                    <p className="font-mono text-xs text-blue-700">{(request as any).gateway_payment_id}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Payment Link */}
+            {loadingDetails ? null : paymentLink ? (
+              <div className="bg-white border border-gray-200 rounded-lg p-4">
+                <h4 className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3">Payment Link</h4>
+                <div className="flex items-center space-x-2 bg-blue-50 border border-blue-200 rounded-lg p-3">
+                  <ExternalLink className="w-4 h-4 text-blue-500 flex-shrink-0" />
+                  <a
+                    href={paymentLink}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-blue-600 text-sm flex-1 truncate hover:underline"
+                  >
+                    {paymentLink}
+                  </a>
+                  <button
+                    onClick={handleCopyLink}
+                    className={`flex-shrink-0 flex items-center space-x-1 px-3 py-1.5 text-xs rounded-md font-semibold transition-colors ${
+                      copied
+                        ? 'bg-green-100 text-green-700 border border-green-300'
+                        : 'bg-white border border-blue-300 text-blue-700 hover:bg-blue-50'
+                    }`}
+                  >
+                    <Copy className="w-3.5 h-3.5" />
+                    <span>{copied ? 'Copied!' : 'Copy'}</span>
+                  </button>
+                </div>
+              </div>
+            ) : null}
+
+            {/* Transaction History */}
+            <div className="bg-white border border-gray-200 rounded-lg p-4">
+              <h4 className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3">Transaction History</h4>
+              {loadingDetails ? (
+                <div className="flex items-center justify-center py-8">
+                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mr-2"></div>
+                  <span className="text-sm text-gray-500">Loading transactions...</span>
+                </div>
+              ) : transactions.length === 0 ? (
+                <div className="text-center py-8 bg-gray-50 rounded-lg">
+                  <Clock className="w-8 h-8 mx-auto mb-2 text-gray-300" />
+                  <p className="text-sm text-gray-500">No transactions recorded yet</p>
+                  {request.status === 'pending' && (
+                    <p className="text-xs text-gray-400 mt-1">Waiting for customer payment</p>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {transactions.map(txn => (
+                    <div key={txn.id} className="border border-gray-200 rounded-lg p-3 flex items-center justify-between">
+                      <div className="space-y-1">
+                        <div className="flex items-center space-x-2">
+                          <span className={`px-2 py-0.5 text-xs font-semibold rounded-full border ${txnStatusColor[txn.status] || 'bg-gray-100 text-gray-700 border-gray-200'}`}>
+                            {txn.status}
+                          </span>
+                          <span className="text-xs text-gray-500 capitalize">
+                            {txn.payment_method || 'unknown'}
+                          </span>
+                        </div>
+                        {txn.gateway_transaction_id && (
+                          <p className="text-xs font-mono text-gray-500">{txn.gateway_transaction_id}</p>
+                        )}
+                        <p className="text-xs text-gray-400">{new Date(txn.created_at).toLocaleString('en-IN')}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-sm font-bold text-gray-900">{fmtCurrency(txn.amount, txn.currency)}</p>
+                        {txn.gateway_fee && (
+                          <p className="text-xs text-gray-500">Fee: {fmtCurrency(txn.gateway_fee, txn.currency)}</p>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Admin: Mark as Paid */}
+            {(request.status === 'pending' || request.status === 'processing') && (
+              <div className="border border-amber-200 bg-amber-50 rounded-lg p-4">
+                <h4 className="text-xs font-bold text-amber-800 uppercase tracking-widest mb-2">Admin Action</h4>
+                <p className="text-sm text-amber-700 mb-3">
+                  Mark this payment as received offline (bank transfer, cheque, cash, etc.). This will update the payment request and linked invoice to paid status.
+                </p>
+                <button
+                  onClick={handleMarkAsPaid}
+                  disabled={markingPaid}
+                  className="w-full flex items-center justify-center space-x-2 px-4 py-2.5 bg-green-600 text-white text-sm font-semibold rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  {markingPaid ? (
+                    <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                  ) : (
+                    <CheckCircle className="w-4 h-4" />
+                  )}
+                  <span>{markingPaid ? 'Updating...' : 'Mark as Paid (Manual / Offline)'}</span>
+                </button>
+              </div>
+            )}
+          </div>
+
+          <div className="px-6 py-4 bg-gray-50 flex justify-end border-t border-gray-200">
+            <button
+              onClick={onClose}
+              className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+            >
+              Close
+            </button>
           </div>
         </div>
       </div>

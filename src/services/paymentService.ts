@@ -124,6 +124,19 @@ class PaymentService {
   // PAYMENT REQUESTS
   // =====================================================
 
+  async deletePaymentRequest(id: string): Promise<void> {
+    // Delete associated payment links and transactions first to avoid FK violations
+    await supabase.from('payment_links').delete().eq('payment_request_id', id);
+    await supabase.from('payment_transactions').delete().eq('payment_request_id', id);
+
+    const { error } = await supabase
+      .from('payment_requests')
+      .delete()
+      .eq('id', id);
+
+    if (error) throw new Error(`Failed to delete payment request: ${error.message}`);
+  }
+
   async createPaymentRequest(data: CreatePaymentRequestData): Promise<PaymentRequest> {
     // Get current user
     const { data: { user } } = await supabase.auth.getUser();
