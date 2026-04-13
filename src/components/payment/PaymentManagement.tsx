@@ -238,6 +238,13 @@ const PaymentManagement: React.FC<PaymentManagementProps> = ({
           // Use the checkout URL from the payment link instead of manually generating it
           const paymentUrl = paymentLink.checkout_url;
           console.log('Payment URL from service:', paymentUrl);
+
+          // Compute human-readable expiry string for the email
+          const expiryDateStr = request.expires_at
+            ? new Date(request.expires_at).toLocaleString('en-IN', { dateStyle: 'long', timeStyle: 'short' })
+            : data.expires_in_hours
+            ? `${data.expires_in_hours} hours from now`
+            : '48 hours from now';
           
           // DEBUG: Test if payment URL is accessible
           console.group('🔗 PAYMENT URL ACCESSIBILITY TEST');
@@ -331,6 +338,11 @@ const PaymentManagement: React.FC<PaymentManagementProps> = ({
                 </p>
             </div>
             
+            <!-- Expiry Warning -->
+            <div style="background: #fef3c7; border: 1px solid #f59e0b; border-radius: 6px; padding: 15px 20px; margin: 20px 0;">
+                <p style="color: #92400e; font-size: 14px; margin: 0;"><strong>⏰ Important:</strong> This payment link will expire on <strong>${expiryDateStr}</strong>. Please complete your payment before the link expires.</p>
+            </div>
+            
             <p style="color: #374151; font-size: 16px; line-height: 1.6; margin: 20px 0 0 0;">Please complete your payment at your earliest convenience. If you have any questions, please contact us.</p>
         </div>
         
@@ -383,6 +395,8 @@ Request ID: ${request.id}
 
 To complete your payment, please visit: ${paymentUrl}
 
+IMPORTANT: This payment link will expire on ${expiryDateStr}. Please complete your payment before the link expires.
+
 Please complete your payment at your earliest convenience.
 
 Best regards,
@@ -409,6 +423,8 @@ Amount: ${formatCurrency(data.amount, data.currency)}
 Request ID: ${request.id}
 
 To complete your payment, please visit: ${paymentUrl}
+
+IMPORTANT: This payment link will expire on ${expiryDateStr}. Please complete your payment before the link expires.
 
 Please complete your payment at your earliest convenience.
 
