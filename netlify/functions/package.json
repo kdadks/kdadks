@@ -3,8 +3,10 @@
   "version": "1.0.0",
   "description": "Netlify Functions for KDADKS website",
   "dependencies": {
-    "nodemailer": "^6.9.8",
     "@google-cloud/recaptcha-enterprise": "^5.6.0",
-    "node-fetch": "^2.6.7"
+    "@supabase/supabase-js": "^2.103.0",
+    "node-fetch": "^2.6.7",
+    "nodemailer": "^6.9.8",
+    "razorpay": "^2.9.6"
   }
 }
