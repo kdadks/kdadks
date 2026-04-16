@@ -2,7 +2,7 @@
 // Payment Gateway System Type Definitions
 // =====================================================
 // Comprehensive TypeScript types for the payment gateway system
-// supporting Razorpay, Stripe, PayPal for domestic and international payments
+// supporting Stripe and PayPal for international payments
 
 // =====================================================
 // CORE PAYMENT TYPES
@@ -11,7 +11,7 @@
 export interface PaymentGateway {
   id: string;
   name: string;
-  provider_type: 'razorpay' | 'stripe' | 'paypal' | 'other';
+  provider_type: 'stripe' | 'paypal' | 'other';
   settings: PaymentGatewaySettings;
   is_active: boolean;
   is_sandbox: boolean;
@@ -29,10 +29,6 @@ export interface PaymentGatewaySettings {
   secret_key?: string;
   webhook_secret?: string;
   environment?: 'sandbox' | 'production';
-  
-  // Razorpay specific
-  key_id?: string;
-  key_secret?: string;
   
   // Stripe specific
   publishable_key?: string;
@@ -253,63 +249,6 @@ export interface PaymentWebhookResult {
 }
 
 // =====================================================
-// RAZORPAY SPECIFIC TYPES
-// =====================================================
-
-export interface RazorpaySettings extends PaymentGatewaySettings {
-  key_id: string;
-  key_secret: string;
-  webhook_secret?: string;
-  environment: 'sandbox' | 'production';
-}
-
-export interface RazorpayOrderRequest {
-  amount: number; // Amount in paise
-  currency: string;
-  receipt?: string;
-  notes?: Record<string, string>;
-  partial_payment?: boolean;
-}
-
-export interface RazorpayOrderResponse {
-  id: string;
-  entity: 'order';
-  amount: number;
-  amount_paid: number;
-  amount_due: number;
-  currency: string;
-  receipt?: string;
-  status: 'created' | 'attempted' | 'paid';
-  attempts: number;
-  notes: Record<string, string>;
-  created_at: number;
-}
-
-export interface RazorpayPaymentResponse {
-  id: string;
-  entity: 'payment';
-  amount: number;
-  currency: string;
-  status: 'created' | 'authorized' | 'captured' | 'refunded' | 'failed';
-  order_id?: string;
-  method: string;
-  captured: boolean;
-  description?: string;
-  card_id?: string;
-  bank?: string;
-  wallet?: string;
-  vpa?: string;
-  email: string;
-  contact: string;
-  notes: Record<string, string>;
-  fee?: number;
-  tax?: number;
-  error_code?: string;
-  error_description?: string;
-  created_at: number;
-}
-
-// =====================================================
 // STRIPE SPECIFIC TYPES
 // =====================================================
 
@@ -517,15 +456,6 @@ export interface WebhookEvent {
   created_at: string;
   signature?: string;
 }
-
-// Razorpay webhook events
-export type RazorpayWebhookEventType = 
-  | 'payment.authorized'
-  | 'payment.captured'
-  | 'payment.failed'
-  | 'refund.created'
-  | 'refund.processed'
-  | 'order.paid';
 
 // Stripe webhook events  
 export type StripeWebhookEventType =

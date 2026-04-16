@@ -1416,10 +1416,9 @@ KDADKS Service Private Limited`,
             <div className="bg-blue-50 rounded-xl p-6">
               <h3 className="text-lg font-medium text-blue-900 mb-2">Need Help Setting Up Gateways?</h3>
               <p className="text-blue-800 mb-4">
-                Payment gateways allow you to accept online payments from customers. Popular options include Razorpay, Stripe, and PayPal.
+                Payment gateways allow you to accept online payments from customers. Popular options include Stripe and PayPal.
               </p>
               <div className="space-y-2 text-sm text-blue-800">
-                <p>• <strong>Razorpay:</strong> Popular in India, supports UPI, cards, wallets, and net banking</p>
                 <p>• <strong>Stripe:</strong> Global payment processor with excellent developer tools</p>
                 <p>• <strong>PayPal:</strong> Widely trusted international payment solution</p>
               </div>
@@ -2480,7 +2479,7 @@ interface AddGatewayModalProps {
 const AddGatewayModal: React.FC<AddGatewayModalProps> = ({ onClose, onSave }) => {
   const [formData, setFormData] = useState({
     name: '',
-    provider_type: 'razorpay' as 'razorpay' | 'stripe' | 'paypal' | 'other',
+    provider_type: 'stripe' as 'stripe' | 'paypal' | 'other',
     is_active: true,
     is_sandbox: true,
     transaction_fee_percentage: 2.5,
@@ -2558,7 +2557,6 @@ const AddGatewayModal: React.FC<AddGatewayModalProps> = ({ onClose, onSave }) =>
                   onChange={(e) => setFormData({ ...formData, provider_type: e.target.value as any })}
                   className="block w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 >
-                  <option value="razorpay">Razorpay</option>
                   <option value="stripe">Stripe</option>
                   <option value="paypal">PayPal</option>
                   <option value="other">Other</option>

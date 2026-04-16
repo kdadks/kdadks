@@ -108,18 +108,6 @@
   force = true
 
 [[redirects]]
-  from = "/api/create-razorpay-order"
-  to = "/.netlify/functions/create-razorpay-order"
-  status = 200
-  force = true
-
-[[redirects]]
-  from = "/api/webhooks/razorpay"
-  to = "/.netlify/functions/payment-webhook"
-  status = 200
-  force = true
-
-[[redirects]]
   from = "/api/webhooks/stripe"  
   to = "/.netlify/functions/payment-webhook"
   status = 200

@@ -26,7 +26,7 @@ export const PaymentPage: React.FC = () => {
 
   // Get status from URL params (from webhook redirect)
   const statusFromUrl = searchParams.get('status');
-  const gatewayRef = searchParams.get('payment_id') || searchParams.get('razorpay_payment_id');
+  const gatewayRef = searchParams.get('payment_id');
 
   useEffect(() => {
     if (requestId) {

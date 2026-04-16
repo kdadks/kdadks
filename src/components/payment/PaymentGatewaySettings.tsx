@@ -94,8 +94,6 @@ export const PaymentGatewaySettings: React.FC = () => {
 
   const getProviderIcon = (providerType: string) => {
     switch (providerType) {
-      case 'razorpay':
-        return <CreditCard className="w-8 h-8 text-blue-600" />;
       case 'stripe':
         return <Globe className="w-8 h-8 text-purple-600" />;
       case 'paypal':
@@ -107,8 +105,6 @@ export const PaymentGatewaySettings: React.FC = () => {
 
   const getProviderDescription = (providerType: string) => {
     switch (providerType) {
-      case 'razorpay':
-        return 'Popular Indian payment gateway supporting UPI, cards, net banking, and wallets';
       case 'stripe':
         return 'Global payment platform with support for international cards and local payment methods';
       case 'paypal':
@@ -337,7 +333,7 @@ const GatewayConfigModal: React.FC<GatewayConfigModalProps> = ({
 }) => {
   const [formData, setFormData] = useState({
     name: gateway?.name || '',
-    provider_type: gateway?.provider_type || 'razorpay',
+    provider_type: gateway?.provider_type || 'stripe',
     is_active: gateway?.is_active ?? true,
     is_sandbox: gateway?.is_sandbox ?? true,
     currency_support: gateway?.currency_support || ['INR'],
@@ -391,70 +387,6 @@ const GatewayConfigModal: React.FC<GatewayConfigModalProps> = ({
     const settings = formData.settings as GatewaySettings;
 
     switch (provider_type) {
-      case 'razorpay':
-        return (
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Key ID *
-              </label>
-              <input
-                type="text"
-                required
-                value={settings.key_id || ''}
-                onChange={(e) => handleSettingChange('key_id', e.target.value)}
-                placeholder="rzp_test_..."
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Key Secret *
-              </label>
-              <div className="relative">
-                <input
-                  type={showPasswords.key_secret ? 'text' : 'password'}
-                  required
-                  value={settings.key_secret || ''}
-                  onChange={(e) => handleSettingChange('key_secret', e.target.value)}
-                  placeholder="Enter Razorpay Key Secret"
-                  className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-                <button
-                  type="button"
-                  onClick={() => togglePasswordVisibility('key_secret')}
-                  className="absolute inset-y-0 right-0 flex items-center px-3 text-gray-500"
-                >
-                  {showPasswords.key_secret ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Webhook Secret
-              </label>
-              <div className="relative">
-                <input
-                  type={showPasswords.webhook_secret ? 'text' : 'password'}
-                  value={settings.webhook_secret || ''}
-                  onChange={(e) => handleSettingChange('webhook_secret', e.target.value)}
-                  placeholder="Webhook secret for signature verification"
-                  className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-                <button
-                  type="button"
-                  onClick={() => togglePasswordVisibility('webhook_secret')}
-                  className="absolute inset-y-0 right-0 flex items-center px-3 text-gray-500"
-                >
-                  {showPasswords.webhook_secret ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
-            </div>
-          </div>
-        );
-
       case 'stripe':
         return (
           <div className="space-y-4">
@@ -634,7 +566,7 @@ const GatewayConfigModal: React.FC<GatewayConfigModalProps> = ({
                     required
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    placeholder="e.g. Razorpay India"
+                    placeholder="e.g. Stripe International"
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
                 </div>
@@ -653,8 +585,7 @@ const GatewayConfigModal: React.FC<GatewayConfigModalProps> = ({
                     })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   >
-                    <option value="razorpay">Razorpay</option>
-                    <option value="stripe">Stripe</option>
+                  <option value="stripe">Stripe</option>
                     <option value="paypal">PayPal</option>
                   </select>
                 </div>

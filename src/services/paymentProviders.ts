@@ -1,7 +1,7 @@
 // =====================================================
 // Payment Providers - Gateway Implementations
 // =====================================================
-// Abstract provider implementations for Razorpay, Stripe, and PayPal
+// Provider implementations for Stripe and PayPal
 // Handles payment processing, verification, and webhook management
 
 import type {
@@ -13,10 +13,6 @@ import type {
   PaymentProviderPaymentDetails,
   PaymentWebhookResult,
   RefundTransaction,
-  RazorpaySettings,
-  RazorpayOrderRequest,
-  RazorpayOrderResponse,
-  RazorpayPaymentResponse,
   StripeSettings,
   StripePaymentIntentRequest,
   StripePaymentIntentResponse,
@@ -48,413 +44,6 @@ abstract class BasePaymentProvider implements PaymentProvider {
 
   protected generateReceipt(): string {
     return `rcpt_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
-  }
-}
-
-// =====================================================
-// RAZORPAY PROVIDER
-// =====================================================
-
-class RazorpayProvider extends BasePaymentProvider {
-  name = 'Razorpay';
-  type = 'razorpay';
-  private settings: RazorpaySettings;
-  private gateway: PaymentGateway;
-  private razorpay: any;
-
-  constructor(gateway: PaymentGateway) {
-    super();
-    this.gateway = gateway;
-    this.settings = gateway.settings as RazorpaySettings;
-    
-    console.log('🔧 RazorpayProvider constructor called with gateway:', gateway);
-    console.log('🔧 Extracted settings:', this.settings);
-    console.log('🔧 Key ID:', this.settings?.key_id);
-    
-    // Initialize Razorpay (client-side)
-    if (typeof window !== 'undefined') {
-      this.initializeRazorpay();
-    }
-  }
-
-  private async initializeRazorpay() {
-    // Load Razorpay script if not already loaded
-    if (!(window as any).Razorpay) {
-      await this.loadRazorpayScript();
-    }
-  }
-
-  private loadRazorpayScript(): Promise<void> {
-    return new Promise((resolve, reject) => {
-      if ((window as any).Razorpay) {
-        resolve();
-        return;
-      }
-
-      const script = document.createElement('script');
-      script.src = 'https://checkout.razorpay.com/v1/checkout.js';
-      script.onload = () => resolve();
-      script.onerror = () => reject(new Error('Failed to load Razorpay script'));
-      document.head.appendChild(script);
-    });
-  }
-
-  async createPaymentRequest(request: PaymentRequest): Promise<PaymentProviderResponse> {
-    try {
-      console.group('🔍 RAZORPAY PROVIDER DEBUG');
-      console.log('Request received:', request);
-      console.log('Gateway settings available:', {
-        key_id: this.settings.key_id,
-        has_key_secret: !!this.settings.key_secret,
-        environment: this.settings.environment || 'not set'
-      });
-      console.groupEnd();
-      
-      // Add alert for debugging
-      console.log('RazorpayProvider.createPaymentRequest called!');
-      console.log('Request details:', {
-        id: request.id,
-        amount: request.amount,
-        currency: request.currency,
-        key_id: this.settings?.key_id ? 'Present' : 'MISSING!'
-      });
-      // Server-side order creation
-      const orderData: RazorpayOrderRequest = {
-        amount: this.convertToSmallestUnit(request.amount, request.currency),
-        currency: request.currency,
-        receipt: this.generateReceipt(),
-        notes: {
-          payment_request_id: request.id,
-          invoice_id: request.invoice_id || '',
-          customer_email: request.customer_email || ''
-        }
-      };
-
-      console.log('📝 Order data for Razorpay:', orderData);
-
-      // In a real implementation, this would be a server-side API call
-      const order = await this.createRazorpayOrder(orderData);
-
-      // For Razorpay, we don't redirect to another URL
-      // Instead, we return data for the checkout page to open the Razorpay modal
-      console.log('🎯 Creating Razorpay payment response with order:', order);
-      console.log('🎯 Settings key_id:', this.settings.key_id);
-      
-      const response = {
-        success: true,
-        paymentUrl: '', // No redirect URL needed
-        orderId: request.id,
-        providerOrderId: order.id,
-        // Include Razorpay-specific data for the modal
-        providerData: {
-          key: this.settings.key_id,
-          order_id: order.id,
-          amount: order.amount,
-          currency: order.currency,
-          name: 'KDADKS Service Private Limited',
-          description: request.description || 'Invoice Payment',
-          modal: true // Indicates this should open a modal, not redirect
-        }
-      };
-      
-      console.log('🎯 Final payment response:', response);
-      console.log('🎯 Provider data validation:', {
-        hasKey: !!response.providerData.key,
-        hasOrderId: !!response.providerData.order_id,
-        hasAmount: !!response.providerData.amount,
-        modal: response.providerData.modal
-      });
-      
-      return response;
-
-    } catch (error) {
-      console.error('❌ RazorpayProvider error:', error);
-      return {
-        success: false,
-        paymentUrl: '',
-        orderId: request.id,
-        error: this.formatError(error)
-      };
-    }
-  }
-
-  private async createRazorpayOrder(orderData: RazorpayOrderRequest): Promise<RazorpayOrderResponse> {
-    // Use server-side API to create actual Razorpay order
-    
-    console.log('Creating REAL Razorpay order with data:', orderData);
-    console.log('Current hostname:', window.location.hostname);
-    console.log('Current origin:', window.location.origin);
-    
-    // Check if we're in development mode (more comprehensive check)
-    const isDevelopment = window.location.hostname === 'localhost' || 
-                         window.location.hostname === '127.0.0.1' ||
-                         window.location.origin.includes('localhost') ||
-                         window.location.origin.includes('127.0.0.1');
-    
-    console.log('Development mode detected:', isDevelopment);
-    console.log('Current port:', window.location.port);
-    
-    // Always try to create real orders first, fall back to mock only if API fails
-    try {
-      // Determine the correct API endpoint
-      const apiEndpoint = isDevelopment 
-        ? 'http://localhost:3005/api/create-razorpay-order'
-        : '/.netlify/functions/create-razorpay-order';
-        
-      console.log('Using API endpoint:', apiEndpoint);
-      
-      const response = await fetch(apiEndpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          gatewayId: this.gateway?.id, // Pass gateway ID to get credentials
-          amount: this.convertFromSmallestUnit(orderData.amount, orderData.currency), // Convert back to main unit for API
-          currency: orderData.currency,
-          receipt: orderData.receipt,
-          notes: orderData.notes
-        })
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      const result = await response.json();
-      
-      if (!result.success || !result.order) {
-        throw new Error(result.error || 'Failed to create order');
-      }
-
-      console.log('REAL Razorpay order created:', result.order);
-      
-      return result.order;
-
-    } catch (error) {
-      console.error('Failed to create Razorpay order:', error);
-      
-      // Fallback to mock order for development
-      console.warn('Falling back to mock order due to server error');
-      
-      const mockOrder: RazorpayOrderResponse = {
-        id: `order_${Date.now()}`,
-        entity: 'order' as const,
-        amount: orderData.amount,
-        amount_paid: 0,
-        amount_due: orderData.amount,
-        currency: orderData.currency,
-        receipt: orderData.receipt,
-        status: 'created',
-        attempts: 0,
-        notes: orderData.notes || {},
-        created_at: Math.floor(Date.now() / 1000)
-      };
-      
-      return mockOrder;
-    }
-  }
-
-  async verifyPayment(paymentId: string, request: PaymentRequest): Promise<PaymentTransaction> {
-    try {
-      // Server-side payment verification
-      const payment = await this.getRazorpayPayment(paymentId);
-
-      const transaction: Omit<PaymentTransaction, 'id' | 'created_at'> = {
-        payment_request_id: request.id,
-        gateway_transaction_id: payment.id,
-        amount: this.convertFromSmallestUnit(payment.amount, payment.currency),
-        currency: payment.currency,
-        status: this.mapRazorpayStatus(payment.status),
-        payment_method: payment.method,
-        payment_method_details: {
-          card_id: payment.card_id,
-          bank: payment.bank,
-          wallet: payment.wallet,
-          vpa: payment.vpa
-        },
-        gateway_response: payment,
-        gateway_fee: payment.fee ? this.convertFromSmallestUnit(payment.fee, payment.currency) : undefined,
-        processed_at: new Date(payment.created_at * 1000).toISOString(),
-        failure_code: payment.error_code,
-        failure_reason: payment.error_description
-      };
-
-      return transaction as PaymentTransaction;
-
-    } catch (error) {
-      throw new Error(`Razorpay payment verification failed: ${this.formatError(error)}`);
-    }
-  }
-
-  private async getRazorpayPayment(paymentId: string): Promise<RazorpayPaymentResponse> {
-    // This would be a server-side API call to Razorpay
-    // Mock response for demo
-    return {
-      id: paymentId,
-      entity: 'payment',
-      amount: 100000, // ₹1000 in paise
-      currency: 'INR',
-      status: 'captured',
-      method: 'card',
-      captured: true,
-      email: 'customer@example.com',
-      contact: '+919876543210',
-      notes: {},
-      created_at: Math.floor(Date.now() / 1000)
-    };
-  }
-
-  private mapRazorpayStatus(status: string): PaymentTransaction['status'] {
-    const statusMap: Record<string, PaymentTransaction['status']> = {
-      'created': 'pending',
-      'authorized': 'processing',
-      'captured': 'success',
-      'refunded': 'refunded',
-      'failed': 'failed'
-    };
-
-    return statusMap[status] || 'failed';
-  }
-
-  async processRefund(transactionId: string, amount: number, reason?: string): Promise<RefundTransaction> {
-    try {
-      // Server-side refund processing
-      const refund = await this.createRazorpayRefund(transactionId, amount, reason);
-
-      return {
-        id: refund.id,
-        amount: this.convertFromSmallestUnit(refund.amount, 'INR'),
-        reason: reason || 'Customer requested refund',
-        created_at: new Date().toISOString(),
-        gateway_refund_id: refund.id,
-        status: 'success'
-      };
-
-    } catch (error) {
-      throw new Error(`Razorpay refund failed: ${this.formatError(error)}`);
-    }
-  }
-
-  private async createRazorpayRefund(paymentId: string, amount: number, reason?: string): Promise<any> {
-    // Mock refund response
-    return {
-      id: `rfnd_${Date.now()}`,
-      amount: this.convertToSmallestUnit(amount, 'INR'),
-      currency: 'INR',
-      payment_id: paymentId,
-      reason: reason || 'requested_by_customer',
-      status: 'processed'
-    };
-  }
-
-  async getPaymentDetails(paymentId: string): Promise<PaymentProviderPaymentDetails> {
-    const payment = await this.getRazorpayPayment(paymentId);
-
-    return {
-      id: payment.id,
-      status: payment.status,
-      amount: this.convertFromSmallestUnit(payment.amount, payment.currency),
-      currency: payment.currency,
-      payment_method: payment.method,
-      created_at: new Date(payment.created_at * 1000).toISOString(),
-      updated_at: new Date(payment.created_at * 1000).toISOString(),
-      metadata: {
-        captured: payment.captured,
-        email: payment.email,
-        contact: payment.contact
-      }
-    };
-  }
-
-  async handleWebhook(payload: any, signature: string): Promise<PaymentWebhookResult> {
-    try {
-      // Verify webhook signature
-      const isValid = this.verifyRazorpaySignature(payload, signature);
-      if (!isValid) {
-        throw new Error('Invalid webhook signature');
-      }
-
-      const event = payload.event;
-      const paymentEntity = payload.payload?.payment?.entity;
-
-      let result: PaymentWebhookResult = { processed: false };
-
-      switch (event) {
-        case 'payment.captured':
-          result = await this.handlePaymentCaptured(paymentEntity);
-          break;
-        case 'payment.failed':
-          result = await this.handlePaymentFailed(paymentEntity);
-          break;
-        case 'refund.created':
-          result = await this.handleRefundCreated(payload.payload?.refund?.entity);
-          break;
-        default:
-          result = { processed: false, action_taken: 'ignored_unknown_event' };
-      }
-
-      return result;
-
-    } catch (error) {
-      return {
-        processed: false,
-        error: this.formatError(error)
-      };
-    }
-  }
-
-  private verifyRazorpaySignature(payload: any, signature: string): boolean {
-    // In a real implementation, verify using Razorpay's webhook secret
-    // This is a simplified version
-    return Boolean(signature && signature.length > 0);
-  }
-
-  private async handlePaymentCaptured(payment: any): Promise<PaymentWebhookResult> {
-    return {
-      processed: true,
-      payment_request_id: payment.notes?.payment_request_id,
-      action_taken: 'payment_captured'
-    };
-  }
-
-  private async handlePaymentFailed(payment: any): Promise<PaymentWebhookResult> {
-    return {
-      processed: true,
-      payment_request_id: payment.notes?.payment_request_id,
-      action_taken: 'payment_failed'
-    };
-  }
-
-  private async handleRefundCreated(_refund: any): Promise<PaymentWebhookResult> {
-    return {
-      processed: true,
-      action_taken: 'refund_created'
-    };
-  }
-
-  private convertToSmallestUnit(amount: number, currency: string): number {
-    // Convert to paise for INR, cents for others
-    const multipliers: Record<string, number> = {
-      'INR': 100,
-      'USD': 100,
-      'EUR': 100,
-      'GBP': 100
-    };
-
-    return Math.round(amount * (multipliers[currency] || 100));
-  }
-
-  private convertFromSmallestUnit(amount: number, currency: string): number {
-    const multipliers: Record<string, number> = {
-      'INR': 100,
-      'USD': 100,
-      'EUR': 100,
-      'GBP': 100
-    };
-
-    return amount / (multipliers[currency] || 100);
   }
 }
 
@@ -957,8 +546,6 @@ class PayPalProvider extends BasePaymentProvider {
 
 export function createPaymentProvider(gateway: PaymentGateway): PaymentProvider {
   switch (gateway.provider_type) {
-    case 'razorpay':
-      return new RazorpayProvider(gateway);
     case 'stripe':
       return new StripeProvider(gateway);
     case 'paypal':
@@ -969,7 +556,7 @@ export function createPaymentProvider(gateway: PaymentGateway): PaymentProvider 
 }
 
 // Export provider classes for direct use if needed
-export { RazorpayProvider, StripeProvider, PayPalProvider };
+export { StripeProvider, PayPalProvider };
 
 // =====================================================
 // PAYMENT PROVIDER FACTORY
@@ -981,8 +568,6 @@ export class PaymentProviderFactory {
     gateway: PaymentGateway
   ): BasePaymentProvider {
     switch (providerType.toLowerCase()) {
-      case 'razorpay':
-        return new RazorpayProvider(gateway);
       case 'stripe':
         return new StripeProvider(gateway);
       case 'paypal':
@@ -993,17 +578,11 @@ export class PaymentProviderFactory {
   }
 
   static getSupportedProviders(): string[] {
-    return ['razorpay', 'stripe', 'paypal'];
+    return ['stripe', 'paypal'];
   }
 
   static getProviderInfo(providerType: string) {
     const providers: Record<string, any> = {
-      razorpay: {
-        name: 'Razorpay',
-        description: 'Popular Indian payment gateway',
-        supportedCurrencies: ['INR'],
-        features: ['UPI', 'Cards', 'Net Banking', 'Wallets']
-      },
       stripe: {
         name: 'Stripe',
         description: 'Global payment platform',
