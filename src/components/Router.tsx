@@ -204,6 +204,22 @@ const Router = () => {
             {/* Admin routes */}
             <Route path="/admin/login" element={<AdminLogin />} />
             <Route path="/admin" element={<SimpleAdminDashboard />} />
+            <Route path="/admin/invoices" element={<SimpleAdminDashboard />} />
+            <Route path="/admin/payments" element={<SimpleAdminDashboard />} />
+            <Route path="/admin/quotes" element={<SimpleAdminDashboard />} />
+            <Route path="/admin/contracts" element={<SimpleAdminDashboard />} />
+            <Route path="/admin/rate-cards" element={<SimpleAdminDashboard />} />
+            <Route path="/admin/announcements" element={<SimpleAdminDashboard />} />
+            <Route path="/admin/expenses" element={<SimpleAdminDashboard />} />
+            <Route path="/admin/income" element={<SimpleAdminDashboard />} />
+            <Route path="/admin/finance" element={<SimpleAdminDashboard />} />
+            <Route path="/admin/hr/employees" element={<SimpleAdminDashboard />} />
+            <Route path="/admin/hr/leave" element={<SimpleAdminDashboard />} />
+            <Route path="/admin/hr/attendance" element={<SimpleAdminDashboard />} />
+            <Route path="/admin/hr/settlement" element={<SimpleAdminDashboard />} />
+            <Route path="/admin/hr/tds-report" element={<SimpleAdminDashboard />} />
+            <Route path="/admin/hr/performance" element={<SimpleAdminDashboard />} />
+            <Route path="/admin/hr/compensation" element={<SimpleAdminDashboard />} />
             
             {/* Employee Portal routes */}
             <Route path="/employee/login" element={<EmployeeLogin />} />

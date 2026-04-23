@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import {
   LogOut,
   Database,
@@ -83,7 +83,6 @@ const SimpleAdminDashboard: React.FC = () => {
   const [user, setUser] = useState<SimpleUser | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [showSuccessMessage, setShowSuccessMessage] = useState(true)
-  const [activeView, setActiveView] = useState<ActiveView>('dashboard')
   const [sidebarOpen, setSidebarOpen] = useState(true)
   // Collapsible menu sections - all open by default
   const [openSections, setOpenSections] = useState<Record<MenuSection, boolean>>({
@@ -104,6 +103,27 @@ const SimpleAdminDashboard: React.FC = () => {
   })
   const [statsLoading, setStatsLoading] = useState(false)
   const navigate = useNavigate()
+  const location = useLocation()
+  const pathToView: Record<string, ActiveView> = {
+    '/admin': 'dashboard',
+    '/admin/invoices': 'invoices',
+    '/admin/payments': 'payments',
+    '/admin/quotes': 'quotes',
+    '/admin/contracts': 'contracts',
+    '/admin/rate-cards': 'rate-cards',
+    '/admin/announcements': 'announcements',
+    '/admin/expenses': 'expenses',
+    '/admin/income': 'income',
+    '/admin/finance': 'finance',
+    '/admin/hr/employees': 'hr-employees',
+    '/admin/hr/leave': 'hr-leave',
+    '/admin/hr/attendance': 'hr-attendance',
+    '/admin/hr/settlement': 'hr-settlement',
+    '/admin/hr/tds-report': 'hr-tds-report',
+    '/admin/hr/performance': 'hr-performance',
+    '/admin/hr/compensation': 'hr-compensation',
+  }
+  const activeView: ActiveView = pathToView[location.pathname] ?? 'dashboard'
 
   // Toggle menu section
   const toggleSection = (section: MenuSection) => {
@@ -361,7 +381,7 @@ const SimpleAdminDashboard: React.FC = () => {
             {/* Dashboard */}
             <li>
               <button
-                onClick={() => setActiveView('dashboard')}
+                onClick={() => navigate('/admin')}
                 title={!sidebarOpen ? 'Dashboard' : undefined}
                 className={`w-full flex items-center ${!sidebarOpen ? 'justify-center' : ''} px-3 py-2 text-sm font-medium rounded-md transition-colors ${
                   activeView === 'dashboard'
@@ -395,7 +415,7 @@ const SimpleAdminDashboard: React.FC = () => {
                 {/* Invoices */}
                 <li>
                   <button
-                    onClick={() => setActiveView('invoices')}
+                    onClick={() => navigate('/admin/invoices')}
                     title={!sidebarOpen ? 'Invoices' : undefined}
                     className={`w-full flex items-center ${!sidebarOpen ? 'justify-center' : ''} px-3 py-2 text-sm font-medium rounded-md transition-colors ${
                       activeView === 'invoices'
@@ -411,7 +431,7 @@ const SimpleAdminDashboard: React.FC = () => {
                 {/* Quotes */}
                 <li>
                   <button
-                    onClick={() => setActiveView('quotes')}
+                    onClick={() => navigate('/admin/quotes')}
                     title={!sidebarOpen ? 'Quotes' : undefined}
                     className={`w-full flex items-center ${!sidebarOpen ? 'justify-center' : ''} px-3 py-2 text-sm font-medium rounded-md transition-colors ${
                       activeView === 'quotes'
@@ -427,7 +447,7 @@ const SimpleAdminDashboard: React.FC = () => {
                 {/* Rate Cards */}
                 <li>
                   <button
-                    onClick={() => setActiveView('rate-cards')}
+                    onClick={() => navigate('/admin/rate-cards')}
                     title={!sidebarOpen ? 'Rate Cards' : undefined}
                     className={`w-full flex items-center ${!sidebarOpen ? 'justify-center' : ''} px-3 py-2 text-sm font-medium rounded-md transition-colors ${
                       activeView === 'rate-cards'
@@ -443,7 +463,7 @@ const SimpleAdminDashboard: React.FC = () => {
                 {/* Contracts */}
                 <li>
                   <button
-                    onClick={() => setActiveView('contracts')}
+                    onClick={() => navigate('/admin/contracts')}
                     title={!sidebarOpen ? 'Contracts' : undefined}
                     className={`w-full flex items-center ${!sidebarOpen ? 'justify-center' : ''} px-3 py-2 text-sm font-medium rounded-md transition-colors ${
                       activeView === 'contracts'
@@ -459,7 +479,7 @@ const SimpleAdminDashboard: React.FC = () => {
                 {/* Payments */}
                 <li>
                   <button
-                    onClick={() => setActiveView('payments')}
+                    onClick={() => navigate('/admin/payments')}
                     title={!sidebarOpen ? 'Payments' : undefined}
                     className={`w-full flex items-center ${!sidebarOpen ? 'justify-center' : ''} px-3 py-2 text-sm font-medium rounded-md transition-colors ${
                       activeView === 'payments'
@@ -495,7 +515,7 @@ const SimpleAdminDashboard: React.FC = () => {
                 {/* Finance */}
                 <li>
                   <button
-                    onClick={() => setActiveView('finance')}
+                    onClick={() => navigate('/admin/finance')}
                     title={!sidebarOpen ? 'Finance Reports' : undefined}
                     className={`w-full flex items-center ${!sidebarOpen ? 'justify-center' : ''} px-3 py-2 text-sm font-medium rounded-md transition-colors ${
                       activeView === 'finance'
@@ -511,7 +531,7 @@ const SimpleAdminDashboard: React.FC = () => {
                 {/* Expenses */}
                 <li>
                   <button
-                    onClick={() => setActiveView('expenses')}
+                    onClick={() => navigate('/admin/expenses')}
                     title={!sidebarOpen ? 'Expenses' : undefined}
                     className={`w-full flex items-center ${!sidebarOpen ? 'justify-center' : ''} px-3 py-2 text-sm font-medium rounded-md transition-colors ${
                       activeView === 'expenses'
@@ -527,7 +547,7 @@ const SimpleAdminDashboard: React.FC = () => {
                 {/* Income */}
                 <li>
                   <button
-                    onClick={() => setActiveView('income')}
+                    onClick={() => navigate('/admin/income')}
                     title={!sidebarOpen ? 'Income' : undefined}
                     className={`w-full flex items-center ${!sidebarOpen ? 'justify-center' : ''} px-3 py-2 text-sm font-medium rounded-md transition-colors ${
                       activeView === 'income'
@@ -563,7 +583,7 @@ const SimpleAdminDashboard: React.FC = () => {
                 {/* Employees & Docs */}
                 <li>
                   <button
-                    onClick={() => setActiveView('hr-employees')}
+                    onClick={() => navigate('/admin/hr/employees')}
                     title={!sidebarOpen ? 'Employees & Docs' : undefined}
                     className={`w-full flex items-center ${!sidebarOpen ? 'justify-center' : ''} px-3 py-2 text-sm font-medium rounded-md transition-colors ${
                       activeView === 'hr-employees'
@@ -579,7 +599,7 @@ const SimpleAdminDashboard: React.FC = () => {
                 {/* Attendance */}
                 <li>
                   <button
-                    onClick={() => setActiveView('hr-attendance')}
+                    onClick={() => navigate('/admin/hr/attendance')}
                     title={!sidebarOpen ? 'Attendance' : undefined}
                     className={`w-full flex items-center ${!sidebarOpen ? 'justify-center' : ''} px-3 py-2 text-sm font-medium rounded-md transition-colors ${
                       activeView === 'hr-attendance'
@@ -595,7 +615,7 @@ const SimpleAdminDashboard: React.FC = () => {
                 {/* Leave Management */}
                 <li>
                   <button
-                    onClick={() => setActiveView('hr-leave')}
+                    onClick={() => navigate('/admin/hr/leave')}
                     title={!sidebarOpen ? 'Leave Management' : undefined}
                     className={`w-full flex items-center ${!sidebarOpen ? 'justify-center' : ''} px-3 py-2 text-sm font-medium rounded-md transition-colors ${
                       activeView === 'hr-leave'
@@ -611,7 +631,7 @@ const SimpleAdminDashboard: React.FC = () => {
                 {/* Compensation */}
                 <li>
                   <button
-                    onClick={() => setActiveView('hr-compensation')}
+                    onClick={() => navigate('/admin/hr/compensation')}
                     title={!sidebarOpen ? 'Compensation' : undefined}
                     className={`w-full flex items-center ${!sidebarOpen ? 'justify-center' : ''} px-3 py-2 text-sm font-medium rounded-md transition-colors ${
                       activeView === 'hr-compensation'
@@ -627,7 +647,7 @@ const SimpleAdminDashboard: React.FC = () => {
                 {/* TDS Report */}
                 <li>
                   <button
-                    onClick={() => setActiveView('hr-tds-report')}
+                    onClick={() => navigate('/admin/hr/tds-report')}
                     title={!sidebarOpen ? 'TDS Report' : undefined}
                     className={`w-full flex items-center ${!sidebarOpen ? 'justify-center' : ''} px-3 py-2 text-sm font-medium rounded-md transition-colors ${
                       activeView === 'hr-tds-report'
@@ -643,7 +663,7 @@ const SimpleAdminDashboard: React.FC = () => {
                 {/* F&F Settlement */}
                 <li>
                   <button
-                    onClick={() => setActiveView('hr-settlement')}
+                    onClick={() => navigate('/admin/hr/settlement')}
                     title={!sidebarOpen ? 'F&F Settlement' : undefined}
                     className={`w-full flex items-center ${!sidebarOpen ? 'justify-center' : ''} px-3 py-2 text-sm font-medium rounded-md transition-colors ${
                       activeView === 'hr-settlement'
@@ -659,7 +679,7 @@ const SimpleAdminDashboard: React.FC = () => {
                 {/* Performance */}
                 <li>
                   <button
-                    onClick={() => setActiveView('hr-performance')}
+                    onClick={() => navigate('/admin/hr/performance')}
                     title={!sidebarOpen ? 'Reviews & Feedback' : undefined}
                     className={`w-full flex items-center ${!sidebarOpen ? 'justify-center' : ''} px-3 py-2 text-sm font-medium rounded-md transition-colors ${
                       activeView === 'hr-performance'
@@ -695,7 +715,7 @@ const SimpleAdminDashboard: React.FC = () => {
                 {/* Announcements */}
                 <li>
                   <button
-                    onClick={() => setActiveView('announcements')}
+                    onClick={() => navigate('/admin/announcements')}
                     title={!sidebarOpen ? 'Announcements' : undefined}
                     className={`w-full flex items-center ${!sidebarOpen ? 'justify-center' : ''} px-3 py-2 text-sm font-medium rounded-md transition-colors ${
                       activeView === 'announcements'
@@ -794,7 +814,7 @@ const SimpleAdminDashboard: React.FC = () => {
                 {/* Invoices Card */}
                 <div 
                   className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 cursor-pointer hover:shadow-md transition-shadow"
-                  onClick={() => setActiveView('invoices')}
+                  onClick={() => navigate('/admin/invoices')}
                 >
                   <div className="flex items-center justify-between">
                     <div>
@@ -813,7 +833,7 @@ const SimpleAdminDashboard: React.FC = () => {
                 {/* Payments Card */}
                 <div 
                   className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 cursor-pointer hover:shadow-md transition-shadow"
-                  onClick={() => setActiveView('payments')}
+                  onClick={() => navigate('/admin/payments')}
                 >
                   <div className="flex items-center justify-between">
                     <div>
@@ -832,7 +852,7 @@ const SimpleAdminDashboard: React.FC = () => {
                 {/* Quotes Card */}
                 <div 
                   className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 cursor-pointer hover:shadow-md transition-shadow"
-                  onClick={() => setActiveView('quotes')}
+                  onClick={() => navigate('/admin/quotes')}
                 >
                   <div className="flex items-center justify-between">
                     <div>
@@ -851,7 +871,7 @@ const SimpleAdminDashboard: React.FC = () => {
                 {/* Employees Card */}
                 <div 
                   className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 cursor-pointer hover:shadow-md transition-shadow"
-                  onClick={() => setActiveView('hr-employees')}
+                  onClick={() => navigate('/admin/hr/employees')}
                 >
                   <div className="flex items-center justify-between">
                     <div>
@@ -885,7 +905,7 @@ const SimpleAdminDashboard: React.FC = () => {
                     <FileCheck className="w-8 h-8 text-cyan-600" />
                   </div>
                   <button
-                    onClick={() => setActiveView('contracts')}
+                    onClick={() => navigate('/admin/contracts')}
                     className="w-full flex items-center justify-center px-3 py-2 text-sm font-medium text-cyan-600 bg-cyan-50 rounded-md hover:bg-cyan-100"
                   >
                     <Eye className="w-4 h-4 mr-2" />
@@ -905,7 +925,7 @@ const SimpleAdminDashboard: React.FC = () => {
                     <FileCheck className="w-8 h-8 text-indigo-600" />
                   </div>
                   <button
-                    onClick={() => setActiveView('hr-employees')}
+                    onClick={() => navigate('/admin/hr/employees')}
                     className="w-full flex items-center justify-center px-3 py-2 text-sm font-medium text-indigo-600 bg-indigo-50 rounded-md hover:bg-indigo-100"
                   >
                     <Eye className="w-4 h-4 mr-2" />
@@ -925,7 +945,7 @@ const SimpleAdminDashboard: React.FC = () => {
                     <DollarSign className="w-8 h-8 text-teal-600" />
                   </div>
                   <button
-                    onClick={() => setActiveView('hr-employees')}
+                    onClick={() => navigate('/admin/hr/employees')}
                     className="w-full flex items-center justify-center px-3 py-2 text-sm font-medium text-teal-600 bg-teal-50 rounded-md hover:bg-teal-100"
                   >
                     <Eye className="w-4 h-4 mr-2" />
@@ -948,7 +968,7 @@ const SimpleAdminDashboard: React.FC = () => {
                     <TrendingUp className="w-8 h-8 text-emerald-600" />
                   </div>
                   <button
-                    onClick={() => setActiveView('invoices')}
+                    onClick={() => navigate('/admin/invoices')}
                     className="w-full flex items-center justify-center px-3 py-2 text-sm font-medium text-emerald-600 bg-emerald-50 rounded-md hover:bg-emerald-100"
                   >
                     <Eye className="w-4 h-4 mr-2" />
@@ -963,7 +983,7 @@ const SimpleAdminDashboard: React.FC = () => {
                 <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
                   {/* Add Employee */}
                   <button
-                    onClick={() => setActiveView('hr-employees')}
+                    onClick={() => navigate('/admin/hr/employees')}
                     className="flex flex-col items-center p-4 bg-orange-50 rounded-lg hover:bg-orange-100 transition-colors"
                   >
                     <div className="w-10 h-10 bg-orange-100 rounded-full flex items-center justify-center mb-2">
@@ -974,7 +994,7 @@ const SimpleAdminDashboard: React.FC = () => {
 
                   {/* Create Invoice */}
                   <button
-                    onClick={() => setActiveView('invoices')}
+                    onClick={() => navigate('/admin/invoices')}
                     className="flex flex-col items-center p-4 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors"
                   >
                     <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center mb-2">
@@ -985,7 +1005,7 @@ const SimpleAdminDashboard: React.FC = () => {
 
                   {/* Create Quote */}
                   <button
-                    onClick={() => setActiveView('quotes')}
+                    onClick={() => navigate('/admin/quotes')}
                     className="flex flex-col items-center p-4 bg-purple-50 rounded-lg hover:bg-purple-100 transition-colors"
                   >
                     <div className="w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center mb-2">
@@ -996,7 +1016,7 @@ const SimpleAdminDashboard: React.FC = () => {
 
                   {/* Create Contract */}
                   <button
-                    onClick={() => setActiveView('contracts')}
+                    onClick={() => navigate('/admin/contracts')}
                     className="flex flex-col items-center p-4 bg-cyan-50 rounded-lg hover:bg-cyan-100 transition-colors"
                   >
                     <div className="w-10 h-10 bg-cyan-100 rounded-full flex items-center justify-center mb-2">
@@ -1007,7 +1027,7 @@ const SimpleAdminDashboard: React.FC = () => {
 
                   {/* Generate Document */}
                   <button
-                    onClick={() => setActiveView('hr-employees')}
+                    onClick={() => navigate('/admin/hr/employees')}
                     className="flex flex-col items-center p-4 bg-indigo-50 rounded-lg hover:bg-indigo-100 transition-colors"
                   >
                     <div className="w-10 h-10 bg-indigo-100 rounded-full flex items-center justify-center mb-2">
@@ -1018,7 +1038,7 @@ const SimpleAdminDashboard: React.FC = () => {
 
                   {/* Generate Salary Slip */}
                   <button
-                    onClick={() => setActiveView('hr-employees')}
+                    onClick={() => navigate('/admin/hr/employees')}
                     className="flex flex-col items-center p-4 bg-teal-50 rounded-lg hover:bg-teal-100 transition-colors"
                   >
                     <div className="w-10 h-10 bg-teal-100 rounded-full flex items-center justify-center mb-2">
@@ -1029,7 +1049,7 @@ const SimpleAdminDashboard: React.FC = () => {
 
                   {/* Mark Attendance */}
                   <button
-                    onClick={() => setActiveView('hr-attendance')}
+                    onClick={() => navigate('/admin/hr/attendance')}
                     className="flex flex-col items-center p-4 bg-green-50 rounded-lg hover:bg-green-100 transition-colors"
                   >
                     <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center mb-2">

@@ -70,8 +70,145 @@ export interface Employee {
   updated_at?: string;
 }
 
-export type DocumentType = 'offer_letter' | 'salary_certificate' | 'experience_certificate' | 'relieving_letter' | 'form_16' | 'form_24q' | 'other';
+export type DocumentType = 'offer_letter' | 'salary_certificate' | 'experience_certificate' | 'relieving_letter' | 'form_16' | 'form_24q' | 'intern_offer_letter' | 'intern_experience_certificate' | 'other';
 export type DocumentStatus = 'draft' | 'generated' | 'sent' | 'archived';
+
+// ─── Version-Control Metadata ────────────────────────────────────────────────
+export type ApprovalStatus = 'draft' | 'pending_approval' | 'approved' | 'archived';
+
+export interface DocumentVersionMeta {
+  /** Semantic version, e.g. "1.0.0" */
+  version: string;
+  /** ISO timestamp when this version was first created */
+  created_at: string;
+  /** ISO timestamp of last modification */
+  modified_at: string;
+  /** Author / HR user who created the document */
+  author: string;
+  /** Name of the approver (HR Manager / Director) */
+  approved_by?: string;
+  /** Current approval status */
+  approval_status: ApprovalStatus;
+  /** Short description of what changed in this version */
+  change_log?: string;
+  /** Identifies the template used, e.g. "ITWala-Intern-v1" */
+  template_version: string;
+  /** Unique document reference ID for auditability */
+  document_ref?: string;
+}
+
+// ─── RBAC Role definitions for intern documents ───────────────────────────────
+export type InternDocumentRole = 'viewer' | 'editor' | 'approver' | 'publisher';
+
+export interface InternDocumentRBAC {
+  /** Role → allowed actions map */
+  viewer: string[];
+  editor: string[];
+  approver: string[];
+  publisher: string[];
+}
+
+// ─── ITWala Academy Internship – Offer Letter Data ────────────────────────────
+export interface InternOfferLetterData {
+  // ── Core / inherited from OfferLetterData ────────────────────────────────
+  position: string;                  // Intern's role title
+  department: string;
+  offer_date?: string;
+  candidate_address?: string;
+
+  // ── Internship Scope & Duration ──────────────────────────────────────────
+  joining_date: string;              // Internship start date (REQUIRED)
+  end_date: string;                  // Internship end date (REQUIRED)
+  internship_duration?: string;      // Human-readable, e.g. "12 weeks"
+  internship_scope?: string;         // High-level description of the internship scope
+
+  // ── Program Details ───────────────────────────────────────────────────────
+  program_name: string;              // e.g. "ITWala Academy Internship Program"
+  program_batch?: string;            // e.g. "Batch 2026-A"
+  program_notes?: string;            // Program-specific notes / conditions
+
+  // ── Supervisor ────────────────────────────────────────────────────────────
+  supervisor_name?: string;
+  supervisor_title?: string;
+  supervisor_department?: string;
+
+  // ── Duties & Learning Objectives ─────────────────────────────────────────
+  duties_and_responsibilities?: string;  // Newline-separated duties
+  learning_objectives?: string;          // What the intern will gain
+
+  // ── Compensation (primarily unpaid) ──────────────────────────────────────
+  /** false = fully unpaid internship (default & compliant) */
+  is_paid: boolean;
+  stipend_amount?: number;               // Monthly stipend amount (0 or omit if unpaid)
+  stipend_currency?: string;             // Defaults to "INR"
+  reimbursement_details?: string;        // e.g. "Travel & meal reimbursement up to ₹2,000/month"
+
+  // ── Working Hours ─────────────────────────────────────────────────────────
+  working_hours_start?: string;
+  working_hours_end?: string;
+  working_days?: string;
+
+  // ── Reporting & Location ─────────────────────────────────────────────────
+  reporting_to?: string;
+  work_location?: string;
+
+  // ── Signatory ────────────────────────────────────────────────────────────
+  signatory_name?: string;
+  signatory_designation?: string;
+  signatory_contact?: string;
+
+  // ── Legal & Compliance ───────────────────────────────────────────────────
+  legal_disclaimer?: string;            // Auto-inserted if omitted
+  confidentiality_clause?: boolean;     // Include NDA/confidentiality section
+  ip_assignment_clause?: boolean;       // Include IP assignment clause
+
+  // ── Version Control ───────────────────────────────────────────────────────
+  version_meta?: DocumentVersionMeta;
+}
+
+// ─── ITWala Academy Internship – Experience Certificate Data ─────────────────
+export interface InternExperienceCertificateData {
+  // ── Core / inherited from ExperienceCertificateData ──────────────────────
+  employee_name: string;
+  designation: string;               // Role held during internship
+  department?: string;
+  date_of_joining: string;
+  last_working_date: string;
+  period_of_employment?: string;     // Auto-calculated if omitted
+  conduct_note?: string;
+  performance_note?: string;
+  issued_date?: string;
+  signatory_name?: string;
+  signatory_designation?: string;
+  contact_details?: string;
+
+  // ── Program Metadata ──────────────────────────────────────────────────────
+  program_name: string;              // e.g. "ITWala Academy Internship Program"
+  program_batch?: string;            // e.g. "Batch 2026-A"
+  internship_type?: string;          // e.g. "Software Development Internship"
+
+  // ── Achievements & Skills ─────────────────────────────────────────────────
+  projects_worked_on?: string;
+  key_achievements?: string;
+  skills_acquired?: string;
+
+  // ── Rating ────────────────────────────────────────────────────────────────
+  overall_rating?: 'excellent' | 'good' | 'satisfactory';
+
+  // ── Supervisor ────────────────────────────────────────────────────────────
+  supervisor_name?: string;
+  supervisor_title?: string;
+
+  // ── Compensation Reference ────────────────────────────────────────────────
+  was_paid?: boolean;
+  stipend_details?: string;
+
+  // ── Legal ─────────────────────────────────────────────────────────────────
+  legal_disclaimer?: string;
+
+  // ── Version Control ───────────────────────────────────────────────────────
+  version_meta?: DocumentVersionMeta;
+}
 
 export interface EmploymentDocument {
   id: string;

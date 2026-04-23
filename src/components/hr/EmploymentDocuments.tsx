@@ -25,6 +25,16 @@ import { employeeAuthService } from '../../services/employeeAuthService';
 import { employeeDocumentService } from '../../services/employeeDocumentService';
 import { PDFBrandingUtils } from '../../utils/pdfBrandingUtils';
 import { generateSalarySlipPDF } from '../../utils/salarySlipPDFGenerator';
+import {
+  generateInternOfferLetterPDF,
+  generateInternExperienceCertificatePDF,
+  getDefaultInternOfferLetterData,
+  getDefaultInternExperienceCertData,
+  validateInternOfferLetter,
+  validateInternExperienceCertificate,
+  canPerformAction,
+  PROGRAM_NAME_DEFAULT,
+} from '../../utils/internDocumentTemplates';
 import { EmailService } from '../../services/emailService';
 import { useToast } from '../ui/ToastProvider';
 import type {
@@ -39,7 +49,9 @@ import type {
   Form24QData,
   HRDocumentSettings,
   SalarySlip,
-  CreateSalarySlipInput
+  CreateSalarySlipInput,
+  InternOfferLetterData,
+  InternExperienceCertificateData,
 } from '../../types/employee';
 import type { CompanySettings } from '../../types/invoice';
 import { supabase } from '../../config/supabase';
@@ -261,6 +273,12 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
             break;
           case 'form_24q':
             pdf = await generateForm24QPDF(docData as Form24QData);
+            break;
+          case 'intern_offer_letter':
+            pdf = await generateInternOfferLetterPDF(employee, docData as InternOfferLetterData, companySettings, hrSettings?.signatory_name, hrSettings?.signatory_designation);
+            break;
+          case 'intern_experience_certificate':
+            pdf = await generateInternExperienceCertificatePDF(employee, docData as InternExperienceCertificateData, companySettings, hrSettings?.signatory_name, hrSettings?.signatory_designation);
             break;
           default:
             throw new Error('Unsupported document type');
@@ -1408,6 +1426,12 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
         case 'form_24q':
           pdf = await generateForm24QPDF(documentData as Form24QData);
           break;
+        case 'intern_offer_letter':
+          pdf = await generateInternOfferLetterPDF(selectedEmployee, documentData as InternOfferLetterData, companySettings, hrSettings?.signatory_name, hrSettings?.signatory_designation);
+          break;
+        case 'intern_experience_certificate':
+          pdf = await generateInternExperienceCertificatePDF(selectedEmployee, documentData as InternExperienceCertificateData, companySettings, hrSettings?.signatory_name, hrSettings?.signatory_designation);
+          break;
         default:
           throw new Error('Unsupported document type');
       }
@@ -1451,6 +1475,12 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
           break;
         case 'form_24q':
           pdf = await generateForm24QPDF(documentData as Form24QData);
+          break;
+        case 'intern_offer_letter':
+          pdf = await generateInternOfferLetterPDF(selectedEmployee, documentData as InternOfferLetterData, companySettings, hrSettings?.signatory_name, hrSettings?.signatory_designation);
+          break;
+        case 'intern_experience_certificate':
+          pdf = await generateInternExperienceCertificatePDF(selectedEmployee, documentData as InternExperienceCertificateData, companySettings, hrSettings?.signatory_name, hrSettings?.signatory_designation);
           break;
         default:
           throw new Error('Unsupported document type');
@@ -1681,6 +1711,12 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
         case 'form_24q':
           pdf = await generateForm24QPDF(docData as Form24QData);
           break;
+        case 'intern_offer_letter':
+          pdf = await generateInternOfferLetterPDF(employee, docData as InternOfferLetterData, companySettings, hrSettings?.signatory_name, hrSettings?.signatory_designation);
+          break;
+        case 'intern_experience_certificate':
+          pdf = await generateInternExperienceCertificatePDF(employee, docData as InternExperienceCertificateData, companySettings, hrSettings?.signatory_name, hrSettings?.signatory_designation);
+          break;
         default:
           throw new Error('Unsupported document type');
       }
@@ -1809,6 +1845,12 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
           break;
         case 'form_24q':
           pdf = await generateForm24QPDF(editedDocumentData as Form24QData);
+          break;
+        case 'intern_offer_letter':
+          pdf = await generateInternOfferLetterPDF(selectedEmployee, editedDocumentData as InternOfferLetterData, companySettings, hrSettings?.signatory_name, hrSettings?.signatory_designation);
+          break;
+        case 'intern_experience_certificate':
+          pdf = await generateInternExperienceCertificatePDF(selectedEmployee, editedDocumentData as InternExperienceCertificateData, companySettings, hrSettings?.signatory_name, hrSettings?.signatory_designation);
           break;
         default:
           throw new Error('Unsupported document type');
@@ -3878,6 +3920,10 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
                   )}
                   <option value="form_16">Form 16</option>
                   <option value="form_24q">Form 24Q</option>
+                  <optgroup label="── ITWala Academy Internship Program ──">
+                    <option value="intern_offer_letter">Internship Offer Letter</option>
+                    <option value="intern_experience_certificate">Internship Experience Certificate</option>
+                  </optgroup>
                 </select>
               </div>
 
@@ -4464,6 +4510,483 @@ Any other duties assigned by management from time to time`}
                           className="w-full px-3 py-2 border border-gray-300 rounded-md"
                           placeholder="Phone or Email"
                         />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* ── ITWala Academy – Internship Offer Letter ─────────────────────── */}
+              {selectedEmployee && documentType === 'intern_offer_letter' && (
+                <div className="space-y-4 border-t pt-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="bg-indigo-100 text-indigo-800 text-xs font-semibold px-2.5 py-1 rounded-full">ITWala Academy Internship Program</span>
+                    <h3 className="font-medium text-lg">Internship Offer Letter</h3>
+                  </div>
+
+                  {/* Validation Banner */}
+                  {(() => {
+                    const v = validateInternOfferLetter(documentData);
+                    if (!v.isValid)
+                      return (
+                        <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700 space-y-1">
+                          <p className="font-semibold">Please fix the following before generating:</p>
+                          <ul className="list-disc ml-4">{v.errors.map((e, i) => <li key={i}>{e}</li>)}</ul>
+                        </div>
+                      );
+                    if (v.warnings.length > 0)
+                      return (
+                        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-sm text-yellow-700 space-y-1">
+                          <p className="font-semibold">Recommendations:</p>
+                          <ul className="list-disc ml-4">{v.warnings.map((w, i) => <li key={i}>{w}</li>)}</ul>
+                        </div>
+                      );
+                    return <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-sm text-green-700 font-medium">✓ All required fields are complete.</div>;
+                  })()}
+
+                  {/* Auto-fill from defaults */}
+                  <div className="flex justify-end">
+                    <button
+                      type="button"
+                      onClick={() => setDocumentData(getDefaultInternOfferLetterData(selectedEmployee))}
+                      className="text-xs text-indigo-600 underline hover:text-indigo-800"
+                    >
+                      Auto-fill defaults
+                    </button>
+                  </div>
+
+                  {/* Core Details */}
+                  <div className="bg-indigo-50 p-4 rounded-lg space-y-4">
+                    <h4 className="font-medium text-indigo-700">1. Core Details</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Program Name *</label>
+                        <input type="text" value={documentData.program_name || PROGRAM_NAME_DEFAULT}
+                          onChange={(e) => setDocumentData({ ...documentData, program_name: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md" placeholder="ITWala Academy Internship Program" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Program Batch</label>
+                        <input type="text" value={documentData.program_batch || ''}
+                          onChange={(e) => setDocumentData({ ...documentData, program_batch: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md" placeholder="e.g. Batch 2026-A" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Intern Role / Position *</label>
+                        <input type="text" value={documentData.position || selectedEmployee.designation}
+                          onChange={(e) => setDocumentData({ ...documentData, position: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md" placeholder="e.g. Frontend Development Intern" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Department *</label>
+                        <input type="text" value={documentData.department || selectedEmployee.department || ''}
+                          onChange={(e) => setDocumentData({ ...documentData, department: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md" placeholder="e.g. Engineering" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Offer Date</label>
+                        <input type="date" value={documentData.offer_date || new Date().toISOString().split('T')[0]}
+                          onChange={(e) => setDocumentData({ ...documentData, offer_date: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md" />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Internship Duration */}
+                  <div className="bg-blue-50 p-4 rounded-lg space-y-4">
+                    <h4 className="font-medium text-blue-700">2. Internship Scope & Duration</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Start Date *</label>
+                        <input type="date" value={documentData.joining_date || selectedEmployee.date_of_joining}
+                          onChange={(e) => setDocumentData({ ...documentData, joining_date: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">End Date *</label>
+                        <input type="date" value={documentData.end_date || ''}
+                          onChange={(e) => setDocumentData({ ...documentData, end_date: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Duration (display)</label>
+                        <input type="text" value={documentData.internship_duration || ''}
+                          onChange={(e) => setDocumentData({ ...documentData, internship_duration: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md" placeholder="e.g. 3 months / 12 weeks" />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Internship Scope Description</label>
+                      <textarea value={documentData.internship_scope || ''}
+                        onChange={(e) => setDocumentData({ ...documentData, internship_scope: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md" rows={3}
+                        placeholder="Briefly describe the scope, objectives, and nature of the internship." />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Program-specific Notes</label>
+                      <textarea value={documentData.program_notes || ''}
+                        onChange={(e) => setDocumentData({ ...documentData, program_notes: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md" rows={2}
+                        placeholder="Any batch-specific conditions or requirements." />
+                    </div>
+                  </div>
+
+                  {/* Supervisor & Location */}
+                  <div className="bg-green-50 p-4 rounded-lg space-y-4">
+                    <h4 className="font-medium text-green-700">3. Supervisor & Location</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Supervisor Name</label>
+                        <input type="text" value={documentData.supervisor_name || ''}
+                          onChange={(e) => setDocumentData({ ...documentData, supervisor_name: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md" placeholder="Supervisor full name" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Supervisor Title</label>
+                        <input type="text" value={documentData.supervisor_title || ''}
+                          onChange={(e) => setDocumentData({ ...documentData, supervisor_title: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md" placeholder="e.g. Senior Engineer / Team Lead" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Work Location</label>
+                        <input type="text" value={documentData.work_location || ''}
+                          onChange={(e) => setDocumentData({ ...documentData, work_location: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md" placeholder="Office address or Remote" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Working Days</label>
+                        <input type="text" value={documentData.working_days || 'Monday to Friday'}
+                          onChange={(e) => setDocumentData({ ...documentData, working_days: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Start Time</label>
+                        <input type="text" value={documentData.working_hours_start || '9:30 AM'}
+                          onChange={(e) => setDocumentData({ ...documentData, working_hours_start: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">End Time</label>
+                        <input type="text" value={documentData.working_hours_end || '6:30 PM'}
+                          onChange={(e) => setDocumentData({ ...documentData, working_hours_end: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md" />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Duties */}
+                  <div className="bg-yellow-50 p-4 rounded-lg space-y-4">
+                    <h4 className="font-medium text-yellow-700">4. Duties & Learning Objectives</h4>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Duties & Responsibilities (one per line)</label>
+                      <textarea value={documentData.duties_and_responsibilities || ''}
+                        onChange={(e) => setDocumentData({ ...documentData, duties_and_responsibilities: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md font-mono text-sm" rows={6}
+                        placeholder={`Assist the team with project-related tasks\nParticipate in team meetings and standups\nDocument work progress and submit weekly reports\nAny other duties assigned by the supervisor`} />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Learning Objectives (one per line)</label>
+                      <textarea value={documentData.learning_objectives || ''}
+                        onChange={(e) => setDocumentData({ ...documentData, learning_objectives: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md font-mono text-sm" rows={4}
+                        placeholder={`Gain hands-on experience in software development lifecycle\nLearn industry best practices and tools\nDevelop professional communication skills`} />
+                    </div>
+                  </div>
+
+                  {/* Compensation */}
+                  <div className="bg-orange-50 p-4 rounded-lg space-y-4">
+                    <h4 className="font-medium text-orange-700">5. Compensation</h4>
+                    <div className="flex items-center gap-3">
+                      <input type="checkbox" id="isPaidIntern" checked={!!documentData.is_paid}
+                        onChange={(e) => setDocumentData({ ...documentData, is_paid: e.target.checked })}
+                        className="w-4 h-4 text-indigo-600 rounded" />
+                      <label htmlFor="isPaidIntern" className="text-sm font-medium text-gray-700">This is a paid internship</label>
+                    </div>
+                    {documentData.is_paid && (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Monthly Stipend (₹)</label>
+                          <input type="number" min={0} value={documentData.stipend_amount || 0}
+                            onChange={(e) => setDocumentData({ ...documentData, stipend_amount: parseFloat(e.target.value) || 0 })}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md" />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Currency</label>
+                          <input type="text" value={documentData.stipend_currency || 'INR'}
+                            onChange={(e) => setDocumentData({ ...documentData, stipend_currency: e.target.value })}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md" />
+                        </div>
+                      </div>
+                    )}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Reimbursement Details</label>
+                      <input type="text" value={documentData.reimbursement_details || ''}
+                        onChange={(e) => setDocumentData({ ...documentData, reimbursement_details: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                        placeholder="e.g. Travel & meal reimbursement up to ₹2,000/month" />
+                    </div>
+                  </div>
+
+                  {/* Legal & Compliance */}
+                  <div className="bg-red-50 p-4 rounded-lg space-y-4">
+                    <h4 className="font-medium text-red-700">6. Legal & Compliance Clauses</h4>
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-3">
+                        <input type="checkbox" id="confClause" checked={documentData.confidentiality_clause !== false}
+                          onChange={(e) => setDocumentData({ ...documentData, confidentiality_clause: e.target.checked })}
+                          className="w-4 h-4 text-red-600 rounded" />
+                        <label htmlFor="confClause" className="text-sm text-gray-700">Include Confidentiality / NDA clause</label>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <input type="checkbox" id="ipClause" checked={documentData.ip_assignment_clause !== false}
+                          onChange={(e) => setDocumentData({ ...documentData, ip_assignment_clause: e.target.checked })}
+                          className="w-4 h-4 text-red-600 rounded" />
+                        <label htmlFor="ipClause" className="text-sm text-gray-700">Include Intellectual Property Assignment clause</label>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Signatory */}
+                  <div className="bg-purple-50 p-4 rounded-lg space-y-4">
+                    <h4 className="font-medium text-purple-700">7. Signatory Details</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Signatory Name</label>
+                        <input type="text" value={documentData.signatory_name || hrSettings?.signatory_name || ''}
+                          onChange={(e) => setDocumentData({ ...documentData, signatory_name: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md" placeholder="Authorized signatory" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Designation</label>
+                        <input type="text" value={documentData.signatory_designation || hrSettings?.signatory_designation || ''}
+                          onChange={(e) => setDocumentData({ ...documentData, signatory_designation: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md" placeholder="e.g. HR Manager" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Contact</label>
+                        <input type="text" value={documentData.signatory_contact || ''}
+                          onChange={(e) => setDocumentData({ ...documentData, signatory_contact: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md" placeholder="Phone / Email" />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* ── ITWala Academy – Internship Experience Certificate ──────────────── */}
+              {selectedEmployee && documentType === 'intern_experience_certificate' && (
+                <div className="space-y-4 border-t pt-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="bg-teal-100 text-teal-800 text-xs font-semibold px-2.5 py-1 rounded-full">ITWala Academy Internship Program</span>
+                    <h3 className="font-medium text-lg">Internship Experience Certificate</h3>
+                  </div>
+
+                  {/* Validation Banner */}
+                  {(() => {
+                    const v = validateInternExperienceCertificate(documentData);
+                    if (!v.isValid)
+                      return (
+                        <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700 space-y-1">
+                          <p className="font-semibold">Please fix the following before generating:</p>
+                          <ul className="list-disc ml-4">{v.errors.map((e, i) => <li key={i}>{e}</li>)}</ul>
+                        </div>
+                      );
+                    if (v.warnings.length > 0)
+                      return (
+                        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-sm text-yellow-700 space-y-1">
+                          <p className="font-semibold">Recommendations:</p>
+                          <ul className="list-disc ml-4">{v.warnings.map((w, i) => <li key={i}>{w}</li>)}</ul>
+                        </div>
+                      );
+                    return <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-sm text-green-700 font-medium">✓ All required fields are complete.</div>;
+                  })()}
+
+                  <div className="flex justify-end">
+                    <button type="button"
+                      onClick={() => setDocumentData(getDefaultInternExperienceCertData(selectedEmployee))}
+                      className="text-xs text-teal-600 underline hover:text-teal-800">
+                      Auto-fill defaults
+                    </button>
+                  </div>
+
+                  {/* Intern & Program Info */}
+                  <div className="bg-teal-50 p-4 rounded-lg space-y-4">
+                    <h4 className="font-medium text-teal-700">1. Intern & Program Information</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Intern Name *</label>
+                        <input type="text" value={documentData.employee_name || selectedEmployee.full_name}
+                          readOnly className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Role / Designation *</label>
+                        <input type="text" value={documentData.designation || selectedEmployee.designation}
+                          onChange={(e) => setDocumentData({ ...documentData, designation: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md" placeholder="e.g. Frontend Development Intern" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Department</label>
+                        <input type="text" value={documentData.department || selectedEmployee.department || ''}
+                          onChange={(e) => setDocumentData({ ...documentData, department: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Program Name *</label>
+                        <input type="text" value={documentData.program_name || PROGRAM_NAME_DEFAULT}
+                          onChange={(e) => setDocumentData({ ...documentData, program_name: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Program Batch</label>
+                        <input type="text" value={documentData.program_batch || ''}
+                          onChange={(e) => setDocumentData({ ...documentData, program_batch: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md" placeholder="e.g. Batch 2026-A" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Internship Type</label>
+                        <input type="text" value={documentData.internship_type || ''}
+                          onChange={(e) => setDocumentData({ ...documentData, internship_type: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md" placeholder="e.g. Software Development Internship" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Start Date *</label>
+                        <input type="date" value={documentData.date_of_joining || selectedEmployee.date_of_joining}
+                          onChange={(e) => setDocumentData({ ...documentData, date_of_joining: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Last Working Date *</label>
+                        <input type="date" value={documentData.last_working_date || selectedEmployee.date_of_leaving || ''}
+                          onChange={(e) => setDocumentData({ ...documentData, last_working_date: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Issued Date</label>
+                        <input type="date" value={documentData.issued_date || new Date().toISOString().split('T')[0]}
+                          onChange={(e) => setDocumentData({ ...documentData, issued_date: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md" />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Supervisor */}
+                  <div className="bg-cyan-50 p-4 rounded-lg space-y-4">
+                    <h4 className="font-medium text-cyan-700">2. Supervisor</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Supervisor Name</label>
+                        <input type="text" value={documentData.supervisor_name || ''}
+                          onChange={(e) => setDocumentData({ ...documentData, supervisor_name: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md" placeholder="Supervisor full name" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Supervisor Title</label>
+                        <input type="text" value={documentData.supervisor_title || ''}
+                          onChange={(e) => setDocumentData({ ...documentData, supervisor_title: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md" placeholder="e.g. Senior Engineer" />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Achievements & Skills */}
+                  <div className="bg-blue-50 p-4 rounded-lg space-y-4">
+                    <h4 className="font-medium text-blue-700">3. Projects, Achievements & Skills</h4>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Projects Worked On (one per line)</label>
+                      <textarea value={documentData.projects_worked_on || ''}
+                        onChange={(e) => setDocumentData({ ...documentData, projects_worked_on: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md font-mono text-sm" rows={4}
+                        placeholder={`Developed a customer-facing dashboard using React\nIntegrated REST APIs for data fetching`} />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Key Achievements</label>
+                      <textarea value={documentData.key_achievements || ''}
+                        onChange={(e) => setDocumentData({ ...documentData, key_achievements: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md" rows={3}
+                        placeholder="Describe notable achievements during the internship." />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Skills Acquired</label>
+                      <textarea value={documentData.skills_acquired || ''}
+                        onChange={(e) => setDocumentData({ ...documentData, skills_acquired: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md" rows={2}
+                        placeholder="e.g. React, TypeScript, REST API integration, Agile methodology" />
+                    </div>
+                  </div>
+
+                  {/* Performance & Rating */}
+                  <div className="bg-green-50 p-4 rounded-lg space-y-4">
+                    <h4 className="font-medium text-green-700">4. Performance & Conduct</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Performance Note</label>
+                        <textarea value={documentData.performance_note || ''}
+                          onChange={(e) => setDocumentData({ ...documentData, performance_note: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md" rows={3}
+                          placeholder="e.g. Demonstrated strong technical acumen and proactive approach throughout the internship." />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Conduct Note</label>
+                        <textarea value={documentData.conduct_note || ''}
+                          onChange={(e) => setDocumentData({ ...documentData, conduct_note: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md" rows={3}
+                          placeholder="e.g. Maintained exemplary professional conduct and collaborated effectively with the team." />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Overall Rating</label>
+                      <select value={documentData.overall_rating || ''}
+                        onChange={(e) => setDocumentData({ ...documentData, overall_rating: e.target.value || undefined })}
+                        className="w-full md:w-48 px-3 py-2 border border-gray-300 rounded-md">
+                        <option value="">— Not specified —</option>
+                        <option value="excellent">Excellent</option>
+                        <option value="good">Good</option>
+                        <option value="satisfactory">Satisfactory</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Compensation reference */}
+                  <div className="bg-orange-50 p-4 rounded-lg space-y-4">
+                    <h4 className="font-medium text-orange-700">5. Compensation Reference</h4>
+                    <div className="flex items-center gap-3">
+                      <input type="checkbox" id="wasPaid" checked={!!documentData.was_paid}
+                        onChange={(e) => setDocumentData({ ...documentData, was_paid: e.target.checked })}
+                        className="w-4 h-4 rounded" />
+                      <label htmlFor="wasPaid" className="text-sm text-gray-700">Intern received a stipend</label>
+                    </div>
+                    {documentData.was_paid && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Stipend Details</label>
+                        <input type="text" value={documentData.stipend_details || ''}
+                          onChange={(e) => setDocumentData({ ...documentData, stipend_details: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                          placeholder="e.g. Monthly stipend of ₹5,000" />
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Signatory */}
+                  <div className="bg-purple-50 p-4 rounded-lg space-y-4">
+                    <h4 className="font-medium text-purple-700">6. Signatory Details</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Signatory Name</label>
+                        <input type="text" value={documentData.signatory_name || hrSettings?.signatory_name || ''}
+                          onChange={(e) => setDocumentData({ ...documentData, signatory_name: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md" placeholder="Authorized signatory" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Designation</label>
+                        <input type="text" value={documentData.signatory_designation || hrSettings?.signatory_designation || ''}
+                          onChange={(e) => setDocumentData({ ...documentData, signatory_designation: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md" placeholder="e.g. HR Manager" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Contact</label>
+                        <input type="text" value={documentData.contact_details || ''}
+                          onChange={(e) => setDocumentData({ ...documentData, contact_details: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md" placeholder="Phone / Email" />
                       </div>
                     </div>
                   </div>
@@ -5466,6 +5989,224 @@ Any other duties assigned by management from time to time`}
                           onChange={(e) => setEditedDocumentData({ ...editedDocumentData, contact_details: e.target.value })}
                           className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
                         />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* ── Edit: Intern Offer Letter ─────────────────────────────────── */}
+              {editingDocument.document_type === 'intern_offer_letter' && (
+                <div className="space-y-4">
+                  <div className="bg-indigo-50 p-4 rounded-lg space-y-3">
+                    <h4 className="font-medium text-indigo-700">Program & Core Details</h4>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Program Name</label>
+                        <input type="text" value={(editedDocumentData as InternOfferLetterData).program_name || PROGRAM_NAME_DEFAULT}
+                          onChange={(e) => setEditedDocumentData({ ...editedDocumentData, program_name: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Program Batch</label>
+                        <input type="text" value={(editedDocumentData as InternOfferLetterData).program_batch || ''}
+                          onChange={(e) => setEditedDocumentData({ ...editedDocumentData, program_batch: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Position</label>
+                        <input type="text" value={(editedDocumentData as InternOfferLetterData).position || ''}
+                          onChange={(e) => setEditedDocumentData({ ...editedDocumentData, position: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Department</label>
+                        <input type="text" value={(editedDocumentData as InternOfferLetterData).department || ''}
+                          onChange={(e) => setEditedDocumentData({ ...editedDocumentData, department: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
+                        <input type="date" value={(editedDocumentData as InternOfferLetterData).joining_date || ''}
+                          onChange={(e) => setEditedDocumentData({ ...editedDocumentData, joining_date: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">End Date</label>
+                        <input type="date" value={(editedDocumentData as InternOfferLetterData).end_date || ''}
+                          onChange={(e) => setEditedDocumentData({ ...editedDocumentData, end_date: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm" />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Internship Scope</label>
+                      <textarea rows={3} value={(editedDocumentData as InternOfferLetterData).internship_scope || ''}
+                        onChange={(e) => setEditedDocumentData({ ...editedDocumentData, internship_scope: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Duties & Responsibilities</label>
+                      <textarea rows={4} value={(editedDocumentData as InternOfferLetterData).duties_and_responsibilities || ''}
+                        onChange={(e) => setEditedDocumentData({ ...editedDocumentData, duties_and_responsibilities: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm font-mono" />
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <input type="checkbox" checked={!!(editedDocumentData as InternOfferLetterData).is_paid}
+                        onChange={(e) => setEditedDocumentData({ ...editedDocumentData, is_paid: e.target.checked })}
+                        className="w-4 h-4 rounded" />
+                      <label className="text-sm text-gray-700">Paid internship</label>
+                    </div>
+                    {(editedDocumentData as InternOfferLetterData).is_paid && (
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Stipend Amount (₹)</label>
+                          <input type="number" value={(editedDocumentData as InternOfferLetterData).stipend_amount || 0}
+                            onChange={(e) => setEditedDocumentData({ ...editedDocumentData, stipend_amount: parseFloat(e.target.value) || 0 })}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm" />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Currency</label>
+                          <input type="text" value={(editedDocumentData as InternOfferLetterData).stipend_currency || 'INR'}
+                            onChange={(e) => setEditedDocumentData({ ...editedDocumentData, stipend_currency: e.target.value })}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm" />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  <div className="bg-purple-50 p-4 rounded-lg space-y-3">
+                    <h4 className="font-medium text-purple-700">Signatory Details</h4>
+                    <div className="grid grid-cols-3 gap-3">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Signatory Name</label>
+                        <input type="text" value={(editedDocumentData as InternOfferLetterData).signatory_name || ''}
+                          onChange={(e) => setEditedDocumentData({ ...editedDocumentData, signatory_name: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Designation</label>
+                        <input type="text" value={(editedDocumentData as InternOfferLetterData).signatory_designation || ''}
+                          onChange={(e) => setEditedDocumentData({ ...editedDocumentData, signatory_designation: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Contact</label>
+                        <input type="text" value={(editedDocumentData as InternOfferLetterData).signatory_contact || ''}
+                          onChange={(e) => setEditedDocumentData({ ...editedDocumentData, signatory_contact: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm" />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* ── Edit: Intern Experience Certificate ───────────────────────── */}
+              {editingDocument.document_type === 'intern_experience_certificate' && (
+                <div className="space-y-4">
+                  <div className="bg-teal-50 p-4 rounded-lg space-y-3">
+                    <h4 className="font-medium text-teal-700">Intern & Program Info</h4>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Program Name</label>
+                        <input type="text" value={(editedDocumentData as InternExperienceCertificateData).program_name || PROGRAM_NAME_DEFAULT}
+                          onChange={(e) => setEditedDocumentData({ ...editedDocumentData, program_name: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Internship Type</label>
+                        <input type="text" value={(editedDocumentData as InternExperienceCertificateData).internship_type || ''}
+                          onChange={(e) => setEditedDocumentData({ ...editedDocumentData, internship_type: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Designation</label>
+                        <input type="text" value={(editedDocumentData as InternExperienceCertificateData).designation || ''}
+                          onChange={(e) => setEditedDocumentData({ ...editedDocumentData, designation: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Department</label>
+                        <input type="text" value={(editedDocumentData as InternExperienceCertificateData).department || ''}
+                          onChange={(e) => setEditedDocumentData({ ...editedDocumentData, department: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
+                        <input type="date" value={(editedDocumentData as InternExperienceCertificateData).date_of_joining || ''}
+                          onChange={(e) => setEditedDocumentData({ ...editedDocumentData, date_of_joining: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Last Working Date</label>
+                        <input type="date" value={(editedDocumentData as InternExperienceCertificateData).last_working_date || ''}
+                          onChange={(e) => setEditedDocumentData({ ...editedDocumentData, last_working_date: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm" />
+                      </div>
+                    </div>
+                  </div>
+                  <div className="bg-blue-50 p-4 rounded-lg space-y-3">
+                    <h4 className="font-medium text-blue-700">Projects, Achievements & Performance</h4>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Projects Worked On</label>
+                      <textarea rows={3} value={(editedDocumentData as InternExperienceCertificateData).projects_worked_on || ''}
+                        onChange={(e) => setEditedDocumentData({ ...editedDocumentData, projects_worked_on: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm font-mono" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Key Achievements</label>
+                      <textarea rows={2} value={(editedDocumentData as InternExperienceCertificateData).key_achievements || ''}
+                        onChange={(e) => setEditedDocumentData({ ...editedDocumentData, key_achievements: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Skills Acquired</label>
+                      <textarea rows={2} value={(editedDocumentData as InternExperienceCertificateData).skills_acquired || ''}
+                        onChange={(e) => setEditedDocumentData({ ...editedDocumentData, skills_acquired: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Performance Note</label>
+                      <textarea rows={2} value={(editedDocumentData as InternExperienceCertificateData).performance_note || ''}
+                        onChange={(e) => setEditedDocumentData({ ...editedDocumentData, performance_note: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Conduct Note</label>
+                      <textarea rows={2} value={(editedDocumentData as InternExperienceCertificateData).conduct_note || ''}
+                        onChange={(e) => setEditedDocumentData({ ...editedDocumentData, conduct_note: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Overall Rating</label>
+                      <select value={(editedDocumentData as InternExperienceCertificateData).overall_rating || ''}
+                        onChange={(e) => setEditedDocumentData({ ...editedDocumentData, overall_rating: (e.target.value as any) || undefined })}
+                        className="w-40 px-3 py-2 border border-gray-300 rounded-md text-sm">
+                        <option value="">— None —</option>
+                        <option value="excellent">Excellent</option>
+                        <option value="good">Good</option>
+                        <option value="satisfactory">Satisfactory</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div className="bg-purple-50 p-4 rounded-lg space-y-3">
+                    <h4 className="font-medium text-purple-700">Signatory Details</h4>
+                    <div className="grid grid-cols-3 gap-3">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Signatory Name</label>
+                        <input type="text" value={(editedDocumentData as InternExperienceCertificateData).signatory_name || ''}
+                          onChange={(e) => setEditedDocumentData({ ...editedDocumentData, signatory_name: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Designation</label>
+                        <input type="text" value={(editedDocumentData as InternExperienceCertificateData).signatory_designation || ''}
+                          onChange={(e) => setEditedDocumentData({ ...editedDocumentData, signatory_designation: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Contact Details</label>
+                        <input type="text" value={(editedDocumentData as InternExperienceCertificateData).contact_details || ''}
+                          onChange={(e) => setEditedDocumentData({ ...editedDocumentData, contact_details: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm" />
                       </div>
                     </div>
                   </div>
