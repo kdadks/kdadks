@@ -1781,7 +1781,11 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
 
       // Get currency info for the customer
       const selectedCustomer = currentCustomers.find(c => c.id === fullInvoice.customer_id);
-      const currencyInfo = getCurrencyInfo(selectedCustomer);
+      const nativeCurrencyInfo = getCurrencyInfo(selectedCustomer);
+      // Honor INR override: if invoice was saved with INR currency but customer's native currency is foreign
+      const currencyInfo = (fullInvoice.currency_code === 'INR' && nativeCurrencyInfo.code !== 'INR')
+        ? { symbol: '₹', code: 'INR', name: 'Rupees' }
+        : nativeCurrencyInfo;
       
       // Get dynamic tax label based on customer's country
       const taxLabel = getTaxLabel(selectedCustomer);
@@ -2821,7 +2825,11 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
       
       // Get currency info for the customer
       const selectedCustomer = customer;
-      const currencyInfo = getCurrencyInfo(selectedCustomer);
+      const nativeCurrencyInfo = getCurrencyInfo(selectedCustomer);
+      // Honor INR override: if invoice was saved with INR currency but customer's native currency is foreign
+      const currencyInfo = (fullInvoice.currency_code === 'INR' && nativeCurrencyInfo.code !== 'INR')
+        ? { symbol: '₹', code: 'INR', name: 'Rupees' }
+        : nativeCurrencyInfo;
 
       // Use same branding system as download PDF
       const dimensions = PDFBrandingUtils.getStandardDimensions();
