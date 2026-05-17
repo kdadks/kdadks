@@ -43,6 +43,7 @@ export default function EmployeeDocuments() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [documentToDelete, setDocumentToDelete] = useState<EmployeeDocument | null>(null);
   const [selectedDocument, setSelectedDocument] = useState<EmployeeDocument | null>(null);
+  const [selectedAdminDocument, setSelectedAdminDocument] = useState<any | null>(null);
   const [showPreviewModal, setShowPreviewModal] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'uploaded' | 'admin-generated'>('uploaded');
@@ -152,10 +153,64 @@ export default function EmployeeDocuments() {
       const url = await employeeDocumentService.getDocumentUrl(document.storage_path);
       setPreviewUrl(url);
       setSelectedDocument(document);
+      setSelectedAdminDocument(null);
       setShowPreviewModal(true);
     } catch (error) {
       console.error('Preview error:', error);
       showError('Failed to preview document');
+    }
+  };
+
+  const handleAdminDocPreview = async (doc: any) => {
+    try {
+      let url: string;
+      if (doc.storage_path) {
+        url = await employeeDocumentService.getDocumentUrl(doc.storage_path);
+      } else if (doc.pdf_url) {
+        url = doc.pdf_url;
+      } else {
+        showError('Document file is not available for preview');
+        return;
+      }
+      setPreviewUrl(url);
+      setSelectedAdminDocument(doc);
+      setSelectedDocument(null);
+      setShowPreviewModal(true);
+    } catch (error) {
+      console.error('Admin doc preview error:', error);
+      showError('Failed to preview document');
+    }
+  };
+
+  const handleAdminDocDownload = async (doc: any) => {
+    try {
+      if (doc.storage_path) {
+        const blob = await employeeDocumentService.downloadDocument(doc.storage_path);
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${doc.document_type}_${doc.document_number}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+      } else if (doc.pdf_url) {
+        const response = await fetch(doc.pdf_url);
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${doc.document_type}_${doc.document_number}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+      } else {
+        showError('Document file is not available for download');
+      }
+    } catch (error) {
+      console.error('Admin doc download error:', error);
+      showError('Failed to download document');
     }
   };
 
@@ -402,24 +457,44 @@ export default function EmployeeDocuments() {
                   key={doc.id}
                   className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 hover:shadow-md transition-shadow"
                 >
-                  <div className="flex items-start space-x-4">
-                    <div className="bg-green-100 rounded-lg p-3">
-                      <FileText className="w-6 h-6 text-green-600" />
-                    </div>
-                    <div className="flex-1">
-                      <h3 className="text-lg font-semibold text-gray-900">
-                        {doc.document_type.replace('_', ' ').toUpperCase()}
-                      </h3>
-                      <p className="text-sm text-gray-600 mt-1">Document #: {doc.document_number}</p>
-                      <div className="flex items-center space-x-4 mt-2 text-sm text-gray-500">
-                        <span>{new Date(doc.document_date).toLocaleDateString('en-IN')}</span>
-                        <span>•</span>
-                        <span className="capitalize">{doc.status}</span>
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-start space-x-4 flex-1">
+                      <div className="bg-green-100 rounded-lg p-3">
+                        <FileText className="w-6 h-6 text-green-600" />
                       </div>
-                      {doc.purpose && (
-                        <p className="text-sm text-gray-600 mt-2">{doc.purpose}</p>
-                      )}
+                      <div className="flex-1">
+                        <h3 className="text-lg font-semibold text-gray-900">
+                          {doc.document_type.replace(/_/g, ' ').toUpperCase()}
+                        </h3>
+                        <p className="text-sm text-gray-600 mt-1">Document #: {doc.document_number}</p>
+                        <div className="flex items-center space-x-4 mt-2 text-sm text-gray-500">
+                          <span>{new Date(doc.document_date).toLocaleDateString('en-IN')}</span>
+                          <span>•</span>
+                          <span className="capitalize">{doc.status}</span>
+                        </div>
+                        {doc.purpose && (
+                          <p className="text-sm text-gray-600 mt-2">{doc.purpose}</p>
+                        )}
+                      </div>
                     </div>
+                    {(doc.storage_path || doc.pdf_url) && (
+                      <div className="flex items-center space-x-2 ml-4">
+                        <button
+                          onClick={() => handleAdminDocPreview(doc)}
+                          className="p-2 text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
+                          title="Preview"
+                        >
+                          <Eye className="w-5 h-5" />
+                        </button>
+                        <button
+                          onClick={() => handleAdminDocDownload(doc)}
+                          className="p-2 text-green-600 hover:bg-green-50 rounded-md transition-colors"
+                          title="Download"
+                        >
+                          <Download className="w-5 h-5" />
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}
@@ -554,14 +629,24 @@ export default function EmployeeDocuments() {
       )}
 
       {/* Preview Modal */}
-      {showPreviewModal && previewUrl && selectedDocument && (
+      {showPreviewModal && previewUrl && (selectedDocument || selectedAdminDocument) && (
         <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg shadow-xl max-w-6xl w-full h-[90vh] flex flex-col">
             <div className="flex items-center justify-between p-4 border-b">
-              <h2 className="text-lg font-semibold">{selectedDocument.document_name}</h2>
+              <h2 className="text-lg font-semibold">
+                {selectedDocument
+                  ? selectedDocument.document_name
+                  : `${selectedAdminDocument?.document_type.replace(/_/g, ' ').toUpperCase()} - ${selectedAdminDocument?.document_number}`}
+              </h2>
               <div className="flex items-center space-x-3">
                 <button
-                  onClick={() => handleDownload(selectedDocument)}
+                  onClick={() => {
+                    if (selectedDocument) {
+                      handleDownload(selectedDocument);
+                    } else if (selectedAdminDocument) {
+                      handleAdminDocDownload(selectedAdminDocument);
+                    }
+                  }}
                   className="flex items-center px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-md hover:bg-primary-700"
                 >
                   <Download className="w-4 h-4 mr-2" />
@@ -571,6 +656,7 @@ export default function EmployeeDocuments() {
                   onClick={() => {
                     setShowPreviewModal(false);
                     setPreviewUrl(null);
+                    setSelectedAdminDocument(null);
                   }}
                   className="text-gray-400 hover:text-gray-600"
                 >
@@ -579,17 +665,17 @@ export default function EmployeeDocuments() {
               </div>
             </div>
             <div className="flex-1 overflow-auto">
-              {selectedDocument.mime_type === 'application/pdf' ? (
-                <iframe
-                  src={previewUrl}
-                  className="w-full h-full"
-                  title="Document Preview"
-                />
-              ) : (
+              {selectedDocument && selectedDocument.mime_type !== 'application/pdf' ? (
                 <img
                   src={previewUrl}
                   alt={selectedDocument.document_name}
                   className="max-w-full max-h-full mx-auto"
+                />
+              ) : (
+                <iframe
+                  src={previewUrl}
+                  className="w-full h-full"
+                  title="Document Preview"
                 />
               )}
             </div>

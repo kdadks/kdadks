@@ -743,12 +743,47 @@ export const employeeService = {
         currentNumber = settings.salary_cert_current_number
         settingsUpdate = { salary_cert_current_number: currentNumber + 1 }
         break
+      case 'intern_offer_letter':
+        prefix = 'INT-OL'
+        format = settings.offer_letter_number_format
+        currentNumber = settings.offer_letter_current_number
+        settingsUpdate = { offer_letter_current_number: currentNumber + 1 }
+        break
+      case 'intern_experience_certificate':
+        prefix = 'INT-EC'
+        format = settings.offer_letter_number_format
+        currentNumber = settings.offer_letter_current_number
+        settingsUpdate = { offer_letter_current_number: currentNumber + 1 }
+        break
+      case 'experience_certificate':
+        prefix = 'EXP'
+        format = settings.offer_letter_number_format
+        currentNumber = settings.offer_letter_current_number
+        settingsUpdate = { offer_letter_current_number: currentNumber + 1 }
+        break
+      case 'relieving_letter':
+        prefix = 'REL'
+        format = settings.offer_letter_number_format
+        currentNumber = settings.offer_letter_current_number
+        settingsUpdate = { offer_letter_current_number: currentNumber + 1 }
+        break
+      case 'form_16':
+        prefix = 'F16'
+        format = settings.offer_letter_number_format
+        currentNumber = settings.offer_letter_current_number
+        settingsUpdate = { offer_letter_current_number: currentNumber + 1 }
+        break
+      case 'form_24q':
+        prefix = 'F24Q'
+        format = settings.offer_letter_number_format
+        currentNumber = settings.offer_letter_current_number
+        settingsUpdate = { offer_letter_current_number: currentNumber + 1 }
+        break
       default:
-        // For other document types, use a generic format
         prefix = 'DOC'
-        format = 'PREFIX/YYYY/###'
-        currentNumber = 1
-        settingsUpdate = {}
+        format = settings.offer_letter_number_format
+        currentNumber = settings.offer_letter_current_number
+        settingsUpdate = { offer_letter_current_number: currentNumber + 1 }
     }
 
     // Generate document number
