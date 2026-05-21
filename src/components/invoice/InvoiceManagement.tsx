@@ -779,6 +779,56 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
     setShowInvoicePreview(true);
   };
 
+  // Helper: returns Wise banking defaults for the given currency code (non-INR)
+  const getIntlBankingDefaults = (currencyCode: string): Partial<CreateInvoiceData> => {
+    const defaults: Partial<CreateInvoiceData> = {
+      intl_account_name: '',
+      intl_account_number: '',
+      intl_account_type: '',
+      intl_routing_number: '',
+      intl_swift_bic: '',
+      intl_bank_address: '',
+      intl_iban: '',
+      intl_sort_code: ''
+    };
+    if (currencyCode === 'EUR') {
+      defaults.intl_account_name = 'Kdadks Service Private Limited';
+      defaults.intl_iban         = 'BE93905254252767';
+      defaults.intl_swift_bic    = 'TRWIBEB1XXX';
+      defaults.intl_bank_address = 'Wise, Rue du Trône 100, 3rd floor, Brussels, 1050, Belgium';
+    } else if (currencyCode === 'GBP') {
+      defaults.intl_account_name   = 'Kdadks Service Private Limited';
+      defaults.intl_iban           = 'GB43TRWI60846460921788';
+      defaults.intl_account_number = '60921788';
+      defaults.intl_sort_code      = '608464';
+      defaults.intl_swift_bic      = 'TRWIGB2LXXX';
+      defaults.intl_bank_address   = 'Wise Payments Limited, Worship Square, 65 Clifton Street, London, EC2A 4JE, United Kingdom';
+    } else if (currencyCode === 'USD') {
+      defaults.intl_account_name   = 'Kdadks Service Private Limited';
+      defaults.intl_account_number = '218404409881';
+      defaults.intl_account_type   = 'Checking';
+      defaults.intl_routing_number = '101019628';
+      defaults.intl_swift_bic      = 'TRWIUS35XXX';
+      defaults.intl_bank_address   = 'Wise US Inc, 108 W 13th St, Wilmington, DE, 19801, United States';
+    }
+    return defaults;
+  };
+
+  // Helper: backfill empty intl_* fields on an invoice/form-data shape using currency-based defaults.
+  // Returns a copy with defaults applied only where existing values are empty/missing.
+  const applyIntlBankingFallback = <T extends Record<string, unknown>>(data: T, currencyCode: string): T => {
+    if (!currencyCode || currencyCode === 'INR') return data;
+    const defaults = getIntlBankingDefaults(currencyCode);
+    const out: Record<string, unknown> = { ...data };
+    (Object.keys(defaults) as (keyof CreateInvoiceData)[]).forEach((key) => {
+      const cur = out[key as string];
+      if (cur === undefined || cur === null || cur === '') {
+        out[key as string] = defaults[key] ?? '';
+      }
+    });
+    return out as T;
+  };
+
   const handleInvoiceFormChange = (field: keyof CreateInvoiceData, value: string | CreateInvoiceItemData[]) => {
     if (field === 'customer_id') {
       console.log('👤 Customer selection changed:', {
@@ -793,40 +843,7 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
       // Auto-populate intl banking defaults based on the selected customer's currency
       const selectedCustomer = customers.find(c => c.id === value);
       const currencyCode = getCurrencyInfo(selectedCustomer).code;
-
-      const intlDefaults: Partial<CreateInvoiceData> = {};
-      if (currencyCode === 'EUR') {
-        intlDefaults.intl_account_name   = 'Kdadks Service Private Limited';
-        intlDefaults.intl_iban           = 'BE93905254252767';
-        intlDefaults.intl_sort_code      = '';
-        intlDefaults.intl_account_number = '';
-        intlDefaults.intl_account_type   = '';
-        intlDefaults.intl_routing_number = '';
-        intlDefaults.intl_swift_bic      = 'TRWIBEB1XXX';
-        intlDefaults.intl_bank_address   = 'Wise, Rue du Trône 100, 3rd floor, Brussels, 1050, Belgium';
-      } else if (currencyCode === 'GBP') {
-        intlDefaults.intl_account_name   = 'Kdadks Service Private Limited';
-        intlDefaults.intl_iban           = 'GB43TRWI60846460921788';
-        intlDefaults.intl_account_number = '60921788';
-        intlDefaults.intl_sort_code      = '608464';
-        intlDefaults.intl_account_type   = '';
-        intlDefaults.intl_routing_number = '';
-        intlDefaults.intl_swift_bic      = 'TRWIGB2LXXX';
-        intlDefaults.intl_bank_address   = 'Wise Payments Limited, Worship Square, 65 Clifton Street, London, EC2A 4JE, United Kingdom';
-      } else if (currencyCode === 'USD') {
-        intlDefaults.intl_account_name   = 'Kdadks Service Private Limited';
-        intlDefaults.intl_iban           = '';
-        intlDefaults.intl_sort_code      = '';
-        intlDefaults.intl_account_number = '218404409881';
-        intlDefaults.intl_account_type   = 'Checking';
-        intlDefaults.intl_routing_number = '101019628';
-        intlDefaults.intl_swift_bic      = 'TRWIUS35XXX';
-        intlDefaults.intl_bank_address   = 'Wise US Inc, 108 W 13th St, Wilmington, DE, 19801, United States';
-      } else if (currencyCode !== 'INR') {
-        // Generic non-INR — keep current values but clear region-specific fields
-        intlDefaults.intl_iban      = '';
-        intlDefaults.intl_sort_code = '';
-      }
+      const intlDefaults = currencyCode !== 'INR' ? getIntlBankingDefaults(currencyCode) : {};
 
       setInvoiceFormData(prev => ({
         ...prev,
@@ -1558,29 +1575,34 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
       // Load full invoice details
       const fullInvoice = await invoiceService.getInvoiceById(invoice.id);
       if (fullInvoice) {
-        setSelectedInvoice(fullInvoice);
+        // Backfill intl_* on the loaded invoice for legacy non-INR invoices
+        // so view/PDF rendering shows banking details even if DB row was empty.
+        const viewCustomer = customers.find(c => c.id === fullInvoice.customer_id);
+        const viewCurrency = getCurrencyInfo(viewCustomer).code;
+        const filledInvoice = applyIntlBankingFallback(fullInvoice as unknown as Record<string, unknown>, viewCurrency) as unknown as typeof fullInvoice;
+        setSelectedInvoice(filledInvoice);
         setInvoiceFormData({
-          customer_id: fullInvoice.customer_id,
-          invoice_date: fullInvoice.invoice_date,
-          due_date: fullInvoice.due_date || '',
-          notes: fullInvoice.notes || '',
-          terms_conditions: fullInvoice.terms_conditions || '',
-          project_title: fullInvoice.project_title || '',
-          estimated_time: fullInvoice.estimated_time || '',
-          company_contact_name: fullInvoice.company_contact_name || '',
-          company_contact_email: fullInvoice.company_contact_email || '',
-          company_contact_phone: fullInvoice.company_contact_phone || '',
-          discount_type: fullInvoice.discount_type || 'percentage',
-          discount_value: fullInvoice.discount_value || 0,
-          intl_account_name: fullInvoice.intl_account_name || '',
-          intl_account_number: fullInvoice.intl_account_number || '',
-          intl_account_type: fullInvoice.intl_account_type || '',
-          intl_routing_number: fullInvoice.intl_routing_number || '',
-          intl_swift_bic: fullInvoice.intl_swift_bic || '',
-          intl_bank_address: fullInvoice.intl_bank_address || '',
-          intl_iban: fullInvoice.intl_iban || '',
-          intl_sort_code: fullInvoice.intl_sort_code || '',
-          items: fullInvoice.invoice_items?.map(item => ({
+          customer_id: filledInvoice.customer_id,
+          invoice_date: filledInvoice.invoice_date,
+          due_date: filledInvoice.due_date || '',
+          notes: filledInvoice.notes || '',
+          terms_conditions: filledInvoice.terms_conditions || '',
+          project_title: filledInvoice.project_title || '',
+          estimated_time: filledInvoice.estimated_time || '',
+          company_contact_name: filledInvoice.company_contact_name || '',
+          company_contact_email: filledInvoice.company_contact_email || '',
+          company_contact_phone: filledInvoice.company_contact_phone || '',
+          discount_type: filledInvoice.discount_type || 'percentage',
+          discount_value: filledInvoice.discount_value || 0,
+          intl_account_name: filledInvoice.intl_account_name || '',
+          intl_account_number: filledInvoice.intl_account_number || '',
+          intl_account_type: filledInvoice.intl_account_type || '',
+          intl_routing_number: filledInvoice.intl_routing_number || '',
+          intl_swift_bic: filledInvoice.intl_swift_bic || '',
+          intl_bank_address: filledInvoice.intl_bank_address || '',
+          intl_iban: filledInvoice.intl_iban || '',
+          intl_sort_code: filledInvoice.intl_sort_code || '',
+          items: filledInvoice.invoice_items?.map(item => ({
             product_id: item.product_id,
             item_name: item.item_name,
             description: item.description,
@@ -1645,12 +1667,38 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
         
         console.log('📝 Final items for form:', itemsForForm);
         
+        // Backfill intl_* defaults for non-INR currencies so admin can edit the
+        // banking section pre-populated for legacy invoices missing these fields.
+        const editCustomer = customers.find(c => c.id === fullInvoice.customer_id);
+        const editCurrency = getCurrencyInfo(editCustomer).code;
+        const intlSource = applyIntlBankingFallback(
+          {
+            intl_account_name: fullInvoice.intl_account_name || '',
+            intl_account_number: fullInvoice.intl_account_number || '',
+            intl_account_type: fullInvoice.intl_account_type || '',
+            intl_routing_number: fullInvoice.intl_routing_number || '',
+            intl_swift_bic: fullInvoice.intl_swift_bic || '',
+            intl_bank_address: fullInvoice.intl_bank_address || '',
+            intl_iban: fullInvoice.intl_iban || '',
+            intl_sort_code: fullInvoice.intl_sort_code || ''
+          },
+          editCurrency
+        );
+
         const formData = {
           customer_id: fullInvoice.customer_id,
           invoice_date: fullInvoice.invoice_date,
           due_date: fullInvoice.due_date || '',
           notes: fullInvoice.notes || '',
           terms_conditions: fullInvoice.terms_conditions || '',
+          project_title: fullInvoice.project_title || '',
+          estimated_time: fullInvoice.estimated_time || '',
+          company_contact_name: fullInvoice.company_contact_name || '',
+          company_contact_email: fullInvoice.company_contact_email || '',
+          company_contact_phone: fullInvoice.company_contact_phone || '',
+          discount_type: fullInvoice.discount_type || 'percentage',
+          discount_value: fullInvoice.discount_value || 0,
+          ...intlSource,
           items: itemsForForm
         };
         
@@ -1742,11 +1790,15 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
   const handleDownloadInvoice = async (invoice: Invoice) => {
     try {
       // Load full invoice details first
-      const fullInvoice = await invoiceService.getInvoiceById(invoice.id);
-      if (!fullInvoice) {
+      const fullInvoiceRaw = await invoiceService.getInvoiceById(invoice.id);
+      if (!fullInvoiceRaw) {
         showError('Invoice not found');
         return;
       }
+      // Backfill intl_* banking defaults for legacy non-INR invoices so PDF renders banking section
+      const dlCustomer = customers.find(c => c.id === fullInvoiceRaw.customer_id);
+      const dlCurrency = getCurrencyInfo(dlCustomer).code;
+      const fullInvoice = applyIntlBankingFallback(fullInvoiceRaw as unknown as Record<string, unknown>, dlCurrency) as unknown as typeof fullInvoiceRaw;
 
       // Get company settings (default company)
       const company = companySettings.find(c => c.is_default) || companySettings[0];
@@ -2805,11 +2857,15 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
       showInfo('📄 Generating PDF attachment...');
 
       // Load full invoice details first
-      const fullInvoice = await invoiceService.getInvoiceById(invoice.id);
-      if (!fullInvoice) {
+      const fullInvoiceRaw = await invoiceService.getInvoiceById(invoice.id);
+      if (!fullInvoiceRaw) {
         showError('Invoice not found');
         return;
       }
+      // Backfill intl_* banking defaults for legacy non-INR invoices so emailed PDF includes banking
+      const emCustomer = customers.find(c => c.id === fullInvoiceRaw.customer_id);
+      const emCurrency = getCurrencyInfo(emCustomer).code;
+      const fullInvoice = applyIntlBankingFallback(fullInvoiceRaw as unknown as Record<string, unknown>, emCurrency) as unknown as typeof fullInvoiceRaw;
 
       // Generate high-quality PDF using the SAME format as download PDF
       const subtotal = fullInvoice.invoice_items?.reduce((sum: number, item: any) => sum + (item.quantity * item.unit_price), 0) || 0;
