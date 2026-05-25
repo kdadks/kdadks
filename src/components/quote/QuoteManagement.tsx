@@ -218,7 +218,7 @@ const QuoteManagement: React.FC<QuoteManagementProps> = ({ onBackToDashboard }) 
       discount_value: 0,
       // Additional info
       notes: quoteSettings?.notes || '',
-      terms_conditions: defaultTermsContent,
+      terms_conditions: '',
       items: [{
         product_id: undefined,
         item_name: '',
@@ -906,262 +906,268 @@ const QuoteManagement: React.FC<QuoteManagementProps> = ({ onBackToDashboard }) 
       const currencyInfo = getCurrencyInfo(customer);
       const taxLabel = getTaxLabel(customer);
 
-      // Create PDF with multi-page support
+      // Create PDF
       const pdf = new jsPDF({
         orientation: 'p',
         unit: 'mm',
         format: 'a4'
       });
-      
+
       pdf.setFont('helvetica');
-      
-      // Page dimensions
-      const pageWidth = 210;
-      const pageHeight = 297;
-      const leftMargin = 15;
-      const rightMargin = 15;
-      const contentWidth = pageWidth - leftMargin - rightMargin;
-      
-      // Apply branding header to get content boundaries
+
+      // Determine ASCII-safe currency symbol (no Unicode issues in Helvetica)
+      let safeCurrencySymbol = 'Rs.';
+      if (currencyInfo && currencyInfo.code) {
+        switch (currencyInfo.code.toUpperCase()) {
+          case 'INR': safeCurrencySymbol = 'Rs.'; break;
+          case 'USD': safeCurrencySymbol = '$'; break;
+          case 'EUR': safeCurrencySymbol = 'EUR'; break;
+          case 'GBP': safeCurrencySymbol = 'GBP'; break;
+          default: safeCurrencySymbol = currencyInfo.code || 'Rs.';
+        }
+      }
+
+      // Indian number formatting (commas, 2 decimal places)
+      const formatIndianNumber = (amount: number): string => {
+        const fixed = amount.toFixed(2);
+        const [whole, dec] = fixed.split('.');
+        let formatted = '';
+        const reversed = whole.split('').reverse().join('');
+        for (let i = 0; i < reversed.length; i++) {
+          if (i === 3) formatted = ',' + formatted;
+          else if (i > 3 && (i - 3) % 2 === 0) formatted = ',' + formatted;
+          formatted = reversed[i] + formatted;
+        }
+        return formatted + '.' + dec;
+      };
+
+      const formatCurrencyForPdf = (amount: number): string =>
+        safeCurrencySymbol + ' ' + formatIndianNumber(amount);
+
+      // Get PDF dimensions and apply branding
       const dimensions = PDFBrandingUtils.getStandardDimensions();
       const { contentStartY, contentEndY } = await PDFBrandingUtils.applyBranding(pdf, company, dimensions);
-      
-      // Calculate usable content area based on branding
-      const topMargin = contentStartY + 5;
-      const maxY = contentEndY - 5; // Leave space above footer
-      
-      let yPos = topMargin + 5;
-      
-      // Helper function to apply branding to a page
-      const applyPageBranding = async (pageNum: number): Promise<void> => {
-        pdf.setPage(pageNum);
-        await PDFBrandingUtils.applyBranding(pdf, company, dimensions);
-      };
-      
-      // Helper function to check if we need a new page
-      const checkPageBreak = (requiredSpace: number): void => {
-        if (yPos + requiredSpace > maxY) {
-          pdf.addPage();
-          yPos = topMargin + 5;
-        }
-      };
-      
-      // ========== TITLE SECTION ==========
-      pdf.setFontSize(24);
-      pdf.setFont('helvetica', 'bold');
-      pdf.setTextColor(5, 150, 105); // Emerald color
-      pdf.text('QUOTATION', pageWidth / 2, yPos, { align: 'center' });
-      
-      yPos += 10;
-      
-      // Quote Number
-      pdf.setFontSize(12);
-      pdf.setFont('helvetica', 'normal');
-      pdf.setTextColor(80, 80, 80);
-      pdf.text(`Quote #: ${fullQuote.quote_number}`, pageWidth / 2, yPos, { align: 'center' });
-      
-      // Project Title if exists
-      if (fullQuote.project_title) {
-        yPos += 10;
-        pdf.setFontSize(16);
+
+      const leftMargin = dimensions.leftMargin;
+      const rightMargin = dimensions.rightMargin;
+
+      // ========== BRANDED HEADER (QUOTATION title + quote number + dates) ==========
+      const quoteDate = new Date(fullQuote.quote_date).toLocaleDateString();
+      const validUntil = fullQuote.valid_until
+        ? new Date(fullQuote.valid_until).toLocaleDateString()
+        : 'N/A';
+
+      if (company.header_image_data) {
+        // Overlay text on header image (white, matching invoice style)
+        pdf.setTextColor(255, 255, 255);
+        pdf.setFontSize(18);
         pdf.setFont('helvetica', 'bold');
-        pdf.setTextColor(0, 0, 0);
-        const projectTitleLines = pdf.splitTextToSize(fullQuote.project_title, contentWidth - 40);
-        pdf.text(projectTitleLines, pageWidth / 2, yPos, { align: 'center' });
-        yPos += projectTitleLines.length * 6;
-        
-        if (fullQuote.estimated_time) {
-          yPos += 2;
-          pdf.setFontSize(11);
-          pdf.setFont('helvetica', 'normal');
-          pdf.setTextColor(100, 100, 100);
-          pdf.text(`Estimated Duration: ${fullQuote.estimated_time}`, pageWidth / 2, yPos, { align: 'center' });
-        }
-      }
-      
-      yPos += 15;
-      
-      // ========== FROM/TO SECTION ==========
-      const col1X = leftMargin;
-      const col2X = pageWidth / 2 + 10;
-      const colWidth = (pageWidth - leftMargin - rightMargin - 20) / 2;
-      let fromY = yPos;
-      let toY = yPos;
-      
-      // FROM Section
-      pdf.setFontSize(10);
-      pdf.setFont('helvetica', 'bold');
-      pdf.setTextColor(5, 150, 105);
-      pdf.text('FROM:', col1X, fromY);
-      
-      fromY += 6;
-      pdf.setFontSize(12);
-      pdf.setFont('helvetica', 'bold');
-      pdf.setTextColor(0, 0, 0);
-      const companyNameLines = pdf.splitTextToSize(company.company_name, colWidth);
-      pdf.text(companyNameLines, col1X, fromY);
-      fromY += companyNameLines.length * 5;
-      
-      pdf.setFontSize(10);
-      pdf.setFont('helvetica', 'normal');
-      pdf.setTextColor(60, 60, 60);
-      
-      if (company.address_line1) {
-        const addrLines = pdf.splitTextToSize(company.address_line1, colWidth);
-        pdf.text(addrLines, col1X, fromY);
-        fromY += addrLines.length * 4.5;
-      }
-      
-      const companyLocation = [company.city, company.state, company.postal_code].filter(Boolean).join(', ');
-      if (companyLocation) {
-        pdf.text(companyLocation, col1X, fromY);
-        fromY += 4.5;
-      }
-      
-      if (company.email) {
-        pdf.text(`Email: ${company.email}`, col1X, fromY);
-        fromY += 4.5;
-      }
-      
-      if (company.phone) {
-        pdf.text(`Phone: ${company.phone}`, col1X, fromY);
-        fromY += 4.5;
-      }
-      
-      // Contact person for this quote
-      if (fullQuote.company_contact_name || fullQuote.company_contact_email || fullQuote.company_contact_phone) {
-        fromY += 4;
-        pdf.setFont('helvetica', 'bold');
-        pdf.setTextColor(5, 150, 105);
-        pdf.text('Contact Person:', col1X, fromY);
-        fromY += 5;
+        pdf.text('QUOTATION', leftMargin, 17);
+        pdf.setFontSize(11);
+        pdf.text(`#${fullQuote.quote_number}`, rightMargin, 13, { align: 'right' });
+        pdf.setFontSize(9);
         pdf.setFont('helvetica', 'normal');
-        pdf.setTextColor(60, 60, 60);
-        
-        if (fullQuote.company_contact_name) {
-          pdf.text(fullQuote.company_contact_name, col1X, fromY);
-          fromY += 4.5;
-        }
-        if (fullQuote.company_contact_email) {
-          pdf.text(fullQuote.company_contact_email, col1X, fromY);
-          fromY += 4.5;
-        }
-        if (fullQuote.company_contact_phone) {
-          pdf.text(fullQuote.company_contact_phone, col1X, fromY);
-          fromY += 4.5;
-        }
-      }
-      
-      // TO Section
-      pdf.setFontSize(10);
-      pdf.setFont('helvetica', 'bold');
-      pdf.setTextColor(5, 150, 105);
-      pdf.text('TO:', col2X, toY);
-      
-      toY += 6;
-      pdf.setFontSize(12);
-      pdf.setFont('helvetica', 'bold');
-      pdf.setTextColor(0, 0, 0);
-      const customerName = customer.company_name || customer.contact_person || 'Customer';
-      const customerNameLines = pdf.splitTextToSize(customerName, colWidth);
-      pdf.text(customerNameLines, col2X, toY);
-      toY += customerNameLines.length * 5;
-      
-      if (customer.contact_person && customer.company_name) {
+        pdf.text(`Date: ${quoteDate}`, rightMargin, 20, { align: 'right' });
+        pdf.text(`Valid Until: ${validUntil}`, rightMargin, 26, { align: 'right' });
+      } else {
+        // Blue header bar (same as invoice fallback)
+        pdf.setFillColor(5, 150, 105);
+        pdf.rect(0, contentStartY, 210, 25, 'F');
+        pdf.setFontSize(16);
+        pdf.setTextColor(255, 255, 255);
+        pdf.setFont('helvetica', 'bold');
+        pdf.text('QUOTATION', leftMargin, contentStartY + 12);
         pdf.setFontSize(10);
         pdf.setFont('helvetica', 'normal');
-        pdf.text(`Attn: ${customer.contact_person}`, col2X, toY);
-        toY += 4.5;
+        pdf.text(`#${fullQuote.quote_number}`, rightMargin, contentStartY + 12, { align: 'right' });
+        pdf.setFontSize(8);
+        pdf.text(`Date: ${quoteDate}`, rightMargin, contentStartY + 18, { align: 'right' });
+        pdf.text(`Valid Until: ${validUntil}`, rightMargin, contentStartY + 22, { align: 'right' });
       }
-      
-      pdf.setFontSize(10);
+
+      let yPos = contentStartY + 5;
+
+      // ========== FROM / TO SECTION ==========
+      const billToX = 110;
+      const fromToStartY = yPos;
+      let fromYPos = fromToStartY;
+      let billToYPos = fromToStartY;
+
+      // FROM (left column)
+      pdf.setFontSize(9);
+      pdf.setFont('helvetica', 'bold');
+      pdf.setTextColor(0, 0, 0);
+      pdf.text('From:', leftMargin, fromYPos);
+      fromYPos += 5;
+
+      pdf.setFontSize(11);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text(company.company_name, leftMargin, fromYPos);
+      fromYPos += 4;
+
+      pdf.setFontSize(8);
       pdf.setFont('helvetica', 'normal');
       pdf.setTextColor(60, 60, 60);
-      
+
+      if (company.legal_name && company.legal_name !== company.company_name) {
+        pdf.text(company.legal_name, leftMargin, fromYPos);
+        fromYPos += 4;
+      }
+      if (company.address_line1) {
+        const a1 = pdf.splitTextToSize(company.address_line1, 85);
+        pdf.text(a1, leftMargin, fromYPos);
+        fromYPos += a1.length * 4;
+      }
+      if (company.address_line2) {
+        const a2 = pdf.splitTextToSize(company.address_line2, 85);
+        pdf.text(a2, leftMargin, fromYPos);
+        fromYPos += a2.length * 4;
+      }
+      const companyLocation = [company.city, company.state, company.postal_code].filter(Boolean).join(', ');
+      if (companyLocation) {
+        const locLines = pdf.splitTextToSize(companyLocation, 85);
+        pdf.text(locLines, leftMargin, fromYPos);
+        fromYPos += locLines.length * 4;
+      }
+      if (company.email) { pdf.text('Email: ' + company.email, leftMargin, fromYPos); fromYPos += 4; }
+      if (company.phone) { pdf.text('Phone: ' + company.phone, leftMargin, fromYPos); fromYPos += 4; }
+      if (company.gstin) {
+        const companyWithCountry = { country: company.country } as Customer;
+        const taxRegLabel = getTaxRegistrationLabel(companyWithCountry);
+        pdf.text(`${taxRegLabel}: ` + company.gstin, leftMargin, fromYPos); fromYPos += 4;
+      }
+
+      // Contact person
+      if (fullQuote.company_contact_name || fullQuote.company_contact_email || fullQuote.company_contact_phone) {
+        fromYPos += 2;
+        pdf.setFont('helvetica', 'bold');
+        pdf.setTextColor(0, 0, 0);
+        let contactLine = fullQuote.company_contact_name || '';
+        if (fullQuote.company_contact_email) contactLine += (contactLine ? ' | ' : '') + fullQuote.company_contact_email;
+        if (fullQuote.company_contact_phone) contactLine += (contactLine ? ' | ' : '') + fullQuote.company_contact_phone;
+        pdf.text('Contact: ', leftMargin, fromYPos);
+        pdf.setFont('helvetica', 'normal');
+        pdf.setTextColor(60, 60, 60);
+        pdf.text(contactLine, leftMargin + 17, fromYPos);
+        fromYPos += 4;
+      }
+
+      // TO (right column)
+      pdf.setTextColor(0, 0, 0);
+      pdf.setFontSize(9);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text('To:', billToX, billToYPos);
+      billToYPos += 5;
+
+      pdf.setFontSize(11);
+      pdf.setFont('helvetica', 'bold');
+      pdf.setTextColor(37, 99, 235);
+      pdf.text(customer.company_name || customer.contact_person || 'N/A', billToX, billToYPos);
+      billToYPos += 4;
+
+      pdf.setFontSize(8);
+      pdf.setFont('helvetica', 'normal');
+      pdf.setTextColor(60, 60, 60);
+
+      if (customer.contact_person && customer.company_name) {
+        pdf.text('Attn: ' + customer.contact_person, billToX, billToYPos); billToYPos += 4;
+      }
       if (customer.address_line1) {
-        const addressLines = pdf.splitTextToSize(customer.address_line1, colWidth);
-        pdf.text(addressLines, col2X, toY);
-        toY += addressLines.length * 4.5;
+        const ca1 = pdf.splitTextToSize(customer.address_line1, 85);
+        pdf.text(ca1, billToX, billToYPos); billToYPos += ca1.length * 4;
       }
       if (customer.address_line2) {
-        const addr2Lines = pdf.splitTextToSize(customer.address_line2, colWidth);
-        pdf.text(addr2Lines, col2X, toY);
-        toY += addr2Lines.length * 4.5;
+        const ca2 = pdf.splitTextToSize(customer.address_line2, 85);
+        pdf.text(ca2, billToX, billToYPos); billToYPos += ca2.length * 4;
       }
-      
       const customerLocation = [customer.city, customer.state, customer.postal_code].filter(Boolean).join(', ');
       if (customerLocation) {
-        pdf.text(customerLocation, col2X, toY);
-        toY += 4.5;
+        const clLines = pdf.splitTextToSize(customerLocation, 85);
+        pdf.text(clLines, billToX, billToYPos); billToYPos += clLines.length * 4;
       }
-      
-      if (customer.email) {
-        pdf.text(`Email: ${customer.email}`, col2X, toY);
-        toY += 4.5;
+      if (customer.email) { pdf.text('Email: ' + customer.email, billToX, billToYPos); billToYPos += 4; }
+      if (customer.phone) { pdf.text('Phone: ' + customer.phone, billToX, billToYPos); billToYPos += 4; }
+      if (customer.gstin) {
+        const taxRegLabel = getTaxRegistrationLabel(customer);
+        pdf.text(`${taxRegLabel}: ` + customer.gstin, billToX, billToYPos); billToYPos += 4;
       }
-      
-      if (customer.phone) {
-        pdf.text(`Phone: ${customer.phone}`, col2X, toY);
-        toY += 4.5;
-      }
-      
-      // Date info box
-      toY += 5;
-      pdf.setFillColor(245, 245, 245);
-      pdf.rect(col2X, toY - 3, colWidth, 20, 'F');
-      pdf.setFont('helvetica', 'bold');
-      pdf.setFontSize(10);
-      pdf.setTextColor(0, 0, 0);
-      pdf.text('Quote Details', col2X + 3, toY + 2);
-      toY += 7;
-      pdf.setFont('helvetica', 'normal');
-      pdf.text(`Date: ${new Date(fullQuote.quote_date).toLocaleDateString()}`, col2X + 3, toY);
-      toY += 5;
-      if (fullQuote.valid_until) {
-        pdf.text(`Valid Until: ${new Date(fullQuote.valid_until).toLocaleDateString()}`, col2X + 3, toY);
-        toY += 5;
-      }
-      
-      yPos = Math.max(fromY, toY) + 15;
-      
-      // ========== ITEMS TABLE ==========
-      checkPageBreak(40);
-      
-      const tableLeftMargin = leftMargin;
-      const tableRightEdge = pageWidth - rightMargin;
-      const tableWidth = tableRightEdge - tableLeftMargin;
-      
-      // Column widths optimized for A4 page (total 180mm): #(10), Description(75), Qty(20), Rate(27), Tax(18), Amount(30)
-      const colWidths = [10, 75, 20, 27, 18, 30];
-      const colX: number[] = [tableLeftMargin];
-      for (let i = 1; i < colWidths.length; i++) {
-        colX.push(colX[i-1] + colWidths[i-1]);
-      }
-      
-      // Table header
-      pdf.setFillColor(5, 150, 105); // Emerald
-      pdf.rect(tableLeftMargin, yPos, tableWidth, 10, 'F');
-      
-      pdf.setFontSize(10);
-      pdf.setFont('helvetica', 'bold');
+
+      // Status badge
+      billToYPos += 5;
+      const statusColors: Record<string, number[]> = {
+        draft: [107, 114, 128],
+        sent: [59, 130, 246],
+        accepted: [34, 197, 94],
+        rejected: [239, 68, 68],
+        expired: [156, 163, 175],
+        converted: [139, 92, 246]
+      };
+      const sc = statusColors[fullQuote.status] || [107, 114, 128];
+      pdf.setFillColor(sc[0], sc[1], sc[2]);
+      pdf.roundedRect(billToX, billToYPos - 3, 25, 6, 1, 1, 'F');
       pdf.setTextColor(255, 255, 255);
-      
-      const headers = ['#', 'Description', 'Qty', 'Rate', taxLabel, 'Amount'];
-      headers.forEach((header, i) => {
-        if (i <= 1) {
-          pdf.text(header, colX[i] + 3, yPos + 6.5);
-        } else {
-          pdf.text(header, colX[i] + colWidths[i] - 3, yPos + 6.5, { align: 'right' });
+      pdf.setFontSize(7);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text(fullQuote.status.toUpperCase(), billToX + 12.5, billToYPos + 1, { align: 'center' });
+
+      yPos = Math.max(fromYPos, billToYPos) + 10;
+
+      // Project details box (if present)
+      if (fullQuote.project_title || fullQuote.estimated_time) {
+        const projBoxHeight = 8 + (fullQuote.project_title ? 4 : 0) + (fullQuote.estimated_time ? 4 : 0);
+        pdf.setFillColor(250, 251, 252);
+        pdf.rect(leftMargin, yPos, 180, projBoxHeight, 'F');
+        pdf.setDrawColor(220, 220, 220);
+        pdf.setLineWidth(0.1);
+        pdf.rect(leftMargin, yPos, 180, projBoxHeight);
+        yPos += 3;
+        pdf.setTextColor(37, 99, 235);
+        pdf.setFontSize(9);
+        pdf.setFont('helvetica', 'bold');
+        pdf.text('Project Details', leftMargin + 2, yPos);
+        yPos += 5;
+        pdf.setFontSize(8);
+        pdf.setFont('helvetica', 'normal');
+        pdf.setTextColor(60, 60, 60);
+        if (fullQuote.project_title) {
+          pdf.setFont('helvetica', 'bold');
+          pdf.text('Project: ', leftMargin + 2, yPos);
+          pdf.setFont('helvetica', 'normal');
+          pdf.text(fullQuote.project_title, leftMargin + 20, yPos);
+          yPos += 4;
         }
-      });
-      
-      yPos += 10;
-      
-      // Table rows with proper spacing
+        if (fullQuote.estimated_time) {
+          pdf.setFont('helvetica', 'bold');
+          pdf.text('Timeline: ', leftMargin + 2, yPos);
+          pdf.setFont('helvetica', 'normal');
+          pdf.text(fullQuote.estimated_time, leftMargin + 20, yPos);
+          yPos += 4;
+        }
+        yPos += 8;
+      }
+
+      // ========== ITEMS TABLE ==========
+      const tableWidth = 180;
+
+      // Table header row
+      pdf.setFillColor(245, 247, 250);
+      pdf.rect(leftMargin, yPos, tableWidth, 8, 'F');
+      pdf.setTextColor(37, 99, 235);
+      pdf.setFontSize(8);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text('Description', leftMargin + 2, yPos + 5);
+      pdf.text('Qty', leftMargin + 95, yPos + 5, { align: 'center' });
+      pdf.text('Rate', leftMargin + 120, yPos + 5, { align: 'center' });
+      pdf.text(`${taxLabel}%`, leftMargin + 145, yPos + 5, { align: 'center' });
+      pdf.text('Amount', leftMargin + 175, yPos + 5, { align: 'right' });
+      yPos += 8;
+
+      pdf.setDrawColor(220, 220, 220);
+      pdf.setLineWidth(0.1);
       pdf.setTextColor(0, 0, 0);
-      
+      pdf.setFont('helvetica', 'normal');
+
       fullQuote.quote_items?.forEach((item, index) => {
-        // Calculate line subtotal based on item type
         let lineSubtotal = 0;
         if (item.is_service_item && item.billable_hours) {
           const resourceCount = item.resource_count || 1;
@@ -1171,245 +1177,195 @@ const QuoteManagement: React.FC<QuoteManagementProps> = ({ onBackToDashboard }) 
         }
         const lineTax = (lineSubtotal * item.tax_rate) / 100;
         const lineTotal = lineSubtotal + lineTax;
-        
-        // Process description - allow full content with page breaks
-        const descriptionLines = item.description ? item.description.split('\n') : [];
-        const formattedDescLines: string[] = [];
-        
-        descriptionLines.forEach(line => {
-          const trimmedLine = line.trim();
-          if (trimmedLine) {
-            const cleanLine = trimmedLine.replace(/^[•\-\*]\s*/, '• ');
-            const wrapped = pdf.splitTextToSize(cleanLine, colWidths[1] - 8);
-            formattedDescLines.push(...wrapped);
-          }
-        });
-        
-        // Calculate row height - readable sizing
-        const itemNameLines = pdf.splitTextToSize(item.item_name, colWidths[1] - 8);
-        const nameHeight = itemNameLines.length * 5;
-        const serviceInfoHeight = (item.is_service_item && item.billable_hours) ? 4.5 : 0;
-        const descHeight = formattedDescLines.length * 4;
-        const minRowHeight = 12;
-        const rowHeight = Math.max(minRowHeight, nameHeight + serviceInfoHeight + descHeight + 8);
-        
-        // Check if we need a new page for this row
-        checkPageBreak(rowHeight + 5);
-        
-        // Alternate row background
-        if (index % 2 === 0) {
-          pdf.setFillColor(250, 250, 250);
-          pdf.rect(tableLeftMargin, yPos, tableWidth, rowHeight, 'F');
-        }
-        
-        // Draw row border
-        pdf.setDrawColor(220, 220, 220);
-        pdf.line(tableLeftMargin, yPos + rowHeight, tableRightEdge, yPos + rowHeight);
-        
-        const textY = yPos + 6;
-        
-        // Row number
-        pdf.setFontSize(10);
-        pdf.setFont('helvetica', 'normal');
-        pdf.text(String(index + 1), colX[0] + 3, textY);
-        
-        // Item name (bold, readable)
-        pdf.setFont('helvetica', 'bold');
-        pdf.setFontSize(10);
-        let currentY = textY;
-        itemNameLines.forEach((nameLine: string) => {
-          pdf.text(nameLine, colX[1] + 3, currentY);
-          currentY += 5;
-        });
-        
-        // Service item calculation info (if applicable)
-        if (item.is_service_item && item.billable_hours) {
-          pdf.setFont('helvetica', 'normal');
+
+        // Row height
+        const itemText = item.item_name + (item.description ? ` - ${item.description}` : '');
+        const itemLines = pdf.splitTextToSize(itemText, 80);
+        const hasServiceInfo = !!(item.is_service_item && item.billable_hours);
+        const rowHeight = Math.max(itemLines.length * 3 + (hasServiceInfo ? 6 : 3), 12);
+
+        // Page break
+        if (yPos + rowHeight > contentEndY - 15) {
+          pdf.addPage();
+          yPos = contentStartY + 5;
+          // Repeat header
+          pdf.setFillColor(245, 247, 250);
+          pdf.rect(leftMargin, yPos, tableWidth, 8, 'F');
+          pdf.setTextColor(37, 99, 235);
           pdf.setFontSize(8);
+          pdf.setFont('helvetica', 'bold');
+          pdf.text('Description', leftMargin + 2, yPos + 5);
+          pdf.text('Qty', leftMargin + 95, yPos + 5, { align: 'center' });
+          pdf.text('Rate', leftMargin + 120, yPos + 5, { align: 'center' });
+          pdf.text(`${taxLabel}%`, leftMargin + 145, yPos + 5, { align: 'center' });
+          pdf.text('Amount', leftMargin + 175, yPos + 5, { align: 'right' });
+          yPos += 8;
+          pdf.setTextColor(0, 0, 0);
+          pdf.setFont('helvetica', 'normal');
+        }
+
+        // Row separator
+        if (index > 0) {
+          pdf.setDrawColor(240, 240, 240);
+          pdf.line(leftMargin, yPos, leftMargin + tableWidth, yPos);
+        }
+
+        yPos += 3;
+        const numbersYPos = yPos + 3;
+
+        // Item name + description
+        pdf.setFontSize(8);
+        pdf.setFont('helvetica', 'bold');
+        pdf.setTextColor(0, 0, 0);
+        pdf.text(itemLines, leftMargin + 2, numbersYPos);
+
+        // Service calculation info
+        if (hasServiceInfo) {
+          const hsnYPos = numbersYPos + itemLines.length * 3 + 1;
+          pdf.setFontSize(6);
+          pdf.setFont('helvetica', 'normal');
           pdf.setTextColor(100, 100, 100);
           const resourceCount = item.resource_count || 1;
-          const serviceInfo = `Service: ${resourceCount} resource${resourceCount > 1 ? 's' : ''} x ${item.quantity} month${item.quantity > 1 ? 's' : ''} x ${item.billable_hours} hrs/month`;
-          pdf.text(serviceInfo, colX[1] + 5, currentY);
-          currentY += 4.5;
-          pdf.setTextColor(0, 0, 0);
+          pdf.text(
+            `${resourceCount} resource${resourceCount > 1 ? 's' : ''} x ${item.quantity} month${item.quantity > 1 ? 's' : ''} x ${item.billable_hours} hrs/mo`,
+            leftMargin + 2, hsnYPos
+          );
         }
-        
-        // Description (normal text, readable size)
-        if (formattedDescLines.length > 0) {
-          pdf.setFont('helvetica', 'normal');
-          pdf.setFontSize(9);
-          pdf.setTextColor(70, 70, 70);
-          currentY += 1;
-          formattedDescLines.forEach((line) => {
-            pdf.text(line, colX[1] + 5, currentY);
-            currentY += 4;
-          });
-          pdf.setTextColor(0, 0, 0);
-        }
-        
-        // Numeric columns - readable size, right aligned
-        pdf.setFontSize(10);
+
+        // Numeric columns
+        pdf.setTextColor(0, 0, 0);
+        pdf.setFontSize(8);
         pdf.setFont('helvetica', 'normal');
-        pdf.text(`${item.quantity} ${item.unit}`, colX[2] + colWidths[2] - 3, textY, { align: 'right' });
-        pdf.text(formatCurrencyAmount(item.unit_price, currencyInfo), colX[3] + colWidths[3] - 3, textY, { align: 'right' });
-        pdf.text(`${item.tax_rate}%`, colX[4] + colWidths[4] - 3, textY, { align: 'right' });
+
+        const qtyText = item.quantity.toString() + (item.unit ? ' ' + item.unit : '');
+        pdf.text(qtyText, leftMargin + 95, numbersYPos, { align: 'center' });
+        pdf.text(safeCurrencySymbol + ' ' + formatIndianNumber(item.unit_price), leftMargin + 120, numbersYPos, { align: 'center' });
+        pdf.text(item.tax_rate.toString() + '%', leftMargin + 145, numbersYPos, { align: 'center' });
         pdf.setFont('helvetica', 'bold');
-        pdf.text(formatCurrencyAmount(lineTotal, currencyInfo), colX[5] + colWidths[5] - 3, textY, { align: 'right' });
-        
+        pdf.text(safeCurrencySymbol + ' ' + formatIndianNumber(lineTotal), leftMargin + 175, numbersYPos, { align: 'right' });
+
         yPos += rowHeight;
       });
-      
-      // ========== TOTALS SECTION ==========
-      yPos += 8;
-      checkPageBreak(50);
-      
-      const totalsBoxWidth = 80;
-      const totalsBoxX = tableRightEdge - totalsBoxWidth;
-      
-      // Calculate amount in words lines first to determine box height
-      pdf.setFontSize(9);
-      const amountWords = formatAmountInWords(total, currencyInfo.name);
-      const maxWordWidth = totalsBoxWidth - 10;
-      const wordLines = pdf.splitTextToSize(amountWords, maxWordWidth);
-      const wordLinesHeight = wordLines.length * 4.5 + 8; // Line height + padding
-      
-      // Calculate total box height based on content
-      const baseHeight = discountAmount > 0 ? 45 : 38;
-      const totalsBoxHeight = baseHeight + wordLinesHeight;
-      
-      // Draw totals box with calculated height
-      pdf.setFillColor(250, 250, 250);
-      pdf.rect(totalsBoxX, yPos, totalsBoxWidth, totalsBoxHeight, 'F');
+
+      // Table bottom border
       pdf.setDrawColor(200, 200, 200);
-      pdf.rect(totalsBoxX, yPos, totalsBoxWidth, totalsBoxHeight, 'S');
-      
-      const labelX = totalsBoxX + 5;
-      const valueX = totalsBoxX + totalsBoxWidth - 5;
-      let totalsY = yPos + 8;
-      
+      pdf.setLineWidth(0.3);
+      pdf.line(leftMargin, yPos, leftMargin + tableWidth, yPos);
+
+      yPos += 10;
+
+      // ========== TOTALS SECTION ==========
+      const totalsWidth = 60;
+      const totalsStartX = leftMargin + tableWidth - totalsWidth;
+      const hasDiscount = discountAmount > 0;
+      const totalsBoxHeight = hasDiscount ? 31 : 25;
+
+      pdf.setFillColor(250, 251, 252);
+      pdf.rect(totalsStartX, yPos - 3, totalsWidth, totalsBoxHeight, 'F');
+      pdf.setDrawColor(225, 229, 235);
+      pdf.setLineWidth(0.2);
+      pdf.rect(totalsStartX, yPos - 3, totalsWidth, totalsBoxHeight);
+
+      pdf.setTextColor(60, 60, 60);
+      pdf.setFontSize(8);
+
       // Subtotal
       pdf.setFont('helvetica', 'normal');
-      pdf.setFontSize(10);
-      pdf.setTextColor(0, 0, 0);
-      pdf.text('Subtotal:', labelX, totalsY);
-      pdf.text(formatCurrencyAmount(subtotal, currencyInfo), valueX, totalsY, { align: 'right' });
-      
-      // Discount line (if applicable)
-      if (discountAmount > 0) {
-        totalsY += 7;
-        pdf.setTextColor(220, 38, 38); // Red color for discount
-        const discountLabel = fullQuote.discount_type === 'percentage' 
-          ? `Discount (${fullQuote.discount_value}%):` 
-          : 'Discount:';
-        pdf.text(discountLabel, labelX, totalsY);
-        pdf.text(`-${formatCurrencyAmount(discountAmount, currencyInfo)}`, valueX, totalsY, { align: 'right' });
-        pdf.setTextColor(0, 0, 0);
-      }
-      
-      // Tax
-      totalsY += 7;
-      pdf.text(`${taxLabel}:`, labelX, totalsY);
-      pdf.text(formatCurrencyAmount(adjustedTotalTax, currencyInfo), valueX, totalsY, { align: 'right' });
-      
-      // Total with highlight
-      totalsY += 9;
-      pdf.setFillColor(5, 150, 105);
-      pdf.rect(totalsBoxX, totalsY - 5, totalsBoxWidth, 10, 'F');
+      pdf.text('Subtotal:', totalsStartX + 3, yPos + 2);
       pdf.setFont('helvetica', 'bold');
-      pdf.setFontSize(11);
-      pdf.setTextColor(255, 255, 255);
-      pdf.text('TOTAL:', labelX, totalsY);
-      pdf.text(formatCurrencyAmount(total, currencyInfo), valueX, totalsY, { align: 'right' });
-      
-      // Amount in words - inside the totals box, right aligned
-      totalsY += 12;
+      pdf.text(safeCurrencySymbol + ' ' + formatIndianNumber(subtotal), totalsStartX + totalsWidth - 3, yPos + 2, { align: 'right' });
+      yPos += 6;
+
+      // Discount
+      if (hasDiscount) {
+        pdf.setFont('helvetica', 'normal');
+        pdf.setTextColor(34, 197, 94);
+        const discountLabel = fullQuote.discount_type === 'percentage'
+          ? `Discount (${fullQuote.discount_value}%):`
+          : 'Discount:';
+        pdf.text(discountLabel, totalsStartX + 3, yPos + 2);
+        pdf.setFont('helvetica', 'bold');
+        pdf.text('- ' + safeCurrencySymbol + ' ' + formatIndianNumber(discountAmount), totalsStartX + totalsWidth - 3, yPos + 2, { align: 'right' });
+        yPos += 6;
+        pdf.setTextColor(60, 60, 60);
+      }
+
+      // Tax
+      pdf.setFont('helvetica', 'normal');
+      pdf.text(`${taxLabel} Amount:`, totalsStartX + 3, yPos + 2);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text(safeCurrencySymbol + ' ' + formatIndianNumber(adjustedTotalTax), totalsStartX + totalsWidth - 3, yPos + 2, { align: 'right' });
+
+      // Total line
+      yPos += 6;
+      pdf.setDrawColor(37, 99, 235);
+      pdf.setLineWidth(0.3);
+      pdf.line(totalsStartX + 3, yPos, totalsStartX + totalsWidth - 3, yPos);
+
+      yPos += 6;
       pdf.setFontSize(9);
+      pdf.setFont('helvetica', 'bold');
+      pdf.setTextColor(37, 99, 235);
+      pdf.text('Total:', totalsStartX + 3, yPos + 2);
+      pdf.text(safeCurrencySymbol + ' ' + formatIndianNumber(total), totalsStartX + totalsWidth - 3, yPos + 2, { align: 'right' });
+
+      yPos += 8;
+
+      // Amount in words
+      const amountInWords = formatAmountInWords(total, currencyInfo.name);
+      pdf.setTextColor(37, 99, 235);
+      pdf.setFontSize(9);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text('Amount in Words', totalsStartX, yPos);
+      yPos += 5;
+      pdf.setFontSize(7);
       pdf.setFont('helvetica', 'italic');
-      pdf.setTextColor(80, 80, 80);
-      
-      // Right-align each line within the totals box
-      wordLines.forEach((line: string, index: number) => {
-        pdf.text(line, valueX, totalsY + (index * 4.5), { align: 'right' });
-      });
-      
-      // Update yPos to be after the totals box
-      yPos = yPos + totalsBoxHeight + 10;
-      
+      pdf.setTextColor(60, 60, 60);
+      const amountLines = pdf.splitTextToSize(amountInWords, totalsWidth);
+      pdf.text(amountLines, totalsStartX, yPos);
+      yPos += amountLines.length * 3 + 8;
+
       // ========== NOTES SECTION ==========
       if (fullQuote.notes) {
-        checkPageBreak(25);
-        
-        pdf.setFillColor(255, 251, 235); // Light amber
-        const notesLines = pdf.splitTextToSize(fullQuote.notes, contentWidth - 10);
-        const notesHeight = 10 + (notesLines.length * 5);
-        pdf.rect(leftMargin, yPos, contentWidth, notesHeight, 'F');
-        
+        pdf.setTextColor(37, 99, 235);
+        pdf.setFontSize(8);
         pdf.setFont('helvetica', 'bold');
-        pdf.setFontSize(11);
-        pdf.setTextColor(0, 0, 0);
-        pdf.text('Notes:', leftMargin + 5, yPos + 7);
-        
+        pdf.text('Notes', leftMargin, yPos);
+        yPos += 5;
+        pdf.setFontSize(6);
         pdf.setFont('helvetica', 'normal');
-        pdf.setFontSize(10);
         pdf.setTextColor(60, 60, 60);
-        pdf.text(notesLines, leftMargin + 5, yPos + 14);
-        yPos += notesHeight + 10;
+        const notesLines = pdf.splitTextToSize(fullQuote.notes, 180);
+        pdf.text(notesLines, leftMargin, yPos);
+        yPos += notesLines.length * 3 + 5;
       }
-      
-      // ========== TERMS & CONDITIONS SECTION ==========
-      if (fullQuote.terms_conditions) {
-        checkPageBreak(25);
-        
-        pdf.setFont('helvetica', 'bold');
-        pdf.setFontSize(11);
-        pdf.setTextColor(0, 0, 0);
-        pdf.text('Terms & Conditions:', leftMargin, yPos);
-        yPos += 7;
-        
-        pdf.setFont('helvetica', 'normal');
-        pdf.setFontSize(10);
-        pdf.setTextColor(60, 60, 60);
-        
-        // Split terms by lines and handle page breaks
-        const termsLines = pdf.splitTextToSize(fullQuote.terms_conditions, contentWidth);
-        const linesPerCheck = 5; // Check for page break every 5 lines
-        
-        for (let i = 0; i < termsLines.length; i++) {
-          if (i > 0 && i % linesPerCheck === 0) {
-            checkPageBreak(linesPerCheck * 5);
-          }
-          pdf.text(termsLines[i], leftMargin, yPos);
-          yPos += 5;
-        }
-      }
-      
-      // ========== APPLY BRANDING TO ALL PAGES ==========
-      // Apply header and footer images to all pages
+
+      // ========== FOOTER ==========
+      const footerStartY = contentEndY - 2;
+      pdf.setDrawColor(240, 240, 240);
+      pdf.setLineWidth(0.2);
+      pdf.line(leftMargin, footerStartY, rightMargin, footerStartY);
+      pdf.setTextColor(37, 99, 235);
+      pdf.setFontSize(7);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text('Thank you for the opportunity!', 105, footerStartY + 4, { align: 'center' });
+      pdf.setTextColor(120, 120, 120);
+      pdf.setFontSize(5.5);
+      pdf.setFont('helvetica', 'normal');
+      pdf.text('This is a computer-generated quotation and does not require a signature.', 105, footerStartY + 7, { align: 'center' });
+
+      // ========== APPLY BRANDING TO ADDITIONAL PAGES ==========
+      // Page 1 already has branding applied at the start (and header overlay text drawn on it).
+      // Only apply branding to pages 2+ to avoid redrawing the header image over the overlay text.
       const totalPages = pdf.getNumberOfPages();
-      for (let i = 1; i <= totalPages; i++) {
-        await applyPageBranding(i);
+      for (let pg = 2; pg <= totalPages; pg++) {
+        pdf.setPage(pg);
+        await PDFBrandingUtils.applyBranding(pdf, company, dimensions);
       }
-      
-      // Add page numbers to all pages (after branding so they appear on top)
-      for (let i = 1; i <= totalPages; i++) {
-        pdf.setPage(i);
-        pdf.setFontSize(9);
-        pdf.setTextColor(150, 150, 150);
-        
-        // Position page number above the footer image
-        const pageNumY = contentEndY + 3;
-        pdf.text(`Page ${i} of ${totalPages}`, pageWidth / 2, pageNumY, { align: 'center' });
-        
-        // Add "Computer Generated" note on last page
-        if (i === totalPages) {
-          pdf.setFontSize(8);
-          pdf.setFont('helvetica', 'italic');
-          pdf.text('This is a computer generated quotation.', pageWidth / 2, pageNumY + 5, { align: 'center' });
-        }
-      }
-      
+
       // Save PDF
-      pdf.save(`${fullQuote.quote_number.replace(/\//g, '-')}.pdf`);
+      const cleanFilename = `Quotation-${fullQuote.quote_number}-${customer.company_name || customer.contact_person || 'Customer'}.pdf`;
+      pdf.save(cleanFilename.replace(/[^a-zA-Z0-9.-]/g, '_'));
       showSuccess('Quote PDF downloaded successfully!');
       
     } catch (error) {
@@ -2139,14 +2095,6 @@ const QuoteManagement: React.FC<QuoteManagementProps> = ({ onBackToDashboard }) 
                       </div>
                     </div>
                     
-                    {/* Terms & Conditions */}
-                    {quoteFormData.terms_conditions && (
-                      <div className="pt-4 border-t border-gray-200">
-                        <div className="font-semibold text-gray-900 mb-2 text-sm">Terms & Conditions:</div>
-                        <div className="text-xs text-gray-600 whitespace-pre-wrap leading-relaxed">{quoteFormData.terms_conditions}</div>
-                      </div>
-                    )}
-                    
                     {/* Disclaimer */}
                     <div className="mt-6 pt-3 border-t border-gray-200 text-center">
                       <p className="text-xs text-gray-500 italic">
@@ -2338,6 +2286,7 @@ const QuoteManagement: React.FC<QuoteManagementProps> = ({ onBackToDashboard }) 
                         {selectedQuote.customer?.address_line1 && <div className="text-gray-600">{selectedQuote.customer.address_line1}</div>}
                         <div className="text-gray-600">{[selectedQuote.customer?.city, selectedQuote.customer?.state, selectedQuote.customer?.postal_code].filter(Boolean).join(', ')}</div>
                         {selectedQuote.customer?.email && <div className="text-gray-600">📧 {selectedQuote.customer.email}</div>}
+                        {selectedQuote.customer?.phone && <div className="text-gray-600">📞 {selectedQuote.customer.phone}</div>}
                       </div>
                     </div>
                   </div>
@@ -2425,12 +2374,7 @@ const QuoteManagement: React.FC<QuoteManagementProps> = ({ onBackToDashboard }) 
                       <div className="text-xs text-gray-600 whitespace-pre-wrap">{selectedQuote.notes}</div>
                     </div>
                   )}
-                  {selectedQuote.terms_conditions && (
-                    <div>
-                      <div className="font-semibold text-sm mb-1">Terms & Conditions:</div>
-                      <div className="text-xs text-gray-600 whitespace-pre-wrap">{selectedQuote.terms_conditions}</div>
-                    </div>
-                  )}
+
                 </div>
                 
                 {/* Footer Image */}
@@ -2756,12 +2700,7 @@ const QuoteManagement: React.FC<QuoteManagementProps> = ({ onBackToDashboard }) 
                     </div>
                   )}
                   
-                  {quoteFormData.terms_conditions && (
-                    <div className="mb-4 p-3 bg-gray-50 border border-gray-200 rounded">
-                      <div className="font-semibold text-sm mb-1">Terms & Conditions:</div>
-                      <div className="text-xs text-gray-700 whitespace-pre-wrap">{quoteFormData.terms_conditions}</div>
-                    </div>
-                  )}
+
                   
                   {companySettings[0]?.footer_image_url && (
                     <div className="w-full mt-6">

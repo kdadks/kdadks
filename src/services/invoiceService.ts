@@ -1092,8 +1092,12 @@ class InvoiceService {
         // Get customer to determine currency for multi-currency conversion
         const customer = await this.getCustomerById(invoice.customer_id);
         let currencyCode = 'INR'; // Default fallback
-        
-        if (customer && customer.country) {
+
+        // Respect explicit currency override (e.g. billing a foreign customer in INR)
+        if (invoiceData.currency_code_override) {
+          currencyCode = invoiceData.currency_code_override;
+          console.log('✅ Using currency_code_override for update:', currencyCode);
+        } else if (customer && customer.country) {
           currencyCode = customer.country.currency_code;
           console.log('✅ Using customer country currency for update:', {
             countryCode: customer.country.code,

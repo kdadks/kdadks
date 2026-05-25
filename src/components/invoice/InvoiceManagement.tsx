@@ -1370,6 +1370,7 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
             due_date: invoiceFormData.due_date,
             notes: invoiceFormData.notes,
             terms_conditions: invoiceFormData.terms_conditions,
+            currency_code_override: useINROverride ? 'INR' : undefined,
             items: validItems // Use the filtered and validated items
           };
           
@@ -1614,6 +1615,8 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
           })) || []
         });
         setGeneratedInvoiceNumber(fullInvoice.invoice_number);
+        // Restore INR override: invoice was billed in INR but customer's native currency is foreign
+        setUseINROverride(filledInvoice.currency_code === 'INR' && viewCurrency !== 'INR');
         
         // Only show preview modal for viewing - no edit modal
         setInvoiceModalMode('view');
@@ -1705,6 +1708,8 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
         console.log('📝 Setting form data for editing:', formData);
         setInvoiceFormData(formData);
         setGeneratedInvoiceNumber(fullInvoice.invoice_number);
+        // Restore INR override: invoice was billed in INR but customer's native currency is foreign
+        setUseINROverride(fullInvoice.currency_code === 'INR' && editCurrency !== 'INR');
         
         // Set default product and HSN code for new items based on existing items
         if (itemsForForm.length > 0) {
