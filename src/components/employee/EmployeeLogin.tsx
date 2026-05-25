@@ -25,10 +25,12 @@ export default function EmployeeLogin() {
           id: result.employee.id,
           email: result.employee.email,
           name: result.employee.full_name,
-          employee_number: result.employee.employee_number
+          employee_number: result.employee.employee_number,
+          passwordExpiringSoon: result.passwordExpiringSoon || false,
+          daysUntilExpiry: result.daysUntilExpiry
         }));
 
-        // Check if password change is required
+        // Check if password change is required (first login)
         if (result.requirePasswordChange) {
           navigate('/employee/change-password', { 
             state: { 

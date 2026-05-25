@@ -85,10 +85,12 @@ export const leaveService = {
    */
   async requestLeave(leaveRequest: LeaveRequest): Promise<Leave | null> {
     try {
-      // Calculate total days
+      // Calculate total days (0.5 for half day)
       const startDate = new Date(leaveRequest.from_date);
       const endDate = new Date(leaveRequest.to_date);
-      const totalDays = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+      const totalDays = leaveRequest.half_day
+        ? 0.5
+        : Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
 
       const { data, error } = await supabase
         .from('leave_applications')

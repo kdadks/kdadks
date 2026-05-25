@@ -43,6 +43,7 @@ export default function LeaveManagement() {
     from_date: '',
     to_date: '',
     reason: '',
+    half_day: false,
   });
   const [currentUser] = useState(() => {
     const session = sessionStorage.getItem('employee_session');
@@ -134,6 +135,7 @@ export default function LeaveManagement() {
         leave_type_id: formData.leave_type_id,
         from_date: formData.from_date,
         to_date: formData.to_date,
+        half_day: formData.half_day,
         reason: formData.reason,
       });
 
@@ -143,6 +145,7 @@ export default function LeaveManagement() {
         from_date: '',
         to_date: '',
         reason: '',
+        half_day: false,
       });
       setShowForm(false);
 
@@ -160,6 +163,7 @@ export default function LeaveManagement() {
 
   const calculateDays = () => {
     if (formData.from_date && formData.to_date) {
+      if (formData.half_day) return 0.5;
       const start = new Date(formData.from_date);
       const end = new Date(formData.to_date);
       const days = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
@@ -272,7 +276,10 @@ export default function LeaveManagement() {
                 <input
                   type="date"
                   value={formData.from_date}
-                  onChange={(e) => setFormData({ ...formData, from_date: e.target.value })}
+                  onChange={(e) => {
+                    const newFrom = e.target.value;
+                    setFormData({ ...formData, from_date: newFrom, half_day: newFrom === formData.to_date ? formData.half_day : false });
+                  }}
                   required
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                 />
@@ -286,13 +293,32 @@ export default function LeaveManagement() {
                 <input
                   type="date"
                   value={formData.to_date}
-                  onChange={(e) => setFormData({ ...formData, to_date: e.target.value })}
+                  onChange={(e) => {
+                    const newTo = e.target.value;
+                    setFormData({ ...formData, to_date: newTo, half_day: newTo === formData.from_date ? formData.half_day : false });
+                  }}
                   required
                   min={formData.from_date}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                 />
               </div>
             </div>
+
+            {/* Half Day Option */}
+            {formData.from_date && formData.to_date && formData.from_date === formData.to_date && (
+              <div className="flex items-center gap-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                <input
+                  type="checkbox"
+                  id="half_day"
+                  checked={formData.half_day}
+                  onChange={(e) => setFormData({ ...formData, half_day: e.target.checked })}
+                  className="w-4 h-4 text-primary-600 rounded focus:ring-primary-500 cursor-pointer"
+                />
+                <label htmlFor="half_day" className="text-sm font-medium text-gray-700 cursor-pointer select-none">
+                  Apply for Half Day <span className="text-gray-500 font-normal">(0.5 days will be deducted)</span>
+                </label>
+              </div>
+            )}
 
             {/* Reason */}
             <div>
