@@ -5,6 +5,8 @@ interface LoginResult {
   success: boolean;
   employee?: Employee;
   requirePasswordChange?: boolean;
+  passwordExpiringSoon?: boolean;
+  daysUntilExpiry?: number;
   message?: string;
 }
 
@@ -214,7 +216,29 @@ class EmployeeAuthService {
         };
       }
 
-      // Successful login - reset failed attempts and update last login
+      // Check 90-day password expiry policy before granting access
+      const PASSWORD_EXPIRY_DAYS = 90;
+      const PASSWORD_WARNING_DAYS = 10;
+      let passwordExpiringSoon = false;
+      let daysUntilExpiry: number | undefined;
+
+      if (employee.password_changed_at && !employee.is_first_login) {
+        const lastChanged = new Date(employee.password_changed_at);
+        const daysSinceChange = Math.floor((Date.now() - lastChanged.getTime()) / (1000 * 60 * 60 * 24));
+        const remaining = PASSWORD_EXPIRY_DAYS - daysSinceChange;
+        if (remaining <= 0) {
+          // Password expired — deny login entirely
+          return {
+            success: false,
+            message: 'Your password has expired and your account is locked. Please contact your administrator to reinstate access.'
+          };
+        } else if (remaining <= PASSWORD_WARNING_DAYS) {
+          passwordExpiringSoon = true;
+          daysUntilExpiry = remaining;
+        }
+      }
+
+      // Successful login — reset failed attempts and update last login
       await supabase
         .from('employees')
         .update({
@@ -226,7 +250,9 @@ class EmployeeAuthService {
       return {
         success: true,
         employee,
-        requirePasswordChange: employee.is_first_login || false
+        requirePasswordChange: employee.is_first_login || false,
+        passwordExpiringSoon,
+        daysUntilExpiry
       };
 
     } catch (error) {

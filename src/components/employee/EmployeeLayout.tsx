@@ -1,12 +1,14 @@
 import React, { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Home, Calendar, Clock, FileText, TrendingUp, Menu, X, User, LogOut, ChevronLeft, ChevronRight, Award, Wallet } from 'lucide-react';
+import PasswordExpiryReminder from './PasswordExpiryReminder';
 
 export default function EmployeeLayout({ children }: { children: React.ReactNode }) {
   const location = useLocation();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false); // Mobile sidebar
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false); // Desktop sidebar collapse
+  const [expiryDismissed, setExpiryDismissed] = useState(false);
 
   const currentUser = (() => {
     const session = sessionStorage.getItem('employee_session');
@@ -15,6 +17,19 @@ export default function EmployeeLayout({ children }: { children: React.ReactNode
       return { name: employee.name || 'Employee' };
     }
     return { name: 'Employee' };
+  })();
+
+  const passwordExpiry = (() => {
+    try {
+      const session = sessionStorage.getItem('employee_session');
+      if (session) {
+        const emp = JSON.parse(session);
+        if (emp.passwordExpiringSoon && typeof emp.daysUntilExpiry === 'number') {
+          return { show: true, days: emp.daysUntilExpiry as number };
+        }
+      }
+    } catch { /* ignore */ }
+    return { show: false, days: 0 };
   })();
 
   const handleLogout = () => {
@@ -172,6 +187,14 @@ export default function EmployeeLayout({ children }: { children: React.ReactNode
         <main className="flex-1 overflow-y-auto p-3 sm:p-4 pb-20 md:pb-4">
           {children}
         </main>
+
+        {/* Password Expiry Reminder Popup */}
+        {passwordExpiry.show && !expiryDismissed && (
+          <PasswordExpiryReminder
+            daysUntilExpiry={passwordExpiry.days}
+            onDismiss={() => setExpiryDismissed(true)}
+          />
+        )}
 
         {/* Mobile Bottom Navigation */}
         <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-40 safe-area-pb">

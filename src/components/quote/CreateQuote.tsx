@@ -879,50 +879,18 @@ export const CreateQuote: React.FC<CreateQuoteProps> = ({
               </div>
             </div>
 
-            {/* Notes and Terms */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-                <label className="block text-sm font-medium text-slate-700 mb-2">
-                  Notes
-                </label>
-                <textarea
-                  value={quoteFormData.notes}
-                  onChange={(e) => onFormChange('notes', e.target.value)}
-                  rows={4}
-                  className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-colors text-sm"
-                  placeholder="Any additional notes for the customer..."
-                />
-              </div>
-
-              <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-                <label className="block text-sm font-medium text-slate-700 mb-2">
-                  Terms & Conditions
-                </label>
-                {termsTemplates.length > 0 && (
-                  <div className="mb-3">
-                    <select
-                      value={selectedTermsTemplateId}
-                      onChange={(e) => onTermsTemplateSelect(e.target.value)}
-                      className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-colors"
-                    >
-                      {termsTemplates
-                        .filter(template => template.category === 'general' || template.category === 'payment')
-                        .map(template => (
-                          <option key={template.id} value={template.id}>
-                            {template.name}
-                          </option>
-                        ))}
-                    </select>
-                  </div>
-                )}
-                <textarea
-                  value={quoteFormData.terms_conditions}
-                  onChange={(e) => onTermsChange(e.target.value)}
-                  rows={4}
-                  className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-colors text-sm"
-                  placeholder="Enter terms and conditions..."
-                />
-              </div>
+            {/* Notes */}
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+              <label className="block text-sm font-medium text-slate-700 mb-2">
+                Notes
+              </label>
+              <textarea
+                value={quoteFormData.notes}
+                onChange={(e) => onFormChange('notes', e.target.value)}
+                rows={4}
+                className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-colors text-sm"
+                placeholder="Any additional notes for the customer..."
+              />
             </div>
           </div>
 
