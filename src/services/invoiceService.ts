@@ -682,6 +682,9 @@ class InvoiceService {
       if (filters.date_to) {
         query = query.lte('invoice_date', filters.date_to);
       }
+      if (filters.subscription_only) {
+        query = query.not('subscription_id', 'is', null);
+      }
     }
 
     const from = (page - 1) * perPage;

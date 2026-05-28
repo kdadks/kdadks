@@ -101,6 +101,10 @@
 #     X-Frame-Options = "SAMEORIGIN"
 
 # Payment webhook routes
+# Scheduled function: generate subscription draft invoices on the 1st of each month
+[functions."generate-subscription-invoices"]
+  schedule = "5 0 1 * *"
+
 [[redirects]]
   from = "/api/send-email"
   to = "/.netlify/functions/send-email"

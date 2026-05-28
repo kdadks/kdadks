@@ -28,7 +28,8 @@ import {
   Wallet,
   BarChart3,
   Banknote,
-  LayoutDashboard
+  LayoutDashboard,
+  Layers
 } from 'lucide-react'
 import { simpleAuth, SimpleUser } from '../../utils/simpleAuth'
 import { isSupabaseConfigured, supabase } from '../../config/supabase'
@@ -51,6 +52,7 @@ import CompensationManagement from './CompensationManagement'
 import ExpenseManagement from './ExpenseManagement'
 import FinanceManagement from './FinanceManagement'
 import IncomeManagement from './IncomeManagement'
+import SubscriptionManagement from './SubscriptionManagement'
 import type { InvoiceStats } from '../../types/invoice'
 import type { QuoteStats } from '../../types/quote'
 
@@ -74,7 +76,7 @@ interface DashboardStats {
   settlements: number;
 }
 
-type ActiveView = 'dashboard' | 'invoices' | 'payments' | 'quotes' | 'contracts' | 'rate-cards' | 'announcements' | 'expenses' | 'income' | 'finance' | 'hr-employees' | 'hr-leave' | 'hr-attendance' | 'hr-settlement' | 'hr-tds-report' | 'hr-performance' | 'hr-compensation';
+type ActiveView = 'dashboard' | 'invoices' | 'payments' | 'quotes' | 'contracts' | 'rate-cards' | 'announcements' | 'expenses' | 'income' | 'finance' | 'hr-employees' | 'hr-leave' | 'hr-attendance' | 'hr-settlement' | 'hr-tds-report' | 'hr-performance' | 'hr-compensation' | 'subscriptions';
 
 // Menu section types
 type MenuSection = 'sales' | 'finance' | 'hr' | 'communication';
@@ -122,6 +124,7 @@ const SimpleAdminDashboard: React.FC = () => {
     '/admin/hr/tds-report': 'hr-tds-report',
     '/admin/hr/performance': 'hr-performance',
     '/admin/hr/compensation': 'hr-compensation',
+    '/admin/subscriptions': 'subscriptions',
   }
   const activeView: ActiveView = pathToView[location.pathname] ?? 'dashboard'
 
@@ -353,6 +356,8 @@ const SimpleAdminDashboard: React.FC = () => {
         return <PerformanceFeedback />;
       case 'hr-compensation':
         return <CompensationManagement />;
+      case 'subscriptions':
+        return <SubscriptionManagement />;
       case 'dashboard':
       default:
         return null;
@@ -489,6 +494,22 @@ const SimpleAdminDashboard: React.FC = () => {
                   >
                     <CreditCard className="w-5 h-5 flex-shrink-0" />
                     {sidebarOpen && <span className="ml-3">Payments</span>}
+                  </button>
+                </li>
+
+                {/* Subscriptions */}
+                <li>
+                  <button
+                    onClick={() => navigate('/admin/subscriptions')}
+                    title={!sidebarOpen ? 'Subscriptions' : undefined}
+                    className={`w-full flex items-center ${!sidebarOpen ? 'justify-center' : ''} px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                      activeView === 'subscriptions'
+                        ? 'bg-blue-100 text-blue-700'
+                        : 'text-gray-700 hover:bg-gray-100'
+                    }`}
+                  >
+                    <Layers className="w-5 h-5 flex-shrink-0" />
+                    {sidebarOpen && <span className="ml-3">Subscriptions</span>}
                   </button>
                 </li>
               </>

@@ -220,6 +220,7 @@ const Router = () => {
             <Route path="/admin/hr/tds-report" element={<SimpleAdminDashboard />} />
             <Route path="/admin/hr/performance" element={<SimpleAdminDashboard />} />
             <Route path="/admin/hr/compensation" element={<SimpleAdminDashboard />} />
+            <Route path="/admin/subscriptions" element={<SimpleAdminDashboard />} />
             
             {/* Employee Portal routes */}
             <Route path="/employee/login" element={<EmployeeLogin />} />

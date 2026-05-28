@@ -257,6 +257,9 @@ export interface Invoice {
   intl_iban?: string;
   intl_sort_code?: string;
 
+  // Subscription reference (set when invoice is auto-generated for a subscription)
+  subscription_id?: string;
+
   // Tracking
   created_by?: string;
   created_at: string;
@@ -534,6 +537,7 @@ export interface InvoiceFilters {
   date_from?: string;
   date_to?: string;
   search?: string;
+  subscription_only?: boolean;
 }
 
 export interface CustomerFilters {

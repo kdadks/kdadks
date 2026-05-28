@@ -4312,6 +4312,11 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
               <div className={`text-sm font-medium ${invoice.status === 'cancelled' ? 'text-gray-500 line-through' : 'text-gray-900'}`}>
                 {invoice.invoice_number}
               </div>
+              {invoice.subscription_id && (
+                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-700 mt-0.5">
+                  Subscription
+                </span>
+              )}
             </td>
             <td className="px-6 py-4 whitespace-nowrap">
               <div className="text-sm text-gray-900">
@@ -4445,6 +4450,11 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
               <div className={`text-sm font-medium ${invoice.status === 'cancelled' ? 'text-gray-500 line-through' : 'text-gray-900'}`}>
                 {invoice.invoice_number}
               </div>
+              {invoice.subscription_id && (
+                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-700 mt-0.5">
+                  Subscription
+                </span>
+              )}
             </td>
             <td className="px-6 py-4 whitespace-nowrap">
               <div className="text-sm text-gray-900">
