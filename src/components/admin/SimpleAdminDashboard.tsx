@@ -29,7 +29,8 @@ import {
   BarChart3,
   Banknote,
   LayoutDashboard,
-  Layers
+  Layers,
+  Gavel
 } from 'lucide-react'
 import { simpleAuth, SimpleUser } from '../../utils/simpleAuth'
 import { isSupabaseConfigured, supabase } from '../../config/supabase'
@@ -53,6 +54,7 @@ import ExpenseManagement from './ExpenseManagement'
 import FinanceManagement from './FinanceManagement'
 import IncomeManagement from './IncomeManagement'
 import SubscriptionManagement from './SubscriptionManagement'
+import BoardResolutionManagement from '../boardResolution/BoardResolutionManagement'
 import type { InvoiceStats } from '../../types/invoice'
 import type { QuoteStats } from '../../types/quote'
 
@@ -76,7 +78,7 @@ interface DashboardStats {
   settlements: number;
 }
 
-type ActiveView = 'dashboard' | 'invoices' | 'payments' | 'quotes' | 'contracts' | 'rate-cards' | 'announcements' | 'expenses' | 'income' | 'finance' | 'hr-employees' | 'hr-leave' | 'hr-attendance' | 'hr-settlement' | 'hr-tds-report' | 'hr-performance' | 'hr-compensation' | 'subscriptions';
+type ActiveView = 'dashboard' | 'invoices' | 'payments' | 'quotes' | 'contracts' | 'rate-cards' | 'announcements' | 'expenses' | 'income' | 'finance' | 'hr-employees' | 'hr-leave' | 'hr-attendance' | 'hr-settlement' | 'hr-tds-report' | 'hr-performance' | 'hr-compensation' | 'subscriptions' | 'board-resolutions';
 
 // Menu section types
 type MenuSection = 'sales' | 'finance' | 'hr' | 'communication';
@@ -125,6 +127,7 @@ const SimpleAdminDashboard: React.FC = () => {
     '/admin/hr/performance': 'hr-performance',
     '/admin/hr/compensation': 'hr-compensation',
     '/admin/subscriptions': 'subscriptions',
+    '/admin/board-resolutions': 'board-resolutions',
   }
   const activeView: ActiveView = pathToView[location.pathname] ?? 'dashboard'
 
@@ -358,6 +361,8 @@ const SimpleAdminDashboard: React.FC = () => {
         return <CompensationManagement />;
       case 'subscriptions':
         return <SubscriptionManagement />;
+      case 'board-resolutions':
+        return <BoardResolutionManagement />;
       case 'dashboard':
       default:
         return null;
@@ -510,6 +515,22 @@ const SimpleAdminDashboard: React.FC = () => {
                   >
                     <Layers className="w-5 h-5 flex-shrink-0" />
                     {sidebarOpen && <span className="ml-3">Subscriptions</span>}
+                  </button>
+                </li>
+
+                {/* Board Resolutions */}
+                <li>
+                  <button
+                    onClick={() => navigate('/admin/board-resolutions')}
+                    title={!sidebarOpen ? 'Board Resolutions' : undefined}
+                    className={`w-full flex items-center ${!sidebarOpen ? 'justify-center' : ''} px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                      activeView === 'board-resolutions'
+                        ? 'bg-blue-100 text-blue-700'
+                        : 'text-gray-700 hover:bg-gray-100'
+                    }`}
+                  >
+                    <Gavel className="w-5 h-5 flex-shrink-0" />
+                    {sidebarOpen && <span className="ml-3">Board Resolutions</span>}
                   </button>
                 </li>
               </>
