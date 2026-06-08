@@ -93,7 +93,7 @@ SUPABASE_SERVICE_ROLE_KEY=your_service_role_key_here
 
 # Required for sending emails
 RESEND_API_KEY=your_resend_api_key_here
-SENDER_EMAIL=hr@kdadks.com  # Or your verified domain
+SENDER_EMAIL=contact@kdadks.com  # Or your verified domain
 ```
 
 **Where to get**:

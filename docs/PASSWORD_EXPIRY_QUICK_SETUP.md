@@ -11,7 +11,7 @@ Add these variables:
 ```bash
 SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 RESEND_API_KEY=re_xxxxxxxxxxxx
-SENDER_EMAIL=hr@kdadks.com
+SENDER_EMAIL=contact@kdadks.com
 ```
 
 **Get Values**:

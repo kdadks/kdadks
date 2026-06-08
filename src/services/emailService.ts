@@ -966,7 +966,7 @@ KDADKS Service Private Limited
         },
         body: JSON.stringify({
           to: params.to,
-          from: '"KDADKS HR Department" <hr@kdadks.com>',
+          from: '"KDADKS HR Department" <contact@kdadks.com>',
           subject,
           text: textEmail,
           html: htmlEmail,
@@ -1199,7 +1199,7 @@ www.kdadks.com
         },
         body: JSON.stringify({
           to: employeeEmail,
-          from: '"KDADKS HR Department" <hr@kdadks.com>',
+          from: '"KDADKS HR Department" <contact@kdadks.com>',
           subject,
           text: EmailService.generatePasswordExpiryTextEmail(employeeName, daysUntilExpiry, urgency),
           html: EmailService.generatePasswordExpiryHtmlEmail(employeeName, daysUntilExpiry, urgency),
@@ -1252,7 +1252,7 @@ PASSWORD REQUIREMENTS:
 
 Please change your password immediately to avoid account lockout.
 
-If you need assistance, contact the HR department at hr@kdadks.com or call +91 7982303199.
+If you need assistance, contact the HR department at contact@kdadks.com or call +91 7982303199.
 
 Best regards,
 HR Department
@@ -1491,7 +1491,7 @@ This is an automated security notification. Please do not reply to this email.
             <div class="contact-info">
                 <strong>Need Help?</strong><br>
                 If you have any questions or need assistance changing your password, please contact:<br><br>
-                📧 Email: hr@kdadks.com<br>
+                📧 Email: contact@kdadks.com<br>
                 📞 Phone: +91 7982303199
             </div>
         </div>
@@ -1523,7 +1523,7 @@ This is an automated security notification. Please do not reply to this email.
         },
         body: JSON.stringify({
           to: employeeEmail,
-          from: '"KDADKS HR Department" <hr@kdadks.com>',
+          from: '"KDADKS HR Department" <contact@kdadks.com>',
           subject,
           text: EmailService.generatePasswordResetTextEmail(employeeName, temporaryPassword),
           html: EmailService.generatePasswordResetHtmlEmail(employeeName, temporaryPassword),
@@ -1575,7 +1575,7 @@ PASSWORD REQUIREMENTS:
 If you did not request this password reset or have concerns about your account security, please contact the HR department immediately.
 
 Contact Information:
-Email: hr@kdadks.com
+Email: contact@kdadks.com
 Phone: +91 7982303199
 
 Best regards,
@@ -1821,7 +1821,7 @@ This is an automated security notification. Please do not reply to this email.
                 <strong>Security Concerns?</strong><br>
                 If you did not request this password reset or have concerns about your account security, 
                 please contact the HR department immediately:<br><br>
-                📧 Email: hr@kdadks.com<br>
+                📧 Email: contact@kdadks.com<br>
                 📞 Phone: +91 7982303199
             </div>
         </div>

@@ -11,7 +11,7 @@ const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
 // Email service configuration
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
-const SENDER_EMAIL = process.env.SENDER_EMAIL || 'hr@kdadks.com';
+const SENDER_EMAIL = process.env.SENDER_EMAIL || 'contact@kdadks.com';
 
 // Password expiry configuration
 const PASSWORD_EXPIRY_DAYS = 90;
@@ -81,7 +81,7 @@ PASSWORD REQUIREMENTS:
 
 Please change your password immediately to avoid account lockout.
 
-If you need assistance, contact HR at hr@kdadks.com or call +91 7982303199.
+If you need assistance, contact HR at contact@kdadks.com or call +91 7982303199.
 
 Best regards,
 HR Department
@@ -155,7 +155,7 @@ KDADKS Service Private Limited
             <div class="cta-button">
                 <a href="https://kdadks.com/employee/login">🔐 Change Password Now</a>
             </div>
-            <p style="color: #4b5563;">Need help? Contact HR at <a href="mailto:hr@kdadks.com">hr@kdadks.com</a> or call +91 7982303199</p>
+            <p style="color: #4b5563;">Need help? Contact HR at <a href="mailto:contact@kdadks.com">contact@kdadks.com</a> or call +91 7982303199</p>
         </div>
         <div class="footer">
             <p><strong>KDADKS Service Private Limited</strong></p>
