@@ -1179,4 +1179,661 @@ www.kdadks.com
 </html>
     `.trim();
   }
+
+  // Send password expiry reminder email
+  static async sendPasswordExpiryReminder(
+    employeeEmail: string,
+    employeeName: string,
+    daysUntilExpiry: number
+  ): Promise<void> {
+    try {
+      const urgency = daysUntilExpiry <= 3;
+      const subject = urgency 
+        ? `🚨 URGENT: Your Password Expires in ${daysUntilExpiry} Day${daysUntilExpiry === 1 ? '' : 's'}!`
+        : `⚠️ Reminder: Your Password Expires in ${daysUntilExpiry} Days`;
+
+      const response = await EmailService.makeApiCall(EmailService.getApiEndpoint(), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          to: employeeEmail,
+          from: '"KDADKS HR Department" <hr@kdadks.com>',
+          subject,
+          text: EmailService.generatePasswordExpiryTextEmail(employeeName, daysUntilExpiry, urgency),
+          html: EmailService.generatePasswordExpiryHtmlEmail(employeeName, daysUntilExpiry, urgency),
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ message: 'Unknown error' }));
+        throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+      }
+
+      const result = await response.json();
+      console.log('Password expiry reminder sent successfully:', result);
+    } catch (error) {
+      console.error('Failed to send password expiry reminder:', error);
+      throw error;
+    }
+  }
+
+  private static generatePasswordExpiryTextEmail(
+    employeeName: string,
+    daysUntilExpiry: number,
+    urgency: boolean
+  ): string {
+    return `
+Dear ${employeeName},
+
+${urgency ? '🚨 URGENT SECURITY NOTICE' : '⚠️ PASSWORD EXPIRY REMINDER'}
+
+Your password ${daysUntilExpiry === 1 ? 'expires TOMORROW' : `expires in ${daysUntilExpiry} days`}!
+
+For security compliance, all employee passwords must be changed every 90 days. Your password is approaching its expiration date.
+
+WHAT HAPPENS IF YOU DON'T CHANGE IT:
+${urgency ? '⚠️ Your account will be LOCKED and you will not be able to access the employee portal until an administrator resets your password.' : '• Your account will be locked after expiry\n• You will lose access to the employee portal\n• An administrator will need to reset your password'}
+
+HOW TO CHANGE YOUR PASSWORD NOW:
+1. Go to: https://kdadks.com/employee/login
+2. Log in with your current password
+3. Click on "Change Password" in your profile
+4. Enter your current password
+5. Create a new strong password
+
+PASSWORD REQUIREMENTS:
+• At least 8 characters long
+• Must contain uppercase letters (A-Z)
+• Must contain lowercase letters (a-z)
+• Must contain numbers (0-9)
+• Must contain special characters (!@#$%^&*)
+
+Please change your password immediately to avoid account lockout.
+
+If you need assistance, contact the HR department at hr@kdadks.com or call +91 7982303199.
+
+Best regards,
+HR Department
+KDADKS Service Private Limited
+
+---
+This is an automated security notification. Please do not reply to this email.
+    `.trim();
+  }
+
+  private static generatePasswordExpiryHtmlEmail(
+    employeeName: string,
+    daysUntilExpiry: number,
+    urgency: boolean
+  ): string {
+    return `
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Password Expiry Reminder</title>
+    <style>
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            margin: 0; 
+            padding: 20px; 
+            background-color: #f9fafb; 
+            color: #1f2937;
+        }
+        .container { 
+            max-width: 600px; 
+            margin: 0 auto; 
+            background: white; 
+            border-radius: 12px; 
+            overflow: hidden; 
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); 
+        }
+        .header { 
+            background: ${urgency ? 'linear-gradient(135deg, #dc2626, #b91c1c)' : 'linear-gradient(135deg, #f59e0b, #d97706)'}; 
+            color: white; 
+            padding: 30px; 
+            text-align: center; 
+        }
+        .header h1 { 
+            margin: 0; 
+            font-size: 28px; 
+            font-weight: 600; 
+        }
+        .header .icon { 
+            font-size: 48px; 
+            margin-bottom: 10px; 
+        }
+        .content { 
+            padding: 40px 30px; 
+        }
+        .greeting { 
+            font-size: 18px; 
+            color: #374151; 
+            margin-bottom: 20px; 
+        }
+        .alert-box { 
+            background: ${urgency ? '#fee2e2' : '#fef3c7'}; 
+            border-left: 4px solid ${urgency ? '#dc2626' : '#f59e0b'}; 
+            border-radius: 8px; 
+            padding: 20px; 
+            margin: 25px 0; 
+        }
+        .alert-box h2 { 
+            margin: 0 0 10px 0; 
+            color: ${urgency ? '#991b1b' : '#92400e'}; 
+            font-size: 20px; 
+        }
+        .alert-box p { 
+            margin: 0; 
+            color: ${urgency ? '#7f1d1d' : '#78350f'}; 
+            font-size: 16px; 
+            line-height: 1.5;
+        }
+        .countdown { 
+            text-align: center; 
+            font-size: 48px; 
+            font-weight: bold; 
+            color: ${urgency ? '#dc2626' : '#f59e0b'}; 
+            margin: 20px 0; 
+            padding: 20px; 
+            background: ${urgency ? '#fef2f2' : '#fffbeb'}; 
+            border-radius: 8px; 
+        }
+        .instructions { 
+            background: #f8fafc; 
+            border-radius: 8px; 
+            padding: 25px; 
+            margin: 25px 0; 
+        }
+        .instructions h3 { 
+            margin: 0 0 15px 0; 
+            color: #1f2937; 
+            font-size: 18px; 
+        }
+        .instructions ol { 
+            margin: 0; 
+            padding-left: 20px; 
+            color: #4b5563; 
+        }
+        .instructions li { 
+            margin: 8px 0; 
+            line-height: 1.6; 
+        }
+        .requirements { 
+            background: #ecfdf5; 
+            border: 1px solid #10b981; 
+            border-radius: 8px; 
+            padding: 20px; 
+            margin: 20px 0; 
+        }
+        .requirements h3 { 
+            margin: 0 0 12px 0; 
+            color: #065f46; 
+            font-size: 16px; 
+        }
+        .requirements ul { 
+            margin: 0; 
+            padding-left: 20px; 
+            color: #064e3b; 
+        }
+        .requirements li { 
+            margin: 6px 0; 
+        }
+        .cta-button { 
+            text-align: center; 
+            margin: 30px 0; 
+        }
+        .cta-button a { 
+            display: inline-block; 
+            background: ${urgency ? '#dc2626' : '#2563eb'}; 
+            color: white; 
+            padding: 15px 40px; 
+            text-decoration: none; 
+            border-radius: 8px; 
+            font-weight: 600; 
+            font-size: 16px; 
+            transition: all 0.3s; 
+        }
+        .cta-button a:hover { 
+            background: ${urgency ? '#b91c1c' : '#1d4ed8'}; 
+            transform: translateY(-2px); 
+        }
+        .warning { 
+            background: #fef2f2; 
+            border: 2px solid #fca5a5; 
+            border-radius: 8px; 
+            padding: 15px; 
+            margin: 20px 0; 
+            color: #991b1b; 
+            font-weight: 500; 
+        }
+        .contact-info { 
+            background: #f8fafc; 
+            border-radius: 8px; 
+            padding: 20px; 
+            margin: 25px 0; 
+            color: #4b5563; 
+        }
+        .footer { 
+            background: #f9fafb; 
+            padding: 25px 30px; 
+            text-align: center; 
+            color: #6b7280; 
+            font-size: 14px; 
+            border-top: 1px solid #e5e7eb; 
+        }
+        .footer p { 
+            margin: 5px 0; 
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="icon">${urgency ? '🚨' : '⚠️'}</div>
+            <h1>${urgency ? 'URGENT' : ''} Password Expiry Notice</h1>
+            <p>Security Compliance Required</p>
+        </div>
+        
+        <div class="content">
+            <p class="greeting">Dear ${employeeName},</p>
+            
+            <div class="alert-box">
+                <h2>${urgency ? '🚨 IMMEDIATE ACTION REQUIRED' : '⚠️ Password Expiry Reminder'}</h2>
+                <p>Your employee portal password is about to expire. You must change it to maintain access to your account.</p>
+            </div>
+            
+            <div class="countdown">
+                ${daysUntilExpiry === 1 ? 'EXPIRES<br>TOMORROW' : `${daysUntilExpiry}<br>DAYS LEFT`}
+            </div>
+            
+            ${urgency ? `
+            <div class="warning">
+                <strong>⚠️ Warning:</strong> If you don't change your password before it expires, your account will be <strong>LOCKED</strong> and you will not be able to access the employee portal. An administrator will need to manually reset your access.
+            </div>
+            ` : `
+            <p style="color: #4b5563; line-height: 1.6;">
+                For security compliance, all employee passwords must be changed every <strong>90 days</strong>. 
+                Your current password is approaching its expiration date.
+            </p>
+            `}
+            
+            <div class="instructions">
+                <h3>📝 How to Change Your Password</h3>
+                <ol>
+                    <li>Go to the employee portal: <a href="https://kdadks.com/employee/login" style="color: #2563eb;">kdadks.com/employee/login</a></li>
+                    <li>Log in with your current credentials</li>
+                    <li>Navigate to your profile and click "Change Password"</li>
+                    <li>Enter your current password</li>
+                    <li>Create a new strong password that meets all requirements</li>
+                    <li>Confirm and save your new password</li>
+                </ol>
+            </div>
+            
+            <div class="requirements">
+                <h3>🔒 Password Requirements</h3>
+                <ul>
+                    <li>At least <strong>8 characters</strong> long</li>
+                    <li>Must contain <strong>uppercase letters</strong> (A-Z)</li>
+                    <li>Must contain <strong>lowercase letters</strong> (a-z)</li>
+                    <li>Must contain <strong>numbers</strong> (0-9)</li>
+                    <li>Must contain <strong>special characters</strong> (!@#$%^&*)</li>
+                </ul>
+            </div>
+            
+            <div class="cta-button">
+                <a href="https://kdadks.com/employee/login">🔐 Change Password Now</a>
+            </div>
+            
+            <div class="contact-info">
+                <strong>Need Help?</strong><br>
+                If you have any questions or need assistance changing your password, please contact:<br><br>
+                📧 Email: hr@kdadks.com<br>
+                📞 Phone: +91 7982303199
+            </div>
+        </div>
+        
+        <div class="footer">
+            <p><strong>KDADKS Service Private Limited</strong></p>
+            <p>This is an automated security notification. Please do not reply to this email.</p>
+            <p>&copy; ${new Date().getFullYear()} KDADKS Service Private Limited. All rights reserved.</p>
+        </div>
+    </div>
+</body>
+</html>
+    `.trim();
+  }
+
+  // Send password reset notification when admin resets employee password
+  static async sendPasswordResetNotification(
+    employeeEmail: string,
+    employeeName: string,
+    temporaryPassword: string
+  ): Promise<void> {
+    try {
+      const subject = '🔐 Your Password Has Been Reset - KDADKS';
+
+      const response = await EmailService.makeApiCall(EmailService.getApiEndpoint(), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          to: employeeEmail,
+          from: '"KDADKS HR Department" <hr@kdadks.com>',
+          subject,
+          text: EmailService.generatePasswordResetTextEmail(employeeName, temporaryPassword),
+          html: EmailService.generatePasswordResetHtmlEmail(employeeName, temporaryPassword),
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ message: 'Unknown error' }));
+        throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+      }
+
+      const result = await response.json();
+      console.log('Password reset notification sent successfully:', result);
+    } catch (error) {
+      console.error('Failed to send password reset notification:', error);
+      throw error;
+    }
+  }
+
+  private static generatePasswordResetTextEmail(
+    employeeName: string,
+    temporaryPassword: string
+  ): string {
+    return `
+Dear ${employeeName},
+
+Your employee portal password has been reset by an administrator.
+
+TEMPORARY PASSWORD: ${temporaryPassword}
+
+IMPORTANT SECURITY INSTRUCTIONS:
+1. This is a temporary password that MUST be changed on first login
+2. Do not share this password with anyone
+3. You will be required to create a new password immediately upon login
+
+HOW TO LOGIN AND CHANGE YOUR PASSWORD:
+1. Go to: https://kdadks.com/employee/login
+2. Enter your email and the temporary password above
+3. You will be automatically redirected to change your password
+4. Create a strong password that meets all requirements
+
+PASSWORD REQUIREMENTS:
+• At least 8 characters long
+• Must contain uppercase letters (A-Z)
+• Must contain lowercase letters (a-z)
+• Must contain numbers (0-9)
+• Must contain special characters (!@#$%^&*)
+
+If you did not request this password reset or have concerns about your account security, please contact the HR department immediately.
+
+Contact Information:
+Email: hr@kdadks.com
+Phone: +91 7982303199
+
+Best regards,
+HR Department
+KDADKS Service Private Limited
+
+---
+This is an automated security notification. Please do not reply to this email.
+    `.trim();
+  }
+
+  private static generatePasswordResetHtmlEmail(
+    employeeName: string,
+    temporaryPassword: string
+  ): string {
+    return `
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Password Reset Notification</title>
+    <style>
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            margin: 0; 
+            padding: 20px; 
+            background-color: #f9fafb; 
+            color: #1f2937;
+        }
+        .container { 
+            max-width: 600px; 
+            margin: 0 auto; 
+            background: white; 
+            border-radius: 12px; 
+            overflow: hidden; 
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); 
+        }
+        .header { 
+            background: linear-gradient(135deg, #2563eb, #1d4ed8); 
+            color: white; 
+            padding: 30px; 
+            text-align: center; 
+        }
+        .header h1 { 
+            margin: 0; 
+            font-size: 28px; 
+            font-weight: 600; 
+        }
+        .header .icon { 
+            font-size: 48px; 
+            margin-bottom: 10px; 
+        }
+        .content { 
+            padding: 40px 30px; 
+        }
+        .greeting { 
+            font-size: 18px; 
+            color: #374151; 
+            margin-bottom: 20px; 
+        }
+        .password-box { 
+            background: #fef3c7; 
+            border: 2px solid #f59e0b; 
+            border-radius: 8px; 
+            padding: 25px; 
+            margin: 25px 0; 
+            text-align: center; 
+        }
+        .password-box h2 { 
+            margin: 0 0 15px 0; 
+            color: #92400e; 
+            font-size: 18px; 
+        }
+        .password-box .password { 
+            font-family: 'Courier New', monospace; 
+            font-size: 24px; 
+            font-weight: bold; 
+            color: #1f2937; 
+            background: white; 
+            padding: 15px 20px; 
+            border-radius: 6px; 
+            display: inline-block; 
+            letter-spacing: 2px; 
+            border: 2px dashed #f59e0b; 
+        }
+        .security-notice { 
+            background: #fee2e2; 
+            border-left: 4px solid #dc2626; 
+            border-radius: 8px; 
+            padding: 20px; 
+            margin: 25px 0; 
+        }
+        .security-notice h3 { 
+            margin: 0 0 10px 0; 
+            color: #991b1b; 
+            font-size: 16px; 
+        }
+        .security-notice ul { 
+            margin: 10px 0 0 0; 
+            padding-left: 20px; 
+            color: #7f1d1d; 
+        }
+        .security-notice li { 
+            margin: 6px 0; 
+        }
+        .instructions { 
+            background: #f8fafc; 
+            border-radius: 8px; 
+            padding: 25px; 
+            margin: 25px 0; 
+        }
+        .instructions h3 { 
+            margin: 0 0 15px 0; 
+            color: #1f2937; 
+            font-size: 18px; 
+        }
+        .instructions ol { 
+            margin: 0; 
+            padding-left: 20px; 
+            color: #4b5563; 
+        }
+        .instructions li { 
+            margin: 8px 0; 
+            line-height: 1.6; 
+        }
+        .requirements { 
+            background: #ecfdf5; 
+            border: 1px solid #10b981; 
+            border-radius: 8px; 
+            padding: 20px; 
+            margin: 20px 0; 
+        }
+        .requirements h3 { 
+            margin: 0 0 12px 0; 
+            color: #065f46; 
+            font-size: 16px; 
+        }
+        .requirements ul { 
+            margin: 0; 
+            padding-left: 20px; 
+            color: #064e3b; 
+        }
+        .requirements li { 
+            margin: 6px 0; 
+        }
+        .cta-button { 
+            text-align: center; 
+            margin: 30px 0; 
+        }
+        .cta-button a { 
+            display: inline-block; 
+            background: #2563eb; 
+            color: white; 
+            padding: 15px 40px; 
+            text-decoration: none; 
+            border-radius: 8px; 
+            font-weight: 600; 
+            font-size: 16px; 
+        }
+        .cta-button a:hover { 
+            background: #1d4ed8; 
+        }
+        .contact-info { 
+            background: #f8fafc; 
+            border-radius: 8px; 
+            padding: 20px; 
+            margin: 25px 0; 
+            color: #4b5563; 
+        }
+        .footer { 
+            background: #f9fafb; 
+            padding: 25px 30px; 
+            text-align: center; 
+            color: #6b7280; 
+            font-size: 14px; 
+            border-top: 1px solid #e5e7eb; 
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="icon">🔐</div>
+            <h1>Password Reset</h1>
+            <p>Your password has been reset</p>
+        </div>
+        
+        <div class="content">
+            <p class="greeting">Dear ${employeeName},</p>
+            
+            <p style="color: #4b5563; line-height: 1.6;">
+                Your employee portal password has been reset by an administrator. 
+                Please use the temporary password below to log in and create a new password.
+            </p>
+            
+            <div class="password-box">
+                <h2>🔑 Your Temporary Password</h2>
+                <div class="password">${temporaryPassword}</div>
+                <p style="margin: 15px 0 0 0; color: #78350f; font-size: 14px;">
+                    <strong>⚠️ This password must be changed on first login</strong>
+                </p>
+            </div>
+            
+            <div class="security-notice">
+                <h3>🛡️ Important Security Instructions</h3>
+                <ul>
+                    <li><strong>Do not share</strong> this temporary password with anyone</li>
+                    <li>You will be <strong>required to change</strong> this password immediately upon login</li>
+                    <li>This is a <strong>one-time use</strong> temporary password</li>
+                    <li>If you didn't request this reset, contact HR immediately</li>
+                </ul>
+            </div>
+            
+            <div class="instructions">
+                <h3>📝 How to Login and Change Password</h3>
+                <ol>
+                    <li>Go to the employee portal: <a href="https://kdadks.com/employee/login" style="color: #2563eb;">kdadks.com/employee/login</a></li>
+                    <li>Enter your email address</li>
+                    <li>Enter the temporary password shown above</li>
+                    <li>You will be automatically redirected to the password change page</li>
+                    <li>Create a strong new password that meets all requirements</li>
+                    <li>Confirm your new password and save</li>
+                </ol>
+            </div>
+            
+            <div class="requirements">
+                <h3>🔒 New Password Requirements</h3>
+                <ul>
+                    <li>At least <strong>8 characters</strong> long</li>
+                    <li>Must contain <strong>uppercase letters</strong> (A-Z)</li>
+                    <li>Must contain <strong>lowercase letters</strong> (a-z)</li>
+                    <li>Must contain <strong>numbers</strong> (0-9)</li>
+                    <li>Must contain <strong>special characters</strong> (!@#$%^&*)</li>
+                </ul>
+            </div>
+            
+            <div class="cta-button">
+                <a href="https://kdadks.com/employee/login">🚀 Login Now</a>
+            </div>
+            
+            <div class="contact-info">
+                <strong>Security Concerns?</strong><br>
+                If you did not request this password reset or have concerns about your account security, 
+                please contact the HR department immediately:<br><br>
+                📧 Email: hr@kdadks.com<br>
+                📞 Phone: +91 7982303199
+            </div>
+        </div>
+        
+        <div class="footer">
+            <p><strong>KDADKS Service Private Limited</strong></p>
+            <p>This is an automated security notification. Please do not reply to this email.</p>
+            <p>&copy; ${new Date().getFullYear()} KDADKS Service Private Limited. All rights reserved.</p>
+        </div>
+    </div>
+</body>
+</html>
+    `.trim();
+  }
 }
