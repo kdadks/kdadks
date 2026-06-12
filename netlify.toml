@@ -98,6 +98,11 @@
 # [[headers]]
 #   for = "/contact"
 #   [headers.values]
+
+# Scheduled Functions
+# Password expiry check - runs daily at 9:00 AM IST (3:30 AM UTC)
+[functions."check-password-expiry"]
+  schedule = "30 3 * * *"
 #     X-Frame-Options = "SAMEORIGIN"
 
 # Payment webhook routes

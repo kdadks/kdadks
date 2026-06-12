@@ -376,6 +376,19 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
       const tempPassword = employeeAuthService.generateTemporaryPassword();
       await employeeAuthService.setTemporaryPassword(newEmployee.id, tempPassword);
 
+      // Send password reset email to employee
+      try {
+        await EmailService.sendPasswordResetNotification(
+          newEmployee.email,
+          fullName,
+          tempPassword
+        );
+        console.log('✅ Password reset email sent to:', newEmployee.email);
+      } catch (emailError) {
+        console.error('❌ Failed to send password email:', emailError);
+        // Continue anyway - admin still has the password
+      }
+
       // Show temporary password modal
       setTempPasswordData({
         email: newEmployee.email,
@@ -2367,6 +2380,19 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
                             const tempPassword = employeeAuthService.generateTemporaryPassword();
                             const result = await employeeAuthService.setTemporaryPassword(employee.id, tempPassword);
                             if (result.success) {
+                              // Send password reset email to employee
+                              try {
+                                await EmailService.sendPasswordResetNotification(
+                                  employee.email,
+                                  employee.full_name,
+                                  tempPassword
+                                );
+                                console.log('✅ Password reset email sent to:', employee.email);
+                              } catch (emailError) {
+                                console.error('❌ Failed to send password email:', emailError);
+                                // Continue anyway - admin still has the password
+                              }
+                              
                               setTempPasswordData({
                                 email: employee.email,
                                 password: tempPassword,
