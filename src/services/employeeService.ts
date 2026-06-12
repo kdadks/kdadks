@@ -804,7 +804,117 @@ export const employeeService = {
     }
 
     return documentNumber
-  }
+  },
+
+  // =============== Employee ID Generation ===============
+
+  async generateEmployeeId(department: string): Promise<string> {
+    const prefixMap: Record<string, string> = {
+      'ITwala': 'ITW',
+      'Kdadks': 'KDA',
+      'Nirchal': 'NIR',
+      'Ayuh Clinic': 'AYU',
+    };
+    const prefix = prefixMap[department] || department.substring(0, 3).toUpperCase();
+
+    // Fetch all employee_numbers with this prefix and find the highest sequence number
+    const { data } = await supabase
+      .from('employees')
+      .select('employee_number')
+      .ilike('employee_number', `${prefix}-%`);
+
+    let maxNum = 0;
+    for (const emp of data || []) {
+      const parts = (emp.employee_number as string).split('-');
+      if (parts.length === 2) {
+        const num = parseInt(parts[1], 10);
+        if (!isNaN(num) && num > maxNum) maxNum = num;
+      }
+    }
+
+    return `${prefix}-${String(maxNum + 1).padStart(6, '0')}`;
+  },
+
+  // =============== Rehire Operations ===============
+
+  async rehireEmployee(
+    employeeId: string,
+    rehireData: {
+      new_joining_date: string;
+      designation: string;
+      department: string;
+      employment_type: import('../types/employee').EmploymentType;
+      basic_salary: number;
+      rehired_by_name: string;
+    }
+  ): Promise<Employee> {
+    const current = await this.getEmployeeById(employeeId);
+    if (!current) throw new Error('Employee not found');
+
+    const updatePayload: Partial<Employee> = {
+      employment_status: 'active',
+      date_of_joining: rehireData.new_joining_date,
+      date_of_leaving: undefined,
+      designation: rehireData.designation,
+      department: rehireData.department,
+      employment_type: rehireData.employment_type,
+      basic_salary: rehireData.basic_salary,
+      gross_salary: rehireData.basic_salary,
+      rehire_count: (current.rehire_count || 0) + 1,
+      previous_joining_date: current.date_of_joining,
+      previous_leaving_date: current.date_of_leaving,
+      last_rehired_at: new Date().toISOString(),
+      last_rehired_by: rehireData.rehired_by_name,
+    };
+
+    const updated = await this.updateEmployee(employeeId, updatePayload);
+
+    await (await import('./auditLogService')).auditLogService.createLog({
+      employee_id: employeeId,
+      table_name: 'employees',
+      record_id: employeeId,
+      action: 'rehire',
+      change_summary: `Employee rehired by ${rehireData.rehired_by_name}. New joining date: ${rehireData.new_joining_date}. Rehire count: ${updatePayload.rehire_count}`,
+      performed_by_name: rehireData.rehired_by_name,
+      new_value: JSON.stringify(updatePayload),
+      old_value: JSON.stringify({ employment_status: current.employment_status, date_of_joining: current.date_of_joining }),
+    });
+
+    return updated;
+  },
+
+  // =============== Intern Conversion ===============
+
+  async convertInternToEmployee(
+    employeeId: string,
+    employeeData: Partial<Employee>,
+    convertedByName: string
+  ): Promise<Employee> {
+    const current = await this.getEmployeeById(employeeId);
+    if (!current) throw new Error('Employee not found');
+    if (current.employment_type !== 'intern') throw new Error('Employee is not an intern');
+
+    const updatePayload: Partial<Employee> = {
+      ...employeeData,
+      employment_type: employeeData.employment_type || 'full-time',
+      employment_status: 'active',
+    };
+
+    const updated = await this.updateEmployee(employeeId, updatePayload);
+
+    await (await import('./auditLogService')).auditLogService.createLog({
+      employee_id: employeeId,
+      table_name: 'employees',
+      record_id: employeeId,
+      action: 'intern_conversion',
+      change_summary: `Intern converted to ${updatePayload.employment_type} employee by ${convertedByName}`,
+      performed_by_name: convertedByName,
+      old_value: JSON.stringify({ employment_type: 'intern', designation: current.designation }),
+      new_value: JSON.stringify({ employment_type: updatePayload.employment_type, designation: updatePayload.designation }),
+    });
+
+    return updated;
+  },
 }
 
 export default employeeService

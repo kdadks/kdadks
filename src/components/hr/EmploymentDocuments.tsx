@@ -55,6 +55,9 @@ import type {
 } from '../../types/employee';
 import type { CompanySettings } from '../../types/invoice';
 import { supabase } from '../../config/supabase';
+import EmployeeNotes from './EmployeeNotes';
+import RehireWorkflow from './RehireWorkflow';
+import InternConversionWorkflow from './InternConversionWorkflow';
 
 interface EmploymentDocumentsProps {
   onBackToDashboard?: () => void;
@@ -125,6 +128,10 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
   // Delete confirmation modal state
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [employeeToDelete, setEmployeeToDelete] = useState<Employee | null>(null);
+
+  // Workflow modal state
+  const [showRehireModal, setShowRehireModal] = useState(false);
+  const [showInternConversionModal, setShowInternConversionModal] = useState(false);
 
   // Employee document verification state
   const [showVerifyDocModal, setShowVerifyDocModal] = useState(false);
@@ -1756,8 +1763,21 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
         return;
       }
 
-      setEditingDocument(document);
-      setEditedDocumentData(document.document_data || {});
+      // Fetch full document from employment_documents to get document_data
+      // (the unified view doesn't include this JSON column)
+      const { data: fullDoc, error: fetchError } = await supabase
+        .from('employment_documents')
+        .select('*')
+        .eq('id', document.id)
+        .single();
+
+      if (fetchError || !fullDoc) {
+        showError('Failed to load document data');
+        return;
+      }
+
+      setEditingDocument(fullDoc);
+      setEditedDocumentData(fullDoc.document_data || {});
       setSelectedEmployee(employee);
       setShowEditModal(true);
     } catch (err) {
@@ -1911,6 +1931,54 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
       showError('Failed to save document');
     } finally {
       setIsSavingDocument(false);
+    }
+  };
+
+  const handlePreviewEditedDocument = async () => {
+    try {
+      if (!editingDocument || !selectedEmployee) {
+        showError('No document selected');
+        return;
+      }
+
+      let pdf: jsPDF;
+
+      switch (editingDocument.document_type) {
+        case 'offer_letter':
+          pdf = await generateOfferLetterPDF(selectedEmployee, editedDocumentData as OfferLetterData);
+          break;
+        case 'salary_certificate':
+          pdf = await generateSalaryCertificatePDF(selectedEmployee, editedDocumentData as SalaryCertificateData);
+          break;
+        case 'experience_certificate':
+          pdf = await generateExperienceCertificatePDF(selectedEmployee, editedDocumentData as ExperienceCertificateData);
+          break;
+        case 'relieving_letter':
+          pdf = await generateRelievingLetterPDF(selectedEmployee, editedDocumentData as RelievingLetterData);
+          break;
+        case 'form_16':
+          pdf = await generateForm16PDF(selectedEmployee, editedDocumentData as Form16Data);
+          break;
+        case 'form_24q':
+          pdf = await generateForm24QPDF(editedDocumentData as Form24QData);
+          break;
+        case 'intern_offer_letter':
+          pdf = await generateInternOfferLetterPDF(selectedEmployee, editedDocumentData as InternOfferLetterData, companySettings, hrSettings?.signatory_name, hrSettings?.signatory_designation);
+          break;
+        case 'intern_experience_certificate':
+          pdf = await generateInternExperienceCertificatePDF(selectedEmployee, editedDocumentData as InternExperienceCertificateData, companySettings, hrSettings?.signatory_name, hrSettings?.signatory_designation);
+          break;
+        default:
+          throw new Error('Unsupported document type');
+      }
+
+      const pdfBlob = pdf.output('blob');
+      const pdfUrl = URL.createObjectURL(pdfBlob);
+      setPreviewPdf(pdfUrl);
+      setShowPreview(true);
+    } catch (err) {
+      console.error('Error generating preview:', err);
+      showError('Failed to generate preview');
     }
   };
 
@@ -2843,10 +2911,10 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
                 </label>
                 <input
                   type="text"
-                  value={employeeForm.employee_number}
-                  onChange={(e) => setEmployeeForm({ ...employeeForm, employee_number: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-                  required
+                  value={employeeForm.employee_number || ''}
+                  readOnly
+                  className="w-full px-3 py-2 border border-gray-200 rounded-md bg-gray-50 text-gray-700 cursor-not-allowed"
+                  placeholder="Auto-generated when department is selected"
                 />
               </div>
 
@@ -2970,12 +3038,28 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Department
                 </label>
-                <input
-                  type="text"
+                <select
                   value={employeeForm.department || ''}
-                  onChange={(e) => setEmployeeForm({ ...employeeForm, department: e.target.value })}
+                  onChange={async (e) => {
+                    const dept = e.target.value;
+                    setEmployeeForm({ ...employeeForm, department: dept });
+                    if (dept && employeeView === 'add') {
+                      try {
+                        const generatedId = await employeeService.generateEmployeeId(dept);
+                        setEmployeeForm(prev => ({ ...prev, department: dept, employee_number: generatedId }));
+                      } catch (err) {
+                        console.error('Failed to generate employee ID:', err);
+                      }
+                    }
+                  }}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-                />
+                >
+                  <option value="">Select Department</option>
+                  <option value="ITwala">ITwala</option>
+                  <option value="Kdadks">Kdadks</option>
+                  <option value="Nirchal">Nirchal</option>
+                  <option value="Ayuh Clinic">Ayuh Clinic</option>
+                </select>
               </div>
 
               <div>
@@ -3449,6 +3533,39 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
               </div>
             </div>
 
+            {/* Employee Notes Section */}
+            <div className="mt-6 border-t pt-6">
+              <EmployeeNotes
+                employeeId={employeeForm.id || ''}
+                currentAdminName="Admin"
+              />
+            </div>
+
+            {/* Workflow Buttons */}
+            {(employeeForm.employment_status === 'resigned' || employeeForm.employment_status === 'terminated') && (
+              <div className="mt-4 p-4 bg-amber-50 border border-amber-200 rounded-lg">
+                <p className="text-sm text-amber-800 font-medium mb-2">This employee has left the organisation.</p>
+                <button
+                  onClick={() => setShowRehireModal(true)}
+                  className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 text-sm flex items-center gap-2"
+                >
+                  Rehire Employee
+                </button>
+              </div>
+            )}
+
+            {employeeForm.employment_type === 'intern' && employeeForm.employment_status === 'active' && (
+              <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                <p className="text-sm text-blue-800 font-medium mb-2">This employee is currently an intern.</p>
+                <button
+                  onClick={() => setShowInternConversionModal(true)}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm flex items-center gap-2"
+                >
+                  Convert to Employee
+                </button>
+              </div>
+            )}
+
             <div className="mt-6 flex justify-between border-t pt-4">
               <button
                 onClick={() => {
@@ -3468,6 +3585,35 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
                 Edit Employee
               </button>
             </div>
+
+            {/* Modals */}
+            {showRehireModal && employeeForm.id && (
+              <RehireWorkflow
+                employee={employeeForm as Employee}
+                onClose={() => setShowRehireModal(false)}
+                onRehired={(updated) => {
+                  setEmployees(employees.map(emp => emp.id === updated.id ? updated : emp));
+                  setEmployeeForm(updated);
+                  setShowRehireModal(false);
+                  showSuccess('Employee rehired successfully');
+                }}
+                currentAdminName="Admin"
+              />
+            )}
+
+            {showInternConversionModal && employeeForm.id && (
+              <InternConversionWorkflow
+                employee={employeeForm as Employee}
+                onClose={() => setShowInternConversionModal(false)}
+                onConverted={(updated) => {
+                  setEmployees(employees.map(emp => emp.id === updated.id ? updated : emp));
+                  setEmployeeForm(updated);
+                  setShowInternConversionModal(false);
+                  showSuccess('Intern converted to employee successfully');
+                }}
+                currentAdminName="Admin"
+              />
+            )}
           </div>
         )}
 
@@ -3620,12 +3766,17 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Department
                 </label>
-                <input
-                  type="text"
+                <select
                   value={employeeForm.department || ''}
                   onChange={(e) => setEmployeeForm({ ...employeeForm, department: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-                />
+                >
+                  <option value="">Select Department</option>
+                  <option value="ITwala">ITwala</option>
+                  <option value="Kdadks">Kdadks</option>
+                  <option value="Nirchal">Nirchal</option>
+                  <option value="Ayuh Clinic">Ayuh Clinic</option>
+                </select>
               </div>
 
               <div>
@@ -6475,34 +6626,44 @@ Any other duties assigned by management from time to time`}
               )}
             </div>
 
-            <div className="flex items-center justify-end gap-3 p-6 border-t bg-gray-50">
+            <div className="flex items-center justify-between gap-3 p-6 border-t bg-gray-50">
               <button
-                onClick={() => {
-                  setShowEditModal(false);
-                  setEditingDocument(null);
-                  setEditedDocumentData({});
-                  setSelectedEmployee(null);
-                }}
-                className="px-4 py-2 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-md hover:from-red-600 hover:to-red-700 transition-all"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSaveEditedDocument}
+                onClick={handlePreviewEditedDocument}
                 disabled={isSavingDocument}
-                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+                className="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
               >
-                {isSavingDocument ? (
-                  <>
-                    <span className="mr-2">Saving...</span>
-                  </>
-                ) : (
-                  <>
-                    <Save className="w-4 h-4 mr-2" />
-                    Save & Regenerate PDF
-                  </>
-                )}
+                <Eye className="w-4 h-4 mr-2" />
+                Preview
               </button>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => {
+                    setShowEditModal(false);
+                    setEditingDocument(null);
+                    setEditedDocumentData({});
+                    setSelectedEmployee(null);
+                  }}
+                  className="px-4 py-2 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-md hover:from-red-600 hover:to-red-700 transition-all"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSaveEditedDocument}
+                  disabled={isSavingDocument}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+                >
+                  {isSavingDocument ? (
+                    <>
+                      <span className="mr-2">Saving...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-4 h-4 mr-2" />
+                      Save & Regenerate PDF
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
           </div>
         </div>

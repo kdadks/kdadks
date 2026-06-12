@@ -9,7 +9,7 @@ export interface AuditLog {
   employee_id?: string;
   table_name: string;
   record_id?: string;
-  action: 'create' | 'update' | 'delete' | 'approve' | 'reject' | 'cancel' | 'restore';
+  action: 'create' | 'update' | 'delete' | 'approve' | 'reject' | 'cancel' | 'restore' | 'rehire' | 'intern_conversion' | 'note_added';
   field_name?: string;
   old_value?: string;
   new_value?: string;

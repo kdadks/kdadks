@@ -4,6 +4,16 @@ export type EmploymentType = 'full-time' | 'part-time' | 'contract' | 'intern';
 export type EmploymentStatus = 'active' | 'on-leave' | 'resigned' | 'terminated';
 export type Gender = 'male' | 'female' | 'other';
 
+export const DEPARTMENTS = ['ITwala', 'Kdadks', 'Nirchal', 'Ayuh Clinic'] as const;
+export type Department = typeof DEPARTMENTS[number];
+
+export const DEPARTMENT_CODES: Record<Department, string> = {
+  'ITwala': 'ITW',
+  'Kdadks': 'KDA',
+  'Nirchal': 'NIR',
+  'Ayuh Clinic': 'AYU',
+};
+
 export interface Employee {
   id: string;
   employee_number: string;
@@ -68,6 +78,13 @@ export interface Employee {
   created_by?: string;
   created_at?: string;
   updated_at?: string;
+
+  // Rehire tracking
+  rehire_count?: number;
+  previous_joining_date?: string;
+  previous_leaving_date?: string;
+  last_rehired_at?: string;
+  last_rehired_by?: string;
 }
 
 export type DocumentType = 'offer_letter' | 'salary_certificate' | 'experience_certificate' | 'relieving_letter' | 'form_16' | 'form_24q' | 'intern_offer_letter' | 'intern_experience_certificate' | 'other';
@@ -462,6 +479,21 @@ export interface EmployeeStats {
   fulltime_employees: number;
   contract_employees: number;
   joined_this_month: number;
+}
+
+export interface EmployeeNote {
+  id: string;
+  employee_id: string;
+  note_text: string;
+  created_by_name: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateEmployeeNoteInput {
+  employee_id: string;
+  note_text: string;
+  created_by_name: string;
 }
 
 // Salary Slip Types

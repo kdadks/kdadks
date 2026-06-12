@@ -365,6 +365,56 @@ class TDSReportService {
       return `${year - 1}-${year.toString().slice(-2)}`;
     }
   }
+
+  /**
+   * Diagnostic: check how many salary slips exist and how many have TDS > 0
+   */
+  async getDiagnostics(startDate: string, endDate: string): Promise<{
+    total_salary_slips: number;
+    slips_with_tds: number;
+    total_settlements: number;
+    settlements_with_tds: number;
+    employees_with_slips: number;
+    sample_slip?: { month: number; year: number; gross: number; tds: number; employee_id: string };
+  }> {
+    const startYear = parseInt(startDate.split('-')[0]);
+    const startMonth = parseInt(startDate.split('-')[1]);
+    const endYear = parseInt(endDate.split('-')[0]);
+    const endMonth = parseInt(endDate.split('-')[1]);
+
+    const { data: allSlips } = await supabase
+      .from('salary_slips')
+      .select('id, employee_id, salary_month, salary_year, gross_salary, tds');
+
+    const filtered = (allSlips || []).filter(slip => {
+      const slipDate = slip.salary_year * 100 + slip.salary_month;
+      return slipDate >= startYear * 100 + startMonth && slipDate <= endYear * 100 + endMonth;
+    });
+
+    const slipsWithTds = filtered.filter(s => (s.tds || 0) > 0);
+    const uniqueEmployees = new Set(filtered.map(s => s.employee_id)).size;
+
+    const { data: settlements } = await supabase
+      .from('full_final_settlements')
+      .select('id, tax_deduction')
+      .gte('relieving_date', startDate)
+      .lte('relieving_date', endDate);
+
+    const settlementsWithTds = (settlements || []).filter(s => (s.tax_deduction || 0) > 0);
+
+    const sample = filtered[0];
+
+    return {
+      total_salary_slips: filtered.length,
+      slips_with_tds: slipsWithTds.length,
+      total_settlements: (settlements || []).length,
+      settlements_with_tds: settlementsWithTds.length,
+      employees_with_slips: uniqueEmployees,
+      sample_slip: sample
+        ? { month: sample.salary_month, year: sample.salary_year, gross: sample.gross_salary, tds: sample.tds || 0, employee_id: sample.employee_id }
+        : undefined,
+    };
+  }
 }
 
 export const tdsReportService = new TDSReportService();
