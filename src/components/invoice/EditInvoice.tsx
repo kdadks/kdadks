@@ -2,7 +2,7 @@ import React from 'react';
 import { FileText, Package, Plus, Trash, RefreshCw } from 'lucide-react';
 import type { CreateInvoiceData, CreateInvoiceItemData, Customer, Product, TermsTemplate, CompanySettings, Invoice } from '../../types/invoice';
 import { getTaxLabel, getClassificationCodeLabel } from '../../utils/taxUtils';
-import { ExchangeRateDisplay } from '../ui/ExchangeRateDisplay';
+
 
 interface EditInvoiceProps {
   selectedInvoice: Invoice;
@@ -694,9 +694,6 @@ export const EditInvoice: React.FC<EditInvoiceProps> = ({
                 </div>
               </div>
             </div>
-
-            {/* Exchange Rate Display for Non-INR Customers */}
-            <ExchangeRateDisplay selectedCustomer={selectedCustomer} showUpdateButton={false} />
           </div>
         </div>
 

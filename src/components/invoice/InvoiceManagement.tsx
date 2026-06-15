@@ -4395,7 +4395,7 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
                   amount={invoice.total_amount}
                   currencyCode={invoice.currency_code}
                   inrAmount={invoice.inr_total_amount}
-                  showBothCurrencies={invoice.currency_code !== 'INR'}
+                  showBothCurrencies={false}
                   conversionDate={invoice.invoice_date}
                 />
               </div>
@@ -4533,7 +4533,7 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
                   amount={invoice.total_amount}
                   currencyCode={invoice.currency_code}
                   inrAmount={invoice.inr_total_amount}
-                  showBothCurrencies={invoice.currency_code !== 'INR'}
+                  showBothCurrencies={false}
                   conversionDate={invoice.invoice_date}
                 />
               </div>
@@ -7145,9 +7145,6 @@ const InvoiceManagement: React.FC<InvoiceManagementProps> = ({ onBackToDashboard
               <p className="text-sm text-gray-600">
                 Invoice <span className="font-semibold">{markAsPaidInvoice.invoice_number}</span>
                 {' '}— Total: <span className="font-semibold">{markAsPaidInvoice.total_amount.toLocaleString('en-IN', { style: 'currency', currency: markAsPaidInvoice.currency_code || 'INR' })}</span>
-                {markAsPaidInvoice.currency_code && markAsPaidInvoice.currency_code !== 'INR' && markAsPaidInvoice.inr_total_amount && (
-                  <span className="text-gray-500"> (≈ ₹{markAsPaidInvoice.inr_total_amount.toLocaleString('en-IN')} INR)</span>
-                )}
               </p>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
