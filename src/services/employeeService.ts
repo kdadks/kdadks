@@ -198,23 +198,68 @@ export const employeeService = {
 
   async getAllEmployeeDocuments(employeeId?: string): Promise<any[]> {
     // Query unified view that combines both employee uploads and admin documents
-    let query = supabase
-      .from('employee_documents_unified')
-      .select('*')
-      .order('created_at', { ascending: false })
+    try {
+      let query = supabase
+        .from('employee_documents_unified')
+        .select('*')
+        .order('created_at', { ascending: false })
 
-    if (employeeId) {
-      query = query.eq('employee_id', employeeId)
+      if (employeeId) {
+        query = query.eq('employee_id', employeeId)
+      }
+
+      const { data, error } = await query
+
+      if (error) {
+        console.error('Error fetching from unified view:', {
+          message: error.message,
+          code: error.code,
+          details: error.details,
+          hint: error.hint
+        })
+        
+        // Fallback: If view doesn't exist, fetch from both tables separately
+        console.log('Falling back to separate queries...')
+        const [uploads, generated] = await Promise.all([
+          this.getEmployeeUploadedDocuments(employeeId),
+          this.getEmploymentDocuments(employeeId)
+        ])
+        
+        // Combine with source indicator
+        const combined = [
+          ...uploads.map(doc => ({ ...doc, document_source: 'employee_upload' })),
+          ...generated.map(doc => ({ ...doc, document_source: 'admin_generated' }))
+        ]
+        
+        // Sort by created_at descending
+        return combined.sort((a, b) => 
+          new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
+        )
+      }
+
+      return data || []
+    } catch (error) {
+      console.error('Exception in getAllEmployeeDocuments:', error)
+      // Fallback to separate queries
+      try {
+        const [uploads, generated] = await Promise.all([
+          this.getEmployeeUploadedDocuments(employeeId),
+          this.getEmploymentDocuments(employeeId)
+        ])
+        
+        const combined = [
+          ...uploads.map(doc => ({ ...doc, document_source: 'employee_upload' })),
+          ...generated.map(doc => ({ ...doc, document_source: 'admin_generated' }))
+        ]
+        
+        return combined.sort((a, b) => 
+          new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
+        )
+      } catch (fallbackError) {
+        console.error('Fallback query also failed:', fallbackError)
+        throw fallbackError
+      }
     }
-
-    const { data, error } = await query
-
-    if (error) {
-      console.error('Error fetching all employee documents:', error)
-      throw error
-    }
-
-    return data || []
   },
 
   async getEmployeeUploadedDocuments(employeeId?: string): Promise<any[]> {

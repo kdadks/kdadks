@@ -245,65 +245,138 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
 
       if (doc.storage_path) {
         // Employee uploaded document - get signed URL
-        const url = await employeeDocumentService.getDocumentUrl(doc.storage_path);
-        setPreviewDocUrl(url);
-      } else if (doc.pdf_url) {
+        try {
+          const url = await employeeDocumentService.getDocumentUrl(doc.storage_path);
+          setPreviewDocUrl(url);
+          setShowDocPreviewModal(true);
+          return;
+        } catch (storageErr) {
+          console.warn('Storage preview failed:', storageErr);
+          // Try pdf_url as fallback
+          if (doc.pdf_url) {
+            setPreviewDocUrl(doc.pdf_url);
+            setShowDocPreviewModal(true);
+            return;
+          }
+          // Continue to other options
+        }
+      }
+      
+      if (doc.pdf_url) {
         // Admin generated document with stored URL
         setPreviewDocUrl(doc.pdf_url);
-      } else if (doc.document_type && doc.document_data) {
-        // Admin generated document - regenerate PDF from document_data
+        setShowDocPreviewModal(true);
+        return;
+      }
+      
+      // Try to regenerate PDF from document_data if available
+      if (doc.document_type && doc.document_data) {
         const employee = employees.find(emp => emp.id === doc.employee_id);
-        if (!employee) {
-          showError('Employee not found');
-          return;
+        if (employee) {
+          let pdf: jsPDF;
+          const docData = doc.document_data;
+
+          try {
+            // Generate PDF based on document type
+            switch (doc.document_type) {
+              case 'offer_letter':
+                pdf = await generateOfferLetterPDF(employee, docData as OfferLetterData);
+                break;
+              case 'salary_certificate':
+                pdf = await generateSalaryCertificatePDF(employee, docData as SalaryCertificateData);
+                break;
+              case 'experience_certificate':
+                pdf = await generateExperienceCertificatePDF(employee, docData as ExperienceCertificateData);
+                break;
+              case 'relieving_letter':
+                pdf = await generateRelievingLetterPDF(employee, docData as RelievingLetterData);
+                break;
+              case 'form_16':
+                pdf = await generateForm16PDF(employee, docData as Form16Data);
+                break;
+              case 'form_24q':
+                pdf = await generateForm24QPDF(docData as Form24QData);
+                break;
+              case 'intern_offer_letter':
+                pdf = await generateInternOfferLetterPDF(employee, docData as InternOfferLetterData, companySettings, hrSettings?.signatory_name, hrSettings?.signatory_designation);
+                break;
+              case 'intern_experience_certificate':
+                pdf = await generateInternExperienceCertificatePDF(employee, docData as InternExperienceCertificateData, companySettings, hrSettings?.signatory_name, hrSettings?.signatory_designation);
+                break;
+              default:
+                throw new Error(`Unsupported document type: ${doc.document_type}`);
+            }
+
+            // Create blob URL for preview
+            const pdfBlob = pdf.output('blob');
+            const pdfUrl = URL.createObjectURL(pdfBlob);
+            setPreviewDocUrl(pdfUrl);
+            setShowDocPreviewModal(true);
+            return;
+          } catch (regenerateErr) {
+            console.warn('PDF regeneration failed:', regenerateErr);
+            // Continue to basic certificate
+          }
         }
+      }
 
-        let pdf: jsPDF;
-        const docData = doc.document_data;
-
-        // Generate PDF based on document type
-        switch (doc.document_type) {
-          case 'offer_letter':
-            pdf = await generateOfferLetterPDF(employee, docData as OfferLetterData);
-            break;
-          case 'salary_certificate':
-            pdf = await generateSalaryCertificatePDF(employee, docData as SalaryCertificateData);
-            break;
-          case 'experience_certificate':
-            pdf = await generateExperienceCertificatePDF(employee, docData as ExperienceCertificateData);
-            break;
-          case 'relieving_letter':
-            pdf = await generateRelievingLetterPDF(employee, docData as RelievingLetterData);
-            break;
-          case 'form_16':
-            pdf = await generateForm16PDF(employee, docData as Form16Data);
-            break;
-          case 'form_24q':
-            pdf = await generateForm24QPDF(docData as Form24QData);
-            break;
-          case 'intern_offer_letter':
-            pdf = await generateInternOfferLetterPDF(employee, docData as InternOfferLetterData, companySettings, hrSettings?.signatory_name, hrSettings?.signatory_designation);
-            break;
-          case 'intern_experience_certificate':
-            pdf = await generateInternExperienceCertificatePDF(employee, docData as InternExperienceCertificateData, companySettings, hrSettings?.signatory_name, hrSettings?.signatory_designation);
-            break;
-          default:
-            throw new Error('Unsupported document type');
-        }
-
-        // Create blob URL for preview
-        const pdfBlob = pdf.output('blob');
-        const pdfUrl = URL.createObjectURL(pdfBlob);
-        setPreviewDocUrl(pdfUrl);
-      } else {
-        showError('Cannot preview this document - no source available');
+      // Final fallback: Create basic document certificate
+      const employee = employees.find(emp => emp.id === doc.employee_id);
+      if (!employee) {
+        showError('Employee not found');
         return;
       }
 
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      pdf.setFont('helvetica');
+      
+      let y = 20;
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      
+      // Title
+      pdf.setFontSize(16);
+      pdf.text('Document Certificate', pageWidth / 2, y, { align: 'center' });
+      
+      y += 15;
+      pdf.setFontSize(11);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text('Document Information', 10, y);
+      
+      y += 10;
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(10);
+      
+      // Document details
+      const details = [
+        [`Document Type:`, doc.document_type?.replace(/_/g, ' ').toUpperCase() || 'Unknown'],
+        [`Document Number:`, doc.document_number || 'N/A'],
+        [`Document Date:`, doc.document_date ? new Date(doc.document_date).toLocaleDateString('en-IN') : 'N/A'],
+        [`Employee Name:`, `${employee.first_name} ${employee.last_name}`],
+        [`Employee ID:`, employee.employee_number || 'N/A'],
+        [`Status:`, doc.status || 'Generated'],
+        [`Generated On:`, new Date(doc.created_at || Date.now()).toLocaleString('en-IN')]
+      ];
+      
+      details.forEach(([label, value]) => {
+        pdf.setFont('helvetica', 'bold');
+        pdf.text(label, 10, y);
+        pdf.setFont('helvetica', 'normal');
+        pdf.text(String(value), 70, y);
+        y += 7;
+      });
+      
+      y += 10;
+      pdf.setFont('helvetica', 'italic');
+      pdf.setFontSize(9);
+      pdf.text('Note: This is a preview of the document certificate. For the complete document, please download or regenerate.', 10, y, { maxWidth: 190 });
+
+      const pdfBlob = pdf.output('blob');
+      const pdfUrl = URL.createObjectURL(pdfBlob);
+      setPreviewDocUrl(pdfUrl);
       setShowDocPreviewModal(true);
     } catch (err) {
       console.error('Error previewing document:', err);
-      showError('Failed to preview document');
+      showError(`Failed to preview document: ${err instanceof Error ? err.message : 'Unknown error'}`);
     }
   };
 
@@ -1651,7 +1724,26 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
         return;
       }
 
-      setViewingDocument(document);
+      // Fetch complete document details from database to ensure all fields are available
+      let completeDocument = document;
+      try {
+        const { data: fullDoc, error: fetchError } = await supabase
+          .from('employment_documents')
+          .select('*')
+          .eq('id', document.id)
+          .single();
+
+        if (!fetchError && fullDoc) {
+          completeDocument = fullDoc;
+        } else {
+          console.warn('Could not fetch full document details, using partial data');
+        }
+      } catch (fetchErr) {
+        console.warn('Error fetching full document:', fetchErr);
+        // Continue with the partial document
+      }
+
+      setViewingDocument(completeDocument);
       setSelectedEmployee(employee);
       setShowViewModal(true);
     } catch (err) {
@@ -1679,29 +1771,57 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
     try {
       // If document has storage_path, download from storage
       if (document.storage_path) {
-        const { data, error } = await supabase.storage
-          .from('employee-documents')
-          .download(document.storage_path);
+        try {
+          const { data, error } = await supabase.storage
+            .from('employee-documents')
+            .download(document.storage_path);
 
-        if (error) {
-          throw new Error(`Failed to download from storage: ${error.message}`);
+          if (error) {
+            console.warn('Storage download failed, trying pdf_url:', error);
+            // Fall through to pdf_url attempt below
+          } else if (data) {
+            // Successfully got data from storage
+            const url = window.URL.createObjectURL(data);
+            const a = window.document.createElement('a');
+            a.href = url;
+            a.download = `${document.document_number}.pdf`;
+            window.document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            window.document.body.removeChild(a);
+            showSuccess('Document downloaded successfully');
+            return;
+          }
+        } catch (storageErr) {
+          console.warn('Storage download error:', storageErr);
+          // Continue to next option
         }
-
-        // Create download link
-        const url = window.URL.createObjectURL(data);
-        const a = window.document.createElement('a');
-        a.href = url;
-        a.download = `${document.document_number}.pdf`;
-        window.document.body.appendChild(a);
-        a.click();
-        window.URL.revokeObjectURL(url);
-        window.document.body.removeChild(a);
-
-        showSuccess('Document downloaded successfully');
-        return;
       }
 
-      // Fallback: regenerate PDF if no storage_path (legacy documents)
+      // Fallback: Try pdf_url if available (for documents stored with public URL)
+      if (document.pdf_url) {
+        try {
+          const response = await fetch(document.pdf_url);
+          if (response.ok) {
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = window.document.createElement('a');
+            a.href = url;
+            a.download = `${document.document_number}.pdf`;
+            window.document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            window.document.body.removeChild(a);
+            showSuccess('Document downloaded successfully');
+            return;
+          }
+        } catch (fetchErr) {
+          console.warn('PDF URL download failed:', fetchErr);
+          // Continue to regeneration attempt
+        }
+      }
+
+      // Fallback: regenerate PDF if no storage_path or pdf_url (legacy documents)
       const employee = employees.find(emp => emp.id === document.employee_id);
       if (!employee) {
         showError('Employee not found');
@@ -1709,45 +1829,93 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
       }
 
       let pdf: jsPDF;
-      const docData = document.document_data;
 
-      // Generate PDF based on document type
-      switch (document.document_type) {
-        case 'offer_letter':
-          pdf = await generateOfferLetterPDF(employee, docData as OfferLetterData);
-          break;
-        case 'salary_certificate':
-          pdf = await generateSalaryCertificatePDF(employee, docData as SalaryCertificateData);
-          break;
-        case 'experience_certificate':
-          pdf = await generateExperienceCertificatePDF(employee, docData as ExperienceCertificateData);
-          break;
-        case 'relieving_letter':
-          pdf = await generateRelievingLetterPDF(employee, docData as RelievingLetterData);
-          break;
-        case 'form_16':
-          pdf = await generateForm16PDF(employee, docData as Form16Data);
-          break;
-        case 'form_24q':
-          pdf = await generateForm24QPDF(docData as Form24QData);
-          break;
-        case 'intern_offer_letter':
-          pdf = await generateInternOfferLetterPDF(employee, docData as InternOfferLetterData, companySettings, hrSettings?.signatory_name, hrSettings?.signatory_designation);
-          break;
-        case 'intern_experience_certificate':
-          pdf = await generateInternExperienceCertificatePDF(employee, docData as InternExperienceCertificateData, companySettings, hrSettings?.signatory_name, hrSettings?.signatory_designation);
-          break;
-        default:
-          throw new Error('Unsupported document type');
+      // If document data exists, use it for regeneration
+      if (document.document_data) {
+        const docData = document.document_data;
+
+        // Generate PDF based on document type
+        switch (document.document_type) {
+          case 'offer_letter':
+            pdf = await generateOfferLetterPDF(employee, docData as OfferLetterData);
+            break;
+          case 'salary_certificate':
+            pdf = await generateSalaryCertificatePDF(employee, docData as SalaryCertificateData);
+            break;
+          case 'experience_certificate':
+            pdf = await generateExperienceCertificatePDF(employee, docData as ExperienceCertificateData);
+            break;
+          case 'relieving_letter':
+            pdf = await generateRelievingLetterPDF(employee, docData as RelievingLetterData);
+            break;
+          case 'form_16':
+            pdf = await generateForm16PDF(employee, docData as Form16Data);
+            break;
+          case 'form_24q':
+            pdf = await generateForm24QPDF(docData as Form24QData);
+            break;
+          case 'intern_offer_letter':
+            pdf = await generateInternOfferLetterPDF(employee, docData as InternOfferLetterData, companySettings, hrSettings?.signatory_name, hrSettings?.signatory_designation);
+            break;
+          case 'intern_experience_certificate':
+            pdf = await generateInternExperienceCertificatePDF(employee, docData as InternExperienceCertificateData, companySettings, hrSettings?.signatory_name, hrSettings?.signatory_designation);
+            break;
+          default:
+            throw new Error(`Unsupported document type: ${document.document_type}`);
+        }
+      } else {
+        // Create basic certificate/receipt PDF if document_data is missing
+        pdf = new jsPDF('p', 'mm', 'a4');
+        pdf.setFont('helvetica');
+        
+        let y = 20;
+        const pageWidth = pdf.internal.pageSize.getWidth();
+        
+        // Title
+        pdf.setFontSize(16);
+        pdf.text('Document Certificate', pageWidth / 2, y, { align: 'center' });
+        
+        y += 15;
+        pdf.setFontSize(11);
+        pdf.setFont('helvetica', 'bold');
+        pdf.text('Document Information', 10, y);
+        
+        y += 10;
+        pdf.setFont('helvetica', 'normal');
+        pdf.setFontSize(10);
+        
+        // Document details
+        const details = [
+          [`Document Type:`, document.document_type?.replace(/_/g, ' ').toUpperCase() || 'Unknown'],
+          [`Document Number:`, document.document_number || 'N/A'],
+          [`Document Date:`, document.document_date ? new Date(document.document_date).toLocaleDateString('en-IN') : 'N/A'],
+          [`Employee Name:`, `${employee.first_name} ${employee.last_name}`],
+          [`Employee ID:`, employee.employee_number || 'N/A'],
+          [`Status:`, document.status || 'Generated'],
+          [`Generated On:`, new Date(document.created_at || Date.now()).toLocaleString('en-IN')]
+        ];
+        
+        details.forEach(([label, value]) => {
+          pdf.setFont('helvetica', 'bold');
+          pdf.text(label, 10, y);
+          pdf.setFont('helvetica', 'normal');
+          pdf.text(String(value), 70, y);
+          y += 7;
+        });
+        
+        y += 10;
+        pdf.setFont('helvetica', 'italic');
+        pdf.setFontSize(9);
+        pdf.text('Note: This is an auto-generated document receipt. For the complete document, please regenerate or contact admin.', 10, y, { maxWidth: 190 });
       }
 
-      // Download the PDF
+      // Download the regenerated PDF
       const fileName = `${document.document_number}_${employee.full_name.replace(/\s+/g, '_')}.pdf`;
       pdf.save(fileName);
       showSuccess('Document downloaded successfully');
     } catch (err) {
       console.error('Error downloading document:', err);
-      showError('Failed to download document');
+      showError(`Failed to download document: ${err instanceof Error ? err.message : 'Unknown error'}`);
     }
   };
 
