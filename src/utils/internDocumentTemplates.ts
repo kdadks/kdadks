@@ -624,9 +624,12 @@ export async function generateInternExperienceCertificatePDF(
     pdf.setFont('helvetica', 'normal');
     const projects = data.projects_worked_on.split('\n').filter(p => p.trim());
     for (const proj of projects) {
-      await checkBreak(LINE_HEIGHT);
-      pdf.text(`• ${proj.trim()}`, dimensions.leftMargin + 5, currentY);
-      currentY += LINE_HEIGHT;
+      const bulletLines = pdf.splitTextToSize(`• ${proj.trim()}`, contentWidth - 5);
+      for (const line of bulletLines) {
+        await checkBreak(LINE_HEIGHT);
+        pdf.text(line, dimensions.leftMargin + 5, currentY);
+        currentY += LINE_HEIGHT;
+      }
     }
     currentY += 4;
   }
