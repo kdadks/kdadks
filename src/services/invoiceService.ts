@@ -1,6 +1,7 @@
 import { supabase, isSupabaseConfigured } from '../config/supabase';
 import { simpleAuth } from '../utils/simpleAuth';
 import { exchangeRateService } from './exchangeRateService';
+import { subscriptionService } from './subscriptionService';
 import type {
   Country,
   CompanySettings,
@@ -464,11 +465,21 @@ class InvoiceService {
       console.log(`🔄 Preview: New financial year detected: ${settings.current_financial_year} → ${currentFinancialYear}`);
       console.log(`📊 Preview: Would reset sequential number from ${settings.current_number} to 1`);
     }
-    // Check if settings counter is ahead of actual invoice count (possible data inconsistency)
+    // Check if settings counter is ahead of actual invoice count for the current financial year (possible data inconsistency)
     else if (actualInvoiceCount > 0 && settings.current_number > actualInvoiceCount + 1) {
-      // Settings counter is ahead, sync it to actual count + 1
-      nextSequentialNumber = actualInvoiceCount + 1;
-      console.log(`⚠️ Preview: Settings counter (${settings.current_number}) ahead of invoice count (${actualInvoiceCount}), syncing to ${nextSequentialNumber}`);
+      // Count invoices in the current financial year to get a more accurate sync point
+      const fyStartDate = new Date(currentYear, fyStartMonth - 1, 1);
+      const fyEndDate = new Date(currentYear + (fyStartMonth <= 3 ? 1 : 0), fyStartMonth - 1, 0);
+      const { count: fyInvoiceCount } = await supabase
+        .from('invoices')
+        .select('*', { count: 'exact', head: true })
+        .gte('created_at', fyStartDate.toISOString())
+        .lte('created_at', fyEndDate.toISOString());
+      const fyActualCount = fyInvoiceCount || 0;
+      if (settings.current_number > fyActualCount + 1) {
+        nextSequentialNumber = fyActualCount + 1;
+        console.log(`⚠️ Preview: Settings counter (${settings.current_number}) ahead of FY invoice count (${fyActualCount}), syncing to ${nextSequentialNumber}`);
+      }
     }
 
     // Generate preview number based on format (without saving to database)
@@ -611,11 +622,21 @@ class InvoiceService {
       console.log(`🔄 New financial year detected: ${settings.current_financial_year} → ${currentFinancialYear}`);
       console.log(`📊 Resetting sequential number from ${settings.current_number} to 1 (Financial Year Start: ${fyStartMonth === 4 ? 'April' : `Month ${fyStartMonth}`})`);
     }
-    // Check if settings counter is ahead of actual invoice count (possible data inconsistency)
+    // Check if settings counter is ahead of actual invoice count for the current financial year (possible data inconsistency)
     else if (actualInvoiceCount > 0 && settings.current_number > actualInvoiceCount + 1) {
-      // Settings counter is ahead, sync it to actual count + 1
-      nextSequentialNumber = actualInvoiceCount + 1;
-      console.log(`⚠️ Generate: Settings counter (${settings.current_number}) ahead of invoice count (${actualInvoiceCount}), syncing to ${nextSequentialNumber}`);
+      // Count invoices in the current financial year to get a more accurate sync point
+      const fyStartDate = new Date(currentYear, fyStartMonth - 1, 1);
+      const fyEndDate = new Date(currentYear + (fyStartMonth <= 3 ? 1 : 0), fyStartMonth - 1, 0);
+      const { count: fyInvoiceCount } = await supabase
+        .from('invoices')
+        .select('*', { count: 'exact', head: true })
+        .gte('created_at', fyStartDate.toISOString())
+        .lte('created_at', fyEndDate.toISOString());
+      const fyActualCount = fyInvoiceCount || 0;
+      if (settings.current_number > fyActualCount + 1) {
+        nextSequentialNumber = fyActualCount + 1;
+        console.log(`⚠️ Generate: Settings counter (${settings.current_number}) ahead of FY invoice count (${fyActualCount}), syncing to ${nextSequentialNumber}`);
+      }
     }
 
     // Generate invoice number based on format
@@ -737,6 +758,53 @@ class InvoiceService {
     
     if (error) throw error;
     return data;
+  }
+
+  /**
+   * Generate draft invoices for all active subscriptions
+   * whose next_billing_date is today or past.
+   * Returns the list of created draft invoices.
+   */
+  async generateDraftInvoicesFromSubscriptions(): Promise<Invoice[]> {
+    const dueSubs = await subscriptionService.getDueSubscriptions();
+    const createdInvoices: Invoice[] = [];
+
+    for (const sub of dueSubs) {
+      try {
+        const invoice = await invoiceService.createInvoice({
+          customer_id: sub.customer_id,
+          invoice_date: sub.next_billing_date || new Date().toISOString().split('T')[0],
+          due_date: new Date(
+            new Date(sub.next_billing_date || new Date().toISOString().split('T')[0]).getTime() + 15 * 86400000
+          ).toISOString().split('T')[0],
+          notes: `Auto-generated from subscription #${sub.id}`,
+          terms_conditions: sub.notes || '',
+          subscription_id: sub.id,
+          items: [
+            {
+              item_name: `${sub.plan?.name || 'Subscription'} - ${sub.plan?.billing_interval === 'monthly' ? 'Monthly' : 'Annual'}`,
+              description: `Subscription to ${sub.plan?.name || 'Unknown'} plan (${sub.plan?.billing_interval}). ${sub.plan?.description || ''}`,
+              quantity: 1,
+              unit: 'svc',
+              unit_price: sub.plan?.price || 0,
+              tax_rate: 0,
+            },
+          ],
+        }, undefined, undefined);
+
+        // Update the subscription's next_billing_date
+        const newNextDate = sub.plan?.billing_interval === 'monthly'
+          ? subscriptionService.calculateNextBillingDate(sub.next_billing_date, 'monthly')
+          : subscriptionService.calculateNextBillingDate(sub.next_billing_date, 'annual');
+        await subscriptionService.updateNextBillingDate(sub.id, newNextDate);
+
+        createdInvoices.push(invoice);
+      } catch (err) {
+        console.error(`Failed to generate draft invoice for subscription ${sub.id}:`, err);
+      }
+    }
+
+    return createdInvoices;
   }
 
   async createInvoice(invoiceData: CreateInvoiceData, invoiceNumber?: string, companySettingsId?: string): Promise<Invoice> {
@@ -933,6 +1001,8 @@ class InvoiceService {
         // Quote reference
         created_from_quote_id: invoiceData.created_from_quote_id || null,
         quote_reference: invoiceData.quote_reference || null,
+        // Subscription reference
+        subscription_id: invoiceData.subscription_id || null,
         // Other fields
         notes: invoiceData.notes,
         terms_conditions: invoiceData.terms_conditions,

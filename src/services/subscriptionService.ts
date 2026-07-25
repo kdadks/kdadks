@@ -1,5 +1,6 @@
 import { supabase } from '../config/supabase';
 import { simpleAuth } from '../utils/simpleAuth';
+import { invoiceService } from './invoiceService';
 import type {
   SubscriptionPlan,
   CustomerSubscription,
@@ -216,6 +217,64 @@ class SubscriptionService {
       .lte('next_billing_date', today);
     if (error) throw error;
     return data || [];
+  }
+
+  /**
+   * Generate a draft invoice from a subscription.
+   * Creates a draft invoice populated with subscription details
+   * and links it via subscription_id.
+   */
+  async generateDraftInvoice(subscriptionId: string): Promise<any> {
+    const subscription = await this.getSubscriptionById(subscriptionId);
+    if (!subscription) throw new Error('Subscription not found');
+    if (subscription.status !== 'active') throw new Error('Subscription is not active');
+    if (!subscription.plan) throw new Error('Subscription plan not found');
+    if (!subscription.customer) throw new Error('Customer not found');
+
+    const plan = subscription.plan;
+    const customer = subscription.customer;
+
+    // Determine the invoice date (use next_billing_date or today)
+    const invoiceDate = subscription.next_billing_date || new Date().toISOString().split('T')[0];
+
+    // Calculate due date (15 days from invoice date)
+    const dueDate = new Date(invoiceDate);
+    dueDate.setDate(dueDate.getDate() + 15);
+
+    // Build line item from subscription plan
+    const itemName = `${plan.name} - ${plan.billing_interval === 'monthly' ? 'Monthly' : 'Annual'} Subscription`;
+    const itemDescription = `Subscription to ${plan.name} plan (${plan.billing_interval}). ${plan.description || ''}`;
+
+    const invoiceData = {
+      customer_id: subscription.customer_id,
+      invoice_date: invoiceDate,
+      due_date: dueDate.toISOString().split('T')[0],
+      notes: `Auto-generated from subscription #${subscription.id}`,
+      terms_conditions: subscription.notes || '',
+      subscription_id: subscription.id,
+      items: [
+        {
+          item_name: itemName,
+          description: itemDescription,
+          quantity: 1,
+          unit: 'svc',
+          unit_price: plan.price,
+          tax_rate: 0,
+        },
+      ],
+    };
+
+    // Create the draft invoice (status will be 'draft')
+    const invoice = await invoiceService.createInvoice(invoiceData, undefined, undefined);
+
+    // Update the subscription's next_billing_date
+    const newNextBillingDate = plan.billing_interval === 'monthly'
+      ? this.calculateNextBillingDate(invoiceDate, 'monthly')
+      : this.calculateNextBillingDate(invoiceDate, 'annual');
+
+    await this.updateNextBillingDate(subscriptionId, newNextBillingDate);
+
+    return invoice;
   }
 }
 

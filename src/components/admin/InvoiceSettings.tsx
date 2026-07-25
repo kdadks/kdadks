@@ -198,7 +198,7 @@ const InvoiceSettings: React.FC = () => {
   const [invoiceSettingsFormData, setInvoiceSettingsFormData] = useState<CreateInvoiceSettingsData>({
     invoice_prefix: 'INV',
     invoice_suffix: '',
-    number_format: 'YYYY-MM-####',
+    number_format: 'PREFIX/YYYY/MM/###',
     reset_annually: true,
     financial_year_start_month: 4,
     current_financial_year: '2024-25',
@@ -410,7 +410,7 @@ const InvoiceSettings: React.FC = () => {
       setInvoiceSettingsFormData({
         invoice_prefix: 'INV',
         invoice_suffix: '',
-        number_format: 'YYYY-MM-####',
+        number_format: 'PREFIX/YYYY/MM/###',
         reset_annually: true,
         financial_year_start_month: 4,
         current_financial_year: '2024-25',
@@ -1051,6 +1051,7 @@ const InvoiceSettings: React.FC = () => {
                     isReadOnly ? 'bg-gray-50 text-gray-500' : ''
                   }`}
                 >
+                  <option value="PREFIX/YYYY/MM/###">PREFIX/YYYY/MM/### (INV/2026/06/010)</option>
                   <option value="YYYY-MM-####">YYYY-MM-#### (2024-01-0001)</option>
                   <option value="####">#### (0001)</option>
                   <option value="YYYY####">YYYY#### (20240001)</option>

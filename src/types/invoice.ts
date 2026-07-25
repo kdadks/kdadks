@@ -318,6 +318,8 @@ export interface CreateInvoiceData {
   // Quote reference
   created_from_quote_id?: string;
   quote_reference?: string;
+  // Subscription reference (set when invoice is auto-generated for a subscription)
+  subscription_id?: string;
   // Additional info
   notes?: string;
   terms_conditions?: string;

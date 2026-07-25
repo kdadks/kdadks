@@ -222,7 +222,7 @@ async function generateInvoiceNumber(supabase, settings) {
   const seq = (count || 0) + 1;
   const numStr = seq < 1000 ? seq.toString().padStart(3, '0') : seq.toString();
 
-  let num = settings.number_format || 'YYYY-MM-####';
+  let num = settings.number_format || 'PREFIX/YYYY/MM/###';
   num = num.replace(/PREFIX/g, settings.invoice_prefix || 'INV');
   num = num.replace(/YYYY/g, year.toString());
   num = num.replace(/MM/g, month);

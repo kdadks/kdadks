@@ -15,6 +15,7 @@ import {
   Receipt,
   Bell,
   X,
+  FileText,
 } from 'lucide-react';
 import { supabase } from '../../config/supabase';
 import { subscriptionService } from '../../services/subscriptionService';
@@ -83,7 +84,8 @@ const ActionMenu: React.FC<{
   sub: CustomerSubscription;
   onStatusChange: (sub: CustomerSubscription, status: CustomerSubscription['status']) => void;
   onEdit: (sub: CustomerSubscription) => void;
-}> = ({ sub, onStatusChange, onEdit }) => {
+  onGenerateInvoice: (sub: CustomerSubscription) => void;
+}> = ({ sub, onStatusChange, onEdit, onGenerateInvoice }) => {
   const [open, setOpen] = useState(false);
   const btnRef = useRef<HTMLButtonElement>(null);
   const [pos, setPos] = useState<DropdownPos>({ top: 0, right: 0 });
@@ -131,6 +133,12 @@ const ActionMenu: React.FC<{
               className="w-full text-left flex items-center gap-2 px-3 py-1.5 text-sm text-blue-600 hover:bg-blue-50"
             >
               <Edit className="w-3 h-3" /> Edit
+            </button>
+            <button
+              onClick={() => { setOpen(false); onGenerateInvoice(sub); }}
+              className="w-full text-left flex items-center gap-2 px-3 py-1.5 text-sm text-green-600 hover:bg-green-50"
+            >
+              <FileText className="w-3 h-3" /> Generate Draft Invoice
             </button>
             <div className="border-t border-gray-100 my-1" />
             {statusOptions.map(o => (
@@ -379,20 +387,42 @@ const SubscriptionManagement: React.FC<SubscriptionManagementProps> = () => {
 
   // ── Status change handler ──────────────────────────────────────────────────
 
-  const changeSubStatus = async (sub: CustomerSubscription, status: CustomerSubscription['status']) => {
-    const labels: Record<CustomerSubscription['status'], string> = {
-      active: 'activate', paused: 'pause', cancelled: 'cancel', expired: 'expire',
-    };
-    const label = labels[status];
-    if (!confirm(
-      `${label.charAt(0).toUpperCase() + label.slice(1)} subscription for "${sub.customer?.company_name || sub.customer?.contact_person}"?`,
-    )) return;
-    try {
-      await subscriptionService.updateSubscriptionStatus(sub.id, status);
-      showSuccess(`Subscription ${label}d`);
-      loadData();
-    } catch { showError('Failed to update status'); }
-  };
+   const changeSubStatus = async (sub: CustomerSubscription, status: CustomerSubscription['status']) => {
+     const labels: Record<CustomerSubscription['status'], string> = {
+       active: 'activate', paused: 'pause', cancelled: 'cancel', expired: 'expire',
+     };
+     const label = labels[status];
+     if (!confirm(
+       `${label.charAt(0).toUpperCase() + label.slice(1)} subscription for "${sub.customer?.company_name || sub.customer?.contact_person}"?`,
+     )) return;
+     try {
+       await subscriptionService.updateSubscriptionStatus(sub.id, status);
+       showSuccess(`Subscription ${label}d`);
+       loadData();
+     } catch { showError('Failed to update status'); }
+   };
+
+   const handleGenerateDraftInvoice = async (sub: CustomerSubscription) => {
+     if (!confirm(`Generate a draft invoice for subscription "${sub.plan?.name}" — ${sub.customer?.company_name || sub.customer?.contact_person}?`)) return;
+     try {
+       const invoice = await subscriptionService.generateDraftInvoice(sub.id);
+       showSuccess(`Draft invoice ${invoice.invoice_number} created successfully!`);
+       loadData();
+     } catch (err) {
+       showError(`Failed to generate draft invoice: ${err instanceof Error ? err.message : 'Unknown error'}`);
+     }
+   };
+
+   const handleGenerateAllDraftInvoices = async () => {
+     if (!confirm('Generate draft invoices for all due subscriptions?')) return;
+     try {
+       const invoices = await invoiceService.generateDraftInvoicesFromSubscriptions();
+       showSuccess(`${invoices.length} draft invoice(s) generated successfully!`);
+       loadData();
+     } catch (err) {
+       showError(`Failed to generate draft invoices: ${err instanceof Error ? err.message : 'Unknown error'}`);
+     }
+   };
 
   const activePlanCount = plans.filter(p => p.is_active).length;
   const activeSubCount = subscriptions.filter(s => s.status === 'active').length;
@@ -845,28 +875,36 @@ const SubscriptionManagement: React.FC<SubscriptionManagementProps> = () => {
         {/* Expiry warning banner */}
         <ExpiryBanner expiring={expiringSoon} onDismiss={() => setExpiryDismissed(true)} />
 
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-3">
-            <h2 className="text-base font-semibold text-gray-900">Customer Subscriptions</h2>
-            <select
-              className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              value={statusFilter}
-              onChange={e => setStatusFilter(e.target.value)}
-            >
-              <option value="all">All Status</option>
-              <option value="active">Active</option>
-              <option value="paused">Paused</option>
-              <option value="cancelled">Cancelled</option>
-              <option value="expired">Expired</option>
-            </select>
-          </div>
-          <button
-            onClick={openCreateSub}
-            className="flex items-center gap-2 px-4 py-2 text-sm text-white bg-blue-600 rounded-lg hover:bg-blue-700"
-          >
-            <Plus className="w-4 h-4" /> New Subscription
-          </button>
-        </div>
+         <div className="flex items-center justify-between mb-4">
+           <div className="flex items-center gap-3">
+             <h2 className="text-base font-semibold text-gray-900">Customer Subscriptions</h2>
+             <select
+               className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500"
+               value={statusFilter}
+               onChange={e => setStatusFilter(e.target.value)}
+             >
+               <option value="all">All Status</option>
+               <option value="active">Active</option>
+               <option value="paused">Paused</option>
+               <option value="cancelled">Cancelled</option>
+               <option value="expired">Expired</option>
+             </select>
+           </div>
+           <div className="flex items-center gap-2">
+             <button
+               onClick={handleGenerateAllDraftInvoices}
+               className="flex items-center gap-2 px-4 py-2 text-sm text-white bg-green-600 rounded-lg hover:bg-green-700"
+             >
+               <FileText className="w-4 h-4" /> Generate Draft Invoices
+             </button>
+             <button
+               onClick={openCreateSub}
+               className="flex items-center gap-2 px-4 py-2 text-sm text-white bg-blue-600 rounded-lg hover:bg-blue-700"
+             >
+               <Plus className="w-4 h-4" /> New Subscription
+             </button>
+           </div>
+         </div>
 
         {subscriptions.length === 0 ? (
           <div className="bg-white rounded-xl border border-gray-200 py-16 text-center">
@@ -938,12 +976,13 @@ const SubscriptionManagement: React.FC<SubscriptionManagementProps> = () => {
                           {sub.status.charAt(0).toUpperCase() + sub.status.slice(1)}
                         </span>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right">
-                        <ActionMenu
-                          sub={sub}
-                          onStatusChange={changeSubStatus}
-                          onEdit={openEditSub}
-                        />
+                       <td className="px-6 py-4 whitespace-nowrap text-right">
+                         <ActionMenu
+                           sub={sub}
+                           onStatusChange={changeSubStatus}
+                           onEdit={openEditSub}
+                           onGenerateInvoice={handleGenerateDraftInvoice}
+                         />
                       </td>
                     </tr>
                   );

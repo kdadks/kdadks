@@ -927,7 +927,24 @@ const getBankingCodeField = (company: CompanySettings | undefined | null): keyof
     return currencyInfo.symbol + ' ' + formattedNumber;
   };
 
-  const handleSaveInvoice = async () => {
+   const handleGenerateDraftInvoices = async () => {
+     const confirmed = await confirm({
+       title: 'Generate Draft Invoices',
+       message: 'Generate draft invoices for all due subscriptions?',
+       confirmText: 'Generate',
+       type: 'info',
+     });
+     if (!confirmed) return;
+     try {
+       const invoices = await invoiceService.generateDraftInvoicesFromSubscriptions();
+       showSuccess(`${invoices.length} draft invoice(s) generated successfully!`);
+       loadData();
+     } catch (err) {
+       showError(`Failed to generate draft invoices: ${err instanceof Error ? err.message : 'Unknown error'}`);
+     }
+   };
+
+   const handleSaveInvoice = async () => {
     try {
       setModalLoading(true);
       
@@ -4240,17 +4257,24 @@ const getBankingCodeField = (company: CompanySettings | undefined | null): keyof
     <div className="space-y-6">
       {/* Header with Actions */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
-        <h2 className="text-2xl font-bold text-gray-900">Invoices</h2>
-        <div className="mt-4 sm:mt-0 flex gap-2">
-          <button 
-            onClick={() => openCreateInvoiceTab()}
-            className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
-          >
-            <Plus className="w-4 h-4 mr-2" />
-            Create Invoice
-          </button>
-        </div>
-      </div>
+         <h2 className="text-2xl font-bold text-gray-900">Invoices</h2>
+         <div className="mt-4 sm:mt-0 flex gap-2">
+           <button
+             onClick={handleGenerateDraftInvoices}
+             className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700"
+           >
+             <FileText className="w-4 h-4 mr-2" />
+             Generate Draft Invoices
+           </button>
+           <button
+             onClick={() => openCreateInvoiceTab()}
+             className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
+           >
+             <Plus className="w-4 h-4 mr-2" />
+             Create Invoice
+           </button>
+         </div>
+       </div>
 
       {/* Search and Filters */}
       <div className="bg-white rounded-lg shadow p-6">
@@ -5296,10 +5320,20 @@ const getBankingCodeField = (company: CompanySettings | undefined | null): keyof
     );
   };
 
-  return (
-    <div className="min-h-screen bg-gray-100">
-      {/* Header */}
-      <header className="bg-white shadow-sm border-b border-gray-200">
+   return (
+     <div className="min-h-screen bg-gray-100">
+       {/* Full-screen loading overlay */}
+       {modalLoading && (
+         <div className="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-50">
+           <div className="bg-white rounded-lg p-6 shadow-xl flex items-center space-x-3">
+             <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+             <span className="text-sm font-medium text-gray-700">Saving invoice...</span>
+           </div>
+         </div>
+       )}
+
+       {/* Header */}
+       <header className="bg-white shadow-sm border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <h1 className="text-xl font-semibold text-gray-900">Invoice Management</h1>
@@ -5656,7 +5690,12 @@ const getBankingCodeField = (company: CompanySettings | undefined | null): keyof
                   disabled={modalLoading}
                   className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50"
                 >
-                  {modalLoading ? 'Saving...' : 'Save Customer'}
+                   {modalLoading ? (
+                     <>
+                       <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                       Saving...
+                     </>
+                   ) : 'Save Customer'}
                 </button>
               </div>
               </>
@@ -5752,7 +5791,17 @@ const getBankingCodeField = (company: CompanySettings | undefined | null): keyof
                     disabled={modalLoading || !invoiceFormData.customer_id || invoiceFormData.items.length === 0 || !invoiceFormData.items[0]?.item_name}
                     className="px-4 py-2 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 transition-colors"
                   >
-                    {modalLoading ? 'Saving...' : 'Create Invoice'}
+                    {modalLoading ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                        Saving...
+                      </>
+                    ) : (
+                      <>
+                        <Save className="w-4 h-4 mr-2" />
+                        Create Invoice
+                      </>
+                    )}
                   </button>
                 </div>
               </div>
