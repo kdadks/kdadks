@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { quoteService } from '../../services/quoteService';
 import { invoiceService } from '../../services/invoiceService';
+import { useCompanyContext } from '../../contexts/CompanyContext';
 import { useToast } from '../ui/ToastProvider';
 import { useConfirmDialog } from '../../hooks/useConfirmDialog';
 import ConfirmDialog from '../ui/ConfirmDialog';
@@ -61,6 +62,7 @@ const QuoteManagement: React.FC<QuoteManagementProps> = ({ onBackToDashboard }) 
   const [searchTerm, setSearchTerm] = useState('');
   const [filters, setFilters] = useState<QuoteFilters>({});
   const [activeTab, setActiveTab] = useState<'dashboard' | 'quotes' | 'create-quote'>('dashboard');
+  const { selectedCompany } = useCompanyContext();
   
   // Modal states
   const [showQuoteModal, setShowQuoteModal] = useState(false);
@@ -109,7 +111,7 @@ const QuoteManagement: React.FC<QuoteManagementProps> = ({ onBackToDashboard }) 
 
   useEffect(() => {
     loadData();
-  }, [currentPage, filters, activeTab]);
+  }, [currentPage, filters, activeTab, selectedCompany]);
 
   useEffect(() => {
     setCurrentPage(1);
@@ -549,7 +551,7 @@ const QuoteManagement: React.FC<QuoteManagementProps> = ({ onBackToDashboard }) 
           items: validItems
         };
         
-        await quoteService.createQuote(finalQuoteData, finalQuoteNumber!);
+        await quoteService.createQuote(finalQuoteData, finalQuoteNumber!, selectedCompany?.id);
         showSuccess(`Quotation ${finalQuoteNumber!} created successfully!`);
         setActiveTab('quotes');
       } else if (quoteModalMode === 'edit' && selectedQuote) {
@@ -851,7 +853,7 @@ const QuoteManagement: React.FC<QuoteManagementProps> = ({ onBackToDashboard }) 
       }
 
       // Get company settings
-      const company = companySettings.find(c => c.is_default) || companySettings[0];
+      const company = companySettings.find(c => c.is_default) || selectedCompany || companySettings[0];
       if (!company) {
         showError('No company settings found. Please configure company information first.');
         return;
@@ -1890,7 +1892,7 @@ const QuoteManagement: React.FC<QuoteManagementProps> = ({ onBackToDashboard }) 
                   {companySettings[0]?.header_image_url && (
                     <div className="w-full">
                       <img 
-                        src={companySettings[0].header_image_url} 
+                        src={(selectedCompany || companySettings[0]).header_image_url} 
                         alt="Header" 
                         className="w-full h-auto object-cover"
                         style={{ maxHeight: '120px' }}
@@ -1906,19 +1908,19 @@ const QuoteManagement: React.FC<QuoteManagementProps> = ({ onBackToDashboard }) 
                         <div className="flex-1">
                           {companySettings[0]?.logo_url && (
                             <img 
-                              src={companySettings[0].logo_url} 
+                              src={(selectedCompany || companySettings[0]).logo_url} 
                               alt="Company Logo" 
                               className="h-12 w-auto mb-3"
                             />
                           )}
                           <div className="text-xl font-bold text-gray-900 mb-1">{companySettings[0]?.company_name || 'Your Company'}</div>
                           <div className="text-xs text-gray-600 leading-tight">
-                            {companySettings[0]?.address_line1 && <div>{companySettings[0].address_line1}</div>}
-                            {companySettings[0]?.address_line2 && <div>{companySettings[0].address_line2}</div>}
-                            <div>{companySettings[0]?.city && `${companySettings[0].city}, `}{companySettings[0]?.state} {companySettings[0]?.postal_code}</div>
+                            {companySettings[0]?.address_line1 && <div>{(selectedCompany || companySettings[0]).address_line1}</div>}
+                            {companySettings[0]?.address_line2 && <div>{(selectedCompany || companySettings[0]).address_line2}</div>}
+                            <div>{companySettings[0]?.city && `${(selectedCompany || companySettings[0]).city}, `}{companySettings[0]?.state} {companySettings[0]?.postal_code}</div>
                             <div className="flex gap-4 mt-1">
-                              {companySettings[0]?.email && <span>📧 {companySettings[0].email}</span>}
-                              {companySettings[0]?.phone && <span>📞 {companySettings[0].phone}</span>}
+                              {companySettings[0]?.email && <span>📧 {(selectedCompany || companySettings[0]).email}</span>}
+                              {companySettings[0]?.phone && <span>📞 {(selectedCompany || companySettings[0]).phone}</span>}
                             </div>
                           </div>
                         </div>
@@ -2107,7 +2109,7 @@ const QuoteManagement: React.FC<QuoteManagementProps> = ({ onBackToDashboard }) 
                   {companySettings[0]?.footer_image_url && (
                     <div className="w-full">
                       <img 
-                        src={companySettings[0].footer_image_url} 
+                        src={(selectedCompany || companySettings[0]).footer_image_url} 
                         alt="Footer" 
                         className="w-full h-auto object-cover"
                         style={{ maxHeight: '100px' }}
@@ -2225,7 +2227,7 @@ const QuoteManagement: React.FC<QuoteManagementProps> = ({ onBackToDashboard }) 
                 {companySettings[0]?.header_image_url && (
                   <div className="w-full">
                     <img 
-                      src={companySettings[0].header_image_url} 
+                      src={(selectedCompany || companySettings[0]).header_image_url} 
                       alt="Header" 
                       className="w-full h-auto object-cover"
                       style={{ maxHeight: '120px' }}
@@ -2265,9 +2267,9 @@ const QuoteManagement: React.FC<QuoteManagementProps> = ({ onBackToDashboard }) 
                       <div className="font-semibold text-gray-900 mb-2">From:</div>
                       <div className="text-sm">
                         <div className="font-medium">{companySettings[0]?.company_name}</div>
-                        {companySettings[0]?.address_line1 && <div className="text-gray-600">{companySettings[0].address_line1}</div>}
+                        {companySettings[0]?.address_line1 && <div className="text-gray-600">{(selectedCompany || companySettings[0]).address_line1}</div>}
                         <div className="text-gray-600">{[companySettings[0]?.city, companySettings[0]?.state, companySettings[0]?.postal_code].filter(Boolean).join(', ')}</div>
-                        {companySettings[0]?.email && <div className="text-gray-600">📧 {companySettings[0].email}</div>}
+                        {companySettings[0]?.email && <div className="text-gray-600">📧 {(selectedCompany || companySettings[0]).email}</div>}
                       </div>
                       {(selectedQuote.company_contact_name || selectedQuote.company_contact_email) && (
                         <div className="mt-3 pt-3 border-t border-gray-200">
@@ -2381,7 +2383,7 @@ const QuoteManagement: React.FC<QuoteManagementProps> = ({ onBackToDashboard }) 
                 {companySettings[0]?.footer_image_url && (
                   <div className="w-full">
                     <img 
-                      src={companySettings[0].footer_image_url} 
+                      src={(selectedCompany || companySettings[0]).footer_image_url} 
                       alt="Footer" 
                       className="w-full h-auto object-cover"
                       style={{ maxHeight: '100px' }}
@@ -2495,7 +2497,7 @@ const QuoteManagement: React.FC<QuoteManagementProps> = ({ onBackToDashboard }) 
                 {companySettings[0]?.header_image_url && (
                   <div className="w-full">
                     <img 
-                      src={companySettings[0].header_image_url} 
+                      src={(selectedCompany || companySettings[0]).header_image_url} 
                       alt="Header" 
                       className="w-full h-auto object-cover"
                       style={{ maxHeight: '120px' }}
@@ -2504,24 +2506,24 @@ const QuoteManagement: React.FC<QuoteManagementProps> = ({ onBackToDashboard }) 
                 )}
                 
                 <div className="p-6">
-                  {!companySettings[0]?.header_image_url && companySettings[0] && (
+                  {!(selectedCompany || companySettings[0]).header_image_url && (selectedCompany || companySettings[0]) && (
                     <div className="flex justify-between items-start mb-6 pb-4 border-b-2 border-emerald-600">
                       <div className="flex-1">
-                        {companySettings[0].logo_url && (
+                        {(selectedCompany || companySettings[0]).logo_url && (
                           <img 
-                            src={companySettings[0].logo_url} 
+                            src={(selectedCompany || companySettings[0]).logo_url} 
                             alt="Logo" 
                             className="h-16 w-auto mb-3"
                           />
                         )}
-                        <div className="text-xl font-bold text-gray-900 mb-1">{companySettings[0].company_name}</div>
+                        <div className="text-xl font-bold text-gray-900 mb-1">{(selectedCompany || companySettings[0]).company_name}</div>
                         <div className="text-xs text-gray-600 space-y-0.5">
-                          {companySettings[0].address_line1 && <div>{companySettings[0].address_line1}</div>}
-                          {companySettings[0].address_line2 && <div>{companySettings[0].address_line2}</div>}
-                          <div>{[companySettings[0].city, companySettings[0].state, companySettings[0].postal_code].filter(Boolean).join(', ')}</div>
+                          {(selectedCompany || companySettings[0]).address_line1 && <div>{(selectedCompany || companySettings[0]).address_line1}</div>}
+                          {(selectedCompany || companySettings[0]).address_line2 && <div>{(selectedCompany || companySettings[0]).address_line2}</div>}
+                          <div>{[(selectedCompany || companySettings[0]).city, (selectedCompany || companySettings[0]).state, (selectedCompany || companySettings[0]).postal_code].filter(Boolean).join(', ')}</div>
                           <div className="flex gap-4 mt-1">
-                            {companySettings[0].email && <span>{companySettings[0].email}</span>}
-                            {companySettings[0].phone && <span>{companySettings[0].phone}</span>}
+                            {(selectedCompany || companySettings[0]).email && <span>{(selectedCompany || companySettings[0]).email}</span>}
+                            {(selectedCompany || companySettings[0]).phone && <span>{(selectedCompany || companySettings[0]).phone}</span>}
                           </div>
                         </div>
                       </div>
@@ -2705,7 +2707,7 @@ const QuoteManagement: React.FC<QuoteManagementProps> = ({ onBackToDashboard }) 
                   {companySettings[0]?.footer_image_url && (
                     <div className="w-full mt-6">
                       <img 
-                        src={companySettings[0].footer_image_url} 
+                        src={(selectedCompany || companySettings[0]).footer_image_url} 
                         alt="Footer" 
                         className="w-full h-auto object-cover"
                         style={{ maxHeight: '80px' }}

@@ -12,6 +12,7 @@ import SEO from './SEO'
 import SEOContent from './SEOContent'
 import ScrollToTop from './ScrollToTop'
 import { ToastProvider } from './ui/ToastProvider'
+import { CompanyProvider } from '../contexts/CompanyContext'
 
 // Loading component
 const LoadingFallback = () => (
@@ -185,8 +186,9 @@ const Router = () => {
     <BrowserRouter>
       <ScrollToTop />
       <ToastProvider>
-        <Suspense fallback={<LoadingFallback />}>
-          <Routes>
+        <CompanyProvider>
+          <Suspense fallback={<LoadingFallback />}>
+            <Routes>
             {/* Main site routes */}
             <Route path="/" element={<HomePage />} />
             <Route path="/privacy" element={<PrivacyPage />} />
@@ -222,6 +224,7 @@ const Router = () => {
             <Route path="/admin/hr/compensation" element={<SimpleAdminDashboard />} />
             <Route path="/admin/subscriptions" element={<SimpleAdminDashboard />} />
             <Route path="/admin/board-resolutions" element={<SimpleAdminDashboard />} />
+            <Route path="/admin/settings" element={<SimpleAdminDashboard />} />
             
             {/* Employee Portal routes */}
             <Route path="/employee/login" element={<EmployeeLogin />} />
@@ -247,6 +250,7 @@ const Router = () => {
             <Route path="*" element={<HomePage />} />
           </Routes>
         </Suspense>
+        </CompanyProvider>
       </ToastProvider>
     </BrowserRouter>
   )

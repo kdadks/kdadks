@@ -63,6 +63,7 @@ export interface CompanySettings {
 
 export interface InvoiceSettings {
   id: string;
+  company_settings_id?: string | null;
   
   // Invoice Number Format
   invoice_prefix: string;
@@ -90,7 +91,7 @@ export interface InvoiceSettings {
   
   // Template Settings
   template_name: string;
-  currency_position: 'before' | 'after';
+  currency_position: 'before' | 'after' | 'inr_before' | 'inr_after' | 'euro_before' | 'euro_after' | 'pound_before' | 'pound_after' | 'usd_before' | 'usd_after';
   
   is_active: boolean;
   created_at: string;
@@ -438,6 +439,7 @@ export interface CreateCompanySettingsData extends UpdateCompanySettingsData {
 }
 
 export interface UpdateInvoiceSettingsData {
+  company_settings_id?: string | null;
   invoice_prefix: string;
   invoice_suffix?: string;
   number_format: string;
@@ -452,7 +454,7 @@ export interface UpdateInvoiceSettingsData {
   due_days: number;
   late_fee_percentage: number;
   template_name: string;
-  currency_position: 'before' | 'after';
+  currency_position: 'before' | 'after' | 'inr_before' | 'inr_after' | 'euro_before' | 'euro_after' | 'pound_before' | 'pound_after' | 'usd_before' | 'usd_after';
 }
 
 export interface CreateInvoiceSettingsData extends UpdateInvoiceSettingsData {}

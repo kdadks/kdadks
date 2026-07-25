@@ -29,7 +29,7 @@ export interface QuoteSettings {
   
   // Template Settings
   template_name: string;
-  currency_position: 'before' | 'after';
+  currency_position: 'before' | 'after' | 'inr_before' | 'inr_after' | 'euro_before' | 'euro_after' | 'pound_before' | 'pound_after' | 'usd_before' | 'usd_after';
   
   is_active: boolean;
   created_at: string;
@@ -208,7 +208,7 @@ export interface UpdateQuoteSettingsData {
   default_tax_rate: number;
   enable_gst: boolean;
   template_name: string;
-  currency_position: 'before' | 'after';
+  currency_position: 'before' | 'after' | 'inr_before' | 'inr_after' | 'euro_before' | 'euro_after' | 'pound_before' | 'pound_after' | 'usd_before' | 'usd_after';
 }
 
 export interface CreateQuoteSettingsData extends UpdateQuoteSettingsData {}

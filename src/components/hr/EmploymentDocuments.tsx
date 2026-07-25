@@ -37,6 +37,7 @@ import {
 } from '../../utils/internDocumentTemplates';
 import { EmailService } from '../../services/emailService';
 import { useToast } from '../ui/ToastProvider';
+import { useCompanyContext } from '../../contexts/CompanyContext';
 import type {
   Employee,
   EmploymentDocument,
@@ -169,9 +170,17 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
     tds: true
   });
 
+  const { selectedCompany } = useCompanyContext();
+
   useEffect(() => {
     loadData();
   }, []);
+
+  useEffect(() => {
+    if (selectedCompany) {
+      setCompanySettings(selectedCompany);
+    }
+  }, [selectedCompany]);
 
   const loadData = async () => {
     try {
@@ -188,21 +197,24 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
       setSalarySlips(salarySlipsData);
       setHRSettings(hrSettingsData);
 
-      // Load company settings for PDF branding
-      const { data: companyData } = await supabase
-        .from('company_settings')
-        .select('*')
-        .eq('is_active', true)
-        .single();
+      if (selectedCompany) {
+        setCompanySettings(selectedCompany);
+      } else {
+        const { data: companyData } = await supabase
+          .from('company_settings')
+          .select('*')
+          .eq('is_active', true)
+          .single();
 
-      if (companyData) {
-        setCompanySettings(companyData);
+        if (companyData) {
+          setCompanySettings(companyData);
+        }
       }
     } catch (err) {
       console.error('Error loading data:', err);
       showError('Failed to load data');
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
   };
 

@@ -72,6 +72,17 @@ export const CreateInvoice: React.FC<CreateInvoiceProps> = ({
   const activeProducts = products.filter(p => p.is_active);
   const defaultCompany = companySettings.find(c => c.is_default) || companySettings[0];
 
+  const getBankingLabel = (company: CompanySettings | undefined | null): string => {
+    if (!company) return 'IFSC';
+    const code = company.country_id?.toUpperCase();
+    if (code === 'IN' || code === 'IND') return 'IFSC';
+    if (code === 'IE' || code === 'IRL' || code === 'GB' || code === 'GBR' || code === 'UK') return 'IBAN';
+    if (code === 'US' || code === 'USA') return 'Routing No';
+    const euCountries = ['AT', 'BE', 'BG', 'HR', 'CY', 'CZ', 'DK', 'EE', 'FI', 'GR', 'HU', 'IE', 'LV', 'LT', 'LU', 'MT', 'PL', 'PT', 'RO', 'SK', 'SI', 'SE', 'DE', 'FR', 'ES', 'IT', 'NL'];
+    if (code && euCountries.includes(code)) return 'IBAN';
+    return 'SWIFT/BIC';
+  };
+
   // Get dynamic tax label based on customer's country
   const taxLabel = getTaxLabel(selectedCustomer);
   const classificationLabel = getClassificationCodeLabel(selectedCustomer);
@@ -605,7 +616,7 @@ export const CreateInvoice: React.FC<CreateInvoiceProps> = ({
                   )}
                   {defaultCompany.ifsc_code && (
                     <div>
-                      <label className="block text-sm font-medium text-slate-500 mb-1">IFSC Code</label>
+                      <label className="block text-sm font-medium text-slate-500 mb-1">{getBankingLabel(defaultCompany)}</label>
                       <p className="px-4 py-3 bg-slate-50 border border-slate-200 rounded-lg text-slate-800 font-mono">{defaultCompany.ifsc_code}</p>
                     </div>
                   )}

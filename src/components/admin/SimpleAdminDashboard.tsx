@@ -30,13 +30,16 @@ import {
   Banknote,
   LayoutDashboard,
   Layers,
-  Gavel
+  Gavel,
+  Settings
 } from 'lucide-react'
 import { simpleAuth, SimpleUser } from '../../utils/simpleAuth'
 import { isSupabaseConfigured, supabase } from '../../config/supabase'
 import { invoiceService } from '../../services/invoiceService'
 import { quoteService } from '../../services/quoteService'
 import { employeeService } from '../../services/employeeService'
+import { useCompanyContext } from '../../contexts/CompanyContext'
+import CompanySelector from '../ui/CompanySelector'
 import InvoiceManagement from '../invoice/InvoiceManagement'
 import { PaymentManagement } from '../payment/PaymentManagement'
 import QuoteManagement from '../quote/QuoteManagement'
@@ -55,6 +58,7 @@ import FinanceManagement from './FinanceManagement'
 import IncomeManagement from './IncomeManagement'
 import SubscriptionManagement from './SubscriptionManagement'
 import BoardResolutionManagement from '../boardResolution/BoardResolutionManagement'
+import InvoiceSettings from './InvoiceSettings'
 import type { InvoiceStats } from '../../types/invoice'
 import type { QuoteStats } from '../../types/quote'
 
@@ -78,10 +82,10 @@ interface DashboardStats {
   settlements: number;
 }
 
-type ActiveView = 'dashboard' | 'invoices' | 'payments' | 'quotes' | 'contracts' | 'rate-cards' | 'announcements' | 'expenses' | 'income' | 'finance' | 'hr-employees' | 'hr-leave' | 'hr-attendance' | 'hr-settlement' | 'hr-tds-report' | 'hr-performance' | 'hr-compensation' | 'subscriptions' | 'board-resolutions';
+type ActiveView = 'dashboard' | 'invoices' | 'payments' | 'quotes' | 'contracts' | 'rate-cards' | 'announcements' | 'expenses' | 'income' | 'finance' | 'hr-employees' | 'hr-leave' | 'hr-attendance' | 'hr-settlement' | 'hr-tds-report' | 'hr-performance' | 'hr-compensation' | 'subscriptions' | 'board-resolutions' | 'settings';
 
 // Menu section types
-type MenuSection = 'sales' | 'finance' | 'hr' | 'communication';
+type MenuSection = 'sales' | 'finance' | 'hr' | 'communication' | 'configuration';
 
 const SimpleAdminDashboard: React.FC = () => {
   const [user, setUser] = useState<SimpleUser | null>(null)
@@ -93,7 +97,8 @@ const SimpleAdminDashboard: React.FC = () => {
     sales: true,
     finance: true,
     hr: true,
-    communication: true
+    communication: true,
+    configuration: true
   })
   const [dashboardStats, setDashboardStats] = useState<DashboardStats>({
     invoices: null,
@@ -106,6 +111,7 @@ const SimpleAdminDashboard: React.FC = () => {
     settlements: 0
   })
   const [statsLoading, setStatsLoading] = useState(false)
+  const { companies, selectedCompany, selectCompany, refreshCompanies } = useCompanyContext()
   const navigate = useNavigate()
   const location = useLocation()
   const pathToView: Record<string, ActiveView> = {
@@ -128,6 +134,7 @@ const SimpleAdminDashboard: React.FC = () => {
     '/admin/hr/compensation': 'hr-compensation',
     '/admin/subscriptions': 'subscriptions',
     '/admin/board-resolutions': 'board-resolutions',
+    '/admin/settings': 'settings',
   }
   const activeView: ActiveView = pathToView[location.pathname] ?? 'dashboard'
 
@@ -363,6 +370,8 @@ const SimpleAdminDashboard: React.FC = () => {
         return <SubscriptionManagement />;
       case 'board-resolutions':
         return <BoardResolutionManagement />;
+      case 'settings':
+        return <InvoiceSettings />;
       case 'dashboard':
       default:
         return null;
@@ -771,6 +780,42 @@ const SimpleAdminDashboard: React.FC = () => {
                 </li>
               </>
             )}
+
+            {/* Section: Configuration */}
+            <li className="pt-3">
+              {sidebarOpen ? (
+                <button
+                  onClick={() => toggleSection('configuration')}
+                  className="w-full flex items-center justify-between px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider hover:bg-gray-50 rounded-md transition-colors"
+                >
+                  <span>Configuration</span>
+                  {openSections.configuration ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                </button>
+              ) : (
+                <hr className="border-gray-200 my-2" />
+              )}
+            </li>
+
+            {/* Configuration Items */}
+            {(openSections.configuration || !sidebarOpen) && (
+              <>
+                {/* Settings */}
+                <li>
+                  <button
+                    onClick={() => navigate('/admin/settings')}
+                    title={!sidebarOpen ? 'Settings' : undefined}
+                    className={`w-full flex items-center ${!sidebarOpen ? 'justify-center' : ''} px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                      activeView === 'settings'
+                        ? 'bg-blue-100 text-blue-700'
+                        : 'text-gray-700 hover:bg-gray-100'
+                    }`}
+                  >
+                    <Settings className="w-5 h-5 flex-shrink-0" />
+                    {sidebarOpen && <span className="ml-3">Settings</span>}
+                  </button>
+                </li>
+              </>
+            )}
           </ul>
         </nav>
 
@@ -795,12 +840,19 @@ const SimpleAdminDashboard: React.FC = () => {
 
       {/* Main Content */}
       <div className="flex-1 overflow-auto">
-        {/* Top Header - only show title on dashboard */}
-        {activeView === 'dashboard' && (
-          <header className="bg-white shadow-sm border-b border-gray-200 h-16 flex items-center px-6">
-            <h2 className="text-xl font-semibold text-gray-900">Dashboard</h2>
-          </header>
-        )}
+        {/* Top Header */}
+        <header className="bg-white shadow-sm border-b border-gray-200 h-16 flex items-center justify-between px-6">
+          <h2 className="text-xl font-semibold text-gray-900 capitalize">
+            {activeView === 'dashboard' ? 'Dashboard' : activeView.replace(/-/g, ' ')}
+          </h2>
+          <div className="flex items-center gap-3">
+            <CompanySelector
+              companies={companies}
+              selectedId={selectedCompany?.id ?? null}
+              onChange={selectCompany}
+            />
+          </div>
+        </header>
 
         {/* Main Content Area */}
         <main className="p-6">

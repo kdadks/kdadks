@@ -265,7 +265,7 @@ class QuoteService {
     return data;
   }
 
-  async createQuote(quoteData: CreateQuoteData, quoteNumber?: string): Promise<Quote> {
+  async createQuote(quoteData: CreateQuoteData, quoteNumber?: string, companySettingsId?: string): Promise<Quote> {
     let finalQuoteNumber: string;
     
     if (quoteNumber) {
@@ -274,16 +274,27 @@ class QuoteService {
       finalQuoteNumber = await this.generateQuoteNumber();
     }
     
-    // Get default company settings
-    const { data: companySettings, error: companyError } = await supabase
-      .from('company_settings')
-      .select(`*, country:countries(*)`)
-      .eq('is_default', true)
-      .eq('is_active', true)
-      .single();
-    
-    if (companyError || !companySettings) {
-      throw new Error('Default company settings not found');
+    let companySettings = null;
+    if (companySettingsId) {
+      const { data: cs } = await supabase
+        .from('company_settings')
+        .select(`*, country:countries(*)`)
+        .eq('id', companySettingsId)
+        .eq('is_active', true)
+        .single();
+      companySettings = cs;
+    }
+    if (!companySettings) {
+      const { data: defaultCs, error: companyError } = await supabase
+        .from('company_settings')
+        .select(`*, country:countries(*)`)
+        .eq('is_default', true)
+        .eq('is_active', true)
+        .single();
+      if (companyError || !defaultCs) {
+        throw new Error('Default company settings not found');
+      }
+      companySettings = defaultCs;
     }
 
     // Get current user

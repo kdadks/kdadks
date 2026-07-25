@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { boardResolutionService } from '../../services/boardResolutionService';
 import { invoiceService } from '../../services/invoiceService';
+import { useCompanyContext } from '../../contexts/CompanyContext';
 import { generateBoardResolutionPDF } from '../../utils/boardResolutionPDFGenerator';
 import { useToast } from '../ui/ToastProvider';
 import { useConfirmDialog } from '../../hooks/useConfirmDialog';
@@ -78,6 +79,7 @@ const BoardResolutionManagement: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<BoardResolutionStatus | ''>('');
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const { selectedCompany, selectCompany } = useCompanyContext();
 
   // Modal state
   const [showFormModal, setShowFormModal] = useState(false);
@@ -119,7 +121,7 @@ const BoardResolutionManagement: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [currentPage, filterStatus, searchTerm]);
+  }, [currentPage, filterStatus, searchTerm, selectedCompany]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
@@ -194,7 +196,7 @@ const BoardResolutionManagement: React.FC = () => {
       board_action: effectiveAction,
       directors_present: formData.directors_present.filter(d => d.trim()),
       directors_absent: (formData.directors_absent || []).filter(d => d.trim()),
-      company_settings_id: companySettings[0]?.id,
+      company_settings_id: selectedCompany?.id || companySettings[0]?.id,
     };
 
     setFormLoading(true);
@@ -233,7 +235,7 @@ const BoardResolutionManagement: React.FC = () => {
   };
 
   const handleDownload = async (resolution: BoardResolution) => {
-    const company = companySettings[0];
+    const company = selectedCompany || companySettings[0];
     if (!company) { showError('Company settings not found.'); return; }
     setDownloadingId(resolution.id);
     try {
@@ -254,7 +256,7 @@ const BoardResolutionManagement: React.FC = () => {
   // ─── Preview content ──────────────────────────────────────────────────────
 
   const renderPreviewContent = (resolution: BoardResolution) => {
-    const company = companySettings[0];
+    const company = selectedCompany || companySettings[0];
     return (
       <div className="bg-white p-8 shadow-lg max-w-4xl mx-auto text-sm" style={{ lineHeight: '1.6' }}>
         {/* Header */}

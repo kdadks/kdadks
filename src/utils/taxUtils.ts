@@ -33,9 +33,13 @@ export const getTaxLabel = (customer: Customer | undefined): string => {
  */
 export const getTaxRegistrationLabel = (customer: Customer | undefined): string => {
   const countryCode = customer?.country?.code?.toUpperCase();
+  return getTaxRegistrationLabelByCode(countryCode);
+};
+
+export const getTaxRegistrationLabelByCode = (countryCode?: string): string => {
+  const code = countryCode?.toUpperCase();
   
-  // Country-specific tax registration labels
-  switch (countryCode) {
+  switch (code) {
     case 'IND':
     case 'IN':
       return 'GSTIN';
@@ -85,10 +89,13 @@ export const getTaxRegistrationLabel = (customer: Customer | undefined): string 
     case 'NL':
       return 'BTW-nummer';
     
+    case 'IRL':
+    case 'IE':
+      return 'VAT Number';
+    
     default: {
-      // For EU countries, use VAT Number
       const euCountries = ['AT', 'BE', 'BG', 'HR', 'CY', 'CZ', 'DK', 'EE', 'FI', 'GR', 'HU', 'IE', 'LV', 'LT', 'LU', 'MT', 'PL', 'PT', 'RO', 'SK', 'SI', 'SE'];
-      if (euCountries.includes(countryCode || '')) {
+      if (code && euCountries.includes(code)) {
         return 'EU VAT Number';
       }
       return 'Tax Registration Number';

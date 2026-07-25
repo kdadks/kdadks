@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { contractService } from '../../services/contractService';
 import { invoiceService } from '../../services/invoiceService';
+import { useCompanyContext } from '../../contexts/CompanyContext';
 import { useToast } from '../ui/ToastProvider';
 import { useConfirmDialog } from '../../hooks/useConfirmDialog';
 import ConfirmDialog from '../ui/ConfirmDialog';
@@ -47,6 +48,7 @@ const ContractManagement: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filters] = useState<ContractFilters>({});
   const [activeTab, setActiveTab] = useState<'dashboard' | 'contracts' | 'templates'>('dashboard');
+  const { selectedCompany } = useCompanyContext();
   
   // Modal states
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -72,7 +74,7 @@ const ContractManagement: React.FC = () => {
   // Load initial data
   useEffect(() => {
     loadData();
-  }, [currentPage, searchTerm, filters]);
+  }, [currentPage, searchTerm, filters, selectedCompany]);
 
   const loadData = async () => {
     try {
@@ -114,30 +116,35 @@ const ContractManagement: React.FC = () => {
 
   // Handle contract creation
   const handleCreateContract = () => {
-    // Build complete address with city, state, and postal code
+    const company = selectedCompany || companySettings;
+    if (!company) {
+      showError('No company selected. Please select a company first.');
+      return;
+    }
+
     let fullAddress = '';
-    if (companySettings?.address_line1) {
-      fullAddress = companySettings.address_line1;
-      if (companySettings.address_line2) {
-        fullAddress += ', ' + companySettings.address_line2;
+    if (company.address_line1) {
+      fullAddress = company.address_line1;
+      if (company.address_line2) {
+        fullAddress += ', ' + company.address_line2;
       }
-      if (companySettings.city) {
-        fullAddress += ', ' + companySettings.city;
+      if (company.city) {
+        fullAddress += ', ' + company.city;
       }
-      if (companySettings.state) {
-        fullAddress += ', ' + companySettings.state;
+      if (company.state) {
+        fullAddress += ', ' + company.state;
       }
-      if (companySettings.postal_code) {
-        fullAddress += ' - ' + companySettings.postal_code;
+      if (company.postal_code) {
+        fullAddress += ' - ' + company.postal_code;
       }
     }
 
     setFormData({
-      party_a_name: companySettings?.company_name || '',
+      party_a_name: company.company_name || '',
       party_a_address: fullAddress,
-      party_a_contact: companySettings?.phone || '',
-      party_a_gstin: companySettings?.gstin || '',
-      party_a_pan: companySettings?.pan || '',
+      party_a_contact: company.phone || '',
+      party_a_gstin: company.gstin || '',
+      party_a_pan: company.pan || '',
       party_b_name: '',
       contract_type: 'MSA',
       contract_title: '',
@@ -303,9 +310,7 @@ const ContractManagement: React.FC = () => {
         return;
       }
 
-      // Get company settings for header/footer
-      const companySettings = await invoiceService.getCompanySettings();
-      const company = companySettings && companySettings.length > 0 ? companySettings[0] : null;
+      const company = selectedCompany || companySettings;
       if (!company) {
         showError('Company settings not configured');
         return;

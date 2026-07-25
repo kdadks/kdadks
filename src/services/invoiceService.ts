@@ -153,12 +153,19 @@ class InvoiceService {
   }
 
   // Invoice Settings
-  async getInvoiceSettings(): Promise<InvoiceSettings | null> {
-    const { data, error } = await supabase
+  async getInvoiceSettings(companySettingsId?: string): Promise<InvoiceSettings | null> {
+    let query = supabase
       .from('invoice_settings')
       .select('*')
-      .eq('is_active', true)
-      .single();
+      .eq('is_active', true);
+
+    if (companySettingsId) {
+      query = query.eq('company_settings_id', companySettingsId);
+    } else {
+      query = query.is('company_settings_id', null);
+    }
+
+    const { data, error } = await query.maybeSingle();
     
     if (error && error.code !== 'PGRST116') throw error;
     return data;
@@ -176,11 +183,12 @@ class InvoiceService {
     return data;
   }
 
-  async createInvoiceSettings(settings: CreateInvoiceSettingsData): Promise<InvoiceSettings> {
+  async createInvoiceSettings(settings: CreateInvoiceSettingsData, companySettingsId?: string): Promise<InvoiceSettings> {
     const { data, error } = await supabase
       .from('invoice_settings')
       .insert({
         ...settings,
+        company_settings_id: companySettingsId || null,
         is_active: true,
         current_number: 1
       })
@@ -416,8 +424,8 @@ class InvoiceService {
   }
 
   // Invoice Number Generation
-  async previewInvoiceNumber(): Promise<string> {
-    const settings = await this.getInvoiceSettings();
+  async previewInvoiceNumber(companySettingsId?: string): Promise<string> {
+    const settings = await this.getInvoiceSettings(companySettingsId);
     if (!settings) throw new Error('Invoice settings not found');
 
     const currentDate = new Date();
@@ -495,8 +503,8 @@ class InvoiceService {
    * Generate next invoice number without updating database settings
    * Used for uniqueness checking before final save
    */
-  async generateNextInvoiceNumber(): Promise<string> {
-    const settings = await this.getInvoiceSettings();
+  async generateNextInvoiceNumber(companySettingsId?: string): Promise<string> {
+    const settings = await this.getInvoiceSettings(companySettingsId);
     if (!settings) throw new Error('Invoice settings not found');
 
     const currentDate = new Date();
@@ -563,8 +571,8 @@ class InvoiceService {
     return invoiceNumber;
   }
 
-  async generateInvoiceNumber(): Promise<string> {
-    const settings = await this.getInvoiceSettings();
+  async generateInvoiceNumber(companySettingsId?: string): Promise<string> {
+    const settings = await this.getInvoiceSettings(companySettingsId);
     if (!settings) throw new Error('Invoice settings not found');
 
     const currentDate = new Date();
@@ -731,20 +739,23 @@ class InvoiceService {
     return data;
   }
 
-  async createInvoice(invoiceData: CreateInvoiceData, invoiceNumber?: string): Promise<Invoice> {
+  async createInvoice(invoiceData: CreateInvoiceData, invoiceNumber?: string, companySettingsId?: string): Promise<Invoice> {
     let finalInvoiceNumber: string;
     
     if (invoiceNumber) {
-      // If invoice number is provided, use it (this means the caller has already reserved it)
       finalInvoiceNumber = invoiceNumber;
       console.log('📝 Using provided invoice number:', finalInvoiceNumber);
     } else {
-      // If no invoice number provided, generate and reserve one
-      finalInvoiceNumber = await this.generateInvoiceNumber();
+      finalInvoiceNumber = await this.generateInvoiceNumber(companySettingsId);
       console.log('🔢 Generated new invoice number:', finalInvoiceNumber);
     }
     
-    const companySettings = await this.getDefaultCompanySettings();
+    let companySettings = await this.getDefaultCompanySettings();
+    
+    if (companySettingsId) {
+      const all = await this.getCompanySettings();
+      companySettings = all.find(c => c.id === companySettingsId) || companySettings;
+    }
     
     if (!companySettings) {
       throw new Error('Default company settings not found');
@@ -2087,7 +2098,7 @@ class InvoiceService {
       throw new Error('Quote has no items to convert');
     }
 
-    const invoiceSettings = await this.getInvoiceSettings();
+    const invoiceSettings = await this.getInvoiceSettings(quote.company_settings_id);
     const dueDays = invoiceSettings?.due_days || 30;
 
     const invoices: { invoiceId: string; invoiceNumber: string }[] = [];
