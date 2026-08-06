@@ -169,7 +169,7 @@ window.clearSupabaseAuth = () => {
 // Debug function (available in browser console)
 window.debugSupabaseAuth = () => {
   console.log('🔍 Supabase Authentication Debug Info:')
-  console.log('- Environment configured:', !!(process.env.VITE_SUPABASE_URL && process.env.VITE_SUPABASE_ANON_KEY))
+  console.log('- Environment configured:', !!(process.env.VITE_SUPABASE_URL && process.env.VITE_SUPABASE_PUBLISHABLE_KEY))
   
   supabase.auth.getSession().then(({ data, error }) => {
     console.log('- Current Session:', data.session ? 'Active' : 'None')

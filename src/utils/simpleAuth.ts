@@ -12,7 +12,7 @@ const debugSupabase = () => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const url = (import.meta as any).env?.VITE_SUPABASE_URL
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const key = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY
+  const key = (import.meta as any).env?.VITE_SUPABASE_PUBLISHABLE_KEY
   
   console.log('Supabase Debug Info:')
   console.log('- URL:', url || 'MISSING')
