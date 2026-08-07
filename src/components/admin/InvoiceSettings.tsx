@@ -43,6 +43,10 @@ const InvoiceSettings: React.FC = () => {
     return country?.code;
   };
 
+  const resolveCountryCode = (countryId?: string) => {
+    return getCountryCode(countryId) || editingCountryCode;
+  };
+
   const getCompanyTaxFields = (countryId?: string) => {
     const code = getCountryCode(countryId)?.toUpperCase();
     if (code === 'IN' || code === 'IND') {
@@ -162,6 +166,7 @@ const InvoiceSettings: React.FC = () => {
     is_default: false
   });
   const [modalLoading, setModalLoading] = useState(false);
+  const [editingCountryCode, setEditingCountryCode] = useState<string | undefined>();
 
   // Invoice settings modal states
   const [showInvoiceSettingsModal, setShowInvoiceSettingsModal] = useState(false);
@@ -282,6 +287,7 @@ const InvoiceSettings: React.FC = () => {
         signature_url: company.signature_url || '',
         is_default: company.is_default
       });
+      setEditingCountryCode(company.country?.code);
     }
 
     setShowCompanyModal(true);
@@ -291,6 +297,7 @@ const InvoiceSettings: React.FC = () => {
     setShowCompanyModal(false);
     setSelectedCompanyForModal(null);
     setModalLoading(false);
+    setEditingCountryCode(undefined);
   };
 
   const handleCompanyFormChange = (field: keyof CreateCompanySettingsData, value: string | boolean) => {
@@ -739,7 +746,7 @@ const InvoiceSettings: React.FC = () => {
               </div>
 
               {(() => {
-                const taxFields = getCompanyTaxFields(getCountryCode(companyFormData.country_id));
+                const taxFields = getCompanyTaxFields(resolveCountryCode(companyFormData.country_id));
                 return (
                   <>
                     {taxFields.fields.map((field) => (
@@ -770,7 +777,7 @@ const InvoiceSettings: React.FC = () => {
                 Banking Information
               </h4>
               {(() => {
-                const banking = getCompanyBankingFields(getCountryCode(companyFormData.country_id));
+                const banking = getCompanyBankingFields(resolveCountryCode(companyFormData.country_id));
                 return (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     {banking.fields.map((field) => (
@@ -1251,7 +1258,7 @@ const InvoiceSettings: React.FC = () => {
                       </div>
                     </div>
                     {(() => {
-                      const taxFields = getCompanyTaxFields(getCountryCode(displayCompany.country_id));
+                      const taxFields = getCompanyTaxFields(resolveCountryCode(displayCompany.country_id));
                       return (
                         <>
                           {taxFields.fields.map((field) => (
@@ -1282,7 +1289,7 @@ const InvoiceSettings: React.FC = () => {
                             <div className="mt-1 text-sm text-gray-900">{displayCompany.bank_name || 'N/A'}</div>
                           </div>
                           {(() => {
-                            const banking = getCompanyBankingFields(getCountryCode(displayCompany.country_id));
+                            const banking = getCompanyBankingFields(resolveCountryCode(displayCompany.country_id));
                             return (
                               <>
                                 {banking.fields.filter(f => f.key !== 'bank_name' && f.key !== 'account_number').map((field) => (
