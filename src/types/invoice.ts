@@ -37,6 +37,8 @@ export interface CompanySettings {
   bank_name?: string;
   account_number?: string;
   ifsc_code?: string;
+  iban?: string;
+  swift_bic?: string;
   branch_name?: string;
   
   // Logo and Branding (legacy)
@@ -431,6 +433,8 @@ export interface UpdateCompanySettingsData {
   bank_name?: string;
   account_number?: string;
   ifsc_code?: string;
+  iban?: string;
+  swift_bic?: string;
   branch_name?: string;
   logo_url?: string;
   signature_url?: string;
