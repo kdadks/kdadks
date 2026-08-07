@@ -24,7 +24,7 @@ const ShippingPolicy = () => {
           </div>
           <p className="text-gray-600 max-w-2xl mx-auto">
             Our shipping and delivery policy for physical products and services across 
-            Kdadks Service Private Limited brands.
+            Kdadks brands.
           </p>
           <p className="text-sm text-gray-500 mt-2">Last updated: May 2025</p>
         </div>

@@ -78,11 +78,11 @@ const About: React.FC = () => {
         <div className="text-center mb-16">
           <h2 id="about-heading" className="text-3xl md:text-4xl lg:text-5xl font-bold text-secondary-900 mb-6" itemProp="name">
             About
-            <span className="block text-gradient">Kdadks Service Pvt. Ltd</span>
+            <span className="block text-gradient">Kdadks</span>
           </h2>
           
           <p className="text-xl text-secondary-600 mb-8 leading-relaxed max-w-4xl mx-auto" itemProp="description">
-            At <strong>Kdadks Service Pvt. Ltd</strong>, our objective is to lead with innovation, compassion, and excellence across our diverse range of services. Through our brands <em>IT Wala</em>, <em>Ayuh Clinic</em>, <em>Nirchal</em>, and <em>Raahirides</em>, we are committed to transforming lives and creating lasting impact.
+            At <strong>Kdadks</strong>, our objective is to lead with innovation, compassion, and excellence across our diverse range of services. Through our brands <em>IT Wala</em>, <em>Ayuh Clinic</em>, <em>Nirchal</em>, and <em>Raahirides</em>, we are committed to transforming lives and creating lasting impact.
           </p>
 
           {/* Brand Pills */}
@@ -309,7 +309,7 @@ const About: React.FC = () => {
               Our Vision
             </h3>
             <p className="text-lg text-secondary-700 leading-relaxed max-w-4xl mx-auto mb-8" itemProp="description">
-              At <strong>Kdadks Service Pvt. Ltd</strong>, through our brands <em>IT Wala</em>, <em>Ayuh Clinic</em>, <em>Nirchal</em>, and <em>Raahirides</em>, we envision a future where we lead with innovation, compassion, and excellence in our respective fields. Our unified vision is to empower individuals through tailored education, deliver comprehensive and compassionate healthcare, inspire confidence and style with high-quality garments, and offer seamless and memorable travel experiences.
+              At <strong>Kdadks</strong>, through our brands <em>IT Wala</em>, <em>Ayuh Clinic</em>, <em>Nirchal</em>, and <em>Raahirides</em>, we envision a future where we lead with innovation, compassion, and excellence in our respective fields. Our unified vision is to empower individuals through tailored education, deliver comprehensive and compassionate healthcare, inspire confidence and style with high-quality garments, and offer seamless and memorable travel experiences.
             </p>
             <p className="text-secondary-600 leading-relaxed max-w-3xl mx-auto">
               We are committed to continuously innovating and adapting to the latest trends and technologies, striving to exceed customer expectations and create a lasting impact. Our goal is to transform lives, uplift communities, and set new standards of excellence across the IT, healthcare, fashion, and travel industries.

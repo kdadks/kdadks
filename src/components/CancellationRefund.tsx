@@ -23,7 +23,7 @@ const CancellationRefund = () => {
             <h1 className="text-4xl font-bold text-secondary-900">Cancellation & Refund Policy</h1>
           </div>
           <p className="text-gray-600 max-w-2xl mx-auto">
-            Our cancellation and refund policy for all services across Kdadks Service Private Limited brands. 
+            Our cancellation and refund policy for all services across Kdadks brands. 
             Please review the specific terms for each service type.
           </p>
           <p className="text-sm text-gray-500 mt-2">Last updated: December 2024</p>

@@ -99,11 +99,11 @@ export function transitionApprovalStatus(
 
 // ─── Legal Disclaimer Text ────────────────────────────────────────────────────
 
-export const INTERN_LEGAL_DISCLAIMER = `This internship is offered under the ITWala Academy Internship Program and is governed by applicable Indian labour laws, including but not limited to the Apprentices Act 1961 and the National Apprenticeship Promotion Scheme (NAPS) guidelines where applicable. The internship is primarily educational in nature and does not constitute regular employment. The intern is not entitled to statutory employment benefits (PF, ESIC, gratuity) unless explicitly stated. The company reserves the right to terminate the internship at any time for conduct unbecoming of an intern or breach of any clause herein. All work product created during the internship remains the exclusive intellectual property of KDADKS Service Private Limited / ITWala Academy. The intern agrees to maintain strict confidentiality of all proprietary information encountered during the program.`;
+export const INTERN_LEGAL_DISCLAIMER = `This internship is offered under the ITWala Academy Internship Program and is governed by applicable Indian labour laws, including but not limited to the Apprentices Act 1961 and the National Apprenticeship Promotion Scheme (NAPS) guidelines where applicable. The internship is primarily educational in nature and does not constitute regular employment. The intern is not entitled to statutory employment benefits (PF, ESIC, gratuity) unless explicitly stated. The company reserves the right to terminate the internship at any time for conduct unbecoming of an intern or breach of any clause herein. All work product created during the internship remains the exclusive intellectual property of Kdadks / ITWala Academy. The intern agrees to maintain strict confidentiality of all proprietary information encountered during the program.`;
 
 export const INTERN_CONFIDENTIALITY_CLAUSE = `The intern agrees to keep all information relating to the company's business, clients, technology, processes, and trade secrets strictly confidential, both during and for a period of two (2) years after the conclusion of the internship. Unauthorized disclosure may result in legal action.`;
 
-export const INTERN_IP_ASSIGNMENT_CLAUSE = `All inventions, developments, improvements, and other intellectual property created by the intern in the course of the internship shall be the sole and exclusive property of KDADKS Service Private Limited / ITWala Academy. The intern hereby assigns all rights, title, and interest in such work product to the company.`;
+export const INTERN_IP_ASSIGNMENT_CLAUSE = `All inventions, developments, improvements, and other intellectual property created by the intern in the course of the internship shall be the sole and exclusive property of Kdadks / ITWala Academy. The intern hereby assigns all rights, title, and interest in such work product to the company.`;
 
 // ─── Validation ───────────────────────────────────────────────────────────────
 
@@ -215,7 +215,7 @@ export async function generateInternOfferLetterPDF(
 
   const dimensions = PDFBrandingUtils.getStandardDimensions();
   const pageHeight = pdf.internal.pageSize.getHeight();
-  const companyName = companySettings?.company_name || 'KDADKS Service Private Limited';
+  const companyName = companySettings?.company_name || 'Kdadks';
   const programName = data.program_name || PROGRAM_NAME_DEFAULT;
 
   const FONT_SIZE = { title: 13, heading: 10, body: 10, small: 9 };
@@ -497,7 +497,7 @@ export async function generateInternExperienceCertificatePDF(
   const dimensions = PDFBrandingUtils.getStandardDimensions();
   const pageWidth = pdf.internal.pageSize.getWidth();
   const pageHeight = pdf.internal.pageSize.getHeight();
-  const companyName = companySettings?.company_name || 'KDADKS Service Private Limited';
+  const companyName = companySettings?.company_name || 'Kdadks';
   const programName = data.program_name || PROGRAM_NAME_DEFAULT;
 
   const FONT_SIZE = { title: 16, heading: 11, body: 11, small: 9 };
@@ -709,7 +709,7 @@ export async function generateInternExperienceCertificatePDF(
   pdf.setFontSize(FONT_SIZE.small);
   pdf.setFont('helvetica', 'italic');
   pdf.setTextColor(100, 100, 100);
-  await writeWrapped(data.legal_disclaimer || 'This certificate is issued exclusively for the purpose of verifying internship tenure at ITWala Academy / KDADKS Service Private Limited and shall not be construed as a certificate of permanent employment.');
+  await writeWrapped(data.legal_disclaimer || 'This certificate is issued exclusively for the purpose of verifying internship tenure at ITWala Academy / Kdadks and shall not be construed as a certificate of permanent employment.');
   pdf.setTextColor(0, 0, 0);
   pdf.setFont('helvetica', 'normal');
   pdf.setFontSize(11);

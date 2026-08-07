@@ -100,7 +100,7 @@ const TermsPage = () => (
 // Shipping policy page
 const ShippingPage = () => (
   <div className="min-h-screen bg-white">
-    <SEO customData={{ title: "Shipping Policy - Kdadks Service Private Limited", description: "Shipping and delivery policy for Kdadks services including fashion products from Nirchal and other physical goods." }} />
+    <SEO customData={{ title: "Shipping Policy - Kdadks", description: "Shipping and delivery policy for Kdadks services including fashion products from Nirchal and other physical goods." }} />
     <Header />
     <Suspense fallback={<LoadingFallback />}>
       <ShippingPolicy />
@@ -112,7 +112,7 @@ const ShippingPage = () => (
 // Refund policy page
 const RefundPage = () => (
   <div className="min-h-screen bg-white">
-    <SEO customData={{ title: "Cancellation & Refund Policy - Kdadks Service Private Limited", description: "Cancellation and refund policy for Kdadks services across IT consulting, healthcare, fashion, and travel sectors." }} />
+    <SEO customData={{ title: "Cancellation & Refund Policy - Kdadks", description: "Cancellation and refund policy for Kdadks services across IT consulting, healthcare, fashion, and travel sectors." }} />
     <Header />
     <Suspense fallback={<LoadingFallback />}>
       <CancellationRefund />
@@ -124,7 +124,7 @@ const RefundPage = () => (
 // Team page
 const TeamPage = () => (
   <div className="min-h-screen bg-white">
-    <SEO customData={{ title: "Our Team - Kdadks Service Private Limited", description: "Meet the expert team behind Kdadks' success across IT consulting, healthcare, fashion, and travel industries." }} />
+    <SEO customData={{ title: "Our Team - Kdadks", description: "Meet the expert team behind Kdadks' success across IT consulting, healthcare, fashion, and travel industries." }} />
     <Header />
     <Suspense fallback={<LoadingFallback />}>
       <Team />
@@ -136,7 +136,7 @@ const TeamPage = () => (
 // Customer Support page
 const CustomerSupportPage = () => (
   <div className="min-h-screen bg-white">
-    <SEO customData={{ title: "Customer Support - Kdadks Service Private Limited", description: "Get comprehensive customer support for all Kdadks services including IT Wala, Ayuh Clinic, Nirchal, and Raahirides." }} />
+    <SEO customData={{ title: "Customer Support - Kdadks", description: "Get comprehensive customer support for all Kdadks services including IT Wala, Ayuh Clinic, Nirchal, and Raahirides." }} />
     <Header />
     <Suspense fallback={<LoadingFallback />}>
       <CustomerSupport />
@@ -148,7 +148,7 @@ const CustomerSupportPage = () => (
 // Service Inquiry page
 const ServiceInquiryPage = () => (
   <div className="min-h-screen bg-white">
-    <SEO customData={{ title: "Service Inquiry - Kdadks Service Private Limited", description: "Explore our comprehensive services across IT, healthcare, fashion, and travel. Get detailed information and request quotes." }} />
+    <SEO customData={{ title: "Service Inquiry - Kdadks", description: "Explore our comprehensive services across IT, healthcare, fashion, and travel. Get detailed information and request quotes." }} />
     <Header />
     <Suspense fallback={<LoadingFallback />}>
       <ServiceInquiry />
@@ -160,7 +160,7 @@ const ServiceInquiryPage = () => (
 // Book Consultation page
 const BookConsultationPage = () => (
   <div className="min-h-screen bg-white">
-    <SEO customData={{ title: "Book Consultation - Kdadks Service Private Limited", description: "Schedule consultations with our experts across IT, healthcare, fashion, and travel services." }} />
+    <SEO customData={{ title: "Book Consultation - Kdadks", description: "Schedule consultations with our experts across IT, healthcare, fashion, and travel services." }} />
     <Header />
     <Suspense fallback={<LoadingFallback />}>
       <BookConsultation />
@@ -172,7 +172,7 @@ const BookConsultationPage = () => (
 // Partnership page
 const PartnershipPage = () => (
   <div className="min-h-screen bg-white">
-    <SEO customData={{ title: "Partnership Opportunities - Kdadks Service Private Limited", description: "Explore partnership opportunities with Kdadks across technology, healthcare, fashion, and travel sectors." }} />
+    <SEO customData={{ title: "Partnership Opportunities - Kdadks", description: "Explore partnership opportunities with Kdadks across technology, healthcare, fashion, and travel sectors." }} />
     <Header />
     <Suspense fallback={<LoadingFallback />}>
       <Partnership />

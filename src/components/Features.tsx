@@ -64,7 +64,7 @@ const Features = () => {
         <div className="text-center mb-16">
           <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold text-secondary-900 mb-6">
             Why Choose
-            <span className="block text-gradient">Kdadks Service Private Limited</span>
+            <span className="block text-gradient">Kdadks</span>
           </h2>
           <p className="text-xl text-secondary-600 max-w-3xl mx-auto leading-relaxed">
             Multi-industry expertise delivering exceptional results across IT, healthcare, fashion, and travel.

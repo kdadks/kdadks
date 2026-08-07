@@ -23,7 +23,7 @@ const PrivacyPolicy = () => {
             <h1 className="text-4xl font-bold text-secondary-900">Privacy Policy</h1>
           </div>
           <p className="text-gray-600 max-w-2xl mx-auto">
-            Your privacy is important to us. This policy outlines how Kdadks Service Private Limited 
+            Your privacy is important to us. This policy outlines how Kdadks 
             collects, uses, and protects your personal information.
           </p>
           <p className="text-sm text-gray-500 mt-2">Last updated: December 2024</p>

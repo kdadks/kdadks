@@ -538,7 +538,7 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
     const dimensions = PDFBrandingUtils.getStandardDimensions();
     const pageHeight = pdf.internal.pageSize.getHeight();
     const pageWidth = pdf.internal.pageSize.getWidth();
-    const companyName = companySettings?.company_name || 'Kdadks Service Private Limited';
+    const companyName = companySettings?.company_name || 'Kdadks';
     
     // Constants for consistent formatting
     const FONT_SIZE = {

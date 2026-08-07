@@ -24,7 +24,7 @@ const TermsConditions = () => {
           </div>
           <p className="text-gray-600 max-w-2xl mx-auto">
             Please read these terms and conditions carefully before using our services across 
-            all Kdadks Service Private Limited brands.
+            all Kdadks brands.
           </p>
           <p className="text-sm text-gray-500 mt-2">Last updated: December 2024</p>
         </div>
@@ -40,7 +40,7 @@ const TermsConditions = () => {
               </div>
               <div className="text-gray-700 space-y-4">
                 <p>
-                  By accessing and using the services provided by Kdadks Service Private Limited 
+                  By accessing and using the services provided by Kdadks 
                   and its brands (IT Wala, Ayuh Clinic, Nirchal, Raahirides), you accept and agree 
                   to be bound by the terms and provision of this agreement.
                 </p>
@@ -54,7 +54,7 @@ const TermsConditions = () => {
             <section>
               <h2 className="text-2xl font-semibold text-secondary-900 mb-4">Our Services</h2>
               <div className="text-gray-700 space-y-4">
-                <p>Kdadks Service Private Limited operates through multiple brands:</p>
+                <p>Kdadks operates through multiple brands:</p>
                 <div className="grid md:grid-cols-2 gap-4">
                   <div className="bg-blue-50 p-4 rounded-lg">
                     <h3 className="font-semibold text-blue-900 mb-2">IT Wala</h3>
@@ -133,7 +133,7 @@ const TermsConditions = () => {
               <div className="text-gray-700 space-y-4">
                 <p>
                   All content, trademarks, and intellectual property on our platforms belong to 
-                  Kdadks Service Private Limited or our licensors. You may not:
+                  Kdadks or our licensors. You may not:
                 </p>
                 <ul className="list-disc list-inside space-y-2 ml-4">
                   <li>Copy, modify, or distribute our content without permission</li>
@@ -152,7 +152,7 @@ const TermsConditions = () => {
               </div>
               <div className="text-gray-700 space-y-4">
                 <p>
-                  To the maximum extent permitted by law, Kdadks Service Private Limited shall not be 
+                  To the maximum extent permitted by law, Kdadks shall not be 
                   liable for any indirect, incidental, special, consequential, or punitive damages.
                 </p>
                 <p>

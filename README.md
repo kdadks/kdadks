@@ -1,6 +1,6 @@
 # KDADKS Website
 
-A modern website for KDADKS Service Private Limited showcasing our d## 🔌 Integration with Other Projects
+A modern website for Kdadks showcasing our d## 🔌 Integration with Other Projects
 
 The Invoice Management System is designed to be modular and can be integrated into other TypeScript projects:
 
@@ -375,11 +375,11 @@ For technical support or questions about this website:
 
 ## 📄 License
 
-This project is proprietary and confidential to KDADKS Service Private Limited.
+This project is proprietary and confidential to Kdadks.
 
 ## 🚀 Contributing
 
-This is a private project for KDADKS Service Private Limited. For internal development:
+This is a private project for Kdadks. For internal development:
 
 1. Create a feature branch
 2. Make your changes

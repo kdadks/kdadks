@@ -352,7 +352,7 @@ exports.handler = async (event, context) => {
 
     // Build Resend payload
     const payload = {
-      from: `KDADKS Service Private Limited <${fromEmail}>`,
+      from: `Kdadks <${fromEmail}>`,
       to: [to],
       subject,
       ...(html ? { html } : { text })
@@ -401,7 +401,7 @@ exports.handler = async (event, context) => {
     if (senderEmail && senderEmail !== to) {
       try {
         const copyPayload = {
-          from: `KDADKS Service Private Limited <${fromEmail}>`,
+          from: `Kdadks <${fromEmail}>`,
           to: [senderEmail],
           subject: `[Copy] ${subject}`,
           ...(html ? { html } : { text })

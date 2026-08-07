@@ -341,7 +341,7 @@ class PayPalProvider extends BasePaymentProvider {
         application_context: {
           return_url: `${window.location.origin}/payment/${request.id}?gateway=paypal&status=success`,
           cancel_url: `${window.location.origin}/payment/${request.id}?gateway=paypal&status=cancelled`,
-          brand_name: 'KDADKS Service Private Limited',
+          brand_name: 'Kdadks',
           landing_page: 'BILLING',
           user_action: 'PAY_NOW'
         }

@@ -298,7 +298,7 @@ const Partnership = () => {
             <h1 className="text-4xl font-bold text-secondary-900">Partnership Opportunities</h1>
           </div>
           <p className="text-gray-600 max-w-3xl mx-auto">
-            Join forces with Kdadks Service Private Limited to create mutual growth opportunities. 
+            Join forces with Kdadks to create mutual growth opportunities. 
             Explore various partnership models across our IT, healthcare, fashion, and travel business verticals.
           </p>
         </div>
@@ -322,7 +322,7 @@ const Partnership = () => {
             <CheckCircle className="w-20 h-20 text-green-500 mx-auto mb-6" />
             <h2 className="text-3xl font-semibold text-green-700 mb-4">Partnership Application Submitted!</h2>
             <p className="text-gray-600 mb-4">
-              Thank you for your interest in partnering with Kdadks Service Private Limited.
+              Thank you for your interest in partnering with Kdadks.
             </p>
             <p className="text-gray-600">
               Our partnership team will review your application and contact you within 5-7 business days 

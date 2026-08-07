@@ -277,7 +277,7 @@ const CustomerSupport = () => {
             <h1 className="text-4xl font-bold text-secondary-900">Customer Support</h1>
           </div>
           <p className="text-gray-600 max-w-2xl mx-auto">
-            We're here to help! Get support for all Kdadks Service Private Limited brands including 
+            We're here to help! Get support for all Kdadks brands including 
             IT Wala, Ayuh Clinic, Nirchal, and Raahirides.
           </p>
         </div>

@@ -177,7 +177,7 @@ const TDSReport: React.FC<TDSReportProps> = ({ onBackToDashboard }) => {
 
     const dimensions = PDFBrandingUtils.getStandardDimensions();
     const pageHeight = pdf.internal.pageSize.getHeight();
-    const companyName = companySettings?.company_name || 'Kdadks Service Private Limited';
+    const companyName = companySettings?.company_name || 'Kdadks';
 
     let contentStartY = dimensions.topMargin;
     let contentEndY = pageHeight - dimensions.bottomMargin;

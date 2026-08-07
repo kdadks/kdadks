@@ -143,7 +143,7 @@ const template = await contractService.getTemplateWithSections(templateId);
 // Create contract
 const contract = await contractService.createContract({
   template_id: templateId,
-  party_a_name: "KDADKS Service Private Limited",
+  party_a_name: "Kdadks",
   party_a_address: "Your address...",
   party_b_name: "Client Company Name",
   party_b_address: "Client address...",
@@ -518,7 +518,7 @@ const msaTemplate = await contractService.getTemplateWithSections(
 // 2. Create contract using template
 const contract = await contractService.createContract({
   template_id: msaTemplate.id,
-  party_a_name: "KDADKS Service Private Limited",
+  party_a_name: "Kdadks",
   party_a_address: "123 Tech Park, Bangalore, Karnataka 560001",
   party_a_gstin: "29AABCT1234F1Z5",
   party_a_contact: "contracts@kdadks.com",

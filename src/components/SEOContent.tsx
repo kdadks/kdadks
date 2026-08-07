@@ -6,12 +6,12 @@ const SEOContent = () => {
       {/* Hidden SEO content for search engines */}
       <article itemScope itemType="https://schema.org/Article">
         <h1 itemProp="headline">
-          Kdadks Service Private Limited: Leading Multi-Industry Excellence in India
+          Kdadks: Leading Multi-Industry Excellence in India
         </h1>
         
         <div itemProp="articleBody">
           <p>
-            <strong>Kdadks Service Private Limited</strong> stands as a premier multi-industry 
+            <strong>Kdadks</strong> stands as a premier multi-industry 
             company in India, delivering exceptional services across IT consulting, healthcare, 
             fashion, and travel sectors. Based in Lucknow, Uttar Pradesh, we have established 
             ourselves as a trusted partner for businesses and individuals seeking professional 
@@ -53,7 +53,7 @@ const SEOContent = () => {
             for all our clients.
           </p>
           
-          <h2>Why Choose Kdadks Service Private Limited?</h2>
+          <h2>Why Choose Kdadks?</h2>
           
           <ul>
             <li><strong>Multi-Industry Expertise:</strong> Unique advantage of diverse service portfolio</li>
@@ -82,7 +82,7 @@ const SEOContent = () => {
           
           <h2>Contact Information</h2>
           <address itemScope itemType="https://schema.org/PostalAddress">
-            <strong>Kdadks Service Private Limited</strong><br />
+            <strong>Kdadks</strong><br />
             <span itemProp="addressLocality">Lucknow</span>, 
             <span itemProp="addressRegion">Uttar Pradesh</span>, 
             <span itemProp="addressCountry">India</span><br />
@@ -91,16 +91,16 @@ const SEOContent = () => {
           </address>
         </div>
         
-        <meta itemProp="author" content="Kdadks Service Private Limited" />
+        <meta itemProp="author" content="Kdadks" />
         <meta itemProp="datePublished" content="2025-01-17" />
         <meta itemProp="dateModified" content="2025-01-17" />
-        <meta itemProp="publisher" content="Kdadks Service Private Limited" />
+        <meta itemProp="publisher" content="Kdadks" />
       </article>
       
       {/* FAQ Schema for SEO */}
       <div itemScope itemType="https://schema.org/FAQPage">
         <div itemScope itemProp="mainEntity" itemType="https://schema.org/Question">
-          <h3 itemProp="name">What services does Kdadks Service Private Limited offer?</h3>
+          <h3 itemProp="name">What services does Kdadks offer?</h3>
           <div itemScope itemProp="acceptedAnswer" itemType="https://schema.org/Answer">
             <div itemProp="text">
               Kdadks offers comprehensive services across four main areas: IT consulting and training 
@@ -111,7 +111,7 @@ const SEOContent = () => {
         </div>
         
         <div itemScope itemProp="mainEntity" itemType="https://schema.org/Question">
-          <h3 itemProp="name">Where is Kdadks Service Private Limited located?</h3>
+          <h3 itemProp="name">Where is Kdadks located?</h3>
           <div itemScope itemProp="acceptedAnswer" itemType="https://schema.org/Answer">
             <div itemProp="text">
               Kdadks is headquartered in Lucknow, Uttar Pradesh, India, and serves clients 

@@ -149,7 +149,7 @@ export default function EmployeeLogin() {
 
         {/* Footer */}
         <div className="mt-8 text-center text-sm text-gray-600 dark:text-gray-400">
-          <p>© {new Date().getFullYear()} KDADKS Service Private Limited</p>
+          <p>© {new Date().getFullYear()} Kdadks</p>
         </div>
       </div>
     </div>

@@ -88,7 +88,7 @@ If you need assistance, contact HR at contact@kdadks.com or call +91 7982303199.
 
 Best regards,
 HR Department
-KDADKS Service Private Limited
+Kdadks
   `.trim();
 
   const htmlEmail = `
@@ -161,7 +161,7 @@ KDADKS Service Private Limited
             <p style="color: #4b5563;">Need help? Contact HR at <a href="mailto:contact@kdadks.com">contact@kdadks.com</a> or call +91 7982303199</p>
         </div>
         <div class="footer">
-            <p><strong>KDADKS Service Private Limited</strong></p>
+            <p><strong>Kdadks</strong></p>
             <p>This is an automated security notification.</p>
         </div>
     </div>

@@ -41,6 +41,22 @@ const Team = () => {
       background: 'Amit’s deep industry experience spans artificial intelligence, Salesforce ecosystems, and digital banking platforms. He possesses a keen ability to align technology with business strategy, driving measurable outcomes across sectors. His time with global enterprises has equipped him with the insights and adaptability to navigate complex environments and implement forward-thinking technology strategies..'
     },
     {
+      name: 'V Vashitha',
+      role: 'Managing Director',
+      description: 'V Vashitha is a 30-year technology veteran with extensive experience in banking and insurance sectors. He has led numerous enterprise-scale transformation initiatives, driving digital innovation and operational excellence across large organizations. His deep understanding of financial services technology and strategic vision has been instrumental in delivering complex, large-scale solutions.',
+      experience: '30 years',
+      specialties: ['Enterprise Transformation', 'Banking Technology', 'Insurance Technology', 'Digital Innovation', 'Strategic Leadership', 'Financial Services'],
+      background: 'With three decades of experience in the technology industry, V Vashitha has been at the forefront of enterprise-scale digital transformation, particularly in banking and insurance. His track record includes leading major technology initiatives that have reshaped operational capabilities and delivered significant business value.'
+    },
+    {
+      name: 'R Joshi',
+      role: 'Managing Director',
+      description: 'R Joshi is a 15-year finance industry veteran with deep expertise in financial operations, strategic planning, and business growth. His comprehensive understanding of finance and business development has been pivotal in shaping the organization\'s financial strategy and sustainable growth trajectory.',
+      experience: '15 years',
+      specialties: ['Finance Industry', 'Strategic Planning', 'Business Growth', 'Financial Operations', 'Corporate Strategy', 'Financial Management'],
+      background: 'R Joshi brings 15 years of dedicated experience in the finance industry, providing strategic direction and financial oversight. His expertise in corporate strategy and business growth has been essential in steering the organization toward sustained success.'
+    },
+    {
       name: 'Kumar Prateek Srivastav',
       role: 'Managing Director',
       company: 'RaahiRides',

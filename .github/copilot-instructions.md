@@ -1,7 +1,7 @@
 # GitHub Copilot Instructions
 
 ## Project Overview
-This is a React/TypeScript business website for KDADKS Service Private Limited with a comprehensive invoice management system. The project combines a public marketing website with a secure admin dashboard featuring a full IGST-compliant invoicing system.
+This is a React/TypeScript business website for Kdadks with a comprehensive invoice management system. The project combines a public marketing website with a secure admin dashboard featuring a full IGST-compliant invoicing system.
 
 ## Architecture & Key Patterns
 
@@ -191,3 +191,10 @@ try {
 ```
 
 This codebase prioritizes type safety, centralized data access, and clean separation between public marketing features and private admin functionality. The invoice system is production-ready with Indian IGST compliance but can be extended for international use.
+
+<!-- mermaid-ai-skills:start -->
+## Mermaid Diagrams
+
+When the user asks to create, edit, or visualize a diagram, follow the
+instructions in `.github/instructions/mermaid.instructions.md`.
+<!-- mermaid-ai-skills:end -->

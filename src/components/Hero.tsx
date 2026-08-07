@@ -10,7 +10,7 @@ const Hero = () => {
   ]
 
   return (
-    <section id="home" className="relative min-h-screen flex items-center bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900 overflow-hidden pt-16 md:pt-20" role="banner" aria-label="Kdadks Service Private Limited Homepage Hero">
+    <section id="home" className="relative min-h-screen flex items-center bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900 overflow-hidden pt-16 md:pt-20" role="banner" aria-label="Kdadks Homepage Hero">
       {/* Background Elements */}
       <div className="absolute inset-0">
         {/* Primary gradient orb */}
@@ -107,7 +107,7 @@ const Hero = () => {
               <a
                 href="#about"
                 className="group inline-flex items-center justify-center px-8 py-4 border-2 border-white/40 text-white font-semibold rounded-xl backdrop-blur-sm hover:bg-white/10 hover:border-white/60 transition-all duration-300 transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-white/50 focus:ring-offset-2 focus:ring-offset-transparent"
-                aria-label="Learn more about Kdadks Service Private Limited"
+                aria-label="Learn more about Kdadks"
               >
                 <Play className="mr-2 w-5 h-5 group-hover:scale-110 transition-transform duration-300" aria-hidden="true" />
                 Learn More
@@ -143,7 +143,7 @@ const Hero = () => {
                       <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center shadow-lg p-1">
                         <img
                           src="/Logo.png"
-                          alt="Kdadks Service Private Limited logo"
+                          alt="Kdadks logo"
                           className="w-full h-full object-contain"
                         />
                       </div>

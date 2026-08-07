@@ -47,7 +47,7 @@
 │                         📧 INBOX                                     │
 │                    contact@kdadks.com                                │
 ├─────────────────────────────────────────────────────────────────────┤
-│  From: KDADKS Service Private Limited <contact@kdadks.com>         │
+│  From: Kdadks <contact@kdadks.com>         │
 │  Reply-To: customer@example.com                                     │
 │  To: contact@kdadks.com                                             │
 │  Subject: [Form Type] - [Customer Name]                            │
@@ -80,7 +80,7 @@
 │  Email Headers (What the system configures)                    │
 ├────────────────────────────────────────────────────────────────┤
 │                                                                │
-│  From: "KDADKS Service Private Limited" <contact@kdadks.com>  │
+│  From: "Kdadks" <contact@kdadks.com>  │
 │        ↑                                                       │
 │        └─ Professional company name displayed in inbox        │
 │                                                                │

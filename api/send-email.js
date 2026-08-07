@@ -74,7 +74,7 @@ module.exports = async (req, res) => {
 
     // Build Resend payload
     const payload = {
-      from: `KDADKS Service Private Limited <${senderEmail}>`,
+      from: `Kdadks <${senderEmail}>`,
       to: [to],
       bcc: [senderEmail],
       subject,

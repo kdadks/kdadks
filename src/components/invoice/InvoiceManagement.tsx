@@ -601,19 +601,19 @@ const getBankingCodeField = (company: CompanySettings | undefined | null): keyof
       intl_sort_code: ''
     };
     if (currencyCode === 'EUR') {
-      defaults.intl_account_name = 'Kdadks Service Private Limited';
+      defaults.intl_account_name = 'Kdadks';
       defaults.intl_iban         = 'BE93905254252767';
       defaults.intl_swift_bic    = 'TRWIBEB1XXX';
       defaults.intl_bank_address = 'Wise, Rue du Trône 100, 3rd floor, Brussels, 1050, Belgium';
     } else if (currencyCode === 'GBP') {
-      defaults.intl_account_name   = 'Kdadks Service Private Limited';
+      defaults.intl_account_name   = 'Kdadks';
       defaults.intl_iban           = 'GB43TRWI60846460921788';
       defaults.intl_account_number = '60921788';
       defaults.intl_sort_code      = '608464';
       defaults.intl_swift_bic      = 'TRWIGB2LXXX';
       defaults.intl_bank_address   = 'Wise Payments Limited, Worship Square, 65 Clifton Street, London, EC2A 4JE, United Kingdom';
     } else if (currencyCode === 'USD') {
-      defaults.intl_account_name   = 'Kdadks Service Private Limited';
+      defaults.intl_account_name   = 'Kdadks';
       defaults.intl_account_number = '218404409881';
       defaults.intl_account_type   = 'Checking';
       defaults.intl_routing_number = '101019628';

@@ -138,7 +138,7 @@ export class EmailService {
         },
         body: JSON.stringify({
           to: customer.email,
-          from: '"KDADKS Service Private Limited" <contact@kdadks.com>',
+          from: '"Kdadks" <contact@kdadks.com>',
           customerName: company.company_name, // Pass company name for display
           subject,
           text: EmailService.generateInvoiceTextEmail(invoice, customer, company, isPaidInvoice),
@@ -743,7 +743,7 @@ Sent from KDADKS Contact Form
     }
   ): Promise<void> {
     try {
-      const subject = `Payment Confirmation - KDADKS Service Private Limited`;
+      const subject = `Payment Confirmation - Kdadks`;
       
       const response = await EmailService.makeApiCall(EmailService.getApiEndpoint(), {
         method: 'POST',
@@ -752,7 +752,7 @@ Sent from KDADKS Contact Form
         },
         body: JSON.stringify({
           to: customerEmail,
-          from: '"KDADKS Service Private Limited" <contact@kdadks.com>',
+          from: '"Kdadks" <contact@kdadks.com>',
           subject,
           text: EmailService.generatePaymentConfirmationTextEmail(paymentDetails),
           html: EmailService.generatePaymentConfirmationHtmlEmail(paymentDetails),
@@ -789,12 +789,12 @@ Payment Details:
 - Transaction Date: ${details.transactionDate}
 ${details.invoiceId ? `- Invoice ID: ${details.invoiceId}` : ''}
 
-Thank you for choosing KDADKS Service Private Limited.
+Thank you for choosing Kdadks.
 
 If you have any questions, please contact us at kdadks@outlook.com or call +91 7982303199.
 
 Best regards,
-KDADKS Service Private Limited
+Kdadks
 Lucknow, India
     `.trim()
   }
@@ -827,7 +827,7 @@ Lucknow, India
 <body>
     <div class="header">
         <h1>Payment Confirmation</h1>
-        <p>KDADKS Service Private Limited</p>
+        <p>Kdadks</p>
     </div>
     
     <div class="content">
@@ -868,7 +868,7 @@ Lucknow, India
             ` : ''}
         </div>
         
-        <p>Thank you for choosing KDADKS Service Private Limited. Your payment has been processed successfully.</p>
+        <p>Thank you for choosing Kdadks. Your payment has been processed successfully.</p>
         
         <p>If you have any questions about this transaction, please don't hesitate to contact us:</p>
         <ul>
@@ -877,7 +877,7 @@ Lucknow, India
         </ul>
         
         <div class="footer">
-            <p><strong>KDADKS Service Private Limited</strong><br>
+            <p><strong>Kdadks</strong><br>
             Lucknow, India<br>
             <a href="https://kdadks.com">www.kdadks.com</a></p>
         </div>
@@ -931,12 +931,12 @@ Lucknow, India
 
             <p>Best regards,<br>
             HR Department<br>
-            KDADKS Service Private Limited</p>
+            Kdadks</p>
         </div>
 
         <div class="footer">
             <p>This is an automated email. Please do not reply to this email.</p>
-            <p>&copy; ${new Date().getFullYear()} KDADKS Service Private Limited. All rights reserved.</p>
+            <p>&copy; ${new Date().getFullYear()} Kdadks. All rights reserved.</p>
         </div>
     </div>
 </body>
@@ -956,7 +956,7 @@ If you have any questions or notice any discrepancies, please contact the HR dep
 
 Best regards,
 HR Department
-KDADKS Service Private Limited
+Kdadks
       `.trim();
 
       const response = await EmailService.makeApiCall(EmailService.getApiEndpoint(), {
@@ -1012,7 +1012,7 @@ KDADKS Service Private Limited
         },
         body: JSON.stringify({
           to: recipientEmail,
-          from: '"KDADKS Service Private Limited" <contact@kdadks.com>',
+          from: '"Kdadks" <contact@kdadks.com>',
           subject: `Payment Request - Invoice ${details.invoiceNumber} - ${this.formatCurrency(details.amount, details.currency)}`,
           text: this.generatePaymentRequestTextEmail(details),
           html: this.generatePaymentRequestHtmlEmail(details),
@@ -1061,7 +1061,7 @@ This payment request will expire in 72 hours.
 If you have any questions, please contact us at contact@kdadks.com or +91 7982303199.
 
 Best regards,
-KDADKS Service Private Limited
+Kdadks
 Lucknow, India
 www.kdadks.com
     `.trim();
@@ -1115,7 +1115,7 @@ www.kdadks.com
     <div class="container">
         <div class="header">
             <h1>💳 Payment Request</h1>
-            <p>KDADKS Service Private Limited</p>
+            <p>Kdadks</p>
         </div>
         
         <div class="content">
@@ -1170,7 +1170,7 @@ www.kdadks.com
         
         <div class="footer">
             <p><strong>Payment Request ID:</strong> ${details.paymentRequestId}</p>
-            <p><strong>KDADKS Service Private Limited</strong><br>
+            <p><strong>Kdadks</strong><br>
             Lucknow, India<br>
             <a href="https://kdadks.com" style="color: #2563eb;">www.kdadks.com</a></p>
         </div>
@@ -1256,7 +1256,7 @@ If you need assistance, contact the HR department at contact@kdadks.com or call 
 
 Best regards,
 HR Department
-KDADKS Service Private Limited
+Kdadks
 
 ---
 This is an automated security notification. Please do not reply to this email.
@@ -1497,9 +1497,9 @@ This is an automated security notification. Please do not reply to this email.
         </div>
         
         <div class="footer">
-            <p><strong>KDADKS Service Private Limited</strong></p>
+            <p><strong>Kdadks</strong></p>
             <p>This is an automated security notification. Please do not reply to this email.</p>
-            <p>&copy; ${new Date().getFullYear()} KDADKS Service Private Limited. All rights reserved.</p>
+            <p>&copy; ${new Date().getFullYear()} Kdadks. All rights reserved.</p>
         </div>
     </div>
 </body>
@@ -1580,7 +1580,7 @@ Phone: +91 7982303199
 
 Best regards,
 HR Department
-KDADKS Service Private Limited
+Kdadks
 
 ---
 This is an automated security notification. Please do not reply to this email.
@@ -1827,9 +1827,9 @@ This is an automated security notification. Please do not reply to this email.
         </div>
         
         <div class="footer">
-            <p><strong>KDADKS Service Private Limited</strong></p>
+            <p><strong>Kdadks</strong></p>
             <p>This is an automated security notification. Please do not reply to this email.</p>
-            <p>&copy; ${new Date().getFullYear()} KDADKS Service Private Limited. All rights reserved.</p>
+            <p>&copy; ${new Date().getFullYear()} Kdadks. All rights reserved.</p>
         </div>
     </div>
 </body>

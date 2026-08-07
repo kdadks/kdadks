@@ -203,7 +203,7 @@ const AdminLogin: React.FC = () => {
           {/* Footer */}
           <div className="mt-8 text-center">
             <p className="text-xs text-gray-500">
-              Kdadks Service Private Limited - Admin Portal
+              Kdadks - Admin Portal
             </p>
           </div>
         </div>

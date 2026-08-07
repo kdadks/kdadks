@@ -277,7 +277,7 @@ const PaymentManagement: React.FC<PaymentManagementProps> = ({
         <div style="padding: 30px;">
             <p style="color: #374151; font-size: 16px; line-height: 1.6; margin: 0 0 20px 0;">Dear ${data.customer_name || 'Valued Customer'},</p>
             
-            <p style="color: #374151; font-size: 16px; line-height: 1.6; margin: 0 0 25px 0;">You have received a new payment request from KDADKS Service Private Limited:</p>
+            <p style="color: #374151; font-size: 16px; line-height: 1.6; margin: 0 0 25px 0;">You have received a new payment request from Kdadks:</p>
             
             <!-- Payment Details Card -->
             <div style="background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 25px; margin: 25px 0;">
@@ -349,7 +349,7 @@ const PaymentManagement: React.FC<PaymentManagementProps> = ({
         <!-- Footer -->
         <div style="background: #f9fafb; padding: 20px; text-align: center; border-top: 1px solid #e5e7eb;">
             <p style="color: #6b7280; font-size: 12px; margin: 0;">
-                KDADKS Service Private Limited<br>
+                Kdadks<br>
                 This is an automated message. Please do not reply to this email.
             </p>
         </div>
@@ -400,7 +400,7 @@ IMPORTANT: This payment link will expire on ${expiryDateStr}. Please complete yo
 Please complete your payment at your earliest convenience.
 
 Best regards,
-KDADKS Service Private Limited`;
+Kdadks`;
           console.log('Text body contains URL:', textBody.includes(paymentUrl));
           console.groupEnd();
 
@@ -412,7 +412,7 @@ KDADKS Service Private Limited`;
             },
             body: JSON.stringify({
               to: data.customer_email,
-              from: '"KDADKS Service Private Limited" <contact@kdadks.com>',
+              from: '"Kdadks" <contact@kdadks.com>',
               subject: `Payment Request from KDADKS Service - ${formatCurrency(data.amount, data.currency)}`,
               text: `Dear ${data.customer_name || 'Valued Customer'},
 
@@ -429,7 +429,7 @@ IMPORTANT: This payment link will expire on ${expiryDateStr}. Please complete yo
 Please complete your payment at your earliest convenience.
 
 Best regards,
-KDADKS Service Private Limited`,
+Kdadks`,
               html: emailHtmlTemplate
             }),
           });
@@ -561,7 +561,7 @@ KDADKS Service Private Limited`,
         <div style="padding: 30px;">
             <p style="color: #374151; font-size: 16px; line-height: 1.6; margin: 0 0 20px 0;">Dear ${request.customer_name || 'Valued Customer'},</p>
             
-            <p style="color: #374151; font-size: 16px; line-height: 1.6; margin: 0 0 25px 0;">This is a friendly reminder for your pending payment request from KDADKS Service Private Limited:</p>
+            <p style="color: #374151; font-size: 16px; line-height: 1.6; margin: 0 0 25px 0;">This is a friendly reminder for your pending payment request from Kdadks:</p>
             
             <!-- Payment Details Card -->
             <div style="background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 25px; margin: 25px 0;">
@@ -612,7 +612,7 @@ KDADKS Service Private Limited`,
         <!-- Footer -->
         <div style="background: #f9fafb; padding: 20px; text-align: center; border-top: 1px solid #e5e7eb;">
             <p style="color: #6b7280; font-size: 12px; margin: 0;">
-                KDADKS Service Private Limited<br>
+                Kdadks<br>
                 This is an automated reminder. Please do not reply to this email.
             </p>
         </div>
@@ -628,7 +628,7 @@ KDADKS Service Private Limited`,
         },
         body: JSON.stringify({
           to: request.customer_email,
-          from: '"KDADKS Service Private Limited" <contact@kdadks.com>',
+          from: '"Kdadks" <contact@kdadks.com>',
           subject: `Payment Reminder - ${formatCurrency(request.amount, request.currency)}`,
           text: `Dear ${request.customer_name || 'Valued Customer'},
 
@@ -640,7 +640,7 @@ Request ID: ${request.id}
 To complete your payment, please visit: ${paymentUrl}
 
 Best regards,
-KDADKS Service Private Limited`,
+Kdadks`,
           html: emailHtmlTemplate
         }),
       });

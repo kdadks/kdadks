@@ -56,7 +56,7 @@ const Footer = () => {
                 className="h-6 w-auto"
               />
               <h3 className="text-lg font-bold text-white">
-                Kdadks Service Private Limited
+                Kdadks
               </h3>
             </div>
             <p className="text-gray-400 text-sm mb-4 leading-relaxed">
@@ -174,7 +174,7 @@ const Footer = () => {
         <div className="container-custom py-4">
           <div className="flex flex-col md:flex-row items-center justify-between text-sm">
             <p className="text-gray-500 mb-2 md:mb-0">
-              © {new Date().getFullYear()} Kdadks Service Private Limited. All rights reserved.
+              © {new Date().getFullYear()} Kdadks. All rights reserved.
             </p>
             <div className="flex items-center space-x-4 text-gray-500">
               <span 

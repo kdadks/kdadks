@@ -158,14 +158,26 @@ const Contact = () => {
     },
     {
       icon: Phone,
-      title: 'Call Us',
+      title: 'Call Us (India)',
       details: '+91-7982303199',
       link: 'tel:+91-7982303199',
     },
     {
+      icon: Phone,
+      title: 'Call Us (Ireland)',
+      details: '+353-871673225',
+      link: 'tel:+353-871673225',
+    },
+    {
       icon: MapPin,
-      title: 'Visit Us',
+      title: 'Visit Us (India)',
       details: 'Lucknow, Uttar Pradesh, India',
+      link: '#',
+    },
+    {
+      icon: MapPin,
+      title: 'Visit Us (Ireland)',
+      details: 'Dublin, Ireland',
       link: '#',
     },
   ]

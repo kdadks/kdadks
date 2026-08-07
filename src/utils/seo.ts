@@ -11,7 +11,7 @@ export interface SEOData {
 }
 
 export const defaultSEO: SEOData = {
-  title: "Kdadks Service Private Limited - Multi-Industry Excellence in IT, Healthcare, Fashion & Travel",
+  title: "Kdadks - Multi-Industry Excellence in IT, Healthcare, Fashion & Travel",
   description: "Leading provider of IT consulting & training, healthcare services, fashion solutions, and travel experiences. Serving through IT Wala, Ayuh Clinic, Nirchal, and Raahirides brands.",
   keywords: [
     "IT consulting", "software training", "healthcare services", "fashion tailoring", "travel solutions",
@@ -30,7 +30,7 @@ export const pageSEO = {
     structuredData: {
       "@context": "https://schema.org",
       "@type": "Organization",
-      "name": "Kdadks Service Private Limited",
+      "name": "Kdadks",
       "alternateName": ["Kdadks", "KDADKS"],
       "url": "https://kdadks.com",
       "logo": "https://kdadks.com/Logo.png",
@@ -100,14 +100,14 @@ export const pageSEO = {
   },
   about: {
     title: "About Kdadks - Multi-Industry Leader | Our Vision & Values",
-    description: "Learn about Kdadks Service Private Limited's journey across IT, healthcare, fashion, and travel industries. Discover our vision, values, and commitment to excellence.",
+    description: "Learn about Kdadks's journey across IT, healthcare, fashion, and travel industries. Discover our vision, values, and commitment to excellence.",
     keywords: ["about kdadks", "company history", "mission vision", "multi-industry expertise", "core values", "business philosophy"],
     structuredData: {
       "@context": "https://schema.org",
       "@type": "AboutPage",
       "mainEntity": {
         "@type": "Organization",
-        "name": "Kdadks Service Private Limited",
+        "name": "Kdadks",
         "description": "Multi-industry company with expertise across IT, healthcare, fashion, and travel sectors"
       }
     }
@@ -122,20 +122,20 @@ export const pageSEO = {
       "serviceType": "Multi-Industry Professional Services",
       "provider": {
         "@type": "Organization",
-        "name": "Kdadks Service Private Limited"
+        "name": "Kdadks"
       }
     }
   },
   contact: {
     title: "Contact Kdadks - Get Professional Services | Lucknow, India",
-    description: "Contact Kdadks Service Private Limited for IT consulting, healthcare, fashion, and travel services. Located in Lucknow, India. Call +91 7982303199 or email kdadks@outlook.com",
+    description: "Contact Kdadks for IT consulting, healthcare, fashion, and travel services. Located in Lucknow, India. Call +91 7982303199 or email kdadks@outlook.com",
     keywords: ["contact kdadks", "business inquiry", "service request", "Lucknow office", "professional consultation"],
     structuredData: {
       "@context": "https://schema.org",
       "@type": "ContactPage",
       "mainEntity": {
         "@type": "Organization",
-        "name": "Kdadks Service Private Limited",
+        "name": "Kdadks",
         "telephone": "+91-7982303199",
         "email": "kdadks@outlook.com",
         "address": {
@@ -148,13 +148,13 @@ export const pageSEO = {
     }
   },
   privacy: {
-    title: "Privacy Policy - Kdadks Service Private Limited",
-    description: "Read Kdadks Service Private Limited's privacy policy. Learn how we protect your personal information and data across our IT, healthcare, fashion, and travel services.",
+    title: "Privacy Policy - Kdadks",
+    description: "Read Kdadks's privacy policy. Learn how we protect your personal information and data across our IT, healthcare, fashion, and travel services.",
     keywords: ["privacy policy", "data protection", "personal information", "GDPR compliance"],
     noindex: false
   },
   terms: {
-    title: "Terms & Conditions - Kdadks Service Private Limited",
+    title: "Terms & Conditions - Kdadks",
     description: "Terms and conditions for using Kdadks services. Legal terms for IT consulting, healthcare, fashion, and travel services.",
     keywords: ["terms conditions", "legal terms", "service agreement"],
     noindex: false
