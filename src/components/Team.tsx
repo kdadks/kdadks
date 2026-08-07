@@ -16,7 +16,7 @@ const Team = () => {
   const teamMembers: TeamMember[] = [
     
     {
-      name: 'Mrs. Sharma',
+      name: 'Mrs.D Sharma',
       role: 'Founder',
       description: 'Mrs. Sharma is a seasoned Healthcare professional and visionary founder. Her career reflects a rare blend of clinical expertise, research leadership, and unwavering dedication to patient-centered care. Specializing in multispecialty clinical trials, Mrs. Sharma has led complex projects across critical care disciplines including ICU, respiratory, nephrology, neurology, diabetes, and oncology.Her ability to balance scientific precision with compassionate care sets her apart as a visionary leader.',
       experience: '21 years',
@@ -49,12 +49,12 @@ const Team = () => {
       background: 'With three decades of experience in the technology industry, V Vashitha has been at the forefront of enterprise-scale digital transformation, particularly in banking and insurance. His track record includes leading major technology initiatives that have reshaped operational capabilities and delivered significant business value.'
     },
     {
-      name: 'R Joshi',
+      name: 'Mrs R Joshi',
       role: 'Managing Director',
-      description: 'R Joshi is a 15-year finance industry veteran with deep expertise in financial operations, strategic planning, and business growth. His comprehensive understanding of finance and business development has been pivotal in shaping the organization\'s financial strategy and sustainable growth trajectory.',
+      description: 'Mrs R Joshi is a 15-year finance industry veteran with deep expertise in financial operations, strategic planning, and business growth. Her comprehensive understanding of finance and business development has been pivotal in shaping the organization\'s financial strategy and sustainable growth trajectory.',
       experience: '15 years',
       specialties: ['Finance Industry', 'Strategic Planning', 'Business Growth', 'Financial Operations', 'Corporate Strategy', 'Financial Management'],
-      background: 'R Joshi brings 15 years of dedicated experience in the finance industry, providing strategic direction and financial oversight. His expertise in corporate strategy and business growth has been essential in steering the organization toward sustained success.'
+      background: 'Mrs R Joshi brings 15 years of dedicated experience in the finance industry, providing strategic direction and financial oversight. Her expertise in corporate strategy and business growth has been essential in steering the organization toward sustained success.'
     },
     {
       name: 'Kumar Prateek Srivastav',
@@ -66,7 +66,7 @@ const Team = () => {
       background: 'Leading a government-authorized travel agency, Kumar has built a reputation for reliability and excellence in the travel industry, specializing in both corporate and leisure travel solutions.'
     },
     {
-      name: 'Deepika Ranjan',
+      name: 'Mrs. Deepika Ranjan',
       role: 'Managing Director',
       company: 'Nirchal',
       description: 'With over 10 years in the garment industry, Deepika founded her boutique to craft unique clothing that helps customers express their beauty. From custom dresses to tailored suits, her designs ensure clients feel confident and stylish, making her boutique a go-to destination for personalized clothing.',
