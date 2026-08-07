@@ -7,6 +7,7 @@ import jsPDF from 'jspdf';
 import { PDFBrandingUtils } from './pdfBrandingUtils';
 import type { BoardResolution } from '../types/boardResolution';
 import type { CompanySettings } from '../types/invoice';
+import { getCompanyTaxFields } from '../utils/taxUtils';
 
 export async function generateBoardResolutionPDF(
   resolution: BoardResolution,
@@ -88,8 +89,14 @@ export async function generateBoardResolutionPDF(
   }
   const location = [company.city, company.state, company.postal_code].filter(Boolean).join(', ');
   if (location) { pdf.text(location, leftMargin, yPos); yPos += 4; }
-  if (company.gstin) { pdf.text(`GSTIN: ${company.gstin}`, leftMargin, yPos); yPos += 4; }
-  if (company.cin) { pdf.text(`CIN: ${company.cin}`, leftMargin, yPos); yPos += 4; }
+  const companyTaxFields = getCompanyTaxFields(company.country_id);
+  companyTaxFields.fields.forEach((field) => {
+    const value = company[field.key as keyof CompanySettings] as string | undefined;
+    if (value) {
+      pdf.text(`${field.label}: ${value}`, leftMargin, yPos);
+      yPos += 4;
+    }
+  });
   if (company.email) { pdf.text(`Email: ${company.email}`, leftMargin, yPos); yPos += 4; }
   if (company.phone) { pdf.text(`Phone: ${company.phone}`, leftMargin, yPos); yPos += 4; }
 

@@ -161,12 +161,16 @@ export interface Contract {
   party_a_contact?: string;
   party_a_gstin?: string;
   party_a_pan?: string;
+  party_a_vat_number?: string;
+  party_a_cro_number?: string;
   
   party_b_name: string;
   party_b_address?: string;
   party_b_contact?: string;
   party_b_gstin?: string;
   party_b_pan?: string;
+  party_b_vat_number?: string;
+  party_b_cro_number?: string;
   
   // Contract Details
   contract_type: ContractType;
@@ -219,12 +223,16 @@ export interface CreateContractData {
   party_a_contact?: string;
   party_a_gstin?: string;
   party_a_pan?: string;
+  party_a_vat_number?: string;
+  party_a_cro_number?: string;
   
   party_b_name: string;
   party_b_address?: string;
   party_b_contact?: string;
   party_b_gstin?: string;
   party_b_pan?: string;
+  party_b_vat_number?: string;
+  party_b_cro_number?: string;
   
   // Contract Details
   contract_type: ContractType;

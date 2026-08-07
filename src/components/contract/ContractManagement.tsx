@@ -145,6 +145,8 @@ const ContractManagement: React.FC = () => {
       party_a_contact: company.phone || '',
       party_a_gstin: company.gstin || '',
       party_a_pan: company.pan || '',
+      party_a_vat_number: company.vat_number || '',
+      party_a_cro_number: company.cro_number || '',
       party_b_name: '',
       contract_type: 'MSA',
       contract_title: '',

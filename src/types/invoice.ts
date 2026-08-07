@@ -23,10 +23,12 @@ export interface CompanySettings {
   postal_code: string;
   country_id: string;
   
-  // IGST Information (India specific)
+  // Tax Information
   gstin?: string;
   pan?: string;
   cin?: string;
+  cro_number?: string;
+  vat_number?: string;
   
   // Contact Information
   phone?: string;
@@ -436,6 +438,8 @@ export interface UpdateCompanySettingsData {
   iban?: string;
   swift_bic?: string;
   branch_name?: string;
+  cro_number?: string;
+  vat_number?: string;
   logo_url?: string;
   signature_url?: string;
 }

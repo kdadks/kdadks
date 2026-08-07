@@ -23,6 +23,8 @@ import { generateBoardResolutionPDF } from '../../utils/boardResolutionPDFGenera
 import { useToast } from '../ui/ToastProvider';
 import { useConfirmDialog } from '../../hooks/useConfirmDialog';
 import ConfirmDialog from '../ui/ConfirmDialog';
+import { getCompanyTaxFields } from '../../utils/taxUtils';
+import type { CompanySettings } from '../../types/invoice';
 import type {
   BoardResolution,
   CreateBoardResolutionData,
@@ -31,7 +33,6 @@ import type {
   BoardResolutionStatus,
 } from '../../types/boardResolution';
 import { BOARD_ACTIONS } from '../../types/boardResolution';
-import type { CompanySettings } from '../../types/invoice';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -269,8 +270,16 @@ const BoardResolutionManagement: React.FC = () => {
             <div className="text-xs text-gray-500 mt-1">
               {company?.address_line1 && <div>{company.address_line1}</div>}
               {company?.city && <div>{company.city}{company.state ? `, ${company.state}` : ''} {company.postal_code}</div>}
-              {company?.gstin && <div>GSTIN: {company.gstin}</div>}
-              {company?.cin && <div>CIN: {company.cin}</div>}
+              {company && (() => {
+                const taxFields = getCompanyTaxFields(company.country_id);
+                return taxFields.fields.map((field) => {
+                  const value = company[field.key as keyof CompanySettings] as string | undefined;
+                  if (value) {
+                    return <div key={field.key}>{field.label}: {value}</div>;
+                  }
+                  return null;
+                });
+              })()}
             </div>
           </div>
           <div className="text-right">

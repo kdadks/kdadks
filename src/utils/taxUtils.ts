@@ -441,3 +441,102 @@ export const getDefaultTaxRate = (customer: Customer | undefined): number => {
       return 20;
   }
 };
+
+export interface TaxField {
+  key: string;
+  label: string;
+  placeholder: string;
+}
+
+export interface BankingField {
+  key: string;
+  label: string;
+  placeholder: string;
+}
+
+export const getCompanyTaxFields = (countryId?: string): { fields: TaxField[] } => {
+  const code = countryId?.toUpperCase();
+  if (code === 'IN' || code === 'IND') {
+    return {
+      fields: [
+        { key: 'gstin', label: 'GSTIN', placeholder: 'Enter GSTIN' },
+        { key: 'pan', label: 'PAN', placeholder: 'Enter PAN' },
+        { key: 'cin', label: 'CIN', placeholder: 'Enter CIN' },
+      ]
+    };
+  }
+  if (code === 'IE' || code === 'IRL') {
+    return {
+      fields: [
+        { key: 'vat_number', label: 'VAT Number', placeholder: 'Enter VAT Number' },
+        { key: 'cro_number', label: 'CRO Number', placeholder: 'Enter CRO Number' },
+        { key: 'pan', label: 'Tax ID', placeholder: 'Enter Tax ID' },
+      ]
+    };
+  }
+  if (code === 'GB' || code === 'GBR' || code === 'UK') {
+    return {
+      fields: [
+        { key: 'gstin', label: 'VAT Number', placeholder: 'Enter VAT Number' },
+        { key: 'pan', label: 'Tax ID', placeholder: 'Enter Tax ID' },
+      ]
+    };
+  }
+  if (code === 'US' || code === 'USA') {
+    return {
+      fields: [
+        { key: 'gstin', label: 'Federal Tax ID (EIN)', placeholder: 'Enter EIN' },
+        { key: 'pan', label: 'Tax ID', placeholder: 'Enter Tax ID' },
+      ]
+    };
+  }
+  return {
+    fields: [
+      { key: 'gstin', label: getTaxRegistrationLabelByCode(code) || 'Tax Registration Number', placeholder: `Enter ${getTaxRegistrationLabelByCode(code) || 'Tax Registration Number'}` },
+    ]
+  };
+};
+
+export const getCompanyBankingFields = (countryId?: string): { fields: BankingField[] } => {
+  const code = countryId?.toUpperCase();
+  if (code === 'IN' || code === 'IND') {
+    return {
+      fields: [
+        { key: 'bank_name', label: 'Bank Name', placeholder: 'Enter bank name' },
+        { key: 'branch_name', label: 'Branch Name', placeholder: 'Enter branch name' },
+        { key: 'account_number', label: 'Account Number', placeholder: 'Enter account number' },
+        { key: 'ifsc_code', label: 'IFSC Code', placeholder: 'Enter IFSC code' },
+      ]
+    };
+  }
+  if (code === 'IE' || code === 'IRL' || code === 'GB' || code === 'GBR' || code === 'UK') {
+    return {
+      fields: [
+        { key: 'bank_name', label: 'Bank Name', placeholder: 'Enter bank name' },
+        { key: 'branch_name', label: 'Branch Name', placeholder: 'Enter branch name' },
+        { key: 'account_number', label: 'Account Number', placeholder: 'Enter account number' },
+        { key: 'iban', label: 'IBAN', placeholder: 'Enter IBAN' },
+        { key: 'swift_bic', label: 'SWIFT/BIC', placeholder: 'Enter SWIFT/BIC' },
+      ]
+    };
+  }
+  if (code === 'US' || code === 'USA') {
+    return {
+      fields: [
+        { key: 'bank_name', label: 'Bank Name', placeholder: 'Enter bank name' },
+        { key: 'branch_name', label: 'Branch Name', placeholder: 'Enter branch name' },
+        { key: 'account_number', label: 'Account Number', placeholder: 'Enter account number' },
+        { key: 'swift_bic', label: 'SWIFT/BIC', placeholder: 'Enter SWIFT/BIC' },
+        { key: 'ifsc_code', label: 'Routing Number', placeholder: 'Enter routing number' },
+      ]
+    };
+  }
+  return {
+    fields: [
+      { key: 'bank_name', label: 'Bank Name', placeholder: 'Enter bank name' },
+      { key: 'branch_name', label: 'Branch Name', placeholder: 'Enter branch name' },
+      { key: 'account_number', label: 'Account Number', placeholder: 'Enter account number' },
+      { key: 'swift_bic', label: 'SWIFT/BIC', placeholder: 'Enter SWIFT/BIC' },
+    ]
+  };
+};

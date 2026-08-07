@@ -242,6 +242,18 @@ export class ContractPDFGenerator {
       this.currentY += 3.5;
     }
     
+    if (this.contract.party_a_vat_number) {
+      this.currentY += 1;
+      this.pdf.text(`VAT Number: ${this.contract.party_a_vat_number}`, leftMargin, this.currentY);
+      this.currentY += 3.5;
+    }
+    
+    if (this.contract.party_a_cro_number) {
+      this.currentY += 1;
+      this.pdf.text(`CRO Number: ${this.contract.party_a_cro_number}`, leftMargin, this.currentY);
+      this.currentY += 3.5;
+    }
+    
     if (this.contract.party_a_contact) {
       this.pdf.text(`Contact: ${this.contract.party_a_contact}`, leftMargin, this.currentY);
       this.currentY += 3.5;
@@ -276,6 +288,18 @@ export class ContractPDFGenerator {
     if (this.contract.party_b_gstin) {
       this.currentY += 1;
       this.pdf.text(`GSTIN: ${this.contract.party_b_gstin}`, col2X, this.currentY);
+      this.currentY += 3.5;
+    }
+    
+    if (this.contract.party_b_vat_number) {
+      this.currentY += 1;
+      this.pdf.text(`VAT Number: ${this.contract.party_b_vat_number}`, col2X, this.currentY);
+      this.currentY += 3.5;
+    }
+    
+    if (this.contract.party_b_cro_number) {
+      this.currentY += 1;
+      this.pdf.text(`CRO Number: ${this.contract.party_b_cro_number}`, col2X, this.currentY);
       this.currentY += 3.5;
     }
     

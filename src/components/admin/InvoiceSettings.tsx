@@ -42,31 +42,42 @@ const InvoiceSettings: React.FC = () => {
     const code = countryId?.toUpperCase();
     if (code === 'IN' || code === 'IND') {
       return {
-        taxLabel: 'GSTIN',
-        taxField: 'gstin',
-        taxPlaceholder: 'Enter GSTIN',
-        showPan: true,
-        panLabel: 'PAN',
-        panPlaceholder: 'Enter PAN',
+        fields: [
+          { key: 'gstin', label: 'GSTIN', placeholder: 'Enter GSTIN' },
+          { key: 'pan', label: 'PAN', placeholder: 'Enter PAN' },
+          { key: 'cin', label: 'CIN', placeholder: 'Enter CIN' },
+        ]
       };
     }
     if (code === 'IE' || code === 'IRL') {
       return {
-        taxLabel: 'VAT Number',
-        taxField: 'gstin',
-        taxPlaceholder: 'Enter VAT Number',
-        showPan: true,
-        panLabel: 'Tax ID',
-        panPlaceholder: 'Enter Tax ID',
+        fields: [
+          { key: 'vat_number', label: 'VAT Number', placeholder: 'Enter VAT Number' },
+          { key: 'cro_number', label: 'CRO Number', placeholder: 'Enter CRO Number' },
+          { key: 'pan', label: 'Tax ID', placeholder: 'Enter Tax ID' },
+        ]
+      };
+    }
+    if (code === 'GB' || code === 'GBR' || code === 'UK') {
+      return {
+        fields: [
+          { key: 'gstin', label: 'VAT Number', placeholder: 'Enter VAT Number' },
+          { key: 'pan', label: 'Tax ID', placeholder: 'Enter Tax ID' },
+        ]
+      };
+    }
+    if (code === 'US' || code === 'USA') {
+      return {
+        fields: [
+          { key: 'gstin', label: 'Federal Tax ID (EIN)', placeholder: 'Enter EIN' },
+          { key: 'pan', label: 'Tax ID', placeholder: 'Enter Tax ID' },
+        ]
       };
     }
     return {
-      taxLabel: getTaxRegistrationLabelByCode(code),
-      taxField: 'gstin',
-      taxPlaceholder: `Enter ${getTaxRegistrationLabelByCode(code)}`,
-      showPan: false,
-      panLabel: 'PAN',
-      panPlaceholder: 'Enter PAN',
+      fields: [
+        { key: 'gstin', label: getTaxRegistrationLabelByCode(code) || 'Tax Registration Number', placeholder: `Enter ${getTaxRegistrationLabelByCode(code) || 'Tax Registration Number'}` },
+      ]
     };
   };
 
@@ -74,92 +85,43 @@ const InvoiceSettings: React.FC = () => {
     const code = countryId?.toUpperCase();
     if (code === 'IN' || code === 'IND') {
       return {
-        accountLabel: 'Account Number',
-        accountPlaceholder: 'Enter account number',
-        showIfsc: true,
-        ifscLabel: 'IFSC Code',
-        ifscPlaceholder: 'Enter IFSC code',
-        showIban: false,
-        ibanLabel: 'IBAN',
-        ibanPlaceholder: 'Enter IBAN',
-        showSwift: false,
-        swiftLabel: 'SWIFT/BIC',
-        swiftPlaceholder: 'Enter SWIFT/BIC',
-        showRouting: false,
-        routingLabel: 'Routing Number',
-        routingPlaceholder: 'Enter routing number',
+        fields: [
+          { key: 'bank_name', label: 'Bank Name', placeholder: 'Enter bank name' },
+          { key: 'branch_name', label: 'Branch Name', placeholder: 'Enter branch name' },
+          { key: 'account_number', label: 'Account Number', placeholder: 'Enter account number' },
+          { key: 'ifsc_code', label: 'IFSC Code', placeholder: 'Enter IFSC code' },
+        ]
       };
     }
     if (code === 'IE' || code === 'IRL' || code === 'GB' || code === 'GBR' || code === 'UK') {
       return {
-        accountLabel: 'Account Number',
-        accountPlaceholder: 'Enter account number',
-        showIfsc: false,
-        ifscLabel: 'IFSC Code',
-        ifscPlaceholder: 'Enter IFSC code',
-        showIban: true,
-        ibanLabel: 'IBAN',
-        ibanPlaceholder: 'Enter IBAN',
-        showSwift: true,
-        swiftLabel: 'SWIFT/BIC',
-        swiftPlaceholder: 'Enter SWIFT/BIC',
-        showRouting: false,
-        routingLabel: 'Routing Number',
-        routingPlaceholder: 'Enter routing number',
+        fields: [
+          { key: 'bank_name', label: 'Bank Name', placeholder: 'Enter bank name' },
+          { key: 'branch_name', label: 'Branch Name', placeholder: 'Enter branch name' },
+          { key: 'account_number', label: 'Account Number', placeholder: 'Enter account number' },
+          { key: 'iban', label: 'IBAN', placeholder: 'Enter IBAN' },
+          { key: 'swift_bic', label: 'SWIFT/BIC', placeholder: 'Enter SWIFT/BIC' },
+        ]
       };
     }
     if (code === 'US' || code === 'USA') {
       return {
-        accountLabel: 'Account Number',
-        accountPlaceholder: 'Enter account number',
-        showIfsc: false,
-        ifscLabel: 'IFSC Code',
-        ifscPlaceholder: 'Enter IFSC code',
-        showIban: false,
-        ibanLabel: 'IBAN',
-        ibanPlaceholder: 'Enter IBAN',
-        showSwift: true,
-        swiftLabel: 'SWIFT/BIC',
-        swiftPlaceholder: 'Enter SWIFT/BIC',
-        showRouting: true,
-        routingLabel: 'Routing Number',
-        routingPlaceholder: 'Enter routing number',
-      };
-    }
-    const euCountries = ['AT', 'BE', 'BG', 'HR', 'CY', 'CZ', 'DK', 'EE', 'FI', 'GR', 'HU', 'IE', 'LV', 'LT', 'LU', 'MT', 'PL', 'PT', 'RO', 'SK', 'SI', 'SE', 'DE', 'FR', 'ES', 'IT', 'NL', 'PT'];
-    if (code && euCountries.includes(code)) {
-      return {
-        accountLabel: 'Account Number',
-        accountPlaceholder: 'Enter account number',
-        showIfsc: false,
-        ifscLabel: 'IFSC Code',
-        ifscPlaceholder: 'Enter IFSC code',
-        showIban: true,
-        ibanLabel: 'IBAN',
-        ibanPlaceholder: 'Enter IBAN',
-        showSwift: true,
-        swiftLabel: 'SWIFT/BIC',
-        swiftPlaceholder: 'Enter SWIFT/BIC',
-        showRouting: false,
-        routingLabel: 'Routing Number',
-        routingPlaceholder: 'Enter routing number',
+        fields: [
+          { key: 'bank_name', label: 'Bank Name', placeholder: 'Enter bank name' },
+          { key: 'branch_name', label: 'Branch Name', placeholder: 'Enter branch name' },
+          { key: 'account_number', label: 'Account Number', placeholder: 'Enter account number' },
+          { key: 'swift_bic', label: 'SWIFT/BIC', placeholder: 'Enter SWIFT/BIC' },
+          { key: 'ifsc_code', label: 'Routing Number', placeholder: 'Enter routing number' },
+        ]
       };
     }
     return {
-      accountLabel: 'Account Number',
-      accountPlaceholder: 'Enter account number',
-      showIfsc: false,
-      ifscLabel: 'IFSC Code',
-      ifscPlaceholder: 'Enter IFSC code',
-      showIban: false,
-      ibanLabel: 'IBAN',
-      ibanPlaceholder: 'Enter IBAN',
-      showSwift: true,
-      swiftLabel: 'SWIFT/BIC',
-      swiftPlaceholder: 'Enter SWIFT/BIC',
-      showRouting: false,
-      routingLabel: 'Routing Number',
-      routingPlaceholder: 'Enter routing number',
+      fields: [
+        { key: 'bank_name', label: 'Bank Name', placeholder: 'Enter bank name' },
+        { key: 'branch_name', label: 'Branch Name', placeholder: 'Enter branch name' },
+        { key: 'account_number', label: 'Account Number', placeholder: 'Enter account number' },
+        { key: 'swift_bic', label: 'SWIFT/BIC', placeholder: 'Enter SWIFT/BIC' },
+      ]
     };
   };
 
@@ -179,6 +141,8 @@ const InvoiceSettings: React.FC = () => {
     gstin: '',
     pan: '',
     cin: '',
+    cro_number: '',
+    vat_number: '',
     phone: '',
     email: '',
     website: '',
@@ -270,6 +234,8 @@ const InvoiceSettings: React.FC = () => {
         gstin: '',
         pan: '',
         cin: '',
+        cro_number: '',
+        vat_number: '',
         phone: '',
         email: '',
         website: '',
@@ -296,6 +262,8 @@ const InvoiceSettings: React.FC = () => {
         gstin: company.gstin || '',
         pan: company.pan || '',
         cin: company.cin || '',
+        cro_number: company.cro_number || '',
+        vat_number: company.vat_number || '',
         phone: company.phone || '',
         email: company.email || '',
         website: company.website || '',
@@ -769,39 +737,23 @@ const InvoiceSettings: React.FC = () => {
                 const taxFields = getCompanyTaxFields(companyFormData.country_id);
                 return (
                   <>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        {taxFields.taxLabel}
-                      </label>
-                      <input
-                        type="text"
-                        value={companyFormData.gstin}
-                        onChange={(e) => handleCompanyFormChange('gstin', e.target.value)}
-                        disabled={isReadOnly}
-                        className={`w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 ${
-                          isReadOnly ? 'bg-gray-50 text-gray-500' : ''
-                        }`}
-                        placeholder={taxFields.taxPlaceholder}
-                      />
-                    </div>
-
-                    {taxFields.showPan && (
-                      <div>
+                    {taxFields.fields.map((field) => (
+                      <div key={field.key}>
                         <label className="block text-sm font-medium text-gray-700 mb-2">
-                          {taxFields.panLabel}
+                          {field.label}
                         </label>
                         <input
                           type="text"
-                          value={companyFormData.pan}
-                          onChange={(e) => handleCompanyFormChange('pan', e.target.value)}
+                          value={companyFormData[field.key as keyof CreateCompanySettingsData] as string}
+                          onChange={(e) => handleCompanyFormChange(field.key as keyof CreateCompanySettingsData, e.target.value)}
                           disabled={isReadOnly}
                           className={`w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 ${
                             isReadOnly ? 'bg-gray-50 text-gray-500' : ''
                           }`}
-                          placeholder={taxFields.panPlaceholder}
+                          placeholder={field.placeholder}
                         />
                       </div>
-                    )}
+                    ))}
                   </>
                 );
               })()}
@@ -816,125 +768,23 @@ const InvoiceSettings: React.FC = () => {
                 const banking = getCompanyBankingFields(companyFormData.country_id);
                 return (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Bank Name
-                      </label>
-                      <input
-                        type="text"
-                        value={companyFormData.bank_name}
-                        onChange={(e) => handleCompanyFormChange('bank_name', e.target.value)}
-                        disabled={isReadOnly}
-                        className={`w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 ${
-                          isReadOnly ? 'bg-gray-50 text-gray-500' : ''
-                        }`}
-                        placeholder="Enter bank name"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Branch Name
-                      </label>
-                      <input
-                        type="text"
-                        value={companyFormData.branch_name}
-                        onChange={(e) => handleCompanyFormChange('branch_name', e.target.value)}
-                        disabled={isReadOnly}
-                        className={`w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 ${
-                          isReadOnly ? 'bg-gray-50 text-gray-500' : ''
-                        }`}
-                        placeholder="Enter branch name"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        {banking.accountLabel}
-                      </label>
-                      <input
-                        type="text"
-                        value={companyFormData.account_number}
-                        onChange={(e) => handleCompanyFormChange('account_number', e.target.value)}
-                        disabled={isReadOnly}
-                        className={`w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 ${
-                          isReadOnly ? 'bg-gray-50 text-gray-500' : ''
-                        }`}
-                        placeholder={banking.accountPlaceholder}
-                      />
-                    </div>
-
-                    {banking.showIfsc && (
-                      <div>
+                    {banking.fields.map((field) => (
+                      <div key={field.key}>
                         <label className="block text-sm font-medium text-gray-700 mb-2">
-                          {banking.ifscLabel}
+                          {field.label}
                         </label>
                         <input
                           type="text"
-                          value={companyFormData.ifsc_code}
-                          onChange={(e) => handleCompanyFormChange('ifsc_code', e.target.value)}
+                          value={companyFormData[field.key as keyof CreateCompanySettingsData] as string}
+                          onChange={(e) => handleCompanyFormChange(field.key as keyof CreateCompanySettingsData, e.target.value)}
                           disabled={isReadOnly}
                           className={`w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 ${
                             isReadOnly ? 'bg-gray-50 text-gray-500' : ''
                           }`}
-                          placeholder={banking.ifscPlaceholder}
+                          placeholder={field.placeholder}
                         />
                       </div>
-                    )}
-
-                     {banking.showIban && (
-                       <div>
-                         <label className="block text-sm font-medium text-gray-700 mb-2">
-                           {banking.ibanLabel}
-                         </label>
-                         <input
-                           type="text"
-                           value={companyFormData.iban}
-                           onChange={(e) => handleCompanyFormChange('iban', e.target.value)}
-                           disabled={isReadOnly}
-                           className={`w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 ${
-                             isReadOnly ? 'bg-gray-50 text-gray-500' : ''
-                           }`}
-                           placeholder={banking.ibanPlaceholder}
-                         />
-                       </div>
-                     )}
-
-                     {banking.showSwift && (
-                       <div>
-                         <label className="block text-sm font-medium text-gray-700 mb-2">
-                           {banking.swiftLabel}
-                         </label>
-                         <input
-                           type="text"
-                           value={companyFormData.swift_bic}
-                           onChange={(e) => handleCompanyFormChange('swift_bic', e.target.value)}
-                           disabled={isReadOnly}
-                           className={`w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 ${
-                             isReadOnly ? 'bg-gray-50 text-gray-500' : ''
-                           }`}
-                           placeholder={banking.swiftPlaceholder}
-                         />
-                       </div>
-                     )}
-
-                    {banking.showRouting && (
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          {banking.routingLabel}
-                        </label>
-                        <input
-                          type="text"
-                          value={companyFormData.ifsc_code}
-                          onChange={(e) => handleCompanyFormChange('ifsc_code', e.target.value)}
-                          disabled={isReadOnly}
-                          className={`w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 ${
-                            isReadOnly ? 'bg-gray-50 text-gray-500' : ''
-                          }`}
-                          placeholder={banking.routingPlaceholder}
-                        />
-                      </div>
-                    )}
+                    ))}
                   </div>
                 );
               })()}
@@ -1399,16 +1249,18 @@ const InvoiceSettings: React.FC = () => {
                       const taxFields = getCompanyTaxFields(displayCompany.country_id);
                       return (
                         <>
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700">{taxFields.taxLabel}</label>
-                            <div className="mt-1 text-sm text-gray-900">{displayCompany.gstin || 'N/A'}</div>
-                          </div>
-                          {taxFields.showPan && (
-                            <div>
-                              <label className="block text-sm font-medium text-gray-700">{taxFields.panLabel}</label>
-                              <div className="mt-1 text-sm text-gray-900">{displayCompany.pan || 'N/A'}</div>
+                          {taxFields.fields.map((field) => (
+                            <div key={field.key}>
+                              <label className="block text-sm font-medium text-gray-700">{field.label}</label>
+                              <div className="mt-1 text-sm text-gray-900">
+                                {field.key === 'vat_number' ? (displayCompany.vat_number || 'N/A') : 
+                                 field.key === 'cro_number' ? (displayCompany.cro_number || 'N/A') : 
+                                 field.key === 'gstin' ? (displayCompany.gstin || 'N/A') : 
+                                 field.key === 'pan' ? (displayCompany.pan || 'N/A') : 
+                                 field.key === 'cin' ? (displayCompany.cin || 'N/A') : 'N/A'}
+                              </div>
                             </div>
-                          )}
+                          ))}
                         </>
                       );
                     })()}
@@ -1418,56 +1270,38 @@ const InvoiceSettings: React.FC = () => {
                         <CreditCard className="w-4 h-4 mr-2" />
                         Banking Information
                       </h4>
-                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                         <div>
-                           <label className="block text-sm font-medium text-gray-700">Bank Name</label>
-                           <div className="mt-1 text-sm text-gray-900">{displayCompany.bank_name || 'N/A'}</div>
-                         </div>
-                         {(() => {
-                           const banking = getCompanyBankingFields(displayCompany.country_id);
-                           return (
-                             <>
-                               {banking.showIfsc && (
-                                 <div>
-                                   <label className="block text-sm font-medium text-gray-700">Branch Name</label>
-                                   <div className="mt-1 text-sm text-gray-900">{displayCompany.branch_name || 'N/A'}</div>
-                                 </div>
-                               )}
-                               {banking.showIban && (
-                                 <div>
-                                   <label className="block text-sm font-medium text-gray-700">SWIFT/BIC</label>
-                                   <div className="mt-1 text-sm text-gray-900 font-mono">{displayCompany.swift_bic || 'N/A'}</div>
-                                 </div>
-                               )}
-                               {banking.showRouting && (
-                                 <div>
-                                   <label className="block text-sm font-medium text-gray-700">SWIFT/BIC</label>
-                                   <div className="mt-1 text-sm text-gray-900 font-mono">{displayCompany.swift_bic || 'N/A'}</div>
-                                 </div>
-                               )}
-                             </>
-                           );
-                         })()}
-                         <div>
-                           <label className="block text-sm font-medium text-gray-700">Account Number</label>
-                           <div className="mt-1 text-sm text-gray-900 font-mono">
-                             {displayCompany.account_number || 'N/A'}
-                           </div>
-                         </div>
-                         {(() => {
-                           const banking = getCompanyBankingFields(displayCompany.country_id);
-                           return (
-                             <div>
-                               <label className="block text-sm font-medium text-gray-700">{banking.showIfsc ? banking.ifscLabel : banking.showIban ? banking.ibanLabel : banking.routingLabel}</label>
-                               <div className="mt-1 text-sm text-gray-900 font-mono">
-                                 {banking.showIfsc ? (displayCompany.ifsc_code || 'N/A') : banking.showIban ? (displayCompany.iban || 'N/A') : (displayCompany.ifsc_code || 'N/A')}
-                               </div>
-                             </div>
-                           );
-                         })()}
+                       <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700">Bank Name</label>
+                            <div className="mt-1 text-sm text-gray-900">{displayCompany.bank_name || 'N/A'}</div>
+                          </div>
+                          {(() => {
+                            const banking = getCompanyBankingFields(displayCompany.country_id);
+                            return (
+                              <>
+                                {banking.fields.filter(f => f.key !== 'bank_name' && f.key !== 'account_number').map((field) => (
+                                  <div key={field.key}>
+                                    <label className="block text-sm font-medium text-gray-700">{field.label}</label>
+                                    <div className="mt-1 text-sm text-gray-900 font-mono">
+                                      {field.key === 'iban' ? (displayCompany.iban || 'N/A') : 
+                                       field.key === 'swift_bic' ? (displayCompany.swift_bic || 'N/A') : 
+                                       field.key === 'ifsc_code' ? (displayCompany.ifsc_code || 'N/A') : 
+                                       field.key === 'branch_name' ? (displayCompany.branch_name || 'N/A') : 'N/A'}
+                                    </div>
+                                  </div>
+                                ))}
+                              </>
+                            );
+                          })()}
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700">Account Number</label>
+                            <div className="mt-1 text-sm text-gray-900 font-mono">
+                              {displayCompany.account_number || 'N/A'}
+                            </div>
+                          </div>
+                        </div>
                        </div>
-                      </div>
                     </div>
                   </div>
                 </div>

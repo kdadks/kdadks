@@ -30,7 +30,7 @@ import ConfirmDialog from '../ui/ConfirmDialog';
 import { PDFBrandingUtils } from '../../utils/pdfBrandingUtils';
 import { CurrencyDisplay } from '../ui/CurrencyDisplay';
 import { CreateQuote } from './CreateQuote';
-import { getTaxLabel, getTaxRegistrationLabel, getDefaultTaxRate, getClassificationCodeLabel } from '../../utils/taxUtils';
+import { getTaxLabel, getTaxRegistrationLabel, getDefaultTaxRate, getClassificationCodeLabel, getCompanyTaxFields } from '../../utils/taxUtils';
 import type { 
   Quote, 
   QuoteFilters, 
@@ -1033,10 +1033,17 @@ const QuoteManagement: React.FC<QuoteManagementProps> = ({ onBackToDashboard }) 
       }
       if (company.email) { pdf.text('Email: ' + company.email, leftMargin, fromYPos); fromYPos += 4; }
       if (company.phone) { pdf.text('Phone: ' + company.phone, leftMargin, fromYPos); fromYPos += 4; }
-      if (company.gstin) {
-        const companyWithCountry = { country: company.country } as Customer;
-        const taxRegLabel = getTaxRegistrationLabel(companyWithCountry);
-        pdf.text(`${taxRegLabel}: ` + company.gstin, leftMargin, fromYPos); fromYPos += 4;
+      const companyTaxFields = getCompanyTaxFields(company.country_id);
+      companyTaxFields.fields.forEach((field) => {
+        const value = company[field.key as keyof typeof company] as string | undefined;
+        if (value) {
+          pdf.text(`${field.label}: ` + value, leftMargin, fromYPos);
+          fromYPos += 4;
+        }
+      });
+      if (company.pan && !companyTaxFields.fields.some(f => f.key === 'pan')) {
+        pdf.text('PAN: ' + company.pan, leftMargin, fromYPos);
+        fromYPos += 4;
       }
 
       // Contact person
@@ -1089,9 +1096,17 @@ const QuoteManagement: React.FC<QuoteManagementProps> = ({ onBackToDashboard }) 
       }
       if (customer.email) { pdf.text('Email: ' + customer.email, billToX, billToYPos); billToYPos += 4; }
       if (customer.phone) { pdf.text('Phone: ' + customer.phone, billToX, billToYPos); billToYPos += 4; }
-      if (customer.gstin) {
-        const taxRegLabel = getTaxRegistrationLabel(customer);
-        pdf.text(`${taxRegLabel}: ` + customer.gstin, billToX, billToYPos); billToYPos += 4;
+      const customerTaxFields = getCompanyTaxFields(customer.country_id);
+      customerTaxFields.fields.forEach((field) => {
+        const value = customer[field.key as keyof Customer] as string | undefined;
+        if (value) {
+          pdf.text(`${field.label}: ` + value, billToX, billToYPos);
+          billToYPos += 4;
+        }
+      });
+      if (customer.pan && !customerTaxFields.fields.some(f => f.key === 'pan')) {
+        pdf.text('PAN: ' + customer.pan, billToX, billToYPos);
+        billToYPos += 4;
       }
 
       // Status badge

@@ -35,7 +35,7 @@ import { useConfirmDialog } from '../../hooks/useConfirmDialog';
 import { useCompanyContext } from '../../contexts/CompanyContext';
 import { CreateInvoice } from './CreateInvoice';
 import { EditInvoice } from './EditInvoice';
-import { getTaxLabel, getTaxRegistrationLabel, validateTaxRegistration, getDefaultTaxRate, getClassificationCodeLabel } from '../../utils/taxUtils';
+import { getTaxLabel, getTaxRegistrationLabel, validateTaxRegistration, getDefaultTaxRate, getClassificationCodeLabel, getCompanyTaxFields } from '../../utils/taxUtils';
 import type { Invoice, InvoiceFilters, InvoiceStats, Customer, Product, CompanySettings, InvoiceSettings, Country, CreateProductData, CreateCustomerData, CreateInvoiceData, CreateInvoiceItemData, TermsTemplate } from '../../types/invoice';
 
 interface InvoiceManagementProps {
@@ -1781,14 +1781,17 @@ const getBankingCodeField = (company: CompanySettings | undefined | null): keyof
         fromYPos += 4;
       }
       
-      if (company.gstin) {
-        const companyWithCountry = { country: company.country } as Customer;
-        const taxRegLabel = getTaxRegistrationLabel(companyWithCountry);
-        downloadPdf.text(`${taxRegLabel}: ` + String(company.gstin), leftMargin, fromYPos);
-        fromYPos += 4;
-      }
+      const companyWithCountry = { country: company.country } as Customer;
+      const taxFields = getCompanyTaxFields(company.country_id);
+      taxFields.fields.forEach((field) => {
+        const value = company[field.key as keyof CompanySettings] as string | undefined;
+        if (value) {
+          downloadPdf.text(`${field.label}: ` + String(value), leftMargin, fromYPos);
+          fromYPos += 4;
+        }
+      });
       
-      if (company.pan) {
+      if (company.pan && !taxFields.fields.some(f => f.key === 'pan')) {
         downloadPdf.text('PAN: ' + String(company.pan), leftMargin, fromYPos);
         fromYPos += 4;
       }
@@ -2796,14 +2799,17 @@ const getBankingCodeField = (company: CompanySettings | undefined | null): keyof
         fromYPos += 4;
       }
       
-      if (company.gstin) {
-        const companyWithCountry = { country: company.country } as Customer;
-        const taxRegLabel = getTaxRegistrationLabel(companyWithCountry);
-        emailPdf.text(`${taxRegLabel}: ` + company.gstin, leftMargin, fromYPos);
-        fromYPos += 4;
-      }
+      const companyWithCountry = { country: company.country } as Customer;
+      const taxFields = getCompanyTaxFields(company.country_id);
+      taxFields.fields.forEach((field) => {
+        const value = company[field.key as keyof CompanySettings] as string | undefined;
+        if (value) {
+          emailPdf.text(`${field.label}: ` + value, leftMargin, fromYPos);
+          fromYPos += 4;
+        }
+      });
       
-      if (company.pan) {
+      if (company.pan && !taxFields.fields.some(f => f.key === 'pan')) {
         emailPdf.text('PAN: ' + company.pan, leftMargin, fromYPos);
         fromYPos += 4;
       }
@@ -5037,7 +5043,23 @@ const getBankingCodeField = (company: CompanySettings | undefined | null): keyof
                 {company?.phone && <span>📞 {company.phone}</span>}
                 {company?.website && <span>🌐 {company.website}</span>}
               </div>
-              {company?.gstin && <div className="mt-1"><strong>{getTaxRegistrationLabel({ country: company.country } as Customer)}:</strong> {company.gstin}</div>}
+              {company && (() => {
+                const taxFields = getCompanyTaxFields(company.country_id);
+                return (
+                  <div className="mt-1">
+                    {taxFields.fields.map((field) => {
+                      const value = company[field.key as keyof CompanySettings] as string | undefined;
+                      if (value) {
+                        return <div key={field.key}><strong>{field.label}:</strong> {value}</div>;
+                      }
+                      return null;
+                    })}
+                    {company.pan && !taxFields.fields.some(f => f.key === 'pan') && (
+                      <div><strong>PAN:</strong> {company.pan}</div>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
           </div>
           <div className="text-right ml-6">
