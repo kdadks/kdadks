@@ -178,6 +178,18 @@ const ViewContractModal: React.FC<ViewContractModalProps> = ({ contract, onClose
                       <p className="text-sm text-gray-900">{contract.party_a_gstin}</p>
                     </div>
                   )}
+                  {contract.party_a_vat_number && (
+                    <div>
+                      <label className="text-xs font-medium text-gray-500">VAT Number</label>
+                      <p className="text-sm text-gray-900">{contract.party_a_vat_number}</p>
+                    </div>
+                  )}
+                  {contract.party_a_cro_number && (
+                    <div>
+                      <label className="text-xs font-medium text-gray-500">CRO Number</label>
+                      <p className="text-sm text-gray-900">{contract.party_a_cro_number}</p>
+                    </div>
+                  )}
                   {contract.party_a_pan && (
                     <div>
                       <label className="text-xs font-medium text-gray-500">PAN</label>
@@ -226,6 +238,18 @@ const ViewContractModal: React.FC<ViewContractModalProps> = ({ contract, onClose
                     <div>
                       <label className="text-xs font-medium text-gray-500">GSTIN</label>
                       <p className="text-sm text-gray-900">{contract.party_b_gstin}</p>
+                    </div>
+                  )}
+                  {contract.party_b_vat_number && (
+                    <div>
+                      <label className="text-xs font-medium text-gray-500">VAT Number</label>
+                      <p className="text-sm text-gray-900">{contract.party_b_vat_number}</p>
+                    </div>
+                  )}
+                  {contract.party_b_cro_number && (
+                    <div>
+                      <label className="text-xs font-medium text-gray-500">CRO Number</label>
+                      <p className="text-sm text-gray-900">{contract.party_b_cro_number}</p>
                     </div>
                   )}
                   {contract.party_b_pan && (

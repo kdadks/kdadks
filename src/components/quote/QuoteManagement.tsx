@@ -1937,6 +1937,21 @@ const QuoteManagement: React.FC<QuoteManagementProps> = ({ onBackToDashboard }) 
                               {companySettings[0]?.email && <span>📧 {(selectedCompany || companySettings[0]).email}</span>}
                               {companySettings[0]?.phone && <span>📞 {(selectedCompany || companySettings[0]).phone}</span>}
                             </div>
+                            {(() => {
+                              const company = selectedCompany || companySettings[0];
+                              const taxFields = getCompanyTaxFields(company?.country?.code);
+                              return (
+                                <div className="mt-1">
+                                  {taxFields.fields.map((field) => {
+                                    const value = company?.[field.key as keyof CompanySettings] as string | undefined;
+                                    if (value) {
+                                      return <div key={field.key}><strong>{field.label}:</strong> {value}</div>;
+                                    }
+                                    return null;
+                                  })}
+                                </div>
+                              );
+                            })()}
                           </div>
                         </div>
                         <div className="text-right ml-6">
