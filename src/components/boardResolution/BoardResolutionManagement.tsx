@@ -271,7 +271,7 @@ const BoardResolutionManagement: React.FC = () => {
               {company?.address_line1 && <div>{company.address_line1}</div>}
               {company?.city && <div>{company.city}{company.state ? `, ${company.state}` : ''} {company.postal_code}</div>}
               {company && (() => {
-                const taxFields = getCompanyTaxFields(company.country_id);
+                const taxFields = getCompanyTaxFields(company.country?.code);
                 return taxFields.fields.map((field) => {
                   const value = company[field.key as keyof CompanySettings] as string | undefined;
                   if (value) {

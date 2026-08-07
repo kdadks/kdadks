@@ -38,8 +38,13 @@ const InvoiceSettings: React.FC = () => {
   const { showSuccess, showError, showWarning } = useToast();
   const { confirm, dialogProps } = useConfirmDialog();
 
+  const getCountryCode = (countryId?: string) => {
+    const country = countries.find(c => c.id === countryId);
+    return country?.code;
+  };
+
   const getCompanyTaxFields = (countryId?: string) => {
-    const code = countryId?.toUpperCase();
+    const code = getCountryCode(countryId)?.toUpperCase();
     if (code === 'IN' || code === 'IND') {
       return {
         fields: [
@@ -82,7 +87,7 @@ const InvoiceSettings: React.FC = () => {
   };
 
   const getCompanyBankingFields = (countryId?: string) => {
-    const code = countryId?.toUpperCase();
+    const code = getCountryCode(countryId)?.toUpperCase();
     if (code === 'IN' || code === 'IND') {
       return {
         fields: [
@@ -734,7 +739,7 @@ const InvoiceSettings: React.FC = () => {
               </div>
 
               {(() => {
-                const taxFields = getCompanyTaxFields(companyFormData.country_id);
+                const taxFields = getCompanyTaxFields(getCountryCode(companyFormData.country_id));
                 return (
                   <>
                     {taxFields.fields.map((field) => (
@@ -765,7 +770,7 @@ const InvoiceSettings: React.FC = () => {
                 Banking Information
               </h4>
               {(() => {
-                const banking = getCompanyBankingFields(companyFormData.country_id);
+                const banking = getCompanyBankingFields(getCountryCode(companyFormData.country_id));
                 return (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     {banking.fields.map((field) => (
@@ -1246,7 +1251,7 @@ const InvoiceSettings: React.FC = () => {
                       </div>
                     </div>
                     {(() => {
-                      const taxFields = getCompanyTaxFields(displayCompany.country_id);
+                      const taxFields = getCompanyTaxFields(getCountryCode(displayCompany.country_id));
                       return (
                         <>
                           {taxFields.fields.map((field) => (
@@ -1277,7 +1282,7 @@ const InvoiceSettings: React.FC = () => {
                             <div className="mt-1 text-sm text-gray-900">{displayCompany.bank_name || 'N/A'}</div>
                           </div>
                           {(() => {
-                            const banking = getCompanyBankingFields(displayCompany.country_id);
+                            const banking = getCompanyBankingFields(getCountryCode(displayCompany.country_id));
                             return (
                               <>
                                 {banking.fields.filter(f => f.key !== 'bank_name' && f.key !== 'account_number').map((field) => (

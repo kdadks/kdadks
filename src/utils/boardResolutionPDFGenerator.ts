@@ -89,7 +89,7 @@ export async function generateBoardResolutionPDF(
   }
   const location = [company.city, company.state, company.postal_code].filter(Boolean).join(', ');
   if (location) { pdf.text(location, leftMargin, yPos); yPos += 4; }
-  const companyTaxFields = getCompanyTaxFields(company.country_id);
+  const companyTaxFields = getCompanyTaxFields(company.country?.code);
   companyTaxFields.fields.forEach((field) => {
     const value = company[field.key as keyof CompanySettings] as string | undefined;
     if (value) {

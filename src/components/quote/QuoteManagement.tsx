@@ -1033,7 +1033,7 @@ const QuoteManagement: React.FC<QuoteManagementProps> = ({ onBackToDashboard }) 
       }
       if (company.email) { pdf.text('Email: ' + company.email, leftMargin, fromYPos); fromYPos += 4; }
       if (company.phone) { pdf.text('Phone: ' + company.phone, leftMargin, fromYPos); fromYPos += 4; }
-      const companyTaxFields = getCompanyTaxFields(company.country_id);
+      const companyTaxFields = getCompanyTaxFields(company.country?.code);
       companyTaxFields.fields.forEach((field) => {
         const value = company[field.key as keyof typeof company] as string | undefined;
         if (value) {
@@ -1096,7 +1096,7 @@ const QuoteManagement: React.FC<QuoteManagementProps> = ({ onBackToDashboard }) 
       }
       if (customer.email) { pdf.text('Email: ' + customer.email, billToX, billToYPos); billToYPos += 4; }
       if (customer.phone) { pdf.text('Phone: ' + customer.phone, billToX, billToYPos); billToYPos += 4; }
-      const customerTaxFields = getCompanyTaxFields(customer.country_id);
+      const customerTaxFields = getCompanyTaxFields(customer.country?.code);
       customerTaxFields.fields.forEach((field) => {
         const value = customer[field.key as keyof Customer] as string | undefined;
         if (value) {

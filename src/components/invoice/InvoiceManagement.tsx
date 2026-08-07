@@ -1782,7 +1782,7 @@ const getBankingCodeField = (company: CompanySettings | undefined | null): keyof
       }
       
       const companyWithCountry = { country: company.country } as Customer;
-      const taxFields = getCompanyTaxFields(company.country_id);
+      const taxFields = getCompanyTaxFields(company.country?.code);
       taxFields.fields.forEach((field) => {
         const value = company[field.key as keyof CompanySettings] as string | undefined;
         if (value) {
@@ -2800,7 +2800,7 @@ const getBankingCodeField = (company: CompanySettings | undefined | null): keyof
       }
       
       const companyWithCountry = { country: company.country } as Customer;
-      const taxFields = getCompanyTaxFields(company.country_id);
+      const taxFields = getCompanyTaxFields(company.country?.code);
       taxFields.fields.forEach((field) => {
         const value = company[field.key as keyof CompanySettings] as string | undefined;
         if (value) {
@@ -5044,7 +5044,7 @@ const getBankingCodeField = (company: CompanySettings | undefined | null): keyof
                 {company?.website && <span>🌐 {company.website}</span>}
               </div>
               {company && (() => {
-                const taxFields = getCompanyTaxFields(company.country_id);
+                const taxFields = getCompanyTaxFields(company.country?.code);
                 return (
                   <div className="mt-1">
                     {taxFields.fields.map((field) => {
