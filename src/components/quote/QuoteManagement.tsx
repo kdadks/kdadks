@@ -852,8 +852,8 @@ const QuoteManagement: React.FC<QuoteManagementProps> = ({ onBackToDashboard }) 
         setCustomers(customersList);
       }
 
-      // Get company settings
-      const company = companySettings.find(c => c.is_default) || selectedCompany || companySettings[0];
+      // Get company settings - prefer the quote's own company, then selected, then default, then first
+      const company = fullQuote.company_settings || selectedCompany || companySettings.find(c => c.is_default) || companySettings[0];
       if (!company) {
         showError('No company settings found. Please configure company information first.');
         return;
@@ -1921,27 +1921,27 @@ const QuoteManagement: React.FC<QuoteManagementProps> = ({ onBackToDashboard }) 
                     {!companySettings[0]?.header_image_url && (
                       <div className="flex justify-between items-start mb-6">
                         <div className="flex-1">
-                          {companySettings[0]?.logo_url && (
-                            <img 
-                              src={(selectedCompany || companySettings[0]).logo_url} 
-                              alt="Company Logo" 
-                              className="h-12 w-auto mb-3"
-                            />
-                          )}
-                          <div className="text-xl font-bold text-gray-900 mb-1">{companySettings[0]?.company_name || 'Your Company'}</div>
-                          <div className="text-xs text-gray-600 leading-tight">
-                            {companySettings[0]?.address_line1 && <div>{(selectedCompany || companySettings[0]).address_line1}</div>}
-                            {companySettings[0]?.address_line2 && <div>{(selectedCompany || companySettings[0]).address_line2}</div>}
-                            <div>{companySettings[0]?.city && `${(selectedCompany || companySettings[0]).city}, `}{companySettings[0]?.state} {companySettings[0]?.postal_code}</div>
-                            <div className="flex gap-4 mt-1">
-                              {companySettings[0]?.email && <span>📧 {(selectedCompany || companySettings[0]).email}</span>}
-                              {companySettings[0]?.phone && <span>📞 {(selectedCompany || companySettings[0]).phone}</span>}
-                            </div>
-                            {(() => {
-                              const company = selectedCompany || companySettings[0];
-                              const taxFields = getCompanyTaxFields(company?.country?.code);
-                              return (
-                                <div className="mt-1">
+                          {(() => {
+                            const company = selectedQuote?.company_settings || selectedCompany || companySettings.find(c => c.is_default) || companySettings[0];
+                            const taxFields = getCompanyTaxFields(company?.country?.code);
+                            return (
+                              <>
+                                {company?.logo_url && (
+                                  <img 
+                                    src={company.logo_url} 
+                                    alt="Company Logo" 
+                                    className="h-12 w-auto mb-3"
+                                  />
+                                )}
+                                <div className="text-xl font-bold text-gray-900 mb-1">{company?.company_name || 'Your Company'}</div>
+                                <div className="text-xs text-gray-600 leading-tight">
+                                  {company?.address_line1 && <div>{company.address_line1}</div>}
+                                  {company?.address_line2 && <div>{company.address_line2}</div>}
+                                  <div>{company?.city && `${company.city}, `}{company?.state} {company?.postal_code}</div>
+                                  <div className="flex gap-4 mt-1">
+                                    {company?.email && <span>📧 {company.email}</span>}
+                                    {company?.phone && <span>📞 {company.phone}</span>}
+                                  </div>
                                   {taxFields.fields.map((field) => {
                                     const value = company?.[field.key as keyof CompanySettings] as string | undefined;
                                     if (value) {
@@ -1950,9 +1950,9 @@ const QuoteManagement: React.FC<QuoteManagementProps> = ({ onBackToDashboard }) 
                                     return null;
                                   })}
                                 </div>
-                              );
-                            })()}
-                          </div>
+                              </>
+                            );
+                          })()}
                         </div>
                         <div className="text-right ml-6">
                           <div className="text-2xl font-bold text-emerald-600 mb-2">QUOTATION</div>
@@ -2145,7 +2145,7 @@ const QuoteManagement: React.FC<QuoteManagementProps> = ({ onBackToDashboard }) 
                         style={{ maxHeight: '100px' }}
                       />
                     </div>
-                  )}
+                    )}
                 </div>
               </div>
               
@@ -2293,23 +2293,39 @@ const QuoteManagement: React.FC<QuoteManagementProps> = ({ onBackToDashboard }) 
                   
                   {/* From/To */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-                    <div className="bg-gray-50 p-4 rounded">
-                      <div className="font-semibold text-gray-900 mb-2">From:</div>
-                      <div className="text-sm">
-                        <div className="font-medium">{companySettings[0]?.company_name}</div>
-                        {companySettings[0]?.address_line1 && <div className="text-gray-600">{(selectedCompany || companySettings[0]).address_line1}</div>}
-                        <div className="text-gray-600">{[companySettings[0]?.city, companySettings[0]?.state, companySettings[0]?.postal_code].filter(Boolean).join(', ')}</div>
-                        {companySettings[0]?.email && <div className="text-gray-600">📧 {(selectedCompany || companySettings[0]).email}</div>}
-                      </div>
-                      {(selectedQuote.company_contact_name || selectedQuote.company_contact_email) && (
-                        <div className="mt-3 pt-3 border-t border-gray-200">
-                          <div className="font-medium text-sm">Contact Person:</div>
-                          {selectedQuote.company_contact_name && <div className="text-gray-600 text-sm">{selectedQuote.company_contact_name}</div>}
-                          {selectedQuote.company_contact_email && <div className="text-gray-600 text-sm">{selectedQuote.company_contact_email}</div>}
-                          {selectedQuote.company_contact_phone && <div className="text-gray-600 text-sm">{selectedQuote.company_contact_phone}</div>}
-                        </div>
-                      )}
-                    </div>
+                     <div className="bg-gray-50 p-4 rounded">
+                       <div className="font-semibold text-gray-900 mb-2">From:</div>
+                       <div className="text-sm">
+                         {(() => {
+                           const company = selectedQuote?.company_settings || selectedCompany || companySettings.find(c => c.is_default) || companySettings[0];
+                           const taxFields = getCompanyTaxFields(company?.country?.code);
+                           return (
+                             <>
+                               <div className="font-medium">{company?.company_name}</div>
+                               {company?.address_line1 && <div className="text-gray-600">{company.address_line1}</div>}
+                               <div className="text-gray-600">{[company?.city, company?.state, company?.postal_code].filter(Boolean).join(', ')}</div>
+                               {company?.email && <div className="text-gray-600">📧 {company.email}</div>}
+                               {company?.phone && <div className="text-gray-600">📞 {company.phone}</div>}
+                               {taxFields.fields.map((field) => {
+                                 const value = company?.[field.key as keyof CompanySettings] as string | undefined;
+                                 if (value) {
+                                   return <div key={field.key} className="text-gray-600"><strong>{field.label}:</strong> {value}</div>;
+                                 }
+                                 return null;
+                               })}
+                             </>
+                           );
+                         })()}
+                       </div>
+                       {(selectedQuote.company_contact_name || selectedQuote.company_contact_email) && (
+                         <div className="mt-3 pt-3 border-t border-gray-200">
+                           <div className="font-medium text-sm">Contact Person:</div>
+                           {selectedQuote.company_contact_name && <div className="text-gray-600 text-sm">{selectedQuote.company_contact_name}</div>}
+                           {selectedQuote.company_contact_email && <div className="text-gray-600 text-sm">{selectedQuote.company_contact_email}</div>}
+                           {selectedQuote.company_contact_phone && <div className="text-gray-600 text-sm">{selectedQuote.company_contact_phone}</div>}
+                         </div>
+                       )}
+                     </div>
                     
                     <div className="bg-gray-50 p-4 rounded">
                       <div className="font-semibold text-gray-900 mb-2">To:</div>
@@ -2535,40 +2551,55 @@ const QuoteManagement: React.FC<QuoteManagementProps> = ({ onBackToDashboard }) 
                   </div>
                 )}
                 
-                <div className="p-6">
-                  {!(selectedCompany || companySettings[0]).header_image_url && (selectedCompany || companySettings[0]) && (
-                    <div className="flex justify-between items-start mb-6 pb-4 border-b-2 border-emerald-600">
-                      <div className="flex-1">
-                        {(selectedCompany || companySettings[0]).logo_url && (
-                          <img 
-                            src={(selectedCompany || companySettings[0]).logo_url} 
-                            alt="Logo" 
-                            className="h-16 w-auto mb-3"
-                          />
-                        )}
-                        <div className="text-xl font-bold text-gray-900 mb-1">{(selectedCompany || companySettings[0]).company_name}</div>
-                        <div className="text-xs text-gray-600 space-y-0.5">
-                          {(selectedCompany || companySettings[0]).address_line1 && <div>{(selectedCompany || companySettings[0]).address_line1}</div>}
-                          {(selectedCompany || companySettings[0]).address_line2 && <div>{(selectedCompany || companySettings[0]).address_line2}</div>}
-                          <div>{[(selectedCompany || companySettings[0]).city, (selectedCompany || companySettings[0]).state, (selectedCompany || companySettings[0]).postal_code].filter(Boolean).join(', ')}</div>
-                          <div className="flex gap-4 mt-1">
-                            {(selectedCompany || companySettings[0]).email && <span>{(selectedCompany || companySettings[0]).email}</span>}
-                            {(selectedCompany || companySettings[0]).phone && <span>{(selectedCompany || companySettings[0]).phone}</span>}
-                          </div>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <div className="text-3xl font-bold text-emerald-600 mb-2">QUOTATION</div>
-                        <div className="text-xs text-gray-600 space-y-1">
-                          <div><strong>Quote #:</strong> {selectedQuote?.quote_number}</div>
-                          <div><strong>Date:</strong> {new Date(quoteFormData.quote_date).toLocaleDateString()}</div>
-                          {quoteFormData.valid_until && (
-                            <div><strong>Valid Until:</strong> {new Date(quoteFormData.valid_until).toLocaleDateString()}</div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  )}
+                 <div className="p-6">
+                   {(() => {
+                     const company = selectedQuote?.company_settings || selectedCompany || companySettings.find(c => c.is_default) || companySettings[0];
+                     const taxFields = getCompanyTaxFields(company?.country?.code);
+                     
+                     if (!(selectedCompany || companySettings[0]).header_image_url && company) {
+                       return (
+                         <div className="flex justify-between items-start mb-6 pb-4 border-b-2 border-emerald-600">
+                           <div className="flex-1">
+                             {company.logo_url && (
+                               <img 
+                                 src={company.logo_url} 
+                                 alt="Logo" 
+                                 className="h-16 w-auto mb-3"
+                               />
+                             )}
+                             <div className="text-xl font-bold text-gray-900 mb-1">{company.company_name}</div>
+                             <div className="text-xs text-gray-600 space-y-0.5">
+                               {company.address_line1 && <div>{company.address_line1}</div>}
+                               {company.address_line2 && <div>{company.address_line2}</div>}
+                               <div>{[company.city, company.state, company.postal_code].filter(Boolean).join(', ')}</div>
+                               <div className="flex gap-4 mt-1">
+                                 {company.email && <span>{company.email}</span>}
+                                 {company.phone && <span>{company.phone}</span>}
+                               </div>
+                               {taxFields.fields.map((field) => {
+                                 const value = company[field.key as keyof CompanySettings] as string | undefined;
+                                 if (value) {
+                                   return <div key={field.key} className="text-gray-600"><strong>{field.label}:</strong> {value}</div>;
+                                 }
+                                 return null;
+                               })}
+                             </div>
+                           </div>
+                           <div className="text-right">
+                             <div className="text-3xl font-bold text-emerald-600 mb-2">QUOTATION</div>
+                             <div className="text-xs text-gray-600 space-y-1">
+                               <div><strong>Quote #:</strong> {selectedQuote?.quote_number}</div>
+                               <div><strong>Date:</strong> {new Date(quoteFormData.quote_date).toLocaleDateString()}</div>
+                               {quoteFormData.valid_until && (
+                                 <div><strong>Valid Until:</strong> {new Date(quoteFormData.valid_until).toLocaleDateString()}</div>
+                               )}
+                             </div>
+                           </div>
+                         </div>
+                       );
+                     }
+                     return null;
+                   })()}
                   
                   {companySettings[0]?.header_image_url && (
                     <div className="text-center mb-6 pb-4 border-b-2 border-emerald-600">

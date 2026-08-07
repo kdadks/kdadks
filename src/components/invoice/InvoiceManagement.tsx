@@ -1629,8 +1629,8 @@ const getBankingCodeField = (company: CompanySettings | undefined | null): keyof
       const dlCurrency = getCurrencyInfo(dlCustomer).code;
       const fullInvoice = applyIntlBankingFallback(fullInvoiceRaw as unknown as Record<string, unknown>, dlCurrency) as unknown as typeof fullInvoiceRaw;
 
-      // Get company settings (default company)
-      const company = selectedCompany || companySettings.find(c => c.is_default) || selectedCompany || companySettings[0];
+      // Get company settings - prefer the invoice's own company, then selected, then default, then first
+      const company = fullInvoice.company_settings || selectedCompany || companySettings.find(c => c.is_default) || companySettings[0];
       if (!company) {
         showError('No company settings found. Please go to Settings and configure your company information first, then try again.');
         navigate('/admin/settings');
