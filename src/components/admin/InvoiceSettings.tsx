@@ -47,8 +47,8 @@ const InvoiceSettings: React.FC = () => {
     return getCountryCode(countryId) || editingCountryCode;
   };
 
-  const getCompanyTaxFields = (countryId?: string) => {
-    const code = getCountryCode(countryId)?.toUpperCase();
+  const getCompanyTaxFields = (countryIdOrCode?: string) => {
+    const code = getCountryCode(countryIdOrCode)?.toUpperCase() || countryIdOrCode?.toUpperCase();
     if (code === 'IN' || code === 'IND') {
       return {
         fields: [
@@ -90,8 +90,8 @@ const InvoiceSettings: React.FC = () => {
     };
   };
 
-  const getCompanyBankingFields = (countryId?: string) => {
-    const code = getCountryCode(countryId)?.toUpperCase();
+  const getCompanyBankingFields = (countryIdOrCode?: string) => {
+    const code = getCountryCode(countryIdOrCode)?.toUpperCase() || countryIdOrCode?.toUpperCase();
     if (code === 'IN' || code === 'IND') {
       return {
         fields: [
