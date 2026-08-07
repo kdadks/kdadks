@@ -1042,7 +1042,8 @@ const QuoteManagement: React.FC<QuoteManagementProps> = ({ onBackToDashboard }) 
         }
       });
       if (company.pan && !companyTaxFields.fields.some(f => f.key === 'pan')) {
-        pdf.text('PAN: ' + company.pan, leftMargin, fromYPos);
+        const panLabel = (company.country?.code === 'IN' || company.country?.code === 'IND') ? 'PAN' : 'Tax ID';
+        pdf.text(`${panLabel}: ` + company.pan, leftMargin, fromYPos);
         fromYPos += 4;
       }
 
@@ -1105,7 +1106,8 @@ const QuoteManagement: React.FC<QuoteManagementProps> = ({ onBackToDashboard }) 
         }
       });
       if (customer.pan && !customerTaxFields.fields.some(f => f.key === 'pan')) {
-        pdf.text('PAN: ' + customer.pan, billToX, billToYPos);
+        const panLabel = (customer.country?.code === 'IN' || customer.country?.code === 'IND') ? 'PAN' : 'Tax ID';
+        pdf.text(`${panLabel}: ` + customer.pan, billToX, billToYPos);
         billToYPos += 4;
       }
 

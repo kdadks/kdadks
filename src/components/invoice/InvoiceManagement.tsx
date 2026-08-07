@@ -1792,7 +1792,8 @@ const getBankingCodeField = (company: CompanySettings | undefined | null): keyof
       });
       
       if (company.pan && !taxFields.fields.some(f => f.key === 'pan')) {
-        downloadPdf.text('PAN: ' + String(company.pan), leftMargin, fromYPos);
+        const panLabel = (company.country?.code === 'IN' || company.country?.code === 'IND') ? 'PAN' : 'Tax ID';
+        downloadPdf.text(`${panLabel}: ` + String(company.pan), leftMargin, fromYPos);
         fromYPos += 4;
       }
       
@@ -2810,7 +2811,8 @@ const getBankingCodeField = (company: CompanySettings | undefined | null): keyof
       });
       
       if (company.pan && !taxFields.fields.some(f => f.key === 'pan')) {
-        emailPdf.text('PAN: ' + company.pan, leftMargin, fromYPos);
+        const panLabel = (company.country?.code === 'IN' || company.country?.code === 'IND') ? 'PAN' : 'Tax ID';
+        emailPdf.text(`${panLabel}: ` + company.pan, leftMargin, fromYPos);
         fromYPos += 4;
       }
       
