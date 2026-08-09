@@ -2329,8 +2329,15 @@ const getBankingCodeField = (company: CompanySettings | undefined | null): keyof
 
       // Smart layout: Banking details and Notes positioning
       const leftSectionStart = leftMargin;
-      const bankingDetailsAvailable = isIndianCurrency && (company.bank_name || company.account_number || company.ifsc_code);
-      const intlBankingAvailable = !isIndianCurrency && (fullInvoice.intl_account_name || fullInvoice.intl_account_number);
+      // Determine banking by company entity, not invoice currency
+      const isIndianCompany = company.country?.code === 'IN' || company.country?.code === 'IND' ||
+        company.country_id?.toUpperCase() === 'IN' || company.country_id?.toUpperCase() === 'IND';
+      // Company banking shown for: Indian entity + INR invoice, OR any non-Indian entity (getBankingLabel applies correct label)
+      const bankingDetailsAvailable = !!(company.bank_name || company.account_number || company.ifsc_code) &&
+        (!isIndianCompany || isIndianCurrency);
+      // Wise intl banking shown only for Indian entity billing a foreign-currency invoice
+      const intlBankingAvailable = isIndianCompany && !isIndianCurrency &&
+        !!(fullInvoice.intl_account_name || fullInvoice.intl_account_number);
       const notesAvailable = fullInvoice.notes;
 
       // Helper: render international banking box (region-specific fields, no QR)
@@ -2452,7 +2459,7 @@ const getBankingCodeField = (company: CompanySettings | undefined | null): keyof
         
         // QR code directly below banking box (side-by-side layout)
         const bankBoxBottomY1 = bankingYPos - 2 + bankingBoxHeight + 5;
-        const dlQrData1 = isIndianCurrency ? await loadQRCodeImage() : null;
+        const dlQrData1 = (isIndianCompany && isIndianCurrency) ? await loadQRCodeImage() : null;
         if (dlQrData1) {
           const qrPdfWidth = 50;
           const qrPdfHeight = qrPdfWidth * (dlQrData1.height / dlQrData1.width);
@@ -2522,7 +2529,7 @@ const getBankingCodeField = (company: CompanySettings | undefined | null): keyof
         
         // QR code directly below banking box (stacked layout)
         const bankBoxBottomY2 = yPos - 2 + bankingBoxHeight + 5;
-        const dlQrData2 = isIndianCurrency ? await loadQRCodeImage() : null;
+        const dlQrData2 = (isIndianCompany && isIndianCurrency) ? await loadQRCodeImage() : null;
         if (dlQrData2) {
           const qrPdfWidth = 50;
           const qrPdfHeight = qrPdfWidth * (dlQrData2.height / dlQrData2.width);
@@ -3231,8 +3238,12 @@ const getBankingCodeField = (company: CompanySettings | undefined | null): keyof
 
       // Smart layout: Banking details and Notes positioning (same as download PDF)
       const leftSectionStart = leftMargin;
-      const bankingDetailsAvailable = isIndianCurrency && (company.bank_name || company.account_number || company.ifsc_code);
-      const intlBankingAvailable = !isIndianCurrency && (fullInvoice.intl_account_name || fullInvoice.intl_account_number);
+      const isIndianCompany = company.country?.code === 'IN' || company.country?.code === 'IND' ||
+        company.country_id?.toUpperCase() === 'IN' || company.country_id?.toUpperCase() === 'IND';
+      const bankingDetailsAvailable = !!(company.bank_name || company.account_number || company.ifsc_code) &&
+        (!isIndianCompany || isIndianCurrency);
+      const intlBankingAvailable = isIndianCompany && !isIndianCurrency &&
+        !!(fullInvoice.intl_account_name || fullInvoice.intl_account_number);
       const notesAvailable = fullInvoice.notes;
 
       // Helper: render international banking box (region-specific fields, no QR)
@@ -3354,7 +3365,7 @@ const getBankingCodeField = (company: CompanySettings | undefined | null): keyof
         
         // QR code directly below banking box (side-by-side layout)
         const emBankBoxBottomY1 = bankingYPos - 2 + bankingBoxHeight + 5;
-        const emQrData1 = isIndianCurrency ? await loadQRCodeImage() : null;
+        const emQrData1 = (isIndianCompany && isIndianCurrency) ? await loadQRCodeImage() : null;
         if (emQrData1) {
           const qrPdfWidth = 50;
           const qrPdfHeight = qrPdfWidth * (emQrData1.height / emQrData1.width);
@@ -3433,7 +3444,7 @@ const getBankingCodeField = (company: CompanySettings | undefined | null): keyof
         
         // QR code directly below banking box (stacked layout)
         const emBankBoxBottomY2 = yPos - 2 + bankingBoxHeight + 5;
-        const emQrData2 = isIndianCurrency ? await loadQRCodeImage() : null;
+        const emQrData2 = (isIndianCompany && isIndianCurrency) ? await loadQRCodeImage() : null;
         if (emQrData2) {
           const qrPdfWidth = 50;
           const qrPdfHeight = qrPdfWidth * (emQrData2.height / emQrData2.width);
@@ -5254,8 +5265,11 @@ const getBankingCodeField = (company: CompanySettings | undefined | null): keyof
         {(() => {
           const isIndianCurrency = currencyInfo.code === 'INR';
           const invCurrency = currencyInfo.code;
-          const hasIndianBanking = isIndianCurrency && !!company?.bank_name;
-          const hasIntlBanking = !isIndianCurrency && !!(invoiceFormData.intl_account_name || invoiceFormData.intl_account_number);
+          const isIndianCompany = company?.country?.code === 'IN' || company?.country?.code === 'IND' ||
+            company?.country_id?.toUpperCase() === 'IN' || company?.country_id?.toUpperCase() === 'IND';
+          const hasIndianBanking = (!isIndianCompany || isIndianCurrency) && !!company?.bank_name;
+          const hasIntlBanking = !!(isIndianCompany && !isIndianCurrency &&
+            (invoiceFormData.intl_account_name || invoiceFormData.intl_account_number));
           const hasBanking = hasIndianBanking || hasIntlBanking;
 
           // Build intl field rows for preview
