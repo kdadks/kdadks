@@ -5012,7 +5012,7 @@ const getBankingCodeField = (company: CompanySettings | undefined | null): keyof
     const currencyInfo = useINROverride && nativeCurrencyInfo.code !== 'INR'
       ? { symbol: '₹', code: 'INR', name: 'Rupees' }
       : nativeCurrencyInfo;
-    const company = selectedCompany || companySettings[0];
+    const company = selectedInvoice?.company_settings || selectedCompany || companySettings.find(c => c.is_default) || companySettings[0];
     
     // Get dynamic tax label based on customer's country
     const taxLabel = getTaxLabel(selectedCustomer);
@@ -5056,9 +5056,10 @@ const getBankingCodeField = (company: CompanySettings | undefined | null): keyof
                       }
                       return null;
                     })}
-                    {company.pan && !taxFields.fields.some(f => f.key === 'pan') && (
-                      <div><strong>PAN:</strong> {company.pan}</div>
-                    )}
+                    {company.pan && !taxFields.fields.some(f => f.key === 'pan') && (() => {
+                      const panLabel = (company.country?.code === 'IN' || company.country?.code === 'IND') ? 'PAN' : 'Tax ID';
+                      return <div><strong>{panLabel}:</strong> {company.pan}</div>;
+                    })()}
                   </div>
                 );
               })()}
