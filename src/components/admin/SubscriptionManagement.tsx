@@ -21,6 +21,8 @@ import { supabase } from '../../config/supabase';
 import { subscriptionService } from '../../services/subscriptionService';
 import { invoiceService } from '../../services/invoiceService';
 import { useToast } from '../ui/ToastProvider';
+import { useCompanyContext } from '../../contexts/CompanyContext';
+import { formatCustomerOption, getPrimaryCustomerId } from '../../utils/customerCodeUtils';
 import type {
   SubscriptionPlan,
   CustomerSubscription,
@@ -203,6 +205,7 @@ interface SubscriptionManagementProps {
 }
 
 const SubscriptionManagement: React.FC<SubscriptionManagementProps> = () => {
+  const { selectedCompany, companies } = useCompanyContext();
   const [activeTab, setActiveTab] = useState<ActiveTab>('plans');
   const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
   const [subscriptions, setSubscriptions] = useState<CustomerSubscription[]>([]);
@@ -241,8 +244,8 @@ const SubscriptionManagement: React.FC<SubscriptionManagementProps> = () => {
         subscriptionService.getPlans(true),
         subscriptionService.getSubscriptions(
           statusFilter !== 'all'
-            ? { status: statusFilter as CustomerSubscription['status'] }
-            : undefined,
+            ? { status: statusFilter as CustomerSubscription['status'], company_settings_id: selectedCompany?.id }
+            : { company_settings_id: selectedCompany?.id },
         ),
         invoiceService.getCustomers(undefined, 1, 500),
       ]);
@@ -255,7 +258,7 @@ const SubscriptionManagement: React.FC<SubscriptionManagementProps> = () => {
     } finally {
       setLoading(false);
     }
-  }, [statusFilter]);
+  }, [statusFilter, selectedCompany]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
@@ -339,7 +342,10 @@ const SubscriptionManagement: React.FC<SubscriptionManagementProps> = () => {
     if (!subForm.start_date) { showError('Start date is required'); return; }
     setSubSaving(true);
     try {
-      await subscriptionService.createSubscription(subForm);
+      await subscriptionService.createSubscription({
+        ...subForm,
+        company_settings_id: selectedCompany?.id,
+      });
       showSuccess('Subscription created');
       setShowSubModal(false);
       loadData();
@@ -618,7 +624,7 @@ const SubscriptionManagement: React.FC<SubscriptionManagementProps> = () => {
                   <option value="">Select customer…</option>
                   {customers.map(c => (
                     <option key={c.id} value={c.id}>
-                      {c.company_name || c.contact_person || c.email || c.id}
+                      {formatCustomerOption(c, companies, selectedCompany)}
                     </option>
                   ))}
                 </select>
@@ -938,6 +944,15 @@ const SubscriptionManagement: React.FC<SubscriptionManagementProps> = () => {
                         <div className="text-sm font-medium text-gray-900">
                           {sub.customer?.company_name || sub.customer?.contact_person || '—'}
                         </div>
+                        {sub.customer?.customer_code && (
+                          <div className="text-xs font-mono text-indigo-600 mt-0.5">
+                            {getPrimaryCustomerId(
+                              sub.customer as Parameters<typeof getPrimaryCustomerId>[0],
+                              companies,
+                              selectedCompany
+                            )}
+                          </div>
+                        )}
                         {sub.customer?.email && (
                           <div className="text-xs text-gray-500">{sub.customer.email}</div>
                         )}

@@ -14,6 +14,7 @@ import {
   CreateBonusData
 } from '../../services/compensationService';
 import { employeeService } from '../../services/employeeService';
+import { useCompanyContext } from '../../contexts/CompanyContext';
 import { useToast } from '../ui/ToastProvider';
 import ConfirmDialog from '../ui/ConfirmDialog';
 import { calculateSalaryBreakdown, type SalaryBreakdown } from '../../utils/salaryCalculator';
@@ -67,6 +68,7 @@ const formatDate = (date: string) => {
 
 const CompensationManagement: React.FC = () => {
   const { showError, showSuccess } = useToast();
+  const { selectedCompany } = useCompanyContext();
   const [activeTab, setActiveTab] = useState<TabType>('compensation');
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(true);
@@ -96,12 +98,16 @@ const CompensationManagement: React.FC = () => {
   }, []);
 
   useEffect(() => {
+    loadEmployees();
+  }, [selectedCompany]);
+
+  useEffect(() => {
     loadData();
   }, [activeTab, filterEmployee]);
 
   const loadEmployees = async () => {
     try {
-      const data = await employeeService.getEmployees();
+      const data = await employeeService.getEmployees(selectedCompany?.id);
       setEmployees(data);
     } catch (error) {
       console.error('Error loading employees:', error);

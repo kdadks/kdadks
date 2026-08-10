@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { performanceFeedbackService, PerformanceFeedback as FeedbackType, PerformanceGoal, CreateFeedbackData } from '../../services/performanceFeedbackService';
 import { employeeService } from '../../services/employeeService';
+import { useCompanyContext } from '../../contexts/CompanyContext';
 import { useToast } from '../ui/ToastProvider';
 import { useConfirmDialog } from '../../hooks/useConfirmDialog';
 import ConfirmDialog from '../ui/ConfirmDialog';
@@ -104,6 +105,7 @@ const RatingStars: React.FC<{ rating: number; onChange?: (rating: number) => voi
 const PerformanceFeedback: React.FC = () => {
   const { showError, showSuccess } = useToast();
   const { confirm, dialogProps } = useConfirmDialog();
+  const { selectedCompany } = useCompanyContext();
   const [feedbacks, setFeedbacks] = useState<FeedbackType[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(true);
@@ -144,7 +146,7 @@ const PerformanceFeedback: React.FC = () => {
 
   useEffect(() => {
     loadData();
-  }, [filterEmployee, filterType, filterStatus, filterYear]);
+  }, [filterEmployee, filterType, filterStatus, filterYear, selectedCompany]);
 
   const loadData = async () => {
     setLoading(true);
@@ -156,7 +158,7 @@ const PerformanceFeedback: React.FC = () => {
           status: filterStatus || undefined,
           year: filterYear
         }),
-        employeeService.getEmployees()
+        employeeService.getEmployees(selectedCompany?.id)
       ]);
       setFeedbacks(feedbackData);
       setEmployees(employeeData);

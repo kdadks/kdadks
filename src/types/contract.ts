@@ -94,6 +94,7 @@ export interface ContractSection {
   section_title: string;
   section_content: string;
   is_required: boolean;
+  is_locked?: boolean;
   page_break_before: boolean;
   created_at: string;
   updated_at: string;
@@ -254,6 +255,9 @@ export interface CreateContractData {
   milestones?: CreateContractMilestoneData[];
   
   notes?: string;
+  
+  // Entity prefix for contract number generation (IND / IRL)
+  entity_prefix?: string;
 }
 
 export interface CreateContractSectionData {
@@ -262,6 +266,7 @@ export interface CreateContractSectionData {
   section_title: string;
   section_content: string;
   is_required: boolean;
+  is_locked?: boolean;     // true = compliance clause, protected from user edits
   page_break_before: boolean;
 }
 
@@ -294,6 +299,7 @@ export interface ContractFilters {
   party_b_name?: string;
   date_from?: string;
   date_to?: string;
+  company_settings_id?: string;
 }
 
 export interface ContractSortOptions {
@@ -328,6 +334,22 @@ export interface ContractStatistics {
   total_contract_value: number;
   active_contract_value: number;
   contracts_by_type: Record<ContractType, number>;
+}
+
+// =====================================================
+// AUDIT TRAIL
+// =====================================================
+
+export interface ContractAuditLog {
+  id: string;
+  contract_id: string;
+  user_id?: string;
+  user_email?: string;
+  action: 'create' | 'edit' | 'status_change' | 'section_edit' | 'delete';
+  field_name?: string;
+  old_value?: string;
+  new_value?: string;
+  changed_at: string;
 }
 
 // =====================================================

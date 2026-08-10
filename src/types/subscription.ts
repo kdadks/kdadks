@@ -15,6 +15,7 @@ export interface CustomerSubscription {
   id: string;
   customer_id: string;
   plan_id: string;
+  company_settings_id?: string;
   status: 'active' | 'paused' | 'cancelled' | 'expired';
   start_date: string;
   end_date?: string;
@@ -29,6 +30,7 @@ export interface CustomerSubscription {
     company_name?: string;
     contact_person?: string;
     email?: string;
+    customer_code?: string;
   };
   plan?: SubscriptionPlan;
 }
@@ -48,10 +50,12 @@ export interface CreateCustomerSubscriptionData {
   start_date: string;
   end_date?: string;
   notes?: string;
+  company_settings_id?: string;
 }
 
 export interface SubscriptionFilters {
   status?: string;
   customer_id?: string;
   plan_id?: string;
+  company_settings_id?: string;
 }

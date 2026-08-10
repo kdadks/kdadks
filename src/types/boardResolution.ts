@@ -60,6 +60,7 @@ export interface UpdateBoardResolutionData extends Partial<CreateBoardResolution
 export interface BoardResolutionFilters {
   status?: BoardResolutionStatus;
   search?: string;
+  company_settings_id?: string;
 }
 
 export interface BoardResolutionStats {

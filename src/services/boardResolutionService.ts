@@ -52,6 +52,10 @@ class BoardResolutionService {
       query = query.eq('status', filters.status);
     }
 
+    if (filters.company_settings_id) {
+      query = query.eq('company_settings_id', filters.company_settings_id);
+    }
+
     if (filters.search) {
       query = query.or(
         `resolution_number.ilike.%${filters.search}%,title.ilike.%${filters.search}%,board_action.ilike.%${filters.search}%`

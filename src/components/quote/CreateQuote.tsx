@@ -4,6 +4,7 @@ import type { CreateQuoteData, CreateQuoteItemData, Customer, Product } from '..
 import type { TermsTemplate, CompanySettings } from '../../types/invoice';
 import type { RateCardTemplate } from '../../types/rateCard';
 import { getTaxLabel, getClassificationCodeLabel } from '../../utils/taxUtils';
+import { formatCustomerOption } from '../../utils/customerCodeUtils';
 import { ExchangeRateDisplay } from '../ui/ExchangeRateDisplay';
 import { rateCardService } from '../../services/rateCardService';
 import { analyzeSalaryToRate, calculateTotalRate } from '../../types/rateCard';
@@ -50,6 +51,7 @@ export const CreateQuote: React.FC<CreateQuoteProps> = ({
   customers,
   products,
   termsTemplates,
+  companySettings,
   selectedDefaultProduct,
   selectedTermsTemplateId,
   globalHsnCode,
@@ -181,7 +183,7 @@ export const CreateQuote: React.FC<CreateQuoteProps> = ({
                     <option value="">Select Customer</option>
                     {customers.filter(customer => customer.is_active !== false).map(customer => (
                       <option key={customer.id} value={customer.id}>
-                        {customer.company_name || customer.contact_person}
+                        {formatCustomerOption(customer, companySettings)}
                       </option>
                     ))}
                   </select>

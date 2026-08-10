@@ -220,6 +220,7 @@ export interface QuoteFilters {
   date_from?: string;
   date_to?: string;
   search?: string;
+  company_settings_id?: string;
 }
 
 // Dashboard Statistics

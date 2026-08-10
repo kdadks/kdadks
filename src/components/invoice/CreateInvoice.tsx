@@ -2,6 +2,7 @@ import React from 'react';
 import { FileText, Package, Plus, Trash, X, Eye, Save, RefreshCw } from 'lucide-react';
 import type { CreateInvoiceData, CreateInvoiceItemData, Customer, Product, TermsTemplate, CompanySettings } from '../../types/invoice';
 import { getTaxLabel, getClassificationCodeLabel } from '../../utils/taxUtils';
+import { formatCustomerOption } from '../../utils/customerCodeUtils';
 
 
 interface CreateInvoiceProps {
@@ -175,7 +176,7 @@ export const CreateInvoice: React.FC<CreateInvoiceProps> = ({
                     <option value="">Select Customer</option>
                     {customers.filter(customer => customer.is_active !== false).map(customer => (
                       <option key={customer.id} value={customer.id}>
-                        {customer.company_name || customer.contact_person}
+                        {formatCustomerOption(customer, companySettings)}
                       </option>
                     ))}
                   </select>

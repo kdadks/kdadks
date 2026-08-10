@@ -470,6 +470,7 @@ export const getCompanyTaxFields = (countryId?: string): { fields: TaxField[] } 
       fields: [
         { key: 'vat_number', label: 'VAT Number', placeholder: 'Enter VAT Number' },
         { key: 'cro_number', label: 'CRO Number', placeholder: 'Enter CRO Number' },
+        { key: 'pan', label: 'Tax ID', placeholder: 'Enter Tax ID' },
       ]
     };
   }

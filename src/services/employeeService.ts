@@ -22,11 +22,17 @@ import { compensationService } from './compensationService'
 export const employeeService = {
   // =============== Employee CRUD Operations ===============
 
-  async getEmployees(): Promise<Employee[]> {
-    const { data, error } = await supabase
+  async getEmployees(company_settings_id?: string): Promise<Employee[]> {
+    let query = supabase
       .from('employees')
       .select('*')
       .order('created_at', { ascending: false })
+
+    if (company_settings_id) {
+      query = query.or(`company_settings_id.eq.${company_settings_id},company_settings_id.is.null`);
+    }
+
+    const { data, error } = await query
 
     if (error) {
       console.error('Error fetching employees:', error)

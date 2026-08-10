@@ -1,7 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { X, Save, Plus, Trash2, GripVertical } from 'lucide-react';
+import { X, Save, Plus, Trash2, GripVertical, Lock, Unlock, FileText, AlertCircle } from 'lucide-react';
 import { invoiceService } from '../../services/invoiceService';
 import { convertToINR, formatCurrencyWithSymbol } from '../../utils/currencyConverter';
+import { useCompanyContext } from '../../contexts/CompanyContext';
+import { formatCustomerOption } from '../../utils/customerCodeUtils';
+import { IRISH_CONTRACT_TEMPLATES, getIrishTemplate } from '../../data/irishContractTemplates';
+import { INDIAN_CONTRACT_TEMPLATES, getIndianTemplate } from '../../data/indianContractTemplates';
 import type { Customer } from '../../types/invoice';
 import type { CreateContractData, CreateContractSectionData, CreateContractMilestoneData, ContractType } from '../../types/contract';
 import RichTextEditor from '../ui/RichTextEditor';
@@ -13,10 +17,21 @@ interface CreateContractModalProps {
 }
 
 const CreateContractModal: React.FC<CreateContractModalProps> = ({ onSave, onClose, initialData }) => {
+  const { companies, selectedCompany } = useCompanyContext();
   const [loading, setLoading] = useState(false);
   const [loadingCustomers, setLoadingCustomers] = useState(false);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [activeTab, setActiveTab] = useState<'basic' | 'parties' | 'sections' | 'milestones'>('basic');
+  const [templateApplied, setTemplateApplied] = useState(false);
+
+  // True when the selected company is the Irish entity
+  const isIrishEntity = companies.find(c => c.id === selectedCompany?.id)?.country?.code === 'IE' ||
+    companies.find(c => c.id === selectedCompany?.id)?.country?.code === 'IRL';
+  const isIndianEntity = companies.find(c => c.id === selectedCompany?.id)?.country?.code === 'IN' ||
+    companies.find(c => c.id === selectedCompany?.id)?.country?.code === 'IND';
+  const hasEntityTemplates = isIrishEntity || isIndianEntity;
+  const availableTemplates = isIrishEntity ? IRISH_CONTRACT_TEMPLATES : isIndianEntity ? INDIAN_CONTRACT_TEMPLATES : [];
+  const getEntityTemplate = isIrishEntity ? getIrishTemplate : isIndianEntity ? getIndianTemplate : () => undefined;
   
   // Form state
   const [formData, setFormData] = useState<CreateContractData>(initialData);
@@ -64,8 +79,10 @@ const CreateContractModal: React.FC<CreateContractModalProps> = ({ onSave, onClo
         party_b_name: customer.company_name || '',
         party_b_address: fullAddress,
         party_b_contact: customer.contact_person || customer.phone || '',
-        party_b_gstin: customer.gstin || '',
-        party_b_pan: customer.pan || '',
+        // Populate the correct tax ID field based on entity type
+        ...(isIrishEntity
+          ? { party_b_vat_number: customer.gstin || '', party_b_cro_number: customer.pan || '' }
+          : { party_b_gstin: customer.gstin || '', party_b_pan: customer.pan || '' }),
         payment_terms: customer.payment_terms ? `Net ${customer.payment_terms} days` : prev.payment_terms
       }));
     }
@@ -73,6 +90,29 @@ const CreateContractModal: React.FC<CreateContractModalProps> = ({ onSave, onClo
 
   const handleInputChange = (field: string, value: string | number) => {
     setFormData(prev => ({ ...prev, [field]: value }));
+  };
+
+  const applyIrishTemplate = (contractType: ContractType) => {
+    const tpl = getEntityTemplate(contractType);
+    if (!tpl) return;
+    setFormData(prev => ({
+      ...prev,
+      contract_title: prev.contract_title || tpl.contract_title,
+      preamble: tpl.preamble,
+      currency_code: tpl.currency_code,
+      contract_type: contractType,
+    }));
+    setSections(tpl.sections.map(s => ({
+      id: `tpl-${s.section_number}-${Date.now()}`,
+      section_number: s.section_number,
+      section_title: s.section_title,
+      section_content: s.section_content,
+      is_required: s.is_required,
+      is_locked: s.is_locked,
+      page_break_before: s.page_break_before,
+    })));
+    setTemplateApplied(true);
+    setActiveTab('basic');
   };
 
   const handleAddSection = () => {
@@ -233,6 +273,48 @@ const CreateContractModal: React.FC<CreateContractModalProps> = ({ onSave, onClo
           {/* Basic Info Tab */}
           {activeTab === 'basic' && (
             <div className="space-y-4">
+
+              {/* Entity Template Picker — shown for Irish and Indian entities */}
+              {hasEntityTemplates && (
+                <div className={`rounded-lg border p-4 ${templateApplied ? 'bg-green-50 border-green-200' : 'bg-blue-50 border-blue-200'}`}>
+                  <div className="flex items-start gap-3">
+                    <FileText className={`w-5 h-5 mt-0.5 flex-shrink-0 ${templateApplied ? 'text-green-600' : 'text-blue-600'}`} />
+                    <div className="flex-1">
+                      <p className={`text-sm font-semibold ${templateApplied ? 'text-green-800' : 'text-blue-800'}`}>
+                        {templateApplied ? '✓ Irish Law Template Applied' : 'Irish Law Templates Available'}
+                      </p>
+                      <p className={`text-xs mt-0.5 ${templateApplied ? 'text-green-700' : 'text-blue-700'}`}>
+                        {templateApplied
+                          ? 'Compliance clauses are locked and protected. Editable sections are marked with an unlock icon.'
+                          : 'Select a template to pre-populate this contract with Irish law-compliant sections and locked regulatory clauses.'}
+                      </p>
+                      {!templateApplied && (
+                        <div className="flex flex-wrap gap-2 mt-3">
+                          {availableTemplates.map(t => (
+                            <button
+                              key={t.contract_type}
+                              type="button"
+                              onClick={() => applyIrishTemplate(t.contract_type)}
+                              className="px-3 py-1.5 text-xs font-medium bg-white border border-blue-300 text-blue-700 rounded-md hover:bg-blue-50 transition-colors"
+                            >
+                              {t.label}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      {templateApplied && (
+                        <button
+                          type="button"
+                          onClick={() => { setTemplateApplied(false); setSections([]); }}
+                          className="mt-2 text-xs text-green-700 underline hover:no-underline"
+                        >
+                          Clear template and start blank
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-4">
                 <div className="col-span-2">
                   <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -409,19 +491,21 @@ const CreateContractModal: React.FC<CreateContractModalProps> = ({ onSave, onClo
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">GSTIN</label>
-                    <input
-                      type="text"
-                      value={formData.party_a_gstin || ''}
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      {isIrishEntity ? 'VAT Number' : 'GSTIN'}
+                    </label>
+                    <input type="text"
+                      value={isIrishEntity ? (formData.party_a_vat_number || '') : (formData.party_a_gstin || '')}
                       readOnly
                       className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 text-gray-600 cursor-not-allowed"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">PAN</label>
-                    <input
-                      type="text"
-                      value={formData.party_a_pan || ''}
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      {isIrishEntity ? 'CRO Number' : 'PAN'}
+                    </label>
+                    <input type="text"
+                      value={isIrishEntity ? (formData.party_a_cro_number || '') : (formData.party_a_pan || '')}
                       readOnly
                       className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 text-gray-600 cursor-not-allowed"
                     />
@@ -447,7 +531,7 @@ const CreateContractModal: React.FC<CreateContractModalProps> = ({ onSave, onClo
                     <option value="">-- Select a customer --</option>
                     {customers.map(customer => (
                       <option key={customer.id} value={customer.id}>
-                        {customer.company_name || customer.contact_person || 'Unnamed Customer'}
+                        {formatCustomerOption(customer, companies, selectedCompany)}
                       </option>
                     ))}
                   </select>
@@ -488,21 +572,25 @@ const CreateContractModal: React.FC<CreateContractModalProps> = ({ onSave, onClo
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">GSTIN</label>
-                    <input
-                      type="text"
-                      value={formData.party_b_gstin || ''}
-                      onChange={(e) => handleInputChange('party_b_gstin', e.target.value)}
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      {isIrishEntity ? 'VAT Number' : 'GSTIN'}
+                    </label>
+                    <input type="text"
+                      value={isIrishEntity ? (formData.party_b_vat_number || '') : (formData.party_b_gstin || '')}
+                      onChange={(e) => handleInputChange(isIrishEntity ? 'party_b_vat_number' : 'party_b_gstin', e.target.value)}
                       className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder={isIrishEntity ? 'e.g., IE1234567T' : 'e.g., 22AAAAA0000A1Z5'}
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">PAN</label>
-                    <input
-                      type="text"
-                      value={formData.party_b_pan || ''}
-                      onChange={(e) => handleInputChange('party_b_pan', e.target.value)}
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      {isIrishEntity ? 'CRO Number' : 'PAN'}
+                    </label>
+                    <input type="text"
+                      value={isIrishEntity ? (formData.party_b_cro_number || '') : (formData.party_b_pan || '')}
+                      onChange={(e) => handleInputChange(isIrishEntity ? 'party_b_cro_number' : 'party_b_pan', e.target.value)}
                       className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder={isIrishEntity ? 'e.g., 123456' : 'e.g., ABCDE1234F'}
                     />
                   </div>
                 </div>
@@ -514,7 +602,15 @@ const CreateContractModal: React.FC<CreateContractModalProps> = ({ onSave, onClo
           {activeTab === 'sections' && (
             <div className="space-y-4">
               <div className="flex justify-between items-center">
-                <h3 className="text-lg font-semibold text-gray-900">Contract Sections</h3>
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900">Contract Sections</h3>
+                  {templateApplied && (
+                    <p className="text-xs text-gray-500 mt-0.5 flex items-center gap-1">
+                      <Lock className="w-3 h-3 text-red-500" /> Locked = compliance clause &nbsp;
+                      <Unlock className="w-3 h-3 text-green-600" /> Unlocked = editable
+                    </p>
+                  )}
+                </div>
                 <button
                   type="button"
                   onClick={handleAddSection}
@@ -527,67 +623,100 @@ const CreateContractModal: React.FC<CreateContractModalProps> = ({ onSave, onClo
 
               {sections.length === 0 ? (
                 <div className="text-center py-12 text-gray-500">
-                  No sections added yet. Click "Add Section" to get started.
+                  No sections added yet. Click "Add Section" or apply an Irish law template above.
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {sections.map((section, index) => (
-                    <div key={section.id} className="border border-gray-200 rounded-lg p-4 bg-gray-50">
+                  {sections.map((section, index) => {
+                    const locked = !!section.is_locked;
+                    return (
+                    <div key={section.id} className={`border rounded-lg p-4 ${locked ? 'border-red-200 bg-red-50' : 'border-gray-200 bg-gray-50'}`}>
                       <div className="flex items-start justify-between mb-3">
                         <div className="flex items-center space-x-2">
                           <GripVertical className="w-5 h-5 text-gray-400" />
                           <span className="font-semibold text-gray-900">Section {section.section_number}</span>
+                          {locked ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700 border border-red-200">
+                              <Lock className="w-3 h-3" /> Compliance — Locked
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700 border border-green-200">
+                              <Unlock className="w-3 h-3" /> Editable
+                            </span>
+                          )}
                         </div>
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveSection(index)}
-                          className="text-red-600 hover:text-red-800"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                        {!locked && (
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveSection(index)}
+                            className="text-red-600 hover:text-red-800"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
                       </div>
+
+                      {locked && (
+                        <div className="mb-2 flex items-start gap-2 text-xs text-red-700 bg-red-100 rounded p-2">
+                          <AlertCircle className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
+                          This section contains a mandatory Irish law compliance clause and cannot be modified.
+                        </div>
+                      )}
+
                       <div className="space-y-3">
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-1">Section Title *</label>
                           <input
                             type="text"
                             value={section.section_title}
-                            onChange={(e) => handleSectionChange(index, 'section_title', e.target.value)}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            onChange={(e) => !locked && handleSectionChange(index, 'section_title', e.target.value)}
+                            readOnly={locked}
+                            className={`w-full px-3 py-2 border rounded-md ${locked ? 'border-red-200 bg-red-50 text-gray-600 cursor-not-allowed' : 'border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent'}`}
                             required
                           />
                         </div>
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">Section Content *</label>
-                          <RichTextEditor
-                            value={section.section_content}
-                            onChange={(value) => handleSectionChange(index, 'section_content', value)}
-                            placeholder="Enter section content. Use the toolbar for formatting."
-                          />
-                        </div>
-                        <div className="flex items-center space-x-4">
-                          <label className="flex items-center">
-                            <input
-                              type="checkbox"
-                              checked={section.is_required}
-                              onChange={(e) => handleSectionChange(index, 'is_required', e.target.checked)}
-                              className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                            />
-                            <span className="ml-2 text-sm text-gray-700">Required Section</span>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Section Content {locked ? '' : '*'}
                           </label>
-                          <label className="flex items-center">
-                            <input
-                              type="checkbox"
-                              checked={section.page_break_before}
-                              onChange={(e) => handleSectionChange(index, 'page_break_before', e.target.checked)}
-                              className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                          {locked ? (
+                            <div className="w-full px-3 py-2 border border-red-200 rounded-md bg-red-50 text-sm text-gray-700 whitespace-pre-wrap min-h-[80px]">
+                              {section.section_content}
+                            </div>
+                          ) : (
+                            <RichTextEditor
+                              value={section.section_content}
+                              onChange={(value) => handleSectionChange(index, 'section_content', value)}
+                              placeholder={section.section_title === 'Scope of Work' ? 'Describe the specific scope of work for this engagement…' : 'Enter section content.'}
                             />
-                            <span className="ml-2 text-sm text-gray-700">Page Break Before</span>
-                          </label>
+                          )}
                         </div>
+                        {!locked && (
+                          <div className="flex items-center space-x-4">
+                            <label className="flex items-center">
+                              <input
+                                type="checkbox"
+                                checked={section.is_required}
+                                onChange={(e) => handleSectionChange(index, 'is_required', e.target.checked)}
+                                className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                              />
+                              <span className="ml-2 text-sm text-gray-700">Required Section</span>
+                            </label>
+                            <label className="flex items-center">
+                              <input
+                                type="checkbox"
+                                checked={section.page_break_before}
+                                onChange={(e) => handleSectionChange(index, 'page_break_before', e.target.checked)}
+                                className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                              />
+                              <span className="ml-2 text-sm text-gray-700">Page Break Before</span>
+                            </label>
+                          </div>
+                        )}
                       </div>
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>

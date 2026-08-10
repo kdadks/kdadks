@@ -32,6 +32,7 @@ export interface TDSReportFilters {
   end_date: string;
   employee_id?: string;
   financial_year?: string;
+  company_settings_id?: string;
 }
 
 class TDSReportService {
@@ -78,10 +79,14 @@ class TDSReportService {
         const employeeIds = [...new Set(filteredSlips.map(s => s.employee_id))].filter(id => id);
 
         if (employeeIds.length > 0) {
-          const { data: employees, error: empError } = await supabase
+          let empQuery = supabase
             .from('employees')
-            .select('id, employee_number, full_name, pan_number')
+            .select('id, employee_number, full_name, pan_number, company_settings_id')
             .in('id', employeeIds);
+          if (filters.company_settings_id) {
+            empQuery = empQuery.or(`company_settings_id.eq.${filters.company_settings_id},company_settings_id.is.null`);
+          }
+          const { data: employees, error: empError } = await empQuery;
 
           if (empError) {
             console.error('Error fetching employees:', empError);

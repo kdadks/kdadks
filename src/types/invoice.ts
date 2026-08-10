@@ -120,6 +120,9 @@ export interface Customer {
   email?: string;
   phone?: string;
   
+  // Unique customer ID: stored as YYYY-XXXX, displayed with entity prefix
+  customer_code?: string;
+  
   // Address
   address_line1?: string;
   address_line2?: string;
@@ -127,6 +130,9 @@ export interface Customer {
   state?: string;
   postal_code?: string;
   country_id?: string;
+  
+  // Entity association
+  company_settings_id?: string;
   
   // IGST Information (if applicable)
   gstin?: string;
@@ -399,6 +405,7 @@ export interface CreateCustomerData {
   state?: string;
   postal_code?: string;
   country_id?: string;
+  company_settings_id?: string;
   gstin?: string;
   pan?: string;
   credit_limit?: number;
@@ -550,11 +557,13 @@ export interface InvoiceFilters {
   date_to?: string;
   search?: string;
   subscription_only?: boolean;
+  company_settings_id?: string;
 }
 
 export interface CustomerFilters {
   search?: string;
   country_id?: string;
+  company_settings_id?: string;
   is_active?: boolean;
 }
 

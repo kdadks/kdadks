@@ -225,6 +225,8 @@ const Router = () => {
             <Route path="/admin/subscriptions" element={<SimpleAdminDashboard />} />
             <Route path="/admin/board-resolutions" element={<SimpleAdminDashboard />} />
             <Route path="/admin/settings" element={<SimpleAdminDashboard />} />
+            <Route path="/admin/customers" element={<SimpleAdminDashboard />} />
+            <Route path="/admin/products" element={<SimpleAdminDashboard />} />
             
             {/* Employee Portal routes */}
             <Route path="/employee/login" element={<EmployeeLogin />} />

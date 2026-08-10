@@ -202,6 +202,7 @@ export const financeService = {
     startDate?: string;
     endDate?: string;
     reconciled?: boolean;
+    company_settings_id?: string;
   }): Promise<ManualTransaction[]> {
     let query = supabase
       .from('manual_transactions')
@@ -212,6 +213,7 @@ export const financeService = {
     if (filters?.startDate) query = query.gte('transaction_date', filters.startDate);
     if (filters?.endDate) query = query.lte('transaction_date', filters.endDate);
     if (filters?.reconciled !== undefined) query = query.eq('is_reconciled', filters.reconciled);
+    if (filters?.company_settings_id) query = query.or(`company_settings_id.eq.${filters.company_settings_id},company_settings_id.is.null`);
 
     const { data, error } = await query;
     if (error) throw error;

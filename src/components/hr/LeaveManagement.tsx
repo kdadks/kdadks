@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { leaveAttendanceService } from '../../services/leaveAttendanceService';
 import { employeeService } from '../../services/employeeService';
+import { useCompanyContext } from '../../contexts/CompanyContext';
 import { useToast } from '../ui/ToastProvider';
 import type {
   LeaveApplication,
@@ -28,6 +29,7 @@ interface LeaveManagementProps {
 type ActiveTab = 'applications' | 'balances' | 'allocate';
 
 const LeaveManagement: React.FC<LeaveManagementProps> = ({ onBackToDashboard, currentUserId }) => {
+  const { selectedCompany } = useCompanyContext();
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<ActiveTab>('applications');
   const [leaveApplications, setLeaveApplications] = useState<LeaveApplication[]>([]);
@@ -55,13 +57,17 @@ const LeaveManagement: React.FC<LeaveManagementProps> = ({ onBackToDashboard, cu
     loadData();
   }, []);
 
+  useEffect(() => {
+    loadData();
+  }, [selectedCompany]);
+
   const loadData = async () => {
     try {
       setLoading(true);
       const [apps, types, emps] = await Promise.all([
         leaveAttendanceService.getLeaveApplications(),
         leaveAttendanceService.getLeaveTypes(),
-        employeeService.getEmployees()
+        employeeService.getEmployees(selectedCompany?.id)
       ]);
 
       setLeaveApplications(apps);

@@ -13,6 +13,7 @@ import {
 import { useToast } from '../ui/ToastProvider';
 import { useConfirmDialog } from '../../hooks/useConfirmDialog';
 import ConfirmDialog from '../ui/ConfirmDialog';
+import { useCompanyContext } from '../../contexts/CompanyContext';
 
 type TabType = 'income' | 'categories';
 
@@ -51,6 +52,7 @@ interface IncomeStats {
 const IncomeManagement: React.FC = () => {
   const { showError, showSuccess } = useToast();
   const { confirm, dialogProps } = useConfirmDialog();
+  const { selectedCompany } = useCompanyContext();
 
   // Tabs
   const [activeTab, setActiveTab] = useState<TabType>('income');
@@ -82,11 +84,15 @@ const IncomeManagement: React.FC = () => {
     loadAll();
   }, []);
 
+  useEffect(() => {
+    loadAll();
+  }, [selectedCompany]);
+
   const loadAll = async () => {
     setLoading(true);
     try {
       const [data, cats] = await Promise.all([
-        financeService.getTransactions({ type: 'income' }),
+        financeService.getTransactions({ type: 'income', company_settings_id: selectedCompany?.id }),
         financeService.getIncomeCategories()
       ]);
       setEntries(data);
@@ -102,7 +108,7 @@ const IncomeManagement: React.FC = () => {
 
   const loadEntries = async () => {
     try {
-      const data = await financeService.getTransactions({ type: 'income' });
+      const data = await financeService.getTransactions({ type: 'income', company_settings_id: selectedCompany?.id });
       setEntries(data);
       computeStats(data, categories);
     } catch (error) {

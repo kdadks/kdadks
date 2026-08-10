@@ -270,6 +270,10 @@ class InvoiceService {
       if (filters.country_id) {
         query = query.eq('country_id', filters.country_id);
       }
+      // Show entity-specific records AND shared records (null = visible to all)
+      if (filters.company_settings_id) {
+        query = query.or(`company_settings_id.eq.${filters.company_settings_id},company_settings_id.is.null`);
+      }
       if (filters.is_active !== undefined) {
         query = query.eq('is_active', filters.is_active);
       }
@@ -308,17 +312,34 @@ class InvoiceService {
   }
 
   async createCustomer(customer: CreateCustomerData): Promise<Customer> {
-    const { data, error } = await supabase
-      .from('customers')
-      .insert(customer)
-      .select(`
-        *,
-        country:countries(*)
-      `)
-      .single();
-    
-    if (error) throw error;
-    return data;
+    // Generate sequential customer_code: YYYY-XXXX (e.g. 2026-0001)
+    const year = new Date().getFullYear();
+    const prefix = `${year}-`;
+    let attempts = 0;
+    while (attempts < 10) {
+      const { data: latest } = await supabase
+        .from('customers')
+        .select('customer_code')
+        .like('customer_code', `${prefix}%`)
+        .order('customer_code', { ascending: false })
+        .limit(1);
+      const lastSeq = latest?.[0]?.customer_code
+        ? parseInt(latest[0].customer_code.split('-')[1], 10)
+        : 0;
+      const nextCode = `${prefix}${String(lastSeq + 1 + attempts).padStart(4, '0')}`;
+
+      const { data, error } = await supabase
+        .from('customers')
+        .insert({ ...customer, customer_code: nextCode })
+        .select(`*, country:countries(*)`)
+        .single();
+
+      if (!error) return data;
+      // Retry on unique-constraint collision (code 23505)
+      if ((error as { code?: string }).code !== '23505') throw error;
+      attempts++;
+    }
+    throw new Error('Failed to generate unique customer code after 10 attempts');
   }
 
   async updateCustomer(id: string, customer: Partial<CreateCustomerData>): Promise<Customer> {
@@ -713,6 +734,9 @@ class InvoiceService {
       }
       if (filters.subscription_only) {
         query = query.not('subscription_id', 'is', null);
+      }
+      if (filters.company_settings_id) {
+        query = query.eq('company_settings_id', filters.company_settings_id);
       }
     }
 

@@ -105,6 +105,7 @@ const BoardResolutionManagement: React.FC = () => {
       const filters: BoardResolutionFilters = {};
       if (filterStatus) filters.status = filterStatus;
       if (searchTerm) filters.search = searchTerm;
+      if (selectedCompany?.id) filters.company_settings_id = selectedCompany.id;
 
       const [{ data, total }, statsData, companies] = await Promise.all([
         boardResolutionService.getResolutions(currentPage, PAGE_SIZE, filters),

@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { settlementService } from '../../services/settlementService';
 import { employeeService } from '../../services/employeeService';
+import { useCompanyContext } from '../../contexts/CompanyContext';
 import { useToast } from '../ui/ToastProvider';
 import type {
   FullFinalSettlement,
@@ -34,6 +35,7 @@ type ActiveView = 'list' | 'create' | 'view' | 'edit' | 'preview';
 const FullFinalSettlementComponent: React.FC<FullFinalSettlementProps> = ({
   onBackToDashboard
 }) => {
+  const { selectedCompany } = useCompanyContext();
   const [settlements, setSettlements] = useState<FullFinalSettlement[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(true);
@@ -72,12 +74,16 @@ const FullFinalSettlementComponent: React.FC<FullFinalSettlementProps> = ({
     loadData();
   }, []);
 
+  useEffect(() => {
+    loadData();
+  }, [selectedCompany]);
+
   const loadData = async () => {
     try {
       setLoading(true);
       const [settlementsData, employeesData] = await Promise.all([
         settlementService.getSettlements(),
-        employeeService.getEmployees()
+        employeeService.getEmployees(selectedCompany?.id)
       ]);
 
       setSettlements(settlementsData);

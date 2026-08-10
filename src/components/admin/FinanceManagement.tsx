@@ -18,6 +18,7 @@ import type { CompanySettings, Country } from '../../types/invoice';
 import { useToast } from '../ui/ToastProvider';
 import { useConfirmDialog } from '../../hooks/useConfirmDialog';
 import ConfirmDialog from '../ui/ConfirmDialog';
+import { useCompanyContext } from '../../contexts/CompanyContext';
 
 type ViewType = 'dashboard' | 'transactions' | 'reports';
 type PeriodType = 'monthly' | 'quarterly' | 'yearly';
@@ -50,6 +51,7 @@ const formatDate = (date: string) => {
 const FinanceManagement: React.FC = () => {
   const { showError, showSuccess } = useToast();
   const { confirm, dialogProps } = useConfirmDialog();
+  const { selectedCompany } = useCompanyContext();
   const [activeView, setActiveView] = useState<ViewType>('dashboard');
   const [loading, setLoading] = useState(true);
   const [periodType, setPeriodType] = useState<PeriodType>('monthly');
@@ -107,7 +109,7 @@ const FinanceManagement: React.FC = () => {
     loadDashboardData();
     loadCountries();
     loadCompanySettings();
-  }, [selectedYear, selectedMonth, selectedQuarter, periodType]);
+  }, [selectedYear, selectedMonth, selectedQuarter, periodType, selectedCompany]);
 
   // Convert FY month (1=Apr, 12=Mar) to calendar month and year
   const fyMonthToCalendar = (fyMonth: number, fyStartYear: number) => {

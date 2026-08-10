@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { leaveAttendanceService } from '../../services/leaveAttendanceService';
 import { employeeService } from '../../services/employeeService';
+import { useCompanyContext } from '../../contexts/CompanyContext';
 import { useToast } from '../ui/ToastProvider';
 import type { AttendanceRecord, MonthlyAttendanceSummary } from '../../types/payroll';
 import type { Employee } from '../../types/employee';
@@ -39,6 +40,7 @@ interface CompanyHoliday {
 type ActiveTab = 'holiday-calendar' | 'view-records' | 'monthly-summary';
 
 const AttendanceManagement: React.FC<AttendanceManagementProps> = ({ onBackToDashboard }) => {
+  const { selectedCompany } = useCompanyContext();
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -70,6 +72,10 @@ const AttendanceManagement: React.FC<AttendanceManagementProps> = ({ onBackToDas
   }, []);
 
   useEffect(() => {
+    loadData();
+  }, [selectedCompany]);
+
+  useEffect(() => {
     if (activeTab === 'holiday-calendar') {
       loadHolidays();
     } else if (activeTab === 'view-records') {
@@ -82,7 +88,7 @@ const AttendanceManagement: React.FC<AttendanceManagementProps> = ({ onBackToDas
   const loadData = async () => {
     try {
       setLoading(true);
-      const emps = await employeeService.getEmployees();
+      const emps = await employeeService.getEmployees(selectedCompany?.id);
       setEmployees(emps.filter(e => e.employment_status === 'active'));
     } catch (error) {
       console.error('Error loading data:', error);

@@ -186,7 +186,7 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
     try {
       setLoading(true);
       const [employeesData, documentsData, salarySlipsData, hrSettingsData] = await Promise.all([
-        employeeService.getEmployees(),
+        employeeService.getEmployees(selectedCompany?.id),
         employeeService.getAllEmployeeDocuments(),
         employeeService.getSalarySlips(),
         employeeService.getHRDocumentSettings()

@@ -15,6 +15,7 @@ import {
   Save
 } from 'lucide-react';
 import { contractService } from '../../services/contractService';
+import { contractAuditService } from '../../services/contractAuditService';
 import { invoiceService } from '../../services/invoiceService';
 import { useCompanyContext } from '../../contexts/CompanyContext';
 import { useToast } from '../ui/ToastProvider';
@@ -25,6 +26,7 @@ import ViewContractModal from './ViewContractModal';
 import EditContractModal from './EditContractModal';
 import StatusUpdateModal from './StatusUpdateModal';
 import CreateContractModal from './CreateContractModal';
+import { getEntityPrefix } from '../../utils/customerCodeUtils';
 import type { CompanySettings } from '../../types/invoice';
 import type { 
   Contract, 
@@ -34,7 +36,8 @@ import type {
   ContractStatus,
   ContractWithDetails,
   CreateContractData,
-  CreateContractSectionData
+  CreateContractSectionData,
+  ContractAuditLog
 } from '../../types/contract';
 
 const ContractManagement: React.FC = () => {
@@ -56,6 +59,8 @@ const ContractManagement: React.FC = () => {
   const [showEditModal, setShowEditModal] = useState(false);
   const [showStatusModal, setShowStatusModal] = useState(false);
   const [selectedContract, setSelectedContract] = useState<ContractWithDetails | null>(null);
+  const [auditLogs, setAuditLogs] = useState<ContractAuditLog[]>([]);
+  const [showAuditPanel, setShowAuditPanel] = useState(false);
   const [formData, setFormData] = useState<CreateContractData>({
     party_a_name: '',
     party_b_name: '',
@@ -93,7 +98,7 @@ const ContractManagement: React.FC = () => {
 
       // Load contracts
       const contractsData = await contractService.getContracts(
-        { ...filters, search: searchTerm },
+        { ...filters, search: searchTerm, company_settings_id: selectedCompany?.id },
         currentPage,
         perPage
       );
@@ -152,7 +157,8 @@ const ContractManagement: React.FC = () => {
       contract_title: '',
       contract_date: new Date().toISOString().split('T')[0],
       effective_date: new Date().toISOString().split('T')[0],
-      currency_code: 'INR',
+      currency_code: selectedCompany?.country?.code === 'IE' || selectedCompany?.country?.code === 'IRL' ? 'EUR' : 'INR',
+      entity_prefix: getEntityPrefix(selectedCompany),
       sections: [
         {
           section_number: 1,
@@ -169,14 +175,15 @@ const ContractManagement: React.FC = () => {
   // Handle save new contract
   const handleSaveNewContract = async (contractData: CreateContractData) => {
     try {
-      await contractService.createContract(contractData);
+      const created = await contractService.createContract(contractData);
+      await contractAuditService.log(created.id, 'create', 'contract', undefined, created.contract_number);
       showSuccess('Contract created successfully');
       setShowCreateModal(false);
       await loadData();
     } catch (err) {
       console.error('Error creating contract:', err);
       showError('Failed to create contract');
-      throw err; // Re-throw to keep modal open on error
+      throw err;
     }
   };
 
@@ -184,9 +191,14 @@ const ContractManagement: React.FC = () => {
   const handleViewContract = async (contractId: string) => {
     try {
       setLoading(true);
-      const contract = await contractService.getContractById(contractId);
+      const [contract, logs] = await Promise.all([
+        contractService.getContractById(contractId),
+        contractAuditService.getLogsForContract(contractId).catch(() => []),
+      ]);
       if (contract) {
         setSelectedContract(contract);
+        setAuditLogs(logs);
+        setShowAuditPanel(false);
         setShowViewModal(true);
       } else {
         showError('Contract not found');
@@ -223,6 +235,7 @@ const ContractManagement: React.FC = () => {
     try {
       setLoading(true);
       await contractService.updateContract(updatedContract);
+      await contractAuditService.log(updatedContract.id, 'edit', 'contract', undefined, 'Contract updated');
       showSuccess('Contract updated successfully');
       setShowEditModal(false);
       setSelectedContract(null);
@@ -230,7 +243,7 @@ const ContractManagement: React.FC = () => {
     } catch (err) {
       console.error('Error updating contract:', err);
       showError('Failed to update contract');
-      throw err; // Re-throw to keep modal open on error
+      throw err;
     } finally {
       setLoading(false);
     }
@@ -732,8 +745,71 @@ const ContractManagement: React.FC = () => {
           onClose={() => {
             setShowViewModal(false);
             setSelectedContract(null);
+            setAuditLogs([]);
           }}
         />
+      )}
+
+      {/* Audit Trail Panel — slides in over view modal */}
+      {showViewModal && selectedContract && (
+        <div className="fixed inset-y-0 right-0 z-[60] w-full max-w-md bg-white shadow-2xl border-l border-gray-200 flex flex-col"
+          style={{ display: showAuditPanel ? 'flex' : 'none' }}>
+          <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 bg-gray-50">
+            <div>
+              <h3 className="text-base font-semibold text-gray-900">Audit Trail</h3>
+              <p className="text-xs text-gray-500">{selectedContract.contract_number}</p>
+            </div>
+            <button onClick={() => setShowAuditPanel(false)} className="text-gray-400 hover:text-gray-700">
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+          <div className="flex-1 overflow-y-auto p-4 space-y-3">
+            {auditLogs.length === 0 ? (
+              <div className="text-center py-12 text-gray-400 text-sm">No audit history yet.</div>
+            ) : (
+              auditLogs.map(log => (
+                <div key={log.id} className="bg-white border border-gray-100 rounded-lg p-3 shadow-sm">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs font-semibold text-gray-700 capitalize">{log.action.replace('_', ' ')}</span>
+                    <span className="text-xs text-gray-400">{new Date(log.changed_at).toLocaleString()}</span>
+                  </div>
+                  <div className="text-xs text-gray-600">
+                    <span className="font-medium">By:</span> {log.user_email ?? log.user_id ?? 'Unknown user'}
+                  </div>
+                  {log.field_name && (
+                    <div className="text-xs text-gray-600 mt-0.5">
+                      <span className="font-medium">Field:</span> {log.field_name}
+                    </div>
+                  )}
+                  {log.old_value && (
+                    <div className="text-xs mt-1 bg-red-50 border border-red-100 rounded px-2 py-1">
+                      <span className="text-red-600 font-medium">Before:</span> <span className="text-gray-700">{log.old_value}</span>
+                    </div>
+                  )}
+                  {log.new_value && (
+                    <div className="text-xs mt-1 bg-green-50 border border-green-100 rounded px-2 py-1">
+                      <span className="text-green-600 font-medium">After:</span> <span className="text-gray-700">{log.new_value}</span>
+                    </div>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Audit trail toggle button — visible when view modal is open */}
+      {showViewModal && selectedContract && (
+        <button
+          onClick={() => setShowAuditPanel(p => !p)}
+          className="fixed bottom-6 right-6 z-[61] flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-full shadow-lg hover:bg-indigo-700"
+        >
+          <FileText className="w-4 h-4" />
+          {showAuditPanel ? 'Hide Audit Trail' : 'View Audit Trail'}
+          {auditLogs.length > 0 && (
+            <span className="ml-1 bg-white text-indigo-600 text-xs font-bold rounded-full px-1.5">{auditLogs.length}</span>
+          )}
+        </button>
       )}
 
       {/* Edit Contract Modal */}

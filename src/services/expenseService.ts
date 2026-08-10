@@ -257,6 +257,7 @@ export const expenseService = {
       vendorId?: string;
       startDate?: string;
       endDate?: string;
+      company_settings_id?: string;
     },
     page: number = 1,
     perPage: number = 20
@@ -276,6 +277,7 @@ export const expenseService = {
     if (filters?.vendorId) query = query.eq('vendor_id', filters.vendorId);
     if (filters?.startDate) query = query.gte('expense_date', filters.startDate);
     if (filters?.endDate) query = query.lte('expense_date', filters.endDate);
+    if (filters?.company_settings_id) query = query.or(`company_settings_id.eq.${filters.company_settings_id},company_settings_id.is.null`);
 
     const from = (page - 1) * perPage;
     const to = from + perPage - 1;

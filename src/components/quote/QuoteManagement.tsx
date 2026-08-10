@@ -31,6 +31,7 @@ import { PDFBrandingUtils } from '../../utils/pdfBrandingUtils';
 import { CurrencyDisplay } from '../ui/CurrencyDisplay';
 import { CreateQuote } from './CreateQuote';
 import { getTaxLabel, getTaxRegistrationLabel, getDefaultTaxRate, getClassificationCodeLabel, getCompanyTaxFields } from '../../utils/taxUtils';
+import { getPrimaryCustomerId } from '../../utils/customerCodeUtils';
 import type { 
   Quote, 
   QuoteFilters, 
@@ -134,11 +135,12 @@ const QuoteManagement: React.FC<QuoteManagementProps> = ({ onBackToDashboard }) 
         console.warn('Failed to load settings:', settingsError);
       }
 
+      const entityFilter = { company_settings_id: selectedCompany?.id };
       if (activeTab === 'dashboard') {
         const [quotesData, statsData, customersData] = await Promise.all([
-          quoteService.getQuotes(filters, currentPage, 10),
+          quoteService.getQuotes({ ...filters, ...entityFilter }, currentPage, 10),
           quoteService.getQuoteStats(),
-          invoiceService.getCustomers({}, 1, 1000)
+          invoiceService.getCustomers(entityFilter, 1, 1000)
         ]);
         setQuotes(quotesData.data);
         setCustomers(customersData.data || []);
@@ -146,19 +148,18 @@ const QuoteManagement: React.FC<QuoteManagementProps> = ({ onBackToDashboard }) 
         setStats(statsData);
       } else if (activeTab === 'quotes') {
         const [quotesData, customersData] = await Promise.all([
-          quoteService.getQuotes(filters, currentPage, 20),
-          invoiceService.getCustomers({}, 1, 1000)
+          quoteService.getQuotes({ ...filters, ...entityFilter }, currentPage, 20),
+          invoiceService.getCustomers(entityFilter, 1, 1000)
         ]);
         setQuotes(quotesData.data);
         setCustomers(customersData.data || []);
         setTotalPages(quotesData.total_pages);
       } else if (activeTab === 'create-quote') {
         const [customersData, productsData, termsData] = await Promise.all([
-          invoiceService.getCustomers({}, 1, 1000),
+          invoiceService.getCustomers(entityFilter, 1, 1000),
           invoiceService.getProducts({}, 1, 1000),
           invoiceService.getTermsTemplates()
         ]);
-        
         setCustomers(customersData.data || []);
         setProducts(productsData.data || []);
         setTermsTemplates(termsData || []);
@@ -599,7 +600,7 @@ const QuoteManagement: React.FC<QuoteManagementProps> = ({ onBackToDashboard }) 
       // Load necessary data for viewing
       const [fullQuote, customersData] = await Promise.all([
         quoteService.getQuoteById(quote.id),
-        customers.length === 0 ? invoiceService.getCustomers({}, 1, 1000) : Promise.resolve({ data: customers })
+        customers.length === 0 ? invoiceService.getCustomers({ company_settings_id: selectedCompany?.id }, 1, 1000) : Promise.resolve({ data: customers })
       ]);
       
       if (customersData.data && customersData.data.length > 0 && customers.length === 0) {
@@ -679,7 +680,7 @@ const QuoteManagement: React.FC<QuoteManagementProps> = ({ onBackToDashboard }) 
       if (customers.length === 0 || products.length === 0) {
         try {
           const [customersData, productsData, termsData] = await Promise.all([
-            invoiceService.getCustomers({}, 1, 1000),
+            invoiceService.getCustomers({ company_settings_id: selectedCompany?.id }, 1, 1000),
             invoiceService.getProducts({}, 1, 1000),
             invoiceService.getTermsTemplates()
           ]);
@@ -838,7 +839,7 @@ const QuoteManagement: React.FC<QuoteManagementProps> = ({ onBackToDashboard }) 
       // Load full quote details and customer data if needed
       const [fullQuote, customersData] = await Promise.all([
         quoteService.getQuoteById(quote.id),
-        customers.length === 0 ? invoiceService.getCustomers({}, 1, 1000) : Promise.resolve({ data: customers })
+        customers.length === 0 ? invoiceService.getCustomers({ company_settings_id: selectedCompany?.id }, 1, 1000) : Promise.resolve({ data: customers })
       ]);
       
       if (!fullQuote) {
@@ -1587,6 +1588,11 @@ const QuoteManagement: React.FC<QuoteManagementProps> = ({ onBackToDashboard }) 
               <div className="text-sm text-gray-900 truncate max-w-xs">
                 {quote.customer?.company_name || quote.customer?.contact_person || 'N/A'}
               </div>
+              {quote.customer?.customer_code && (
+                <div className="text-xs font-mono text-indigo-600 mt-0.5">
+                  {getPrimaryCustomerId(quote.customer, companySettings, selectedCompany)}
+                </div>
+              )}
             </td>
             <td className="px-3 py-3 whitespace-nowrap">
               <div className="text-sm text-gray-900">

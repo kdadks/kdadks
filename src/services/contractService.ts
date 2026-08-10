@@ -23,38 +23,53 @@ class ContractService {
   // =====================================================
   // CONTRACT NUMBER GENERATION
   // =====================================================
-  
+
   /**
-   * Generate next contract number
-   * Format: KDADKS/C/YYYY/MM/###
+   * Generate next contract number.
+   * New format: {ENTITY_PREFIX}-{CONTRACT_TYPE}-{YYYY}-{XXX}
+   * e.g. IND-MSA-2026-001, IRL-SOW-2026-003
+   * Falls back to legacy KDADKS/C/YYYY/MM/### when no entity prefix is supplied.
    */
-  async generateContractNumber(): Promise<string> {
+  async generateContractNumber(entityPrefix?: string, contractType?: string): Promise<string> {
     if (!isSupabaseConfigured) {
       throw new Error('Database is not configured');
     }
 
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = (now.getMonth() + 1).toString().padStart(2, '0');
-    const prefix = `KDADKS/C/${year}/${month}/`;
+    const year = new Date().getFullYear();
 
-    // Get the highest contract number for this month
+    if (entityPrefix && contractType) {
+      const prefix = `${entityPrefix}-${contractType}-${year}-`;
+      const { data, error } = await supabase
+        .from('contracts')
+        .select('contract_number')
+        .like('contract_number', `${prefix}%`)
+        .order('contract_number', { ascending: false })
+        .limit(1);
+      if (error) throw error;
+      let next = 1;
+      if (data && data.length > 0) {
+        const tail = data[0].contract_number.split('-').pop();
+        next = parseInt(tail || '0', 10) + 1;
+      }
+      return `${prefix}${next.toString().padStart(3, '0')}`;
+    }
+
+    // Legacy fallback
+    const month = (new Date().getMonth() + 1).toString().padStart(2, '0');
+    const legacyPrefix = `KDADKS/C/${year}/${month}/`;
     const { data, error } = await supabase
       .from('contracts')
       .select('contract_number')
-      .like('contract_number', `${prefix}%`)
+      .like('contract_number', `${legacyPrefix}%`)
       .order('contract_number', { ascending: false })
       .limit(1);
-
     if (error) throw error;
-
     let nextNumber = 1;
     if (data && data.length > 0) {
       const lastNumber = data[0].contract_number.split('/').pop();
       nextNumber = parseInt(lastNumber || '0', 10) + 1;
     }
-
-    return `${prefix}${nextNumber.toString().padStart(3, '0')}`;
+    return `${legacyPrefix}${nextNumber.toString().padStart(3, '0')}`;
   }
 
   // =====================================================
@@ -123,10 +138,13 @@ class ContractService {
     }
 
     const currentUser = await simpleAuth.getCurrentUser();
-    const contractNumber = await this.generateContractNumber();
+    const contractNumber = await this.generateContractNumber(
+      contractData.entity_prefix,
+      contractData.contract_type
+    );
 
-    // Prepare contract data (exclude sections and milestones for main insert)
-    const { sections, milestones, ...contractInfo } = contractData;
+    // Prepare contract data (exclude sections, milestones, and internal fields for main insert)
+    const { sections, milestones, entity_prefix, ...contractInfo } = contractData;
 
     const contractToInsert = {
       ...contractInfo,
@@ -155,6 +173,7 @@ class ContractService {
         section_title: section.section_title,
         section_content: section.section_content,
         is_required: section.is_required || false,
+        is_locked: section.is_locked || false,
         page_break_before: section.page_break_before || false
       }));
 
@@ -231,6 +250,10 @@ class ContractService {
 
     if (filters?.date_to) {
       query = query.lte('contract_date', filters.date_to);
+    }
+
+    if (filters?.company_settings_id) {
+      query = query.eq('company_settings_id', filters.company_settings_id);
     }
 
     // Pagination

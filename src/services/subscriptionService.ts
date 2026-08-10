@@ -73,7 +73,7 @@ class SubscriptionService {
       .from('customer_subscriptions')
       .select(`
         *,
-        customer:customers(id, company_name, contact_person, email),
+        customer:customers(id, company_name, contact_person, email, customer_code),
         plan:subscription_plans(*)
       `)
       .order('created_at', { ascending: false });
@@ -81,6 +81,7 @@ class SubscriptionService {
     if (filters?.status) query = query.eq('status', filters.status);
     if (filters?.customer_id) query = query.eq('customer_id', filters.customer_id);
     if (filters?.plan_id) query = query.eq('plan_id', filters.plan_id);
+    if (filters?.company_settings_id) query = query.eq('company_settings_id', filters.company_settings_id);
 
     const { data, error } = await query;
     if (error) throw error;
@@ -123,6 +124,7 @@ class SubscriptionService {
         end_date: sub.end_date || null,
         next_billing_date: nextBillingDate,
         notes: sub.notes || null,
+        company_settings_id: sub.company_settings_id || null,
         created_by: currentUser.id,
       })
       .select(`

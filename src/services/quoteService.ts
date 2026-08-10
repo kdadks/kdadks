@@ -220,6 +220,9 @@ class QuoteService {
       if (filters.date_to) {
         query = query.lte('quote_date', filters.date_to);
       }
+      if (filters.company_settings_id) {
+        query = query.eq('company_settings_id', filters.company_settings_id);
+      }
     }
 
     const from = (page - 1) * perPage;

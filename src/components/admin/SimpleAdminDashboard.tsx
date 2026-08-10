@@ -44,6 +44,8 @@ import InvoiceManagement from '../invoice/InvoiceManagement'
 import { PaymentManagement } from '../payment/PaymentManagement'
 import QuoteManagement from '../quote/QuoteManagement'
 import ContractManagement from '../contract/ContractManagement'
+import CustomerManagement from '../customer/CustomerManagement'
+import ProductManagement from '../product/ProductManagement'
 import EmploymentDocuments from '../hr/EmploymentDocuments'
 import LeaveManagement from '../hr/LeaveManagement'
 import AttendanceManagement from '../hr/AttendanceManagement'
@@ -82,7 +84,7 @@ interface DashboardStats {
   settlements: number;
 }
 
-type ActiveView = 'dashboard' | 'invoices' | 'payments' | 'quotes' | 'contracts' | 'rate-cards' | 'announcements' | 'expenses' | 'income' | 'finance' | 'hr-employees' | 'hr-leave' | 'hr-attendance' | 'hr-settlement' | 'hr-tds-report' | 'hr-performance' | 'hr-compensation' | 'subscriptions' | 'board-resolutions' | 'settings';
+type ActiveView = 'dashboard' | 'invoices' | 'payments' | 'quotes' | 'contracts' | 'rate-cards' | 'announcements' | 'expenses' | 'income' | 'finance' | 'hr-employees' | 'hr-leave' | 'hr-attendance' | 'hr-settlement' | 'hr-tds-report' | 'hr-performance' | 'hr-compensation' | 'subscriptions' | 'board-resolutions' | 'settings' | 'customers' | 'products';
 
 // Menu section types
 type MenuSection = 'sales' | 'finance' | 'hr' | 'communication' | 'configuration';
@@ -135,6 +137,8 @@ const SimpleAdminDashboard: React.FC = () => {
     '/admin/subscriptions': 'subscriptions',
     '/admin/board-resolutions': 'board-resolutions',
     '/admin/settings': 'settings',
+    '/admin/customers': 'customers',
+    '/admin/products': 'products',
   }
   const activeView: ActiveView = pathToView[location.pathname] ?? 'dashboard'
 
@@ -372,6 +376,10 @@ const SimpleAdminDashboard: React.FC = () => {
         return <BoardResolutionManagement />;
       case 'settings':
         return <InvoiceSettings />;
+      case 'customers':
+        return <CustomerManagement />;
+      case 'products':
+        return <ProductManagement />;
       case 'dashboard':
       default:
         return null;
@@ -431,6 +439,38 @@ const SimpleAdminDashboard: React.FC = () => {
             {/* Sales & Revenue Items */}
             {(openSections.sales || !sidebarOpen) && (
               <>
+                {/* Customers */}
+                <li>
+                  <button
+                    onClick={() => navigate('/admin/customers')}
+                    title={!sidebarOpen ? 'Customers' : undefined}
+                    className={`w-full flex items-center ${!sidebarOpen ? 'justify-center' : ''} px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                      activeView === 'customers'
+                        ? 'bg-blue-100 text-blue-700'
+                        : 'text-gray-700 hover:bg-gray-100'
+                    }`}
+                  >
+                    <Users className="w-5 h-5 flex-shrink-0" />
+                    {sidebarOpen && <span className="ml-3">Customers</span>}
+                  </button>
+                </li>
+
+                {/* Products */}
+                <li>
+                  <button
+                    onClick={() => navigate('/admin/products')}
+                    title={!sidebarOpen ? 'Products' : undefined}
+                    className={`w-full flex items-center ${!sidebarOpen ? 'justify-center' : ''} px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                      activeView === 'products'
+                        ? 'bg-blue-100 text-blue-700'
+                        : 'text-gray-700 hover:bg-gray-100'
+                    }`}
+                  >
+                    <Layers className="w-5 h-5 flex-shrink-0" />
+                    {sidebarOpen && <span className="ml-3">Products</span>}
+                  </button>
+                </li>
+
                 {/* Invoices */}
                 <li>
                   <button

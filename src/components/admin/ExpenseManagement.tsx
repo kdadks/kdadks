@@ -19,6 +19,7 @@ import type { Country } from '../../types/invoice';
 import { useToast } from '../ui/ToastProvider';
 import { useConfirmDialog } from '../../hooks/useConfirmDialog';
 import ConfirmDialog from '../ui/ConfirmDialog';
+import { useCompanyContext } from '../../contexts/CompanyContext';
 
 type TabType = 'expenses' | 'vendors' | 'categories';
 type ModalType = 'expense' | 'vendor' | 'category' | null;
@@ -58,6 +59,7 @@ const formatDate = (date: string) => {
 const ExpenseManagement: React.FC = () => {
   const { showError, showSuccess } = useToast();
   const { confirm, dialogProps } = useConfirmDialog();
+  const { selectedCompany } = useCompanyContext();
 
   // Reject dialog state
   const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
@@ -101,6 +103,10 @@ const ExpenseManagement: React.FC = () => {
     loadData();
     loadCountries();
   }, []);
+
+  useEffect(() => {
+    loadData();
+  }, [selectedCompany]);
   
   const loadCountries = async () => {
     try {
@@ -121,7 +127,7 @@ const ExpenseManagement: React.FC = () => {
     setLoading(true);
     try {
       const [expenseData, vendorData, categoryData, statsData] = await Promise.all([
-        expenseService.getExpenses({}, currentPage, itemsPerPage),
+        expenseService.getExpenses({ company_settings_id: selectedCompany?.id }, currentPage, itemsPerPage),
         expenseService.getVendors(),
         expenseService.getCategories(),
         expenseService.getExpenseStats()
@@ -146,7 +152,8 @@ const ExpenseManagement: React.FC = () => {
           status: filters.status || undefined,
           paymentStatus: filters.paymentStatus || undefined,
           categoryId: filters.categoryId || undefined,
-          vendorId: filters.vendorId || undefined
+          vendorId: filters.vendorId || undefined,
+          company_settings_id: selectedCompany?.id,
         },
         currentPage,
         itemsPerPage

@@ -36,6 +36,7 @@ import { useCompanyContext } from '../../contexts/CompanyContext';
 import { CreateInvoice } from './CreateInvoice';
 import { EditInvoice } from './EditInvoice';
 import { getTaxLabel, getTaxRegistrationLabel, validateTaxRegistration, getDefaultTaxRate, getClassificationCodeLabel, getCompanyTaxFields } from '../../utils/taxUtils';
+import { getPrimaryCustomerId } from '../../utils/customerCodeUtils';
 import type { Invoice, InvoiceFilters, InvoiceStats, Customer, Product, CompanySettings, InvoiceSettings, Country, CreateProductData, CreateCustomerData, CreateInvoiceData, CreateInvoiceItemData, TermsTemplate } from '../../types/invoice';
 
 interface InvoiceManagementProps {
@@ -85,7 +86,7 @@ const getBankingCodeField = (company: CompanySettings | undefined | null): keyof
   const [totalPages, setTotalPages] = useState(1);
   const [searchTerm, setSearchTerm] = useState('');
   const [filters, setFilters] = useState<InvoiceFilters>({});
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'invoices' | 'customers' | 'products' | 'create-invoice'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'invoices' | 'create-invoice'>('dashboard');
   
   // Product modal states
   const [showProductModal, setShowProductModal] = useState(false);
@@ -460,10 +461,8 @@ const getBankingCodeField = (company: CompanySettings | undefined | null): keyof
       }
       
       closeCustomerModal();
-      // Only reload data if we're not on the customers tab to avoid losing the country relationship
-      if (activeTab !== 'customers') {
+      // Only reload data after saving customer
         await loadData();
-      }
     } catch (error) {
       console.error('Failed to save customer:', error);
       showError(`Failed to save customer: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -2333,7 +2332,8 @@ const getBankingCodeField = (company: CompanySettings | undefined | null): keyof
       const isIndianCompany = company.country?.code === 'IN' || company.country?.code === 'IND' ||
         company.country_id?.toUpperCase() === 'IN' || company.country_id?.toUpperCase() === 'IND';
       // Company banking shown for: Indian entity + INR invoice, OR any non-Indian entity (getBankingLabel applies correct label)
-      const bankingDetailsAvailable = !!(company.bank_name || company.account_number || company.ifsc_code) &&
+      const bankingDetailsAvailable = !!(company.bank_name || company.account_number || company.ifsc_code ||
+        company.iban || company.swift_bic) &&
         (!isIndianCompany || isIndianCurrency);
       // Wise intl banking shown only for Indian entity billing a foreign-currency invoice
       const intlBankingAvailable = isIndianCompany && !isIndianCurrency &&
@@ -2421,7 +2421,9 @@ const getBankingCodeField = (company: CompanySettings | undefined | null): keyof
         let bankFieldCount = 0;
         if (company.bank_name) bankFieldCount++;
         if (company.account_number) bankFieldCount++;
-        if (company.ifsc_code) bankFieldCount++;
+        if (isIndianCompany && company.ifsc_code) bankFieldCount++;
+        if (!isIndianCompany && company.iban) bankFieldCount++;
+        if (!isIndianCompany && company.swift_bic) bankFieldCount++;
         const bankingBoxHeight = 4 + bankFieldCount * 4;
         const leftColWidth = 85;
         downloadPdf.rect(leftSectionStart, bankingYPos - 2, leftColWidth, bankingBoxHeight, 'F');
@@ -2450,11 +2452,25 @@ const getBankingCodeField = (company: CompanySettings | undefined | null): keyof
           bankingContentY += 4;
         }
         
-        if (company.ifsc_code) {
+        if (isIndianCompany && company.ifsc_code) {
           downloadPdf.setFont('helvetica', 'bold');
           downloadPdf.text(`${getBankingLabel(company)}:`, leftSectionStart + 2, bankingContentY);
           downloadPdf.setFont('helvetica', 'normal');
           downloadPdf.text(company.ifsc_code, leftSectionStart + 15, bankingContentY);
+          bankingContentY += 4;
+        }
+        if (!isIndianCompany && company.iban) {
+          downloadPdf.setFont('helvetica', 'bold');
+          downloadPdf.text('IBAN:', leftSectionStart + 2, bankingContentY);
+          downloadPdf.setFont('helvetica', 'normal');
+          downloadPdf.text(company.iban, leftSectionStart + 15, bankingContentY);
+          bankingContentY += 4;
+        }
+        if (!isIndianCompany && company.swift_bic) {
+          downloadPdf.setFont('helvetica', 'bold');
+          downloadPdf.text('SWIFT/BIC:', leftSectionStart + 2, bankingContentY);
+          downloadPdf.setFont('helvetica', 'normal');
+          downloadPdf.text(company.swift_bic, leftSectionStart + 22, bankingContentY);
         }
         
         // QR code directly below banking box (side-by-side layout)
@@ -2491,7 +2507,9 @@ const getBankingCodeField = (company: CompanySettings | undefined | null): keyof
         let bankFieldCount = 0;
         if (company.bank_name) bankFieldCount++;
         if (company.account_number) bankFieldCount++;
-        if (company.ifsc_code) bankFieldCount++;
+        if (isIndianCompany && company.ifsc_code) bankFieldCount++;
+        if (!isIndianCompany && company.iban) bankFieldCount++;
+        if (!isIndianCompany && company.swift_bic) bankFieldCount++;
         const bankingBoxHeight = 4 + bankFieldCount * 4;
         const leftColWidth = 85;
         downloadPdf.rect(leftSectionStart, yPos - 2, leftColWidth, bankingBoxHeight, 'F');
@@ -2520,11 +2538,25 @@ const getBankingCodeField = (company: CompanySettings | undefined | null): keyof
           bankingYPos += 4;
         }
         
-        if (company.ifsc_code) {
+        if (isIndianCompany && company.ifsc_code) {
           downloadPdf.setFont('helvetica', 'bold');
           downloadPdf.text(`${getBankingLabel(company)}:`, leftSectionStart + 2, bankingYPos);
           downloadPdf.setFont('helvetica', 'normal');
           downloadPdf.text(company.ifsc_code, leftSectionStart + 15, bankingYPos);
+          bankingYPos += 4;
+        }
+        if (!isIndianCompany && company.iban) {
+          downloadPdf.setFont('helvetica', 'bold');
+          downloadPdf.text('IBAN:', leftSectionStart + 2, bankingYPos);
+          downloadPdf.setFont('helvetica', 'normal');
+          downloadPdf.text(company.iban, leftSectionStart + 15, bankingYPos);
+          bankingYPos += 4;
+        }
+        if (!isIndianCompany && company.swift_bic) {
+          downloadPdf.setFont('helvetica', 'bold');
+          downloadPdf.text('SWIFT/BIC:', leftSectionStart + 2, bankingYPos);
+          downloadPdf.setFont('helvetica', 'normal');
+          downloadPdf.text(company.swift_bic, leftSectionStart + 22, bankingYPos);
         }
         
         // QR code directly below banking box (stacked layout)
@@ -2618,7 +2650,11 @@ const getBankingCodeField = (company: CompanySettings | undefined | null): keyof
   const ensureCustomersLoaded = async () => {
     if (customers.length === 0) {
       try {
-        const customersData = await invoiceService.getCustomers({}, 1, 1000);
+        const customersData = await invoiceService.getCustomers(
+          { company_settings_id: selectedCompany?.id },
+          1,
+          1000
+        );
         setCustomers(customersData.data || []);
         return customersData.data || [];
       } catch (error) {
@@ -3240,7 +3276,8 @@ const getBankingCodeField = (company: CompanySettings | undefined | null): keyof
       const leftSectionStart = leftMargin;
       const isIndianCompany = company.country?.code === 'IN' || company.country?.code === 'IND' ||
         company.country_id?.toUpperCase() === 'IN' || company.country_id?.toUpperCase() === 'IND';
-      const bankingDetailsAvailable = !!(company.bank_name || company.account_number || company.ifsc_code) &&
+      const bankingDetailsAvailable = !!(company.bank_name || company.account_number || company.ifsc_code ||
+        company.iban || company.swift_bic) &&
         (!isIndianCompany || isIndianCurrency);
       const intlBankingAvailable = isIndianCompany && !isIndianCurrency &&
         !!(fullInvoice.intl_account_name || fullInvoice.intl_account_number);
@@ -3327,7 +3364,9 @@ const getBankingCodeField = (company: CompanySettings | undefined | null): keyof
         let bankFieldCount = 0;
         if (company.bank_name) bankFieldCount++;
         if (company.account_number) bankFieldCount++;
-        if (company.ifsc_code) bankFieldCount++;
+        if (isIndianCompany && company.ifsc_code) bankFieldCount++;
+        if (!isIndianCompany && company.iban) bankFieldCount++;
+        if (!isIndianCompany && company.swift_bic) bankFieldCount++;
         const bankingBoxHeight = 4 + bankFieldCount * 4;
         const leftColWidth = 85;
         emailPdf.rect(leftSectionStart, bankingYPos - 2, leftColWidth, bankingBoxHeight, 'F');
@@ -3356,11 +3395,25 @@ const getBankingCodeField = (company: CompanySettings | undefined | null): keyof
           bankingContentY += 4;
         }
         
-        if (company.ifsc_code) {
+        if (isIndianCompany && company.ifsc_code) {
           emailPdf.setFont('helvetica', 'bold');
           emailPdf.text(`${getBankingLabel(company)}:`, leftSectionStart + 2, bankingContentY);
           emailPdf.setFont('helvetica', 'normal');
           emailPdf.text(company.ifsc_code, leftSectionStart + 15, bankingContentY);
+          bankingContentY += 4;
+        }
+        if (!isIndianCompany && company.iban) {
+          emailPdf.setFont('helvetica', 'bold');
+          emailPdf.text('IBAN:', leftSectionStart + 2, bankingContentY);
+          emailPdf.setFont('helvetica', 'normal');
+          emailPdf.text(company.iban, leftSectionStart + 15, bankingContentY);
+          bankingContentY += 4;
+        }
+        if (!isIndianCompany && company.swift_bic) {
+          emailPdf.setFont('helvetica', 'bold');
+          emailPdf.text('SWIFT/BIC:', leftSectionStart + 2, bankingContentY);
+          emailPdf.setFont('helvetica', 'normal');
+          emailPdf.text(company.swift_bic, leftSectionStart + 22, bankingContentY);
         }
         
         // QR code directly below banking box (side-by-side layout)
@@ -3397,7 +3450,9 @@ const getBankingCodeField = (company: CompanySettings | undefined | null): keyof
         let bankFieldCount = 0;
         if (company.bank_name) bankFieldCount++;
         if (company.account_number) bankFieldCount++;
-        if (company.ifsc_code) bankFieldCount++;
+        if (isIndianCompany && company.ifsc_code) bankFieldCount++;
+        if (!isIndianCompany && company.iban) bankFieldCount++;
+        if (!isIndianCompany && company.swift_bic) bankFieldCount++;
         if (company.branch_name) bankFieldCount++;
         const bankingBoxHeight = 4 + bankFieldCount * 4;
         const leftColWidth = 90;
@@ -3427,11 +3482,25 @@ const getBankingCodeField = (company: CompanySettings | undefined | null): keyof
           bankingContentY += 4;
         }
         
-        if (company.ifsc_code) {
+        if (isIndianCompany && company.ifsc_code) {
           emailPdf.setFont('helvetica', 'bold');
           emailPdf.text(`${getBankingLabel(company)}:`, leftSectionStart + 2, bankingContentY);
           emailPdf.setFont('helvetica', 'normal');
           emailPdf.text(company.ifsc_code, leftSectionStart + 15, bankingContentY);
+          bankingContentY += 4;
+        }
+        if (!isIndianCompany && company.iban) {
+          emailPdf.setFont('helvetica', 'bold');
+          emailPdf.text('IBAN:', leftSectionStart + 2, bankingContentY);
+          emailPdf.setFont('helvetica', 'normal');
+          emailPdf.text(company.iban, leftSectionStart + 15, bankingContentY);
+          bankingContentY += 4;
+        }
+        if (!isIndianCompany && company.swift_bic) {
+          emailPdf.setFont('helvetica', 'bold');
+          emailPdf.text('SWIFT/BIC:', leftSectionStart + 2, bankingContentY);
+          emailPdf.setFont('helvetica', 'normal');
+          emailPdf.text(company.swift_bic, leftSectionStart + 22, bankingContentY);
           bankingContentY += 4;
         }
         
@@ -3828,55 +3897,32 @@ const getBankingCodeField = (company: CompanySettings | undefined | null): keyof
       }
 
       if (activeTab === 'dashboard') {
+        const entityFilter = { company_settings_id: selectedCompany?.id };
         const [invoicesData, statsData, customersData] = await Promise.all([
-          invoiceService.getInvoices(filters, currentPage, 10),
+          invoiceService.getInvoices({ ...filters, ...entityFilter }, currentPage, 10),
           invoiceService.getInvoiceStats(),
-          invoiceService.getCustomers({}, 1, 1000) // Load all customers for email functionality
+          invoiceService.getCustomers(entityFilter, 1, 1000)
         ]);
         setInvoices(invoicesData.data);
-        setCustomers(customersData.data || []); // Ensure customers are available for email
+        setCustomers(customersData.data || []);
         setTotalPages(invoicesData.total_pages);
         setStats(statsData);
       } else if (activeTab === 'invoices') {
+        const entityFilter = { company_settings_id: selectedCompany?.id };
         const [invoicesData, customersData] = await Promise.all([
-          invoiceService.getInvoices(filters, currentPage, 20),
-          invoiceService.getCustomers({}, 1, 1000) // Load all customers for email functionality
+          invoiceService.getInvoices({ ...filters, ...entityFilter }, currentPage, 20),
+          invoiceService.getCustomers(entityFilter, 1, 1000)
         ]);
         setInvoices(invoicesData.data);
-        setCustomers(customersData.data || []); // Ensure customers are available for email
-        setTotalPages(invoicesData.total_pages);
-      } else if (activeTab === 'customers') {
-        console.log('👥 Loading customers with filters:', filters);
-        const customersData = await invoiceService.getCustomers(filters, currentPage, 20);
-        console.log('👥 Customers loaded:', customersData.data?.length || 0);
         setCustomers(customersData.data || []);
-        setTotalPages(customersData.total_pages || 1);
-      } else if (activeTab === 'products') {
-        console.log('🔍 Loading products from database...');
-        try {
-          const productsData = await invoiceService.getProducts({}, currentPage, 20);
-          console.log('📦 Products data received:', productsData);
-          console.log('📊 Products count:', productsData.data?.length || 0);
-          setProducts(productsData.data || []);
-          setTotalPages(productsData.total_pages || 1);
-        } catch (productsError) {
-          console.error('❌ Failed to load products:', productsError);
-          setProducts([]);
-          setTotalPages(1);
-        }
+        setTotalPages(invoicesData.total_pages);
       } else if (activeTab === 'create-invoice') {
-        // Load all necessary data for creating invoices
-        console.log('🔍 Loading data for create invoice tab...');
+        const entityFilter = { company_settings_id: selectedCompany?.id };
         const [customersData, productsData, termsData] = await Promise.all([
-          invoiceService.getCustomers({}, 1, 1000), // Load all customers
-          invoiceService.getProducts({}, 1, 1000),  // Load all products
+          invoiceService.getCustomers(entityFilter, 1, 1000),
+          invoiceService.getProducts({}, 1, 1000),
           invoiceService.getTermsTemplates()
         ]);
-        
-        console.log('👥 Customers loaded:', customersData.data?.length || 0);
-        console.log('📦 Products loaded:', productsData.data?.length || 0);
-        console.log('📋 Terms templates loaded:', termsData?.length || 0);
-        
         setCustomers(customersData.data || []);
         setProducts(productsData.data || []);
         setTermsTemplates(termsData || []);
@@ -4081,6 +4127,11 @@ const getBankingCodeField = (company: CompanySettings | undefined | null): keyof
               <div className="text-sm text-gray-900">
                 {invoice.customer?.company_name || invoice.customer?.contact_person || 'N/A'}
               </div>
+              {invoice.customer?.customer_code && (
+                <div className="text-xs font-mono text-indigo-600 mt-0.5">
+                  {getPrimaryCustomerId(invoice.customer, companySettings, selectedCompany)}
+                </div>
+              )}
             </td>
             <td className="px-6 py-4 whitespace-nowrap">
               <div className="text-sm text-gray-900">
@@ -4219,6 +4270,11 @@ const getBankingCodeField = (company: CompanySettings | undefined | null): keyof
               <div className="text-sm text-gray-900">
                 {invoice.customer?.company_name || invoice.customer?.contact_person || 'N/A'}
               </div>
+              {invoice.customer?.customer_code && (
+                <div className="text-xs font-mono text-indigo-600 mt-0.5">
+                  {getPrimaryCustomerId(invoice.customer, companySettings, selectedCompany)}
+                </div>
+              )}
             </td>
             <td className="px-6 py-4 whitespace-nowrap">
               <div className="text-sm text-gray-900">
@@ -5267,7 +5323,7 @@ const getBankingCodeField = (company: CompanySettings | undefined | null): keyof
           const invCurrency = currencyInfo.code;
           const isIndianCompany = company?.country?.code === 'IN' || company?.country?.code === 'IND' ||
             company?.country_id?.toUpperCase() === 'IN' || company?.country_id?.toUpperCase() === 'IND';
-          const hasIndianBanking = (!isIndianCompany || isIndianCurrency) && !!company?.bank_name;
+          const hasIndianBanking = (!isIndianCompany || isIndianCurrency) && !!(company?.bank_name || company?.iban || company?.swift_bic);
           const hasIntlBanking = !!(isIndianCompany && !isIndianCurrency &&
             (invoiceFormData.intl_account_name || invoiceFormData.intl_account_number));
           const hasBanking = hasIndianBanking || hasIntlBanking;
@@ -5323,9 +5379,11 @@ const getBankingCodeField = (company: CompanySettings | undefined | null): keyof
                     <div className="text-xs text-gray-600 bg-gray-50 p-3 rounded leading-relaxed">
                       {hasIndianBanking && company ? (
                         <>
-                          <div><strong>Bank:</strong> {company.bank_name}</div>
+                          {company.bank_name && <div><strong>Bank:</strong> {company.bank_name}</div>}
                           {company.account_number && <div><strong>A/C:</strong> {company.account_number}</div>}
-                          {company.ifsc_code && <div><strong>{getBankingLabel(company)}:</strong> {company.ifsc_code}</div>}
+                          {isIndianCompany && company.ifsc_code && <div><strong>{getBankingLabel(company)}:</strong> {company.ifsc_code}</div>}
+                          {!isIndianCompany && company.iban && <div><strong>IBAN:</strong> {company.iban}</div>}
+                          {!isIndianCompany && company.swift_bic && <div><strong>SWIFT/BIC:</strong> {company.swift_bic}</div>}
                           {company.branch_name && <div><strong>Branch:</strong> {company.branch_name}</div>}
                         </>
                       ) : (
@@ -5388,8 +5446,6 @@ const getBankingCodeField = (company: CompanySettings | undefined | null): keyof
               { key: 'dashboard', label: 'Dashboard', icon: FileText },
               { key: 'invoices', label: 'Invoices', icon: FileText },
               { key: 'create-invoice', label: 'Create Invoice', icon: Plus },
-              { key: 'customers', label: 'Customers', icon: Users },
-              { key: 'products', label: 'Products', icon: Package }
             ].map(({ key, label, icon: Icon }) => (
               <button
                 key={key}
@@ -5441,8 +5497,6 @@ const getBankingCodeField = (company: CompanySettings | undefined | null): keyof
             onCurrencyToggle={() => setUseINROverride(prev => !prev)}
           />
         )}
-        {activeTab === 'customers' && renderCustomers()}
-        {activeTab === 'products' && renderProducts()}
       </main>
 
       {/* Product Modal */}

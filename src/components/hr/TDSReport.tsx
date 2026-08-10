@@ -16,6 +16,7 @@ import { tdsReportService, TDSReportSummary } from '../../services/tdsReportServ
 import { PDFBrandingUtils } from '../../utils/pdfBrandingUtils';
 import { useToast } from '../ui/ToastProvider';
 import { supabase } from '../../config/supabase';
+import { useCompanyContext } from '../../contexts/CompanyContext';
 import type { CompanySettings } from '../../types/invoice';
 
 interface TDSReportProps {
@@ -42,6 +43,7 @@ const TDSReport: React.FC<TDSReportProps> = ({ onBackToDashboard }) => {
   const [previewEmployee, setPreviewEmployee] = useState<TDSReportSummary | null>(null);
   const [diagnostics, setDiagnostics] = useState<any>(null);
   const { showSuccess, showError } = useToast();
+  const { selectedCompany } = useCompanyContext();
 
   const [startDate, setStartDate] = useState(() => {
     const date = new Date();
@@ -84,8 +86,8 @@ const TDSReport: React.FC<TDSReportProps> = ({ onBackToDashboard }) => {
         setEndDate(effectiveEnd);
       }
 
-      const [reportData, statsData] = await Promise.all([
-        tdsReportService.getTDSReport({ start_date: effectiveStart, end_date: effectiveEnd }),
+    const [reportData, statsData] = await Promise.all([
+        tdsReportService.getTDSReport({ start_date: effectiveStart, end_date: effectiveEnd, company_settings_id: selectedCompany?.id }),
         tdsReportService.getTDSStats(effectiveStart, effectiveEnd)
       ]);
 
