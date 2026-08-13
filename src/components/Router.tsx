@@ -35,6 +35,8 @@ const Partnership = lazy(() => import('./Partnership'))
 // Admin Components (directly imported - manual chunking handles code splitting)
 import AdminLogin from './admin/AdminLogin'
 import SimpleAdminDashboard from './admin/SimpleAdminDashboard'
+import LeadManagement from './lead/LeadManagement'
+import OpportunityManagement from './lead/OpportunityManagement'
 
 // Employee Portal Components (directly imported - manual chunking handles code splitting)
 import EmployeeLayout from './employee/EmployeeLayout'
@@ -226,7 +228,23 @@ const Router = () => {
             <Route path="/admin/board-resolutions" element={<SimpleAdminDashboard />} />
             <Route path="/admin/settings" element={<SimpleAdminDashboard />} />
             <Route path="/admin/customers" element={<SimpleAdminDashboard />} />
+            <Route path="/admin/leads" element={<SimpleAdminDashboard />} />
+            <Route path="/admin/opportunities" element={<SimpleAdminDashboard />} />
             <Route path="/admin/products" element={<SimpleAdminDashboard />} />
+            
+            {/* Reporting & Analytics routes */}
+            <Route path="/admin/reporting" element={<SimpleAdminDashboard />} />
+            <Route path="/admin/reporting/customers" element={<SimpleAdminDashboard />} />
+            <Route path="/admin/reporting/leads" element={<SimpleAdminDashboard />} />
+            <Route path="/admin/reporting/opportunities" element={<SimpleAdminDashboard />} />
+            <Route path="/admin/reporting/subscriptions" element={<SimpleAdminDashboard />} />
+            <Route path="/admin/reporting/quotes" element={<SimpleAdminDashboard />} />
+            <Route path="/admin/reporting/invoices" element={<SimpleAdminDashboard />} />
+            <Route path="/admin/reporting/hr" element={<SimpleAdminDashboard />} />
+            <Route path="/admin/reporting/hr/attendance" element={<SimpleAdminDashboard />} />
+            <Route path="/admin/reporting/hr/leave" element={<SimpleAdminDashboard />} />
+            <Route path="/admin/reporting/hr/compensation" element={<SimpleAdminDashboard />} />
+            <Route path="/admin/reporting/hr/performance" element={<SimpleAdminDashboard />} />
             
             {/* Employee Portal routes */}
             <Route path="/employee/login" element={<EmployeeLogin />} />

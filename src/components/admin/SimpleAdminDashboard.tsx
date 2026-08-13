@@ -31,7 +31,10 @@ import {
   LayoutDashboard,
   Layers,
   Gavel,
-  Settings
+  Settings,
+  Mail,
+  UserCheck,
+  Target
 } from 'lucide-react'
 import { simpleAuth, SimpleUser } from '../../utils/simpleAuth'
 import { isSupabaseConfigured, supabase } from '../../config/supabase'
@@ -46,6 +49,8 @@ import QuoteManagement from '../quote/QuoteManagement'
 import ContractManagement from '../contract/ContractManagement'
 import CustomerManagement from '../customer/CustomerManagement'
 import ProductManagement from '../product/ProductManagement'
+import LeadManagement from '../lead/LeadManagement'
+import OpportunityManagement from '../lead/OpportunityManagement'
 import EmploymentDocuments from '../hr/EmploymentDocuments'
 import LeaveManagement from '../hr/LeaveManagement'
 import AttendanceManagement from '../hr/AttendanceManagement'
@@ -61,6 +66,16 @@ import IncomeManagement from './IncomeManagement'
 import SubscriptionManagement from './SubscriptionManagement'
 import BoardResolutionManagement from '../boardResolution/BoardResolutionManagement'
 import InvoiceSettings from './InvoiceSettings'
+import CustomerReporting from './reporting/CustomerReporting'
+import LeadReporting from './reporting/LeadReporting'
+import OpportunityReporting from './reporting/OpportunityReporting'
+import SubscriptionReporting from './reporting/SubscriptionReporting'
+import QuoteReporting from './reporting/QuoteReporting'
+import InvoiceReporting from './reporting/InvoiceReporting'
+import HRAttendanceReporting from './reporting/HRAttendanceReporting'
+import HRLeaveReporting from './reporting/HRLeaveReporting'
+import HRCompensationReporting from './reporting/HRCompensationReporting'
+import HRPerformanceReporting from './reporting/HRPerformanceReporting'
 import type { InvoiceStats } from '../../types/invoice'
 import type { QuoteStats } from '../../types/quote'
 
@@ -84,10 +99,10 @@ interface DashboardStats {
   settlements: number;
 }
 
-type ActiveView = 'dashboard' | 'invoices' | 'payments' | 'quotes' | 'contracts' | 'rate-cards' | 'announcements' | 'expenses' | 'income' | 'finance' | 'hr-employees' | 'hr-leave' | 'hr-attendance' | 'hr-settlement' | 'hr-tds-report' | 'hr-performance' | 'hr-compensation' | 'subscriptions' | 'board-resolutions' | 'settings' | 'customers' | 'products';
+type ActiveView = 'dashboard' | 'invoices' | 'payments' | 'quotes' | 'contracts' | 'rate-cards' | 'announcements' | 'expenses' | 'income' | 'finance' | 'hr-employees' | 'hr-leave' | 'hr-attendance' | 'hr-settlement' | 'hr-tds-report' | 'hr-performance' | 'hr-compensation' | 'subscriptions' | 'board-resolutions' | 'settings' | 'customers' | 'leads' | 'opportunities' | 'products' | 'reporting-customers' | 'reporting-leads' | 'reporting-opportunities' | 'reporting-subscriptions' | 'reporting-quotes' | 'reporting-invoices' | 'reporting-hr' | 'reporting-hr-attendance' | 'reporting-hr-leave' | 'reporting-hr-compensation' | 'reporting-hr-performance';
 
 // Menu section types
-type MenuSection = 'sales' | 'finance' | 'hr' | 'communication' | 'configuration';
+type MenuSection = 'sales' | 'finance' | 'hr' | 'communication' | 'configuration' | 'reporting';
 
 const SimpleAdminDashboard: React.FC = () => {
   const [user, setUser] = useState<SimpleUser | null>(null)
@@ -100,7 +115,8 @@ const SimpleAdminDashboard: React.FC = () => {
     finance: true,
     hr: true,
     communication: true,
-    configuration: true
+    configuration: true,
+    reporting: true
   })
   const [dashboardStats, setDashboardStats] = useState<DashboardStats>({
     invoices: null,
@@ -138,13 +154,35 @@ const SimpleAdminDashboard: React.FC = () => {
     '/admin/board-resolutions': 'board-resolutions',
     '/admin/settings': 'settings',
     '/admin/customers': 'customers',
+    '/admin/leads': 'leads',
+    '/admin/opportunities': 'opportunities',
     '/admin/products': 'products',
+    '/admin/reporting': 'reporting-customers',
+    '/admin/reporting/customers': 'reporting-customers',
+    '/admin/reporting/leads': 'reporting-leads',
+    '/admin/reporting/opportunities': 'reporting-opportunities',
+    '/admin/reporting/subscriptions': 'reporting-subscriptions',
+    '/admin/reporting/quotes': 'reporting-quotes',
+    '/admin/reporting/invoices': 'reporting-invoices',
+    '/admin/reporting/hr': 'reporting-hr',
+    '/admin/reporting/hr/attendance': 'reporting-hr-attendance',
+    '/admin/reporting/hr/leave': 'reporting-hr-leave',
+    '/admin/reporting/hr/compensation': 'reporting-hr-compensation',
+    '/admin/reporting/hr/performance': 'reporting-hr-performance',
   }
   const activeView: ActiveView = pathToView[location.pathname] ?? 'dashboard'
 
   // Toggle menu section
   const toggleSection = (section: MenuSection) => {
     setOpenSections(prev => ({ ...prev, [section]: !prev[section] }))
+  }
+
+  const [reportingSubOpen, setReportingSubOpen] = useState<Record<string, boolean>>({
+    hr: true
+  })
+
+  const toggleReportingSub = (id: string) => {
+    setReportingSubOpen(prev => ({ ...prev, [id]: !prev[id] }))
   }
 
   // If Supabase is not configured, redirect to login with message
@@ -340,10 +378,14 @@ const SimpleAdminDashboard: React.FC = () => {
     switch (activeView) {
       case 'invoices':
         return <InvoiceManagement />;
+      case 'reporting-invoices':
+        return <InvoiceReporting />;
       case 'payments':
         return <PaymentManagement />;
       case 'quotes':
         return <QuoteManagement />;
+      case 'reporting-quotes':
+        return <QuoteReporting />;
       case 'contracts':
         return <ContractManagement />;
       case 'rate-cards':
@@ -360,24 +402,44 @@ const SimpleAdminDashboard: React.FC = () => {
         return <EmploymentDocuments />;
       case 'hr-leave':
         return <LeaveManagement currentUserId={user?.id} />;
+      case 'reporting-hr-leave':
+        return <HRLeaveReporting />;
       case 'hr-settlement':
         return <FullFinalSettlement />;
       case 'hr-tds-report':
         return <TDSReport />;
       case 'hr-attendance':
         return <AttendanceManagement />;
+      case 'reporting-hr-attendance':
+        return <HRAttendanceReporting />;
       case 'hr-performance':
         return <PerformanceFeedback />;
+      case 'reporting-hr-performance':
+        return <HRPerformanceReporting />;
       case 'hr-compensation':
         return <CompensationManagement />;
+      case 'reporting-hr-compensation':
+        return <HRCompensationReporting />;
       case 'subscriptions':
         return <SubscriptionManagement />;
+      case 'reporting-subscriptions':
+        return <SubscriptionReporting />;
       case 'board-resolutions':
         return <BoardResolutionManagement />;
       case 'settings':
         return <InvoiceSettings />;
       case 'customers':
         return <CustomerManagement />;
+      case 'reporting-customers':
+        return <CustomerReporting />;
+      case 'leads':
+        return <LeadManagement />;
+      case 'reporting-leads':
+        return <LeadReporting />;
+      case 'opportunities':
+        return <OpportunityManagement />;
+      case 'reporting-opportunities':
+        return <OpportunityReporting />;
       case 'products':
         return <ProductManagement />;
       case 'dashboard':
@@ -419,9 +481,9 @@ const SimpleAdminDashboard: React.FC = () => {
                 <LayoutDashboard className="w-5 h-5 flex-shrink-0" />
                 {sidebarOpen && <span className="ml-3">Dashboard</span>}
               </button>
-            </li>
+              </li>
 
-            {/* Section: Sales & Revenue */}
+              {/* Section: Sales & Revenue */}
             <li className="pt-3">
               {sidebarOpen ? (
                 <button
@@ -452,6 +514,38 @@ const SimpleAdminDashboard: React.FC = () => {
                   >
                     <Users className="w-5 h-5 flex-shrink-0" />
                     {sidebarOpen && <span className="ml-3">Customers</span>}
+                  </button>
+                </li>
+
+                {/* Leads */}
+                <li>
+                  <button
+                    onClick={() => navigate('/admin/leads')}
+                    title={!sidebarOpen ? 'Leads' : undefined}
+                    className={`w-full flex items-center ${!sidebarOpen ? 'justify-center' : ''} px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                      activeView === 'leads'
+                        ? 'bg-blue-100 text-blue-700'
+                        : 'text-gray-700 hover:bg-gray-100'
+                    }`}
+                  >
+                    <Mail className="w-5 h-5 flex-shrink-0" />
+                    {sidebarOpen && <span className="ml-3">Leads</span>}
+                  </button>
+                </li>
+
+                {/* Opportunities */}
+                <li>
+                  <button
+                    onClick={() => navigate('/admin/opportunities')}
+                    title={!sidebarOpen ? 'Opportunities' : undefined}
+                    className={`w-full flex items-center ${!sidebarOpen ? 'justify-center' : ''} px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                      activeView === 'opportunities'
+                        ? 'bg-blue-100 text-blue-700'
+                        : 'text-gray-700 hover:bg-gray-100'
+                    }`}
+                  >
+                    <TrendingUp className="w-5 h-5 flex-shrink-0" />
+                    {sidebarOpen && <span className="ml-3">Opportunities</span>}
                   </button>
                 </li>
 
@@ -782,10 +876,210 @@ const SimpleAdminDashboard: React.FC = () => {
                     {sidebarOpen && <span className="ml-3">Reviews & Feedback</span>}
                   </button>
                 </li>
-              </>
-            )}
+               </>
+             )}
 
-            {/* Section: Communication */}
+             {/* Section: Reporting & Analytics */}
+             <li className="pt-3">
+               {sidebarOpen ? (
+                 <button
+                   onClick={() => toggleSection('reporting')}
+                   className="w-full flex items-center justify-between px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider hover:bg-gray-50 rounded-md transition-colors"
+                 >
+                   <span>Reporting & Analytics</span>
+                   {openSections.reporting ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                 </button>
+               ) : (
+                 <hr className="border-gray-200 my-2" />
+               )}
+             </li>
+
+             {/* Reporting & Analytics Items */}
+             {(openSections.reporting || !sidebarOpen) && (
+               <>
+                 {/* Customer Reporting */}
+                 <li>
+                   <button
+                     onClick={() => navigate('/admin/reporting/customers')}
+                     title={!sidebarOpen ? 'Customer Reporting' : undefined}
+                     className={`w-full flex items-center ${!sidebarOpen ? 'justify-center' : ''} px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                       activeView === 'reporting-customers'
+                         ? 'bg-blue-100 text-blue-700'
+                         : 'text-gray-700 hover:bg-gray-100'
+                     }`}
+                   >
+                     <Users className="w-5 h-5 flex-shrink-0" />
+                     {sidebarOpen && <span className="ml-3">Customer Reporting</span>}
+                   </button>
+                 </li>
+
+                 {/* Lead Reporting */}
+                 <li>
+                   <button
+                     onClick={() => navigate('/admin/reporting/leads')}
+                     title={!sidebarOpen ? 'Lead Reporting' : undefined}
+                     className={`w-full flex items-center ${!sidebarOpen ? 'justify-center' : ''} px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                       activeView === 'reporting-leads'
+                         ? 'bg-blue-100 text-blue-700'
+                         : 'text-gray-700 hover:bg-gray-100'
+                     }`}
+                   >
+                     <Mail className="w-5 h-5 flex-shrink-0" />
+                     {sidebarOpen && <span className="ml-3">Lead Reporting</span>}
+                   </button>
+                 </li>
+
+                 {/* Opportunity Reporting */}
+                 <li>
+                   <button
+                     onClick={() => navigate('/admin/reporting/opportunities')}
+                     title={!sidebarOpen ? 'Opportunity Reporting' : undefined}
+                     className={`w-full flex items-center ${!sidebarOpen ? 'justify-center' : ''} px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                       activeView === 'reporting-opportunities'
+                         ? 'bg-blue-100 text-blue-700'
+                         : 'text-gray-700 hover:bg-gray-100'
+                     }`}
+                   >
+                     <Target className="w-5 h-5 flex-shrink-0" />
+                     {sidebarOpen && <span className="ml-3">Opportunity Reporting</span>}
+                   </button>
+                 </li>
+
+                 {/* Subscription Reporting */}
+                 <li>
+                   <button
+                     onClick={() => navigate('/admin/reporting/subscriptions')}
+                     title={!sidebarOpen ? 'Subscription Reporting' : undefined}
+                     className={`w-full flex items-center ${!sidebarOpen ? 'justify-center' : ''} px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                       activeView === 'reporting-subscriptions'
+                         ? 'bg-blue-100 text-blue-700'
+                         : 'text-gray-700 hover:bg-gray-100'
+                     }`}
+                   >
+                     <Wallet className="w-5 h-5 flex-shrink-0" />
+                     {sidebarOpen && <span className="ml-3">Subscription Reporting</span>}
+                   </button>
+                 </li>
+
+                 {/* Quote Reporting */}
+                 <li>
+                   <button
+                     onClick={() => navigate('/admin/reporting/quotes')}
+                     title={!sidebarOpen ? 'Quote Reporting' : undefined}
+                     className={`w-full flex items-center ${!sidebarOpen ? 'justify-center' : ''} px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                       activeView === 'reporting-quotes'
+                         ? 'bg-blue-100 text-blue-700'
+                         : 'text-gray-700 hover:bg-gray-100'
+                     }`}
+                   >
+                     <FileText className="w-5 h-5 flex-shrink-0" />
+                     {sidebarOpen && <span className="ml-3">Quote Reporting</span>}
+                   </button>
+                 </li>
+
+                 {/* Invoice Reporting */}
+                 <li>
+                   <button
+                     onClick={() => navigate('/admin/reporting/invoices')}
+                     title={!sidebarOpen ? 'Invoice Reporting' : undefined}
+                     className={`w-full flex items-center ${!sidebarOpen ? 'justify-center' : ''} px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                       activeView === 'reporting-invoices'
+                         ? 'bg-blue-100 text-blue-700'
+                         : 'text-gray-700 hover:bg-gray-100'
+                     }`}
+                   >
+                     <Receipt className="w-5 h-5 flex-shrink-0" />
+                     {sidebarOpen && <span className="ml-3">Invoice Reporting</span>}
+                   </button>
+                 </li>
+
+                 {/* HR Reporting */}
+                 <li>
+                   {sidebarOpen ? (
+                     <button
+                       onClick={() => toggleReportingSub('hr')}
+                       className={`w-full flex items-center justify-between px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                         activeView.startsWith('reporting-hr')
+                           ? 'bg-blue-100 text-blue-700'
+                           : 'text-gray-700 hover:bg-gray-100'
+                       }`}
+                     >
+                       <span className="flex items-center">
+                         <UserCheck className="w-5 h-5 flex-shrink-0" />
+                         <span className="ml-3">HR Reporting</span>
+                       </span>
+                       {reportingSubOpen['hr'] ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                     </button>
+                   ) : (
+                     <button
+                       onClick={() => navigate('/admin/reporting/hr')}
+                       title="HR Reporting"
+                       className={`w-full flex items-center justify-center px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                         activeView.startsWith('reporting-hr')
+                           ? 'bg-blue-100 text-blue-700'
+                           : 'text-gray-700 hover:bg-gray-100'
+                       }`}
+                     >
+                       <UserCheck className="w-5 h-5 flex-shrink-0" />
+                     </button>
+                   )}
+                   {(reportingSubOpen['hr'] || !sidebarOpen) && (
+                     <ul className="mt-1 ml-4 space-y-1 border-l-2 border-gray-200 pl-2">
+                       <li>
+                         <button
+                           onClick={() => navigate('/admin/reporting/hr/attendance')}
+                           className={`w-full flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                             activeView === 'reporting-hr-attendance'
+                               ? 'bg-blue-100 text-blue-700'
+                               : 'text-gray-600 hover:bg-gray-100'
+                           }`}
+                         >
+                           Employee Attendance
+                         </button>
+                       </li>
+                       <li>
+                         <button
+                           onClick={() => navigate('/admin/reporting/hr/leave')}
+                           className={`w-full flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                             activeView === 'reporting-hr-leave'
+                               ? 'bg-blue-100 text-blue-700'
+                               : 'text-gray-600 hover:bg-gray-100'
+                           }`}
+                         >
+                           Leave
+                         </button>
+                       </li>
+                       <li>
+                         <button
+                           onClick={() => navigate('/admin/reporting/hr/compensation')}
+                           className={`w-full flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                             activeView === 'reporting-hr-compensation'
+                               ? 'bg-blue-100 text-blue-700'
+                               : 'text-gray-600 hover:bg-gray-100'
+                           }`}
+                         >
+                           Compensation
+                         </button>
+                       </li>
+                       <li>
+                         <button
+                           onClick={() => navigate('/admin/reporting/hr/performance')}
+                           className={`w-full flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                             activeView === 'reporting-hr-performance'
+                               ? 'bg-blue-100 text-blue-700'
+                               : 'text-gray-600 hover:bg-gray-100'
+                           }`}
+                         >
+                           Review & Feedback
+                         </button>
+                       </li>
+                     </ul>
+                   )}
+                 </li>
+               </>
+             )}
+
+             {/* Section: Communication */}
             <li className="pt-3">
               {sidebarOpen ? (
                 <button
@@ -880,11 +1174,13 @@ const SimpleAdminDashboard: React.FC = () => {
 
       {/* Main Content */}
       <div className="flex-1 overflow-auto">
-        {/* Top Header */}
-        <header className="bg-white shadow-sm border-b border-gray-200 h-16 flex items-center justify-between px-6">
-          <h2 className="text-xl font-semibold text-gray-900 capitalize">
-            {activeView === 'dashboard' ? 'Dashboard' : activeView.replace(/-/g, ' ')}
-          </h2>
+         {/* Top Header */}
+         <header className="bg-white shadow-sm border-b border-gray-200 h-16 flex items-center justify-between px-6">
+           <h2 className="text-xl font-semibold text-gray-900 capitalize">
+             {activeView === 'dashboard' ? 'Dashboard' : 
+              activeView.startsWith('reporting-') ? activeView.replace('reporting-', '').replace(/-/g, ' ') :
+              activeView.replace(/-/g, ' ')}
+           </h2>
           <div className="flex items-center gap-3">
             <CompanySelector
               companies={companies}

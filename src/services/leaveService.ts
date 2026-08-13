@@ -151,7 +151,11 @@ export const leaveService = {
     try {
       const { data, error } = await supabase
         .from('leave_applications')
-        .select('*, employees(id, first_name, last_name, email, department), leave_types(name)')
+        .select(`
+          *,
+          employee:employees!leave_applications_employee_id_fkey(id, first_name, last_name, email, department),
+          leave_type:leave_types(name)
+        `)
         .eq('status', 'pending')
         .order('applied_at', { ascending: false });
 
@@ -175,7 +179,11 @@ export const leaveService = {
     try {
       let query = supabase
         .from('leave_applications')
-        .select('*, employees(first_name, last_name, email, department), leave_types(name)', { count: 'exact' });
+        .select(`
+          *,
+          employee:employees!leave_applications_employee_id_fkey(first_name, last_name, email, department),
+          leave_type:leave_types(name)
+        `, { count: 'exact' });
 
       if (filters.employee_id) {
         query = query.eq('employee_id', filters.employee_id);
@@ -369,8 +377,12 @@ export const leaveService = {
 
       const { data, error } = await supabase
         .from('leave_applications')
-        .select('*, employees(first_name, last_name, department), leave_types(name)')
-        .eq('employees.department', department)
+        .select(`
+          *,
+          employee:employees!leave_applications_employee_id_fkey(first_name, last_name, department),
+          leave_type:leave_types(name)
+        `)
+        .eq('employee.department', department)
         .eq('status', 'approved')
         .gte('from_date', today)
         .order('from_date');
