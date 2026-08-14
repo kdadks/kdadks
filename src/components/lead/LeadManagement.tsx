@@ -7,10 +7,11 @@ import { useCompanyContext } from '../../contexts/CompanyContext';
 import { useToast } from '../ui/ToastProvider';
 import { useConfirmDialog } from '../../hooks/useConfirmDialog';
 import ConfirmDialog from '../ui/ConfirmDialog';
-import type { Lead, LeadStatus, LeadSource, CreateLeadData, LeadFilters, LeadStats } from '../../types/lead';
+import type { Lead, LeadStatus, LeadSource, CreateLeadData, LeadFilters, LeadStats, LeadActivity } from '../../types/lead';
 import type { Customer, CompanySettings, Country } from '../../types/invoice';
 import { getTaxRegistrationLabel, getTaxLabel } from '../../utils/taxUtils';
 import { getCustomerDisplayIds } from '../../utils/customerCodeUtils';
+import { formatCurrencyWithSymbol } from '../../utils/currencyConverter';
 
 const SHARED_VALUE = '__shared__';
 
@@ -54,6 +55,9 @@ const LeadManagement: React.FC = () => {
   const [modalMode, setModalMode] = useState<'view' | 'edit' | 'add'>('view');
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [modalLoading, setModalLoading] = useState(false);
+  const [notes, setNotes] = useState<LeadActivity[]>([]);
+  const [newNote, setNewNote] = useState('');
+  const [notesLoading, setNotesLoading] = useState(false);
   const [formData, setFormData] = useState<CreateLeadData>({
     first_name: '',
     last_name: '',
@@ -73,6 +77,7 @@ const LeadManagement: React.FC = () => {
     customer_id: undefined,
     budget_min: undefined,
     budget_max: undefined,
+    currency_code: selectedCompany?.country?.currency_code || 'INR',
     expected_close_date: undefined,
     gstin: '',
     pan: '',
@@ -95,8 +100,8 @@ const LeadManagement: React.FC = () => {
       
       if (activeTab === 'dashboard') {
         const [statsData, leadsData, customersData, countriesData] = await Promise.all([
-          leadService.getLeadStats(),
-          leadService.getLeads(filters, 1, 10),
+          leadService.getLeadStats(entityId ?? undefined),
+          leadService.getLeads({ ...filters, ...entityFilter }, 1, 10),
           invoiceService.getCustomers(entityFilter, 1, 1000),
           invoiceService.getCountries()
         ]);
@@ -131,13 +136,15 @@ const LeadManagement: React.FC = () => {
   const openModal = (mode: 'view' | 'edit' | 'add', lead?: Lead) => {
     setModalMode(mode);
     setSelectedLead(lead ?? null);
+    setNotes([]);
+    setNewNote('');
     if (mode === 'add') {
       setFormData({
         first_name: '', last_name: '', email: '', phone: '', job_title: '', company_name: '',
         source: 'website', description: '', address_line1: '', address_line2: '', city: '', state: '', postal_code: '',
         country_id: selectedCompany?.country_id || 'IN',
         company_settings_id: entityId ?? undefined, customer_id: undefined,
-        budget_min: undefined, budget_max: undefined, expected_close_date: undefined,
+        budget_min: undefined, budget_max: undefined, currency_code: selectedCompany?.country?.currency_code || 'INR', expected_close_date: undefined,
         gstin: '', pan: '', vat_number: '', cro_number: ''
       });
     } else if (lead) {
@@ -149,9 +156,10 @@ const LeadManagement: React.FC = () => {
         country_id: lead.country_id || selectedCompany?.country_id || 'IN',
         company_settings_id: lead.company_settings_id ?? entityId ?? undefined,
         customer_id: lead.customer_id || undefined,
-        budget_min: lead.budget_min, budget_max: lead.budget_max, expected_close_date: lead.expected_close_date || undefined,
+        budget_min: lead.budget_min, budget_max: lead.budget_max, currency_code: lead.currency_code || selectedCompany?.country?.currency_code || 'INR', expected_close_date: lead.expected_close_date || undefined,
         gstin: lead.gstin || '', pan: lead.pan || '', vat_number: lead.vat_number || '', cro_number: lead.cro_number || ''
       });
+      loadNotes(lead.id);
     }
     setShowModal(true);
   };
@@ -160,6 +168,18 @@ const LeadManagement: React.FC = () => {
     setShowModal(false);
     setSelectedLead(null);
     setModalLoading(false);
+  };
+
+  const loadNotes = async (leadId: string) => {
+    setNotesLoading(true);
+    try {
+      const activities = await leadActivityService.getActivities({ lead_id: leadId });
+      setNotes(activities.data.filter(a => a.activity_type === 'note'));
+    } catch (err) {
+      console.error('Failed to load notes:', err);
+    } finally {
+      setNotesLoading(false);
+    }
   };
 
   const handleChange = (field: keyof CreateLeadData, value: string | number | undefined) => {
@@ -195,6 +215,23 @@ const LeadManagement: React.FC = () => {
       showError(`Failed to save lead: ${err instanceof Error ? err.message : 'Unknown error'}`);
     } finally {
       setModalLoading(false);
+    }
+  };
+
+  const handleAddNote = async () => {
+    if (!newNote.trim() || !selectedLead) return;
+    try {
+      await leadActivityService.createActivity({
+        lead_id: selectedLead.id,
+        activity_type: 'note',
+        subject: 'Note',
+        description: newNote.trim()
+      });
+      setNewNote('');
+      loadNotes(selectedLead.id);
+      showSuccess('Note added successfully!');
+    } catch (err) {
+      showError(`Failed to add note: ${err instanceof Error ? err.message : 'Unknown error'}`);
     }
   };
 
@@ -343,7 +380,7 @@ const LeadManagement: React.FC = () => {
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{lead.company_name || '—'}</td>
                           <td className="px-6 py-4 whitespace-nowrap">{renderSourceBadge(lead.source)}</td>
                           <td className="px-6 py-4 whitespace-nowrap">{renderStatusBadge(lead.status)}</td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{lead.budget_min || lead.budget_max ? `$${(lead.budget_min || 0).toLocaleString()} - $${(lead.budget_max || 0).toLocaleString()}` : '—'}</td>
+                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{lead.budget_min || lead.budget_max ? formatCurrencyWithSymbol(lead.budget_min || 0, lead.currency_code || 'INR') + ' - ' + formatCurrencyWithSymbol(lead.budget_max || 0, lead.currency_code || 'INR') : '—'}</td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{lead.company_settings ? lead.company_settings.company_name : '—'}</td>
                           <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                             <div className="flex items-center justify-end space-x-2">
@@ -418,9 +455,19 @@ const LeadManagement: React.FC = () => {
                 <div><label className="block text-sm font-medium text-gray-700 mb-1">Job Title</label><input type="text" value={formData.job_title} onChange={e => handleChange('job_title', e.target.value)} disabled={modalMode === 'view'} placeholder="Enter job title" className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50" /></div>
                 <div><label className="block text-sm font-medium text-gray-700 mb-1">Company Name</label><input type="text" value={formData.company_name} onChange={e => handleChange('company_name', e.target.value)} disabled={modalMode === 'view'} placeholder="Enter company name" className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50" /></div>
                 <div><label className="block text-sm font-medium text-gray-700 mb-1">Source</label><select value={formData.source} onChange={e => handleChange('source', e.target.value)} disabled={modalMode === 'view'} className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50">{LEAD_SOURCES.map(s => (<option key={s.value} value={s.value}>{s.label}</option>))}</select></div>
-                <div><label className="block text-sm font-medium text-gray-700 mb-1">Associate Customer</label><select value={formData.customer_id || ''} onChange={e => handleChange('customer_id', e.target.value || undefined)} disabled={modalMode === 'view'} className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50"><option value="">Select Customer (Optional)</option>{customers.map(c => (<option key={c.id} value={c.id}>{c.company_name || c.contact_person}</option>))}</select></div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
+                 <div><label className="block text-sm font-medium text-gray-700 mb-1">Associate Customer</label><select value={formData.customer_id || ''} onChange={e => handleChange('customer_id', e.target.value || undefined)} disabled={modalMode === 'view'} className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50"><option value="">Select Customer (Optional)</option>{customers.map(c => (<option key={c.id} value={c.id}>{c.company_name || c.contact_person}</option>))}</select></div>
+               </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div><label className="block text-sm font-medium text-gray-700 mb-1">Budget Min</label><input type="number" value={formData.budget_min ?? ''} onChange={e => handleChange('budget_min', e.target.value ? parseFloat(e.target.value) : undefined)} disabled={modalMode === 'view'} placeholder="Min budget" className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50" /></div>
+                  <div><label className="block text-sm font-medium text-gray-700 mb-1">Budget Max</label><input type="number" value={formData.budget_max ?? ''} onChange={e => handleChange('budget_max', e.target.value ? parseFloat(e.target.value) : undefined)} disabled={modalMode === 'view'} placeholder="Max budget" className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50" /></div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Currency</label>
+                  <select value={formData.currency_code || 'INR'} onChange={e => handleChange('currency_code', e.target.value)} disabled={modalMode === 'view'} className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50">
+                    {countries.map(c => (<option key={c.id} value={c.currency_code}>{c.currency_code} - {c.currency_name}</option>))}
+                  </select>
+                </div>
+               <div className="grid grid-cols-2 gap-4">
                 {isGST ? (<>
                   <div><label className="block text-sm font-medium text-gray-700 mb-1">GSTIN</label><input type="text" value={formData.gstin} onChange={e => handleChange('gstin', e.target.value.toUpperCase())} disabled={modalMode === 'view'} placeholder="e.g., 22AAAAA0000A1Z5" className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50" /></div>
                   <div><label className="block text-sm font-medium text-gray-700 mb-1">PAN</label><input type="text" value={formData.pan} onChange={e => handleChange('pan', e.target.value.toUpperCase())} disabled={modalMode === 'view'} placeholder="e.g., ABCDE1234F" className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50" /></div>
@@ -429,8 +476,40 @@ const LeadManagement: React.FC = () => {
                   <div><label className="block text-sm font-medium text-gray-700 mb-1">CRO Number</label><input type="text" value={formData.cro_number} onChange={e => handleChange('cro_number', e.target.value.toUpperCase())} disabled={modalMode === 'view'} placeholder="Enter CRO Number" className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50" /></div>
                 </>)}
               </div>
-              <div><label className="block text-sm font-medium text-gray-700 mb-1">Description</label><textarea value={formData.description} onChange={e => handleChange('description', e.target.value)} disabled={modalMode === 'view'} rows={3} placeholder="Enter lead description..." className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50" /></div>
-            </div>
+               <div><label className="block text-sm font-medium text-gray-700 mb-1">Description</label><textarea value={formData.description} onChange={e => handleChange('description', e.target.value)} disabled={modalMode === 'view'} rows={3} placeholder="Enter lead description..." className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50" /></div>
+               <div className="border-t border-gray-200 pt-4">
+                 <h4 className="text-sm font-semibold text-gray-900 mb-3">Notes</h4>
+                 {notesLoading ? (
+                   <div className="text-center py-4 text-gray-500">Loading notes...</div>
+                 ) : notes.length === 0 ? (
+                   <p className="text-sm text-gray-500 mb-3">No notes yet.</p>
+                 ) : (
+                   <div className="space-y-2 mb-3 max-h-40 overflow-y-auto">
+                     {notes.map(note => (
+                       <div key={note.id} className="bg-gray-50 rounded-md p-3">
+                         <div className="flex items-center justify-between">
+                           <span className="text-xs font-medium text-gray-500">{new Date(note.created_at).toLocaleString()}</span>
+                         </div>
+                         <p className="text-sm text-gray-900 mt-1">{note.description || note.subject}</p>
+                       </div>
+                     ))}
+                   </div>
+                 )}
+                 {modalMode !== 'view' && (
+                   <div className="flex gap-2">
+                     <input
+                       type="text"
+                       value={newNote}
+                       onChange={e => setNewNote(e.target.value)}
+                       placeholder="Add a note..."
+                       className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 text-sm"
+                       onKeyDown={e => e.key === 'Enter' && handleAddNote()}
+                     />
+                     <button onClick={handleAddNote} className="px-3 py-2 bg-blue-600 text-white rounded-md text-sm hover:bg-blue-700">Add</button>
+                   </div>
+                 )}
+               </div>
+             </div>
             {modalMode !== 'view' && (
               <div className="flex justify-end space-x-3 mt-6">
                 <button onClick={closeModal} className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md text-sm font-medium hover:bg-gray-300">Cancel</button>

@@ -2,15 +2,17 @@ import React, { useState, useEffect } from 'react';
 import { Plus, Search, Eye, Edit, Trash2, X, Users, RefreshCw, TrendingUp, DollarSign, Filter, ArrowRightCircle, UserCheck, UserX } from 'lucide-react';
 import { opportunityService } from '../../services/opportunityService';
 import { leadService } from '../../services/leadService';
+import { leadActivityService } from '../../services/leadActivityService';
 import { invoiceService } from '../../services/invoiceService';
 import { quoteService } from '../../services/quoteService';
 import { useCompanyContext } from '../../contexts/CompanyContext';
 import { useToast } from '../ui/ToastProvider';
 import { useConfirmDialog } from '../../hooks/useConfirmDialog';
 import ConfirmDialog from '../ui/ConfirmDialog';
-import type { Opportunity, OpportunityStage, CreateOpportunityData, OpportunityFilters, OpportunityStats, Lead } from '../../types/lead';
-import type { Customer, CompanySettings } from '../../types/invoice';
+import type { Opportunity, OpportunityStage, CreateOpportunityData, OpportunityFilters, OpportunityStats, Lead, LeadActivity } from '../../types/lead';
+import type { Customer, CompanySettings, Country } from '../../types/invoice';
 import { getCustomerDisplayIds } from '../../utils/customerCodeUtils';
+import { formatCurrencyWithSymbol } from '../../utils/currencyConverter';
 
 const SHARED_VALUE = '__shared__';
 
@@ -31,6 +33,7 @@ const OpportunityManagement: React.FC = () => {
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
   const [leads, setLeads] = useState<Lead[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
+  const [countries, setCountries] = useState<Country[]>([]);
   const [stats, setStats] = useState<OpportunityStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
@@ -45,6 +48,9 @@ const OpportunityManagement: React.FC = () => {
   const [modalMode, setModalMode] = useState<'view' | 'edit' | 'add'>('view');
   const [selectedOpportunity, setSelectedOpportunity] = useState<Opportunity | null>(null);
   const [modalLoading, setModalLoading] = useState(false);
+  const [notes, setNotes] = useState<LeadActivity[]>([]);
+  const [newNote, setNewNote] = useState('');
+  const [notesLoading, setNotesLoading] = useState(false);
   const [formData, setFormData] = useState<CreateOpportunityData>({
     opportunity_name: '',
     customer_id: '',
@@ -53,7 +59,7 @@ const OpportunityManagement: React.FC = () => {
     stage: 'prospecting',
     probability: 10,
     estimated_value: 0,
-    currency_code: 'INR',
+    currency_code: selectedCompany?.country?.currency_code || 'INR',
     expected_close_date: '',
     description: '',
     next_steps: ''
@@ -72,33 +78,27 @@ const OpportunityManagement: React.FC = () => {
       setLoading(true);
       const entityFilter = { company_settings_id: selectedCompany?.id };
       
+      const [leadsData, customersData, countriesData] = await Promise.all([
+        leadService.getLeads({ status: 'qualified', ...entityFilter }, 1, 1000),
+        invoiceService.getCustomers(entityFilter, 1, 1000),
+        invoiceService.getCountries()
+      ]);
+      setLeads(leadsData.data);
+      setCustomers(customersData.data || []);
+      setCountries(countriesData);
+      
       if (activeTab === 'dashboard') {
-        const [statsData, opportunitiesData, leadsData, customersData] = await Promise.all([
-          opportunityService.getOpportunityStats(),
-          opportunityService.getOpportunities(filters, 1, 10),
-          leadService.getLeads({ status: 'qualified', ...entityFilter }, 1, 1000),
-          invoiceService.getCustomers(entityFilter, 1, 1000)
+        const [statsData, opportunitiesData] = await Promise.all([
+          opportunityService.getOpportunityStats(entityId ?? undefined),
+          opportunityService.getOpportunities({ ...filters, ...entityFilter }, 1, 10)
         ]);
         setStats(statsData);
         setOpportunities(opportunitiesData.data);
         setTotalPages(opportunitiesData.total_pages);
-        setLeads(leadsData.data);
-        setCustomers(customersData.data || []);
       } else if (activeTab === 'opportunities') {
-        const [opportunitiesData, customersData] = await Promise.all([
-          opportunityService.getOpportunities({ ...filters, ...entityFilter }, currentPage, 20),
-          invoiceService.getCustomers(entityFilter, 1, 1000)
-        ]);
+        const opportunitiesData = await opportunityService.getOpportunities({ ...filters, ...entityFilter }, currentPage, 20);
         setOpportunities(opportunitiesData.data);
         setTotalPages(opportunitiesData.total_pages);
-        setCustomers(customersData.data || []);
-      } else if (activeTab === 'create-opportunity') {
-        const [leadsData, customersData] = await Promise.all([
-          leadService.getLeads({ status: 'qualified', ...entityFilter }, 1, 1000),
-          invoiceService.getCustomers(entityFilter, 1, 1000)
-        ]);
-        setLeads(leadsData.data);
-        setCustomers(customersData.data || []);
       }
     } catch (err) {
       showError(`Failed to load data: ${err instanceof Error ? err.message : 'Unknown error'}`);
@@ -110,11 +110,13 @@ const OpportunityManagement: React.FC = () => {
   const openModal = (mode: 'view' | 'edit' | 'add', opportunity?: Opportunity) => {
     setModalMode(mode);
     setSelectedOpportunity(opportunity ?? null);
+    setNotes([]);
+    setNewNote('');
     if (mode === 'add') {
       setFormData({
         opportunity_name: '', customer_id: '', lead_id: undefined,
         company_settings_id: entityId ?? undefined, stage: 'prospecting', probability: 10,
-        estimated_value: 0, currency_code: 'INR', expected_close_date: '', description: '', next_steps: ''
+        estimated_value: 0, currency_code: selectedCompany?.country?.currency_code || 'INR', expected_close_date: '', description: '', next_steps: ''
       });
     } else if (opportunity) {
       setFormData({
@@ -130,6 +132,7 @@ const OpportunityManagement: React.FC = () => {
         description: opportunity.description || '',
         next_steps: opportunity.next_steps || ''
       });
+      loadNotes(opportunity.id);
     }
     setShowModal(true);
   };
@@ -138,6 +141,35 @@ const OpportunityManagement: React.FC = () => {
     setShowModal(false);
     setSelectedOpportunity(null);
     setModalLoading(false);
+  };
+
+  const loadNotes = async (opportunityId: string) => {
+    setNotesLoading(true);
+    try {
+      const activities = await leadActivityService.getActivities({ opportunity_id: opportunityId });
+      setNotes(activities.data.filter(a => a.activity_type === 'note'));
+    } catch (err) {
+      console.error('Failed to load notes:', err);
+    } finally {
+      setNotesLoading(false);
+    }
+  };
+
+  const handleAddNote = async () => {
+    if (!newNote.trim() || !selectedOpportunity) return;
+    try {
+      await leadActivityService.createActivity({
+        opportunity_id: selectedOpportunity.id,
+        activity_type: 'note',
+        subject: 'Note',
+        description: newNote.trim()
+      });
+      setNewNote('');
+      loadNotes(selectedOpportunity.id);
+      showSuccess('Note added successfully!');
+    } catch (err) {
+      showError(`Failed to add note: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    }
   };
 
   const handleChange = (field: keyof CreateOpportunityData, value: string | number | undefined) => {
@@ -263,13 +295,13 @@ const OpportunityManagement: React.FC = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             {[
               { label: 'Total Opportunities', value: stats?.total_opportunities || 0, icon: TrendingUp, color: 'text-blue-600' },
-              { label: 'Open Pipeline', value: stats?.open_pipeline_value || 0, icon: DollarSign, color: 'text-green-600', prefix: '$' },
+               { label: 'Open Pipeline', value: stats?.open_pipeline_value || 0, icon: DollarSign, color: 'text-green-600' },
               { label: 'Closed Won', value: stats?.closed_won_opportunities || 0, icon: Users, color: 'text-green-600' },
               { label: 'Closed Lost', value: stats?.closed_lost_opportunities || 0, icon: Users, color: 'text-red-600' }
             ].map(stat => (
               <div key={stat.label} className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
                 <div className="flex items-center justify-between">
-                  <div><p className="text-sm text-gray-600">{stat.label}</p><p className="text-2xl font-semibold text-gray-900">{stat.prefix || ''}{stat.value.toLocaleString()}</p></div>
+                   <div><p className="text-sm text-gray-600">{stat.label}</p><p className="text-2xl font-semibold text-gray-900">{stat.value.toLocaleString()}</p></div>
                   <stat.icon className={`w-8 h-8 ${stat.color}`} />
                 </div>
               </div>
@@ -288,7 +320,7 @@ const OpportunityManagement: React.FC = () => {
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{opp.opportunity_name}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{opp.customer?.company_name || opp.customer?.contact_person || '—'}</td>
                         <td className="px-6 py-4 whitespace-nowrap">{renderStageBadge(opp.stage)}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${opp.estimated_value?.toLocaleString() || '0'}</td>
+                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{formatCurrencyWithSymbol(opp.estimated_value || 0, opp.currency_code || 'INR')}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{opp.company_settings?.company_name || '—'}</td>
                       </tr>
                     ))}
@@ -324,7 +356,7 @@ const OpportunityManagement: React.FC = () => {
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{opp.opportunity_name}</td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{opp.customer?.company_name || opp.customer?.contact_person || '—'}</td>
                           <td className="px-6 py-4 whitespace-nowrap">{renderStageBadge(opp.stage)}</td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${opp.estimated_value?.toLocaleString() || '0'}</td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{formatCurrencyWithSymbol(opp.estimated_value || 0, opp.currency_code || 'INR')}</td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{opp.company_settings?.company_name || '—'}</td>
                           <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                             <div className="flex items-center justify-end space-x-2">
@@ -365,9 +397,10 @@ const OpportunityManagement: React.FC = () => {
             <div><label className="block text-sm font-medium text-gray-700 mb-1">Opportunity Name *</label><input type="text" value={formData.opportunity_name} onChange={e => handleChange('opportunity_name', e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500" placeholder="Enter opportunity name" /></div>
             <div><label className="block text-sm font-medium text-gray-700 mb-1">Customer *</label><select value={formData.customer_id} onChange={e => handleChange('customer_id', e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white focus:ring-blue-500 focus:border-blue-500"><option value="">Select Customer</option>{customers.map(c => (<option key={c.id} value={c.id}>{c.company_name || c.contact_person}</option>))}</select></div>
             <div><label className="block text-sm font-medium text-gray-700 mb-1">Associate Lead (Optional)</label><select value={formData.lead_id || ''} onChange={e => handleChange('lead_id', e.target.value || undefined)} className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white focus:ring-blue-500 focus:border-blue-500"><option value="">Select Lead</option>{leads.filter(l => l.status === 'qualified').map(l => (<option key={l.id} value={l.id}>{l.first_name} {l.last_name} - {l.company_name || 'No Company'}</option>))}</select></div>
-            <div><label className="block text-sm font-medium text-gray-700 mb-1">Estimated Value ($)</label><input type="number" value={formData.estimated_value} onChange={e => handleChange('estimated_value', parseFloat(e.target.value) || 0)} className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500" placeholder="0.00" /></div>
+            <div><label className="block text-sm font-medium text-gray-700 mb-1">Estimated Value ({formData.currency_code || 'INR'})</label><input type="number" value={formData.estimated_value} onChange={e => handleChange('estimated_value', parseFloat(e.target.value) || 0)} className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500" placeholder="0.00" /></div>
             <div><label className="block text-sm font-medium text-gray-700 mb-1">Expected Close Date</label><input type="date" value={formData.expected_close_date} onChange={e => handleChange('expected_close_date', e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500" /></div>
             <div><label className="block text-sm font-medium text-gray-700 mb-1">Stage</label><select value={formData.stage} onChange={e => handleChange('stage', e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white focus:ring-blue-500 focus:border-blue-500">{OPPORTUNITY_STAGES.map(s => (<option key={s.value} value={s.value}>{s.label}</option>))}</select></div>
+            <div><label className="block text-sm font-medium text-gray-700 mb-1">Currency</label><select value={formData.currency_code || 'INR'} onChange={e => handleChange('currency_code', e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white focus:ring-blue-500 focus:border-blue-500">{countries.map(c => (<option key={c.id} value={c.currency_code}>{c.currency_code} - {c.currency_name}</option>))}</select></div>
           </div>
           <div className="mt-4"><label className="block text-sm font-medium text-gray-700 mb-1">Description</label><textarea value={formData.description} onChange={e => handleChange('description', e.target.value)} rows={3} placeholder="Enter opportunity description..." className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500" /></div>
           <div className="mt-6 flex justify-end space-x-3">
@@ -392,15 +425,48 @@ const OpportunityManagement: React.FC = () => {
                   {companies.map(c => (<option key={c.id} value={c.id}>{c.company_name}</option>))}
                 </select>
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div><label className="block text-sm font-medium text-gray-700 mb-1">Opportunity Name *</label><input type="text" value={formData.opportunity_name} onChange={e => handleChange('opportunity_name', e.target.value)} disabled={modalMode === 'view'} placeholder="Enter opportunity name" className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50" /></div>
-                <div><label className="block text-sm font-medium text-gray-700 mb-1">Customer *</label><select value={formData.customer_id} onChange={e => handleChange('customer_id', e.target.value)} disabled={modalMode === 'view'} className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50"><option value="">Select Customer</option>{customers.map(c => (<option key={c.id} value={c.id}>{c.company_name || c.contact_person}</option>))}</select></div>
-                <div><label className="block text-sm font-medium text-gray-700 mb-1">Associate Lead</label><select value={formData.lead_id || ''} onChange={e => handleChange('lead_id', e.target.value || undefined)} disabled={modalMode === 'view'} className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50"><option value="">Select Lead</option>{leads.filter(l => l.status === 'qualified').map(l => (<option key={l.id} value={l.id}>{l.first_name} {l.last_name} - {l.company_name || 'No Company'}</option>))}</select></div>
-                <div><label className="block text-sm font-medium text-gray-700 mb-1">Stage</label><select value={formData.stage} onChange={e => handleChange('stage', e.target.value)} disabled={modalMode === 'view'} className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50">{OPPORTUNITY_STAGES.map(s => (<option key={s.value} value={s.value}>{s.label}</option>))}</select></div>
-                <div><label className="block text-sm font-medium text-gray-700 mb-1">Estimated Value ($)</label><input type="number" value={formData.estimated_value} onChange={e => handleChange('estimated_value', parseFloat(e.target.value) || 0)} disabled={modalMode === 'view'} className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50" /></div>
-                <div><label className="block text-sm font-medium text-gray-700 mb-1">Expected Close Date</label><input type="date" value={formData.expected_close_date} onChange={e => handleChange('expected_close_date', e.target.value)} disabled={modalMode === 'view'} className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50" /></div>
-              </div>
+               <div className="grid grid-cols-2 gap-4">
+                 <div><label className="block text-sm font-medium text-gray-700 mb-1">Opportunity Name *</label><input type="text" value={formData.opportunity_name} onChange={e => handleChange('opportunity_name', e.target.value)} disabled={modalMode === 'view'} placeholder="Enter opportunity name" className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50" /></div>
+                 <div><label className="block text-sm font-medium text-gray-700 mb-1">Customer *</label><select value={formData.customer_id} onChange={e => handleChange('customer_id', e.target.value)} disabled={modalMode === 'view'} className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50"><option value="">Select Customer</option>{customers.map(c => (<option key={c.id} value={c.id}>{c.company_name || c.contact_person}</option>))}</select></div>
+                 <div><label className="block text-sm font-medium text-gray-700 mb-1">Associate Lead</label><select value={formData.lead_id || ''} onChange={e => handleChange('lead_id', e.target.value || undefined)} disabled={modalMode === 'view'} className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50"><option value="">Select Lead</option>{leads.filter(l => l.status === 'qualified').map(l => (<option key={l.id} value={l.id}>{l.first_name} {l.last_name} - {l.company_name || 'No Company'}</option>))}</select></div>
+                 <div><label className="block text-sm font-medium text-gray-700 mb-1">Stage</label><select value={formData.stage} onChange={e => handleChange('stage', e.target.value)} disabled={modalMode === 'view'} className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50">{OPPORTUNITY_STAGES.map(s => (<option key={s.value} value={s.value}>{s.label}</option>))}</select></div>
+                 <div><label className="block text-sm font-medium text-gray-700 mb-1">Currency</label><select value={formData.currency_code || 'INR'} onChange={e => handleChange('currency_code', e.target.value)} disabled={modalMode === 'view'} className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50">{countries.map(c => (<option key={c.id} value={c.currency_code}>{c.currency_code} - {c.currency_name}</option>))}</select></div>
+                 <div><label className="block text-sm font-medium text-gray-700 mb-1">Estimated Value ({formData.currency_code || 'INR'})</label><input type="number" value={formData.estimated_value} onChange={e => handleChange('estimated_value', parseFloat(e.target.value) || 0)} disabled={modalMode === 'view'} className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50" /></div>
+                 <div><label className="block text-sm font-medium text-gray-700 mb-1">Expected Close Date</label><input type="date" value={formData.expected_close_date} onChange={e => handleChange('expected_close_date', e.target.value)} disabled={modalMode === 'view'} className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50" /></div>
+               </div>
               <div><label className="block text-sm font-medium text-gray-700 mb-1">Description</label><textarea value={formData.description} onChange={e => handleChange('description', e.target.value)} disabled={modalMode === 'view'} rows={3} placeholder="Enter opportunity description..." className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50" /></div>
+              <div className="border-t border-gray-200 pt-4">
+                <h4 className="text-sm font-semibold text-gray-900 mb-3">Notes</h4>
+                {notesLoading ? (
+                  <div className="text-center py-4 text-gray-500">Loading notes...</div>
+                ) : notes.length === 0 ? (
+                  <p className="text-sm text-gray-500 mb-3">No notes yet.</p>
+                ) : (
+                  <div className="space-y-2 mb-3 max-h-40 overflow-y-auto">
+                    {notes.map(note => (
+                      <div key={note.id} className="bg-gray-50 rounded-md p-3">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-medium text-gray-500">{new Date(note.created_at).toLocaleString()}</span>
+                        </div>
+                        <p className="text-sm text-gray-900 mt-1">{note.description || note.subject}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {modalMode !== 'view' && (
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={newNote}
+                      onChange={e => setNewNote(e.target.value)}
+                      placeholder="Add a note..."
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 text-sm"
+                      onKeyDown={e => e.key === 'Enter' && handleAddNote()}
+                    />
+                    <button onClick={handleAddNote} className="px-3 py-2 bg-blue-600 text-white rounded-md text-sm hover:bg-blue-700">Add</button>
+                  </div>
+                )}
+              </div>
             </div>
             {modalMode !== 'view' && (
               <div className="flex justify-end space-x-3 mt-6">

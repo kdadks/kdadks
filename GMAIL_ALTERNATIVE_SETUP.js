@@ -5,7 +5,7 @@
 // Replace the Microsoft 365 Exchange SMTP configuration in send-email.js with this
 
 // Gmail SMTP Configuration (if you prefer Gmail over Microsoft 365)
-const transporter = nodemailer.createTransporter({
+const transporter = nodemailer.createTransport({
   service: 'gmail',
   auth: {
     user: 'your-email@gmail.com', // Your Gmail address

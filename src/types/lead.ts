@@ -55,6 +55,7 @@ export interface Lead {
   // Qualification criteria
   budget_min?: number;
   budget_max?: number;
+  currency_code?: string;
   expected_close_date?: string;
   probability: number;
   
@@ -112,6 +113,7 @@ export interface CreateLeadData {
   // Qualification criteria
   budget_min?: number;
   budget_max?: number;
+  currency_code?: string;
   expected_close_date?: string;
   
   // Entity-specific fields (India)

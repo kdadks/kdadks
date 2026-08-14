@@ -23,7 +23,38 @@ class LeadService {
     }
   }
 
-  async getLeadStats(): Promise<LeadStats> {
+  async getLeadStats(companySettingsId?: string): Promise<LeadStats> {
+    if (companySettingsId) {
+      const { data, error } = await supabase
+        .from('leads')
+        .select('status, source, created_at')
+        .eq('company_settings_id', companySettingsId);
+      
+      if (error) throw error;
+      
+      const now = new Date();
+      
+      return {
+        total_leads: data?.length || 0,
+        new_leads: data?.filter(l => l.status === 'new').length || 0,
+        contacted_leads: data?.filter(l => l.status === 'contacted').length || 0,
+        qualified_leads: data?.filter(l => l.status === 'qualified').length || 0,
+        disqualified_leads: data?.filter(l => l.status === 'disqualified').length || 0,
+        converted_leads: data?.filter(l => l.status === 'converted').length || 0,
+        website_leads: data?.filter(l => l.source === 'website').length || 0,
+        referral_leads: data?.filter(l => l.source === 'referral').length || 0,
+        campaign_leads: data?.filter(l => l.source === 'campaign').length || 0,
+        this_month_leads: data?.filter(l => {
+          const d = new Date(l.created_at);
+          return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+        }).length || 0,
+        this_year_leads: data?.filter(l => {
+          const d = new Date(l.created_at);
+          return d.getFullYear() === now.getFullYear();
+        }).length || 0
+      };
+    }
+    
     const { data, error } = await supabase
       .from('lead_stats_view')
       .select('*')

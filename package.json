@@ -35,15 +35,14 @@
     "jspdf": "^4.0.0",
     "lucide-react": "^0.263.1",
     "node-fetch": "^3.3.2",
-    "nodemailer": "^7.0.13",
-    "puppeteer": "^24.34.0",
+    "nodemailer": "^9.0.5",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-google-recaptcha": "^3.1.0",
     "react-hook-form": "^7.61.1",
     "react-router-dom": "^7.7.1",
     "tinymce": "^8.3.1",
-    "xlsx": "^0.18.5"
+    "xlsx-republish": "^0.20.3"
   },
   "devDependencies": {
     "@types/react": "^18.2.15",

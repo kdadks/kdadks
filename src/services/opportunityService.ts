@@ -15,7 +15,38 @@ import type {
 } from '../types/lead';
 
 class OpportunityService {
-  async getOpportunityStats(): Promise<OpportunityStats> {
+  async getOpportunityStats(companySettingsId?: string): Promise<OpportunityStats> {
+    if (companySettingsId) {
+      const { data, error } = await supabase
+        .from('opportunities')
+        .select('stage, estimated_value, created_at')
+        .eq('company_settings_id', companySettingsId);
+      
+      if (error) throw error;
+      
+      const now = new Date();
+      
+      return {
+        total_opportunities: data?.length || 0,
+        prospecting_opportunities: data?.filter(o => o.stage === 'prospecting').length || 0,
+        qualification_opportunities: data?.filter(o => o.stage === 'qualification').length || 0,
+        proposal_opportunities: data?.filter(o => o.stage === 'proposal').length || 0,
+        negotiation_opportunities: data?.filter(o => o.stage === 'negotiation').length || 0,
+        closed_won_opportunities: data?.filter(o => o.stage === 'closed_won').length || 0,
+        closed_lost_opportunities: data?.filter(o => o.stage === 'closed_lost').length || 0,
+        total_pipeline_value: data?.reduce((sum, o) => sum + (Number(o.estimated_value) || 0), 0) || 0,
+        open_pipeline_value: data?.filter(o => !['closed_won', 'closed_lost'].includes(o.stage)).reduce((sum, o) => sum + (Number(o.estimated_value) || 0), 0) || 0,
+        this_month_opportunities: data?.filter(o => {
+          const d = new Date(o.created_at);
+          return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+        }).length || 0,
+        this_year_opportunities: data?.filter(o => {
+          const d = new Date(o.created_at);
+          return d.getFullYear() === now.getFullYear();
+        }).length || 0
+      };
+    }
+    
     const { data, error } = await supabase
       .from('opportunity_stats_view')
       .select('*')
