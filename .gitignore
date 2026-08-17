@@ -64,6 +64,8 @@ netlify/functions/debug.js
 !CONTRIBUTING.md
 !CHANGELOG.md
 !ENVIRONMENT_VARIABLES_FIX.md
+!memory.md
+!AGENTS.md
 /PAYMENT_*.md
 /RECAPTCHA_*.md
 /WEBHOOK_*.md
