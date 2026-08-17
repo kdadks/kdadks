@@ -60,12 +60,9 @@ netlify/functions/debug.js
 
 # Temporary Documentation and Status Files
 /*.md
-!README.md
 !CONTRIBUTING.md
 !CHANGELOG.md
 !ENVIRONMENT_VARIABLES_FIX.md
-!memory.md
-!AGENTS.md
 /PAYMENT_*.md
 /RECAPTCHA_*.md
 /WEBHOOK_*.md
