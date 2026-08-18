@@ -1,6 +1,6 @@
 # Project Memory — KDADKS Website
 
-> Auto-updated by Kilo agent after every implementation. Last updated: 2026-08-17
+> Auto-updated by Kilo agent after every implementation. Last updated: 2026-08-18
 
 A comprehensive knowledge base for the KDADKS website codebase. This file serves as a single source of truth for project architecture, conventions, patterns, and key implementation details.
 
@@ -273,7 +273,8 @@ src/
 │   ├── paymentService.ts        # (908 lines) — payments, payment gateways
 │   ├── leadService.ts           # (317 lines) — lead CRUD, stats, number generation
 │   ├── opportunityService.ts    # (405 lines) — opportunity CRUD, stats, lead→opp conversion, opp→quote conversion
-│   ├── leadActivityService.ts   # (179 lines) — lead/opportunity activity tracking, notes
+│   ├── leadActivityService.ts   # (250+ lines) — lead/opportunity activity tracking, notes
+│   ├── leadFollowUpService.ts   # (200+ lines) — follow-up task CRUD, reminders, stale lead detection, alerts
 │   ├── contractService.ts       # — contract CRUD
 │   ├── employeeService.ts       # — employee CRUD
 │   ├── subscriptionService.ts   # — subscriptions
@@ -498,6 +499,9 @@ The complete sales pipeline with status/stage transitions:
 - PAN validation regex: `^[A-Z]{5}[0-9]{4}[A-Z]{1}$`
 - GSTIN/VAT/CRO fields shown conditionally based on country
 - Lead number generated via `get_next_lead_opportunity_number({ p_record_type: 'lead' })`
+- **Follow-up Tasks tab** for managing task priorities (low/medium/high/urgent), due dates, recurring follow-ups (daily/weekly/monthly/quarterly), and task assignments
+- **Timeline & Alerts tab** for unified chronological activity log combining all touchpoints (calls, emails, meetings, notes, tasks, status changes)
+- Automated alerts for overdue tasks, stale leads (14+ days no activity), and upcoming due dates
 
 ### Opportunity Management (`src/components/lead/OpportunityManagement.tsx`)
 
@@ -534,6 +538,19 @@ The complete sales pipeline with status/stage transitions:
 
 `src/services/leadActivityService.ts` — tracks activities (call, email, meeting, note, task, status_change) for both leads and opportunities via polymorphic `lead_id` / `opportunity_id` foreign keys.
 
+- `getLeadTimeline(leadId)` — generates unified chronological timeline merging activities, follow-up tasks, and status changes
+- `getOpportunityTimeline(opportunityId)` — same for opportunities
+
+### Lead Follow-Up Task Management
+
+`src/services/leadFollowUpService.ts` — manages follow-up tasks with:
+- CRUD operations for tasks with priorities (low/medium/high/urgent)
+- Recurring follow-ups (none/daily/weekly/bi_weekly/monthly/quarterly)
+- Task completion and cancellation workflows
+- Overdue task detection
+- Stale lead detection (configurable days of inactivity)
+- Upcoming task reminders
+
 ---
 
 ## 6. Database Schema
@@ -559,6 +576,7 @@ The database uses **9+ interconnected tables** with foreign key relationships (S
 | leads              | → customers, company_settings, countries |
 | opportunities      | → leads, customers, company_settings    |
 | lead_activities    | → leads, opportunities (polymorphic)    |
+| lead_follow_up_tasks | → leads, opportunities, company_settings |
 | quotes             | → customers, company_settings          |
 | quote_items        | → quotes, products                     |
 
@@ -584,6 +602,7 @@ Migrations are in `database/migrations/` (40+ SQL files). Key recent migrations:
 - `026_lead_opportunity_id_sequences.sql` — number generation sequences
 - `027_fix_lead_country_foreign_key.sql`
 - `028_add_lead_currency_code.sql`
+- `029_lead_follow_up_tasks.sql` — follow-up tasks, priorities, recurrence, alerts
 - `022_add_iban_swift_to_company_settings.sql`
 - `023_add_cro_vat_to_company_settings.sql`
 
@@ -648,12 +667,14 @@ npm validate         # Validate deployment configuration
 | `src/services/invoiceService.ts` | 2323-line core service for invoices, customers, products, countries, company settings |
 | `src/components/admin/SimpleAdminDashboard.tsx` | 1548-line admin shell with sidebar, routing, dashboard stats |
 | `src/components/invoice/InvoiceManagement.tsx` | 6071-line core invoicing component |
-| `src/components/lead/LeadManagement.tsx` | Lead management UI (dashboard + CRUD + notes) |
+| `src/components/lead/LeadManagement.tsx` | Lead management UI (dashboard + CRUD + notes + follow-up tasks + timeline) |
 | `src/components/lead/OpportunityManagement.tsx` | Opportunity management UI (pipeline stages) |
+| `src/services/leadFollowUpService.ts` | Follow-up task service (CRUD, overdue detection, stale leads, alerts) |
+| `src/services/leadActivityService.ts` | Activity service with unified timeline generation for leads/opportunities |
+| `src/types/lead.ts` | 450+ lines — lead, opportunity, activity, follow-up task, timeline, alert types |
 | `src/utils/taxUtils.ts` | 542-line multi-country tax & banking field utilities |
 | `src/utils/leadEntityUtils.ts` | Entity prefix, tax label, validation for leads/opportunities |
 | `src/types/invoice.ts` | 574 lines — core domain type definitions |
-| `src/types/lead.ts` | 403 lines — lead, opportunity, activity, filters, stats types |
 | `netlify.toml` | Build config, redirects (SPA fallback), security headers, scheduled functions |
 | `.env.example` | Template for all required environment variables |
 
@@ -705,11 +726,13 @@ All reporting components follow a consistent pattern:
 
 Recent commits indicate active development on:
 1. **Lead & Opportunity Management** — full CRUD with note functionality, currency support, entity filtering
-2. **Multi-country tax/banking refactor** — `resolveCountryCode` function, VAT/CRO field display, IBAN/SWIFT fields
-3. **Subscription management** — draft invoice generation from subscription data
-4. **Payment gateway** — webhook security, RLS fixes
-5. **Company rebranding** — from "Kdadks Service Private Limited" to "Kdadks"
-6. **External API/MCP server plan** — architecture for external CRM integration
+2. **Follow-up Task Management** — task priorities, recurring follow-ups, due dates, reminders, automated alerts for overdue and stale leads
+3. **Lead Timeline & Activity Tracking** — unified chronological timeline consolidating all touchpoints (calls, emails, meetings, notes, tasks, status changes)
+4. **Multi-country tax/banking refactor** — `resolveCountryCode` function, VAT/CRO field display, IBAN/SWIFT fields
+5. **Subscription management** — draft invoice generation from subscription data
+6. **Payment gateway** — webhook security, RLS fixes
+7. **Company rebranding** — from "Kdadks Service Private Limited" to "Kdadks"
+8. **External API/MCP server plan** — architecture for external CRM integration
 
 ---
 

@@ -331,6 +331,120 @@ export interface QuoteHandoffItem {
   is_service_item?: boolean;
 }
 
+export type LeadTimelineEntryType = 'activity' | 'follow_up_task' | 'status_change' | 'score_change';
+
+export interface LeadTimelineEntry {
+  id: string;
+  entry_type: LeadTimelineEntryType;
+  occurred_at: string;
+  title: string;
+  description?: string;
+  metadata?: Record<string, any>;
+  actor_id?: string;
+  actor_name?: string;
+}
+
+export interface LeadTimeline {
+  entries: LeadTimelineEntry[];
+}
+
+export type FollowUpTaskPriority = 'low' | 'medium' | 'high' | 'urgent';
+
+export type FollowUpTaskStatus = 'open' | 'in_progress' | 'completed' | 'cancelled' | 'overdue';
+
+export type FollowUpTaskRecurrence = 'none' | 'daily' | 'weekly' | 'bi_weekly' | 'monthly' | 'quarterly';
+
+export interface LeadFollowUpTask {
+  id: string;
+  
+  company_settings_id?: string;
+  lead_id: string;
+  opportunity_id?: string;
+  
+  title: string;
+  description?: string;
+  task_type: string;
+  priority: FollowUpTaskPriority;
+  status: FollowUpTaskStatus;
+  due_date: string;
+  reminder_date?: string;
+  recurrence: FollowUpTaskRecurrence;
+  parent_task_id?: string;
+  
+  created_by?: string;
+  assigned_to?: string;
+  completed_by?: string;
+  completed_at?: string;
+  cancelled_at?: string;
+  cancellation_reason?: string;
+  
+  created_at: string;
+  updated_at: string;
+  
+  lead?: Lead;
+  opportunity?: Opportunity;
+}
+
+export interface CreateLeadFollowUpTaskData {
+  company_settings_id?: string;
+  lead_id: string;
+  opportunity_id?: string;
+  title: string;
+  description?: string;
+  task_type?: string;
+  priority?: FollowUpTaskPriority;
+  due_date: string;
+  reminder_date?: string;
+  recurrence?: FollowUpTaskRecurrence;
+  parent_task_id?: string;
+  assigned_to?: string;
+}
+
+export interface UpdateLeadFollowUpTaskData extends Partial<CreateLeadFollowUpTaskData> {
+  id: string;
+  status?: FollowUpTaskStatus;
+  completed_by?: string;
+  completed_at?: string;
+  cancelled_at?: string;
+  cancellation_reason?: string;
+}
+
+export interface LeadFollowUpTaskFilters {
+  company_settings_id?: string;
+  lead_id?: string;
+  opportunity_id?: string;
+  status?: FollowUpTaskStatus;
+  priority?: FollowUpTaskPriority;
+  assigned_to?: string;
+  due_date_from?: string;
+  due_date_to?: string;
+  overdue_only?: boolean;
+}
+
+export interface LeadFollowUpTaskStats {
+  total_tasks: number;
+  open_tasks: number;
+  in_progress_tasks: number;
+  completed_tasks: number;
+  overdue_tasks: number;
+  cancelled_tasks: number;
+  high_priority_tasks: number;
+  urgent_tasks: number;
+  upcoming_tasks: number;
+}
+
+export interface LeadAlert {
+  id: string;
+  lead_id: string;
+  alert_type: 'overdue_follow_up' | 'stale_lead' | 'upcoming_due' | 'high_priority';
+  severity: 'info' | 'warning' | 'critical';
+  title: string;
+  message: string;
+  is_read: boolean;
+  created_at: string;
+  lead?: Lead;
+}
+
 // =====================================================
 // FILTERS & PAGINATION
 // =====================================================

@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Search, Eye, Edit, Trash2, X, Users, RefreshCw, TrendingUp, UserCheck, UserX, Mail, Phone, Building2, Filter } from 'lucide-react';
+import { Plus, Search, Eye, Edit, Trash2, X, Users, RefreshCw, TrendingUp, UserCheck, UserX, Mail, Phone, Building2, Filter, Bell, AlertTriangle, CheckCircle, Clock, Calendar, Flag, Activity, ChevronDown, ChevronRight, AlertCircle } from 'lucide-react';
 import { leadService } from '../../services/leadService';
 import { leadActivityService } from '../../services/leadActivityService';
+import { leadFollowUpTaskService } from '../../services/leadFollowUpService';
 import { invoiceService } from '../../services/invoiceService';
 import { useCompanyContext } from '../../contexts/CompanyContext';
 import { useToast } from '../ui/ToastProvider';
 import { useConfirmDialog } from '../../hooks/useConfirmDialog';
 import ConfirmDialog from '../ui/ConfirmDialog';
-import type { Lead, LeadStatus, LeadSource, CreateLeadData, LeadFilters, LeadStats, LeadActivity } from '../../types/lead';
+import type { Lead, LeadStatus, LeadSource, CreateLeadData, LeadFilters, LeadStats, LeadActivity, LeadFollowUpTask, LeadFollowUpTaskFilters, LeadFollowUpTaskStats, LeadTimelineEntry, FollowUpTaskStatus, FollowUpTaskPriority, CreateLeadFollowUpTaskData, LeadAlert } from '../../types/lead';
 import type { Customer, CompanySettings, Country } from '../../types/invoice';
 import { getTaxRegistrationLabel, getTaxLabel } from '../../utils/taxUtils';
 import { getCustomerDisplayIds } from '../../utils/customerCodeUtils';
@@ -46,8 +47,32 @@ const LeadManagement: React.FC = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [searchTerm, setSearchTerm] = useState('');
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'leads' | 'create-lead'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'leads' | 'create-lead' | 'tasks' | 'timeline'>('dashboard');
   const [filters, setFilters] = useState<LeadFilters>({});
+  
+  const [followUpTasks, setFollowUpTasks] = useState<LeadFollowUpTask[]>([]);
+  const [taskStats, setTaskStats] = useState<LeadFollowUpTaskStats | null>(null);
+  const [taskLoading, setTaskLoading] = useState(false);
+  const [taskPage, setTaskPage] = useState(1);
+  const [taskTotalPages, setTaskTotalPages] = useState(1);
+  const [taskFilters, setTaskFilters] = useState<LeadFollowUpTaskFilters>({});
+  const [showTaskModal, setShowTaskModal] = useState(false);
+  const [taskModalMode, setTaskModalMode] = useState<'add' | 'edit'>('add');
+  const [selectedTask, setSelectedTask] = useState<LeadFollowUpTask | null>(null);
+  const [taskFormData, setTaskFormData] = useState<CreateLeadFollowUpTaskData>({
+    lead_id: '',
+    title: '',
+    due_date: '',
+    priority: 'medium',
+    recurrence: 'none'
+  });
+  
+  const [timeline, setTimeline] = useState<LeadTimelineEntry[]>([]);
+  const [timelineLoading, setTimelineLoading] = useState(false);
+  const [selectedLeadForTimeline, setSelectedLeadForTimeline] = useState<Lead | null>(null);
+  
+  const [alerts, setAlerts] = useState<LeadAlert[]>([]);
+  const [showAlertsPanel, setShowAlertsPanel] = useState(false);
 
   const entityId = selectedCompany?.id ?? null;
 
@@ -87,6 +112,8 @@ const LeadManagement: React.FC = () => {
 
   useEffect(() => {
     loadData();
+    if (activeTab === 'tasks') loadFollowUpTasks();
+    if (activeTab === 'timeline') loadAlerts();
   }, [currentPage, searchTerm, activeTab, selectedCompany]);
 
   useEffect(() => {
@@ -125,11 +152,99 @@ const LeadManagement: React.FC = () => {
         ]);
         setCustomers(customersData.data || []);
         setCountries(countriesData);
+      } else if (activeTab === 'tasks') {
+        await loadFollowUpTasks();
+      } else if (activeTab === 'timeline') {
+        const [leadsData] = await Promise.all([
+          leadService.getLeads({ ...filters, company_settings_id: selectedCompany?.id || undefined }, 1, 1000)
+        ]);
+        setLeads(leadsData.data);
+        await loadAlerts();
       }
     } catch (err) {
       showError(`Failed to load data: ${err instanceof Error ? err.message : 'Unknown error'}`);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadFollowUpTasks = async () => {
+    try {
+      setTaskLoading(true);
+      const [tasksData, statsData] = await Promise.all([
+        leadFollowUpTaskService.getFollowUpTasks({ ...taskFilters, ...(entityId ? { company_settings_id: entityId } : {}) }, taskPage, 20),
+        leadFollowUpTaskService.getFollowUpTaskStats(entityId || undefined)
+      ]);
+      setFollowUpTasks(tasksData.data);
+      setTaskTotalPages(tasksData.total_pages);
+      setTaskStats(statsData);
+    } catch (err) {
+      showError(`Failed to load tasks: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    } finally {
+      setTaskLoading(false);
+    }
+  };
+
+  const loadAlerts = async () => {
+    try {
+      setLoading(true);
+      const [overdueTasks, staleLeads] = await Promise.all([
+        leadFollowUpTaskService.getOverdueFollowUpTasks(entityId || undefined),
+        leadFollowUpTaskService.getStaleLeads(entityId || undefined)
+      ]);
+      
+      const alertList: LeadAlert[] = [];
+      
+      for (const task of overdueTasks) {
+        alertList.push({
+          id: `overdue-${task.id}`,
+          lead_id: task.lead_id,
+          alert_type: 'overdue_follow_up',
+          severity: 'critical',
+          title: 'Overdue Follow-up Task',
+          message: `"${task.title}" was due on ${new Date(task.due_date).toLocaleDateString()}`,
+          is_read: false,
+          created_at: task.due_date,
+          lead: task.lead
+        });
+      }
+      
+      for (const lead of staleLeads) {
+        alertList.push({
+          id: `stale-${lead.id}`,
+          lead_id: lead.id,
+          alert_type: 'stale_lead',
+          severity: 'warning',
+          title: 'Stale Lead - No Activity',
+          message: `Lead "${lead.first_name} ${lead.last_name}" has had no activity for 14+ days`,
+          is_read: false,
+          created_at: lead.updated_at,
+          lead
+        });
+      }
+      
+      alertList.sort((a, b) => {
+        const severityOrder = { critical: 0, warning: 1, info: 2 } as const;
+        return severityOrder[a.severity as keyof typeof severityOrder] - severityOrder[b.severity as keyof typeof severityOrder] || new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      });
+      
+      setAlerts(alertList);
+    } catch (err) {
+      showError(`Failed to load alerts: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadTimeline = async (leadId: string) => {
+    setTimelineLoading(true);
+    try {
+      const timelineData = await leadActivityService.getLeadTimeline(leadId);
+      setTimeline(timelineData);
+    } catch (err) {
+      console.error('Failed to load timeline:', err);
+    } finally {
+      setTimelineLoading(false);
     }
   };
 
@@ -160,6 +275,7 @@ const LeadManagement: React.FC = () => {
         gstin: lead.gstin || '', pan: lead.pan || '', vat_number: lead.vat_number || '', cro_number: lead.cro_number || ''
       });
       loadNotes(lead.id);
+      loadTimeline(lead.id);
     }
     setShowModal(true);
   };
@@ -262,6 +378,84 @@ const LeadManagement: React.FC = () => {
     }
   };
 
+  const handleCreateTask = async () => {
+    if (!taskFormData.title.trim() || !taskFormData.due_date || !taskFormData.lead_id) return;
+    try {
+      await leadFollowUpTaskService.createFollowUpTask(taskFormData);
+      showSuccess('Follow-up task created successfully!');
+      setShowTaskModal(false);
+      setTaskFormData({ lead_id: '', title: '', due_date: '', priority: 'medium', recurrence: 'none' });
+      loadFollowUpTasks();
+    } catch (err) {
+      showError(`Failed to create task: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    }
+  };
+
+  const handleCompleteTask = async (task: LeadFollowUpTask) => {
+    try {
+      await leadFollowUpTaskService.completeFollowUpTask(task.id);
+      showSuccess('Task marked as completed!');
+      loadFollowUpTasks();
+    } catch (err) {
+      showError(`Failed to complete task: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    }
+  };
+
+  const handleCancelTask = async (task: LeadFollowUpTask) => {
+    const confirmed = await confirm({ title: 'Cancel Task', message: `Cancel task "${task.title}"?`, confirmText: 'Cancel', type: 'warning' });
+    if (!confirmed) return;
+    try {
+      await leadFollowUpTaskService.cancelFollowUpTask(task.id);
+      showSuccess('Task cancelled!');
+      loadFollowUpTasks();
+    } catch (err) {
+      showError(`Failed to cancel task: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    }
+  };
+
+  const handleDeleteTask = async (task: LeadFollowUpTask) => {
+    const confirmed = await confirm({ title: 'Delete Task', message: `Delete task "${task.title}"? This action cannot be undone.`, confirmText: 'Delete', type: 'danger' });
+    if (!confirmed) return;
+    try {
+      await leadFollowUpTaskService.deleteFollowUpTask(task.id);
+      showSuccess('Task deleted successfully!');
+      loadFollowUpTasks();
+    } catch (err) {
+      showError(`Failed to delete task: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    }
+  };
+
+  const openTaskModal = (mode: 'add' | 'edit', task?: LeadFollowUpTask, leadId?: string) => {
+    setTaskModalMode(mode);
+    setSelectedTask(task ?? null);
+    if (mode === 'add') {
+      setTaskFormData({
+        lead_id: leadId || selectedLead?.id || '',
+        title: '',
+        due_date: '',
+        priority: 'medium',
+        recurrence: 'none',
+        company_settings_id: entityId ?? undefined
+      });
+    } else if (task) {
+      setTaskFormData({
+        lead_id: task.lead_id,
+        opportunity_id: task.opportunity_id,
+        title: task.title,
+        description: task.description,
+        task_type: task.task_type,
+        priority: task.priority,
+        due_date: task.due_date,
+        reminder_date: task.reminder_date,
+        recurrence: task.recurrence,
+        parent_task_id: task.parent_task_id,
+        assigned_to: task.assigned_to,
+        company_settings_id: task.company_settings_id
+      });
+    }
+    setShowTaskModal(true);
+  };
+
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     setCurrentPage(1);
@@ -304,7 +498,7 @@ const LeadManagement: React.FC = () => {
 
       <div className="border-b border-gray-200">
         <nav className="-mb-px flex space-x-8">
-          {[{ key: 'dashboard', label: 'Dashboard' }, { key: 'leads', label: 'All Leads' }, { key: 'create-lead', label: 'Create Lead' }].map(tab => (
+          {[{ key: 'dashboard', label: 'Dashboard' }, { key: 'leads', label: 'All Leads' }, { key: 'create-lead', label: 'Create Lead' }, { key: 'tasks', label: 'Follow-up Tasks' }, { key: 'timeline', label: 'Timeline & Alerts' }].map(tab => (
             <button key={tab.key} onClick={() => setActiveTab(tab.key as any)} className={`${
               activeTab === tab.key ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
             } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}>{tab.label}</button>
@@ -330,7 +524,13 @@ const LeadManagement: React.FC = () => {
             ))}
           </div>
           <div className="bg-white rounded-lg shadow overflow-hidden">
-            <div className="px-6 py-4 border-b border-gray-200"><h3 className="text-lg font-medium text-gray-900">Recent Leads</h3></div>
+            <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+              <h3 className="text-lg font-medium text-gray-900">Recent Leads</h3>
+              <button onClick={() => setShowAlertsPanel(!showAlertsPanel)} className="inline-flex items-center px-3 py-1 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">
+                <Bell className="w-4 h-4 mr-2" />Alerts
+                {alerts.filter(a => !a.is_read).length > 0 && <span className="ml-2 inline-flex items-center justify-center px-2 py-1 text-xs font-bold leading-none text-white bg-red-600 rounded-full">{alerts.filter(a => !a.is_read).length}</span>}
+              </button>
+            </div>
             {loading ? <div className="text-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto" /></div> : leads.length === 0 ? <div className="text-center py-12 text-gray-500">No leads found</div> : (
               <div className="overflow-x-auto">
                 <table className="min-w-full divide-y divide-gray-200">
@@ -351,6 +551,26 @@ const LeadManagement: React.FC = () => {
               </div>
             )}
           </div>
+          {showAlertsPanel && (
+            <div className="bg-white rounded-lg shadow p-6">
+              <h3 className="text-lg font-medium text-gray-900 mb-4">Recent Alerts</h3>
+              <div className="space-y-3">
+                {alerts.slice(0, 5).map(alert => (
+                  <div key={alert.id} className={`p-3 rounded-md border ${alert.severity === 'critical' ? 'bg-red-50 border-red-200' : 'bg-yellow-50 border-yellow-200'}`}>
+                    <div className="flex items-start">
+                      {alert.severity === 'critical' ? <AlertTriangle className="w-5 h-5 text-red-600 mr-3 mt-0.5" /> : <AlertCircle className="w-5 h-5 text-yellow-600 mr-3 mt-0.5" />}
+                      <div>
+                        <p className="text-sm font-medium text-gray-900">{alert.title}</p>
+                        <p className="text-sm text-gray-600 mt-1">{alert.message}</p>
+                        {alert.lead && <p className="text-xs text-blue-600 mt-1">{alert.lead.lead_number} - {alert.lead.first_name} {alert.lead.last_name}</p>}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                {alerts.length === 0 && <p className="text-sm text-gray-500">No active alerts.</p>}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -432,6 +652,200 @@ const LeadManagement: React.FC = () => {
         </div>
       )}
 
+      {activeTab === 'tasks' && (
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            {[
+              { label: 'Total Tasks', value: taskStats?.total_tasks || 0, icon: Activity, color: 'text-blue-600' },
+              { label: 'Open', value: taskStats?.open_tasks || 0, icon: Clock, color: 'text-gray-600' },
+              { label: 'Overdue', value: taskStats?.overdue_tasks || 0, icon: AlertTriangle, color: 'text-red-600' },
+              { label: 'Upcoming', value: taskStats?.upcoming_tasks || 0, icon: Calendar, color: 'text-green-600' }
+            ].map(stat => (
+              <div key={stat.label} className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+                <div className="flex items-center justify-between">
+                  <div><p className="text-sm text-gray-600">{stat.label}</p><p className="text-2xl font-semibold text-gray-900">{stat.value}</p></div>
+                  <stat.icon className={`w-8 h-8 ${stat.color}`} />
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="bg-white rounded-lg shadow p-4 flex justify-between items-center">
+            <div className="flex items-center space-x-2">
+              <select value={taskFilters.status || ''} onChange={e => setTaskFilters(prev => ({ ...prev, status: e.target.value as FollowUpTaskStatus || undefined }))} className="px-3 py-2 border border-gray-300 rounded-md bg-white focus:ring-blue-500 focus:border-blue-500">
+                <option value="">All Statuses</option>
+                <option value="open">Open</option>
+                <option value="in_progress">In Progress</option>
+                <option value="completed">Completed</option>
+                <option value="overdue">Overdue</option>
+                <option value="cancelled">Cancelled</option>
+              </select>
+              <select value={taskFilters.priority || ''} onChange={e => setTaskFilters(prev => ({ ...prev, priority: e.target.value as FollowUpTaskPriority || undefined }))} className="px-3 py-2 border border-gray-300 rounded-md bg-white focus:ring-blue-500 focus:border-blue-500">
+                <option value="">All Priorities</option>
+                <option value="low">Low</option>
+                <option value="medium">Medium</option>
+                <option value="high">High</option>
+                <option value="urgent">Urgent</option>
+              </select>
+              <label className="flex items-center space-x-2">
+                <input type="checkbox" checked={taskFilters.overdue_only || false} onChange={e => setTaskFilters(prev => ({ ...prev, overdue_only: e.target.checked || undefined }))} className="rounded border-gray-300" />
+                <span className="text-sm text-gray-700">Overdue Only</span>
+              </label>
+            </div>
+            <button onClick={() => openTaskModal('add')} className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"><Plus className="w-4 h-4 mr-2" />Add Task</button>
+          </div>
+          <div className="bg-white rounded-lg shadow overflow-hidden">
+            {taskLoading ? <div className="text-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto" /></div> : followUpTasks.length === 0 ? (
+              <div className="text-center py-12"><Activity className="h-16 w-16 text-gray-400 mx-auto mb-4" /><h3 className="text-lg font-medium text-gray-900 mb-2">No Tasks Found</h3><p className="text-gray-500 mb-4">Create follow-up tasks to manage lead engagement.</p></div>
+            ) : (
+              <>
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Task</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Lead</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Priority</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Due Date</th>
+                        <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {followUpTasks.map(task => {
+                        const priorityColors = { low: 'bg-gray-100 text-gray-800', medium: 'bg-blue-100 text-blue-800', high: 'bg-orange-100 text-orange-800', urgent: 'bg-red-100 text-red-800' };
+                        const statusColors = { open: 'bg-gray-100 text-gray-800', in_progress: 'bg-blue-100 text-blue-800', completed: 'bg-green-100 text-green-800', cancelled: 'bg-red-100 text-red-800', overdue: 'bg-red-100 text-red-800' };
+                        const isOverdue = task.due_date < new Date().toISOString() && task.status !== 'completed' && task.status !== 'cancelled';
+                        return (
+                          <tr key={task.id} className="hover:bg-gray-50">
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="text-sm font-medium text-gray-900">{task.title}</div>
+                              <div className="text-sm text-gray-500">{task.task_type}</div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{task.lead ? `${task.lead.first_name} ${task.lead.last_name}` : '—'}</td>
+                            <td className="px-6 py-4 whitespace-nowrap"><span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${priorityColors[task.priority]}`}>{task.priority}</span></td>
+                            <td className="px-6 py-4 whitespace-nowrap"><span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${statusColors[task.status]} ${isOverdue ? 'ring-2 ring-red-500' : ''}`}>{isOverdue ? 'overdue' : task.status.replace('_', ' ')}</span></td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{new Date(task.due_date).toLocaleDateString()}</td>
+                            <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                              <div className="flex items-center justify-end space-x-2">
+                                {(task.status === 'open' || task.status === 'overdue') && <button onClick={() => handleCompleteTask(task)} className="text-green-600 hover:text-green-900" title="Mark Complete"><CheckCircle className="w-4 h-4" /></button>}
+                                {(task.status === 'open' || task.status === 'in_progress') && <button onClick={() => handleCancelTask(task)} className="text-orange-600 hover:text-orange-900" title="Cancel"><X className="w-4 h-4" /></button>}
+                                <button onClick={() => handleDeleteTask(task)} className="text-red-600 hover:text-red-900" title="Delete"><Trash2 className="w-4 h-4" /></button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+                {taskTotalPages > 1 && (
+                  <div className="px-6 py-3 border-t border-gray-200 flex items-center justify-between">
+                    <div className="text-sm text-gray-700">Page {taskPage} of {taskTotalPages}</div>
+                    <div className="flex space-x-2">
+                      <button onClick={() => setTaskPage(p => Math.max(1, p - 1))} disabled={taskPage === 1} className="px-3 py-1 border border-gray-300 rounded-md text-sm disabled:opacity-50">Previous</button>
+                      <button onClick={() => setTaskPage(p => Math.min(taskTotalPages, p + 1))} disabled={taskPage === taskTotalPages} className="px-3 py-1 border border-gray-300 rounded-md text-sm disabled:opacity-50">Next</button>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'timeline' && (
+        <div className="space-y-6">
+          <div className="bg-white rounded-lg shadow p-4 flex justify-between items-center">
+            <h3 className="text-lg font-medium text-gray-900">Lead Alerts & Activity Timeline</h3>
+            <button onClick={loadAlerts} className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"><RefreshCw className="w-4 h-4 mr-2" />Refresh</button>
+          </div>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-1 space-y-4">
+              <div className="bg-white rounded-lg shadow p-4">
+                <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center"><AlertTriangle className="w-4 h-4 mr-2 text-red-600" />Alerts</h4>
+                {loading ? <div className="text-center py-4"><div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mx-auto" /></div> : alerts.length === 0 ? (
+                  <p className="text-sm text-gray-500">No active alerts.</p>
+                ) : (
+                  <div className="space-y-3">
+                    {alerts.map(alert => (
+                      <div key={alert.id} className={`p-3 rounded-md border ${alert.severity === 'critical' ? 'bg-red-50 border-red-200' : 'bg-yellow-50 border-yellow-200'}`}>
+                        <div className="flex items-start justify-between">
+                          <div className="flex items-start">
+                            {alert.severity === 'critical' ? <AlertTriangle className="w-4 h-4 text-red-600 mr-2 mt-0.5" /> : <AlertCircle className="w-4 h-4 text-yellow-600 mr-2 mt-0.5" />}
+                            <div>
+                              <p className="text-sm font-medium text-gray-900">{alert.title}</p>
+                              <p className="text-xs text-gray-600 mt-1">{alert.message}</p>
+                              {alert.lead && <p className="text-xs text-blue-600 mt-1">{alert.lead.first_name} {alert.lead.last_name} - {alert.lead.lead_number}</p>}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div className="bg-white rounded-lg shadow p-4">
+                <h4 className="text-sm font-semibold text-gray-900 mb-3">View Timeline for Lead</h4>
+                <select onChange={e => { const lead = leads.find(l => l.id === e.target.value); if (lead) { setSelectedLeadForTimeline(lead); loadTimeline(lead.id); } }} className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white focus:ring-blue-500 focus:border-blue-500">
+                  <option value="">Select a lead...</option>
+                  {leads.map(lead => (<option key={lead.id} value={lead.id}>{lead.lead_number} - {lead.first_name} {lead.last_name}</option>))}
+                </select>
+              </div>
+            </div>
+            <div className="lg:col-span-2 bg-white rounded-lg shadow p-6">
+              <h4 className="text-sm font-semibold text-gray-900 mb-4">Unified Activity Timeline</h4>
+              {!selectedLeadForTimeline ? (
+                <div className="text-center py-12 text-gray-500">
+                  <Activity className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                  <p>Select a lead to view its complete timeline.</p>
+                </div>
+              ) : timelineLoading ? (
+                <div className="text-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto" /></div>
+              ) : timeline.length === 0 ? (
+                <div className="text-center py-12 text-gray-500">No timeline entries found for this lead.</div>
+              ) : (
+                <div className="flow-root">
+                  <ul className="-mb-8">
+                    {timeline.map((entry, idx) => {
+                      const entryDate = new Date(entry.occurred_at).toLocaleString();
+                      const iconMap = { activity: '📋', follow_up_task: '✅', status_change: '🔄', score_change: '📊' };
+                      return (
+                        <li key={entry.id}>
+                          <div className="relative pb-8">
+                            {idx !== timeline.length - 1 && <span className="absolute top-4 left-4 -ml-px h-full w-0.5 bg-gray-200" aria-hidden="true" />}
+                            <div className="relative flex space-x-3">
+                              <div>
+                                <span className="h-8 w-8 rounded-full bg-blue-50 flex items-center justify-center text-lg">{iconMap[entry.entry_type] || '📋'}</span>
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div>
+                                  <div className="text-sm text-gray-500">
+                                    <span className="font-medium text-gray-900">{entry.title}</span>
+                                    <span className="ml-2 text-xs text-gray-400">{entryDate}</span>
+                                  </div>
+                                  {entry.description && <p className="mt-1 text-sm text-gray-600">{entry.description}</p>}
+                                  {entry.metadata && (
+                                    <div className="mt-1 flex flex-wrap gap-1">
+                                      {Object.entries(entry.metadata).map(([k, v]) => (
+                                        <span key={k} className="inline-flex px-2 py-0.5 text-xs rounded bg-gray-100 text-gray-700">{k}: {String(v)}</span>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {showModal && (
         <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
           <div className="relative top-20 mx-auto p-5 border w-11/12 max-w-2xl shadow-lg rounded-md bg-white">
@@ -456,66 +870,150 @@ const LeadManagement: React.FC = () => {
                 <div><label className="block text-sm font-medium text-gray-700 mb-1">Company Name</label><input type="text" value={formData.company_name} onChange={e => handleChange('company_name', e.target.value)} disabled={modalMode === 'view'} placeholder="Enter company name" className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50" /></div>
                 <div><label className="block text-sm font-medium text-gray-700 mb-1">Source</label><select value={formData.source} onChange={e => handleChange('source', e.target.value)} disabled={modalMode === 'view'} className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50">{LEAD_SOURCES.map(s => (<option key={s.value} value={s.value}>{s.label}</option>))}</select></div>
                  <div><label className="block text-sm font-medium text-gray-700 mb-1">Associate Customer</label><select value={formData.customer_id || ''} onChange={e => handleChange('customer_id', e.target.value || undefined)} disabled={modalMode === 'view'} className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50"><option value="">Select Customer (Optional)</option>{customers.map(c => (<option key={c.id} value={c.id}>{c.company_name || c.contact_person}</option>))}</select></div>
-               </div>
+                </div>
+                 <div className="grid grid-cols-2 gap-4">
+                   <div><label className="block text-sm font-medium text-gray-700 mb-1">Budget Min</label><input type="number" value={formData.budget_min ?? ''} onChange={e => handleChange('budget_min', e.target.value ? parseFloat(e.target.value) : undefined)} disabled={modalMode === 'view'} placeholder="Min budget" className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50" /></div>
+                   <div><label className="block text-sm font-medium text-gray-700 mb-1">Budget Max</label><input type="number" value={formData.budget_max ?? ''} onChange={e => handleChange('budget_max', e.target.value ? parseFloat(e.target.value) : undefined)} disabled={modalMode === 'view'} placeholder="Max budget" className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50" /></div>
+                 </div>
+                 <div>
+                   <label className="block text-sm font-medium text-gray-700 mb-1">Currency</label>
+                   <select value={formData.currency_code || 'INR'} onChange={e => handleChange('currency_code', e.target.value)} disabled={modalMode === 'view'} className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50">
+                     {countries.map(c => (<option key={c.id} value={c.currency_code}>{c.currency_code} - {c.currency_name}</option>))}
+                   </select>
+                 </div>
                 <div className="grid grid-cols-2 gap-4">
-                  <div><label className="block text-sm font-medium text-gray-700 mb-1">Budget Min</label><input type="number" value={formData.budget_min ?? ''} onChange={e => handleChange('budget_min', e.target.value ? parseFloat(e.target.value) : undefined)} disabled={modalMode === 'view'} placeholder="Min budget" className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50" /></div>
-                  <div><label className="block text-sm font-medium text-gray-700 mb-1">Budget Max</label><input type="number" value={formData.budget_max ?? ''} onChange={e => handleChange('budget_max', e.target.value ? parseFloat(e.target.value) : undefined)} disabled={modalMode === 'view'} placeholder="Max budget" className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50" /></div>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Currency</label>
-                  <select value={formData.currency_code || 'INR'} onChange={e => handleChange('currency_code', e.target.value)} disabled={modalMode === 'view'} className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50">
-                    {countries.map(c => (<option key={c.id} value={c.currency_code}>{c.currency_code} - {c.currency_name}</option>))}
-                  </select>
-                </div>
-               <div className="grid grid-cols-2 gap-4">
-                {isGST ? (<>
-                  <div><label className="block text-sm font-medium text-gray-700 mb-1">GSTIN</label><input type="text" value={formData.gstin} onChange={e => handleChange('gstin', e.target.value.toUpperCase())} disabled={modalMode === 'view'} placeholder="e.g., 22AAAAA0000A1Z5" className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50" /></div>
-                  <div><label className="block text-sm font-medium text-gray-700 mb-1">PAN</label><input type="text" value={formData.pan} onChange={e => handleChange('pan', e.target.value.toUpperCase())} disabled={modalMode === 'view'} placeholder="e.g., ABCDE1234F" className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50" /></div>
-                </>) : (<>
-                  <div><label className="block text-sm font-medium text-gray-700 mb-1">VAT Number</label><input type="text" value={formData.vat_number} onChange={e => handleChange('vat_number', e.target.value.toUpperCase())} disabled={modalMode === 'view'} placeholder="Enter VAT Number" className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50" /></div>
-                  <div><label className="block text-sm font-medium text-gray-700 mb-1">CRO Number</label><input type="text" value={formData.cro_number} onChange={e => handleChange('cro_number', e.target.value.toUpperCase())} disabled={modalMode === 'view'} placeholder="Enter CRO Number" className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50" /></div>
-                </>)}
-              </div>
-               <div><label className="block text-sm font-medium text-gray-700 mb-1">Description</label><textarea value={formData.description} onChange={e => handleChange('description', e.target.value)} disabled={modalMode === 'view'} rows={3} placeholder="Enter lead description..." className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50" /></div>
-               <div className="border-t border-gray-200 pt-4">
-                 <h4 className="text-sm font-semibold text-gray-900 mb-3">Notes</h4>
-                 {notesLoading ? (
-                   <div className="text-center py-4 text-gray-500">Loading notes...</div>
-                 ) : notes.length === 0 ? (
-                   <p className="text-sm text-gray-500 mb-3">No notes yet.</p>
-                 ) : (
-                   <div className="space-y-2 mb-3 max-h-40 overflow-y-auto">
-                     {notes.map(note => (
-                       <div key={note.id} className="bg-gray-50 rounded-md p-3">
-                         <div className="flex items-center justify-between">
-                           <span className="text-xs font-medium text-gray-500">{new Date(note.created_at).toLocaleString()}</span>
-                         </div>
-                         <p className="text-sm text-gray-900 mt-1">{note.description || note.subject}</p>
-                       </div>
-                     ))}
-                   </div>
-                 )}
-                 {modalMode !== 'view' && (
-                   <div className="flex gap-2">
-                     <input
-                       type="text"
-                       value={newNote}
-                       onChange={e => setNewNote(e.target.value)}
-                       placeholder="Add a note..."
-                       className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 text-sm"
-                       onKeyDown={e => e.key === 'Enter' && handleAddNote()}
-                     />
-                     <button onClick={handleAddNote} className="px-3 py-2 bg-blue-600 text-white rounded-md text-sm hover:bg-blue-700">Add</button>
-                   </div>
-                 )}
+                 {isGST ? (<>
+                   <div><label className="block text-sm font-medium text-gray-700 mb-1">GSTIN</label><input type="text" value={formData.gstin} onChange={e => handleChange('gstin', e.target.value.toUpperCase())} disabled={modalMode === 'view'} placeholder="e.g., 22AAAAA0000A1Z5" className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50" /></div>
+                   <div><label className="block text-sm font-medium text-gray-700 mb-1">PAN</label><input type="text" value={formData.pan} onChange={e => handleChange('pan', e.target.value.toUpperCase())} disabled={modalMode === 'view'} placeholder="e.g., ABCDE1234F" className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50" /></div>
+                 </>) : (<>
+                   <div><label className="block text-sm font-medium text-gray-700 mb-1">VAT Number</label><input type="text" value={formData.vat_number} onChange={e => handleChange('vat_number', e.target.value.toUpperCase())} disabled={modalMode === 'view'} placeholder="Enter VAT Number" className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50" /></div>
+                   <div><label className="block text-sm font-medium text-gray-700 mb-1">CRO Number</label><input type="text" value={formData.cro_number} onChange={e => handleChange('cro_number', e.target.value.toUpperCase())} disabled={modalMode === 'view'} placeholder="Enter CRO Number" className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50" /></div>
+                 </>)}
                </div>
-             </div>
+                <div><label className="block text-sm font-medium text-gray-700 mb-1">Description</label><textarea value={formData.description} onChange={e => handleChange('description', e.target.value)} disabled={modalMode === 'view'} rows={3} placeholder="Enter lead description..." className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50" /></div>
+                <div className="border-t border-gray-200 pt-4">
+                  <h4 className="text-sm font-semibold text-gray-900 mb-3">Notes</h4>
+                  {notesLoading ? (
+                    <div className="text-center py-4 text-gray-500">Loading notes...</div>
+                  ) : notes.length === 0 ? (
+                    <p className="text-sm text-gray-500 mb-3">No notes yet.</p>
+                  ) : (
+                    <div className="space-y-2 mb-3 max-h-40 overflow-y-auto">
+                      {notes.map(note => (
+                        <div key={note.id} className="bg-gray-50 rounded-md p-3">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-medium text-gray-500">{new Date(note.created_at).toLocaleString()}</span>
+                          </div>
+                          <p className="text-sm text-gray-900 mt-1">{note.description || note.subject}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {modalMode !== 'view' && (
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={newNote}
+                        onChange={e => setNewNote(e.target.value)}
+                        placeholder="Add a note..."
+                        className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 text-sm"
+                        onKeyDown={e => e.key === 'Enter' && handleAddNote()}
+                      />
+                      <button onClick={handleAddNote} className="px-3 py-2 bg-blue-600 text-white rounded-md text-sm hover:bg-blue-700">Add</button>
+                    </div>
+                  )}
+                </div>
+                {selectedLead && (
+                  <div className="border-t border-gray-200 pt-4">
+                    <h4 className="text-sm font-semibold text-gray-900 mb-3">Timeline</h4>
+                    {timelineLoading ? (
+                      <div className="text-center py-4 text-gray-500">Loading timeline...</div>
+                    ) : timeline.length === 0 ? (
+                      <p className="text-sm text-gray-500 mb-3">No timeline entries yet.</p>
+                    ) : (
+                      <div className="space-y-2 mb-3 max-h-40 overflow-y-auto">
+                        {timeline.slice(-10).map(entry => (
+                          <div key={entry.id} className="bg-gray-50 rounded-md p-2">
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs font-medium text-gray-500">{new Date(entry.occurred_at).toLocaleString()}</span>
+                              <span className="text-xs px-2 py-0.5 rounded bg-gray-200 text-gray-700 capitalize">{entry.entry_type.replace('_', ' ')}</span>
+                            </div>
+                            <p className="text-sm text-gray-900 mt-1">{entry.title}</p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
             {modalMode !== 'view' && (
               <div className="flex justify-end space-x-3 mt-6">
                 <button onClick={closeModal} className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md text-sm font-medium hover:bg-gray-300">Cancel</button>
                 <button onClick={handleSave} disabled={modalLoading} className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50">{modalLoading ? 'Saving...' : 'Save Lead'}</button>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {showTaskModal && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+          <div className="relative top-20 mx-auto p-5 border w-11/12 max-w-lg shadow-lg rounded-md bg-white">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-medium text-gray-900">{taskModalMode === 'add' ? 'Create Follow-up Task' : 'Edit Task'}</h3>
+              <button onClick={() => setShowTaskModal(false)} className="text-gray-400 hover:text-gray-600"><X className="w-6 h-6" /></button>
+            </div>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Lead *</label>
+                <select value={taskFormData.lead_id} onChange={e => setTaskFormData(prev => ({ ...prev, lead_id: e.target.value }))} className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white focus:ring-blue-500 focus:border-blue-500">
+                  <option value="">Select Lead</option>
+                  {leads.map(lead => (<option key={lead.id} value={lead.id}>{lead.lead_number} - {lead.first_name} {lead.last_name}</option>))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Title *</label>
+                <input type="text" value={taskFormData.title} onChange={e => setTaskFormData(prev => ({ ...prev, title: e.target.value }))} className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500" placeholder="Enter task title" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                <textarea value={taskFormData.description || ''} onChange={e => setTaskFormData(prev => ({ ...prev, description: e.target.value }))} rows={3} className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500" placeholder="Task description..." />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Priority</label>
+                  <select value={taskFormData.priority} onChange={e => setTaskFormData(prev => ({ ...prev, priority: e.target.value as FollowUpTaskPriority }))} className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white focus:ring-blue-500 focus:border-blue-500">
+                    <option value="low">Low</option>
+                    <option value="medium">Medium</option>
+                    <option value="high">High</option>
+                    <option value="urgent">Urgent</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Recurrence</label>
+                  <select value={taskFormData.recurrence} onChange={e => setTaskFormData(prev => ({ ...prev, recurrence: e.target.value as any }))} className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white focus:ring-blue-500 focus:border-blue-500">
+                    <option value="none">None</option>
+                    <option value="daily">Daily</option>
+                    <option value="weekly">Weekly</option>
+                    <option value="bi_weekly">Bi-Weekly</option>
+                    <option value="monthly">Monthly</option>
+                    <option value="quarterly">Quarterly</option>
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Due Date *</label>
+                <input type="datetime-local" value={taskFormData.due_date} onChange={e => setTaskFormData(prev => ({ ...prev, due_date: e.target.value }))} className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Reminder Date</label>
+                <input type="datetime-local" value={taskFormData.reminder_date || ''} onChange={e => setTaskFormData(prev => ({ ...prev, reminder_date: e.target.value || undefined }))} className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500" />
+              </div>
+            </div>
+            <div className="flex justify-end space-x-3 mt-6">
+              <button onClick={() => setShowTaskModal(false)} className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md text-sm font-medium hover:bg-gray-300">Cancel</button>
+              <button onClick={handleCreateTask} disabled={!taskFormData.title.trim() || !taskFormData.due_date || !taskFormData.lead_id} className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50">{taskModalMode === 'add' ? 'Create Task' : 'Update Task'}</button>
+            </div>
           </div>
         </div>
       )}

@@ -4,7 +4,8 @@ import type {
   LeadActivity,
   ActivityType,
   CreateLeadActivityData,
-  LeadActivityFilters
+  LeadActivityFilters,
+  LeadTimelineEntry
 } from '../types/lead';
 
 class LeadActivityService {
@@ -174,6 +175,232 @@ class LeadActivityService {
     if (error) throw error;
     return data || [];
   }
+
+  async getLeadTimeline(leadId: string): Promise<LeadTimelineEntry[]> {
+    const [activitiesResult, tasksResult, statusChangesResult] = await Promise.all([
+      supabase
+        .from('lead_activities')
+        .select(`
+          id,
+          activity_type,
+          subject,
+          description,
+          created_at,
+          completed_at,
+          created_by
+        `)
+        .eq('lead_id', leadId)
+        .order('created_at', { ascending: true }),
+      
+      supabase
+        .from('lead_follow_up_tasks')
+        .select(`
+          id,
+          title,
+          description,
+          status,
+          priority,
+          due_date,
+          completed_at,
+          cancelled_at,
+          cancellation_reason,
+          created_by,
+          completed_by,
+          assigned_to,
+          created_at,
+          updated_at
+        `)
+        .eq('lead_id', leadId)
+        .order('created_at', { ascending: true }),
+      
+      supabase
+        .from('leads')
+        .select('status, updated_at, converted_at, qualified_at, disqualified_at, probability')
+        .eq('id', leadId)
+        .single()
+    ]);
+
+    if (activitiesResult.error) throw activitiesResult.error;
+    if (tasksResult.error) throw tasksResult.error;
+    if (statusChangesResult.error) throw statusChangesResult.error;
+
+    const timeline: LeadTimelineEntry[] = [];
+
+    const activities = activitiesResult.data || [];
+    for (const activity of activities) {
+      timeline.push({
+        id: activity.id,
+        entry_type: 'activity',
+        occurred_at: activity.completed_at || activity.created_at,
+        title: activity.subject,
+        description: activity.description,
+        metadata: { activity_type: activity.activity_type, completed: !!activity.completed_at },
+        actor_id: activity.created_by
+      });
+    }
+
+    const tasks = tasksResult.data || [];
+    for (const task of tasks) {
+      if (task.status === 'completed' && task.completed_at) {
+        timeline.push({
+          id: task.id,
+          entry_type: 'follow_up_task',
+          occurred_at: task.completed_at,
+          title: `Completed: ${task.title}`,
+          description: task.description,
+          metadata: { task_status: task.status, priority: task.priority, completed: true },
+          actor_id: task.completed_by || task.created_by
+        });
+      } else if (task.status === 'cancelled' && task.cancelled_at) {
+        timeline.push({
+          id: task.id,
+          entry_type: 'follow_up_task',
+          occurred_at: task.cancelled_at,
+          title: `Cancelled: ${task.title}`,
+          description: task.cancellation_reason || task.description,
+          metadata: { task_status: task.status, priority: task.priority },
+          actor_id: task.created_by
+        });
+      } else {
+        timeline.push({
+          id: task.id,
+          entry_type: 'follow_up_task',
+          occurred_at: task.created_at,
+          title: `Task created: ${task.title}`,
+          description: task.description,
+          metadata: { task_status: task.status, priority: task.priority, due_date: task.due_date },
+          actor_id: task.created_by
+        });
+
+        if (task.updated_at !== task.created_at && task.status !== 'open') {
+          timeline.push({
+            id: `${task.id}-status-update`,
+            entry_type: 'follow_up_task',
+            occurred_at: task.updated_at,
+            title: `Task updated: ${task.title}`,
+            description: `Status changed to ${task.status}`,
+            metadata: { task_status: task.status, priority: task.priority },
+            actor_id: task.assigned_to || task.created_by
+          });
+        }
+      }
+    }
+
+    const statusChanges = [];
+    if (statusChangesResult.data) {
+      const lead = statusChangesResult.data;
+      if (lead.converted_at) {
+        statusChanges.push({ occurred_at: lead.converted_at, title: 'Lead converted', status: 'converted' });
+      }
+      if (lead.qualified_at) {
+        statusChanges.push({ occurred_at: lead.qualified_at, title: 'Lead qualified', status: 'qualified' });
+      }
+      if (lead.disqualified_at) {
+        statusChanges.push({ occurred_at: lead.disqualified_at, title: 'Lead disqualified', status: 'disqualified' });
+      }
+    }
+
+    for (const change of statusChanges) {
+      timeline.push({
+        id: `status-${change.occurred_at}`,
+        entry_type: 'status_change',
+        occurred_at: change.occurred_at,
+        title: change.title,
+        metadata: { new_status: change.status }
+      });
+    }
+
+    timeline.sort((a, b) => new Date(a.occurred_at).getTime() - new Date(b.occurred_at).getTime());
+
+    return timeline;
+  }
+
+  async getOpportunityTimeline(opportunityId: string): Promise<LeadTimelineEntry[]> {
+    const [activitiesResult, tasksResult] = await Promise.all([
+      supabase
+        .from('lead_activities')
+        .select(`
+          id,
+          activity_type,
+          subject,
+          description,
+          created_at,
+          completed_at,
+          created_by
+        `)
+        .eq('opportunity_id', opportunityId)
+        .order('created_at', { ascending: true }),
+      
+      supabase
+        .from('lead_follow_up_tasks')
+        .select(`
+          id,
+          title,
+          description,
+          status,
+          priority,
+          due_date,
+          completed_at,
+          cancelled_at,
+          cancellation_reason,
+          created_by,
+          completed_by,
+          assigned_to,
+          created_at,
+          updated_at
+        `)
+        .eq('opportunity_id', opportunityId)
+        .order('created_at', { ascending: true })
+    ]);
+
+    if (activitiesResult.error) throw activitiesResult.error;
+    if (tasksResult.error) throw tasksResult.error;
+
+    const timeline: LeadTimelineEntry[] = [];
+
+    const activities = activitiesResult.data || [];
+    for (const activity of activities) {
+      timeline.push({
+        id: activity.id,
+        entry_type: 'activity',
+        occurred_at: activity.completed_at || activity.created_at,
+        title: activity.subject,
+        description: activity.description,
+        metadata: { activity_type: activity.activity_type, completed: !!activity.completed_at },
+        actor_id: activity.created_by
+      });
+    }
+
+    const tasks = tasksResult.data || [];
+    for (const task of tasks) {
+      if (task.status === 'completed' && task.completed_at) {
+        timeline.push({
+          id: task.id,
+          entry_type: 'follow_up_task',
+          occurred_at: task.completed_at,
+          title: `Completed: ${task.title}`,
+          description: task.description,
+          metadata: { task_status: task.status, priority: task.priority, completed: true },
+          actor_id: task.completed_by || task.created_by
+        });
+      } else {
+        timeline.push({
+          id: task.id,
+          entry_type: 'follow_up_task',
+          occurred_at: task.created_at,
+          title: `Task created: ${task.title}`,
+          description: task.description,
+          metadata: { task_status: task.status, priority: task.priority, due_date: task.due_date },
+          actor_id: task.created_by
+        });
+      }
+    }
+
+    timeline.sort((a, b) => new Date(a.occurred_at).getTime() - new Date(b.occurred_at).getTime());
+
+    return timeline;
+  }
 }
 
 export const leadActivityService = new LeadActivityService();
+
