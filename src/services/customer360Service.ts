@@ -39,11 +39,10 @@ class Customer360Service {
 
       const customer: Customer = customerData;
 
-      // Execute remaining fetches in parallel
+      // Execute queries
       const [
         contactsResult,
         leadsResult,
-        opportunitiesResult,
         quotesResult,
         contractsResult,
         subscriptionsResult,
@@ -62,13 +61,6 @@ class Customer360Service {
           .from('leads')
           .select('*')
           .or(`customer_id.eq.${customerId},email.ilike.${customer.email || 'nonexistent_email'}`)
-          .order('created_at', { ascending: false }),
-
-        // 4. Opportunities
-        supabase
-          .from('opportunities')
-          .select('*, lead:leads(*)')
-          .or(`customer_id.eq.${customerId}`)
           .order('created_at', { ascending: false }),
 
         // 5. Quotes
@@ -103,11 +95,26 @@ class Customer360Service {
       const contacts: CustomerContact[] = contactsResult.data || [];
       const primaryContact = contacts.find(c => c.is_primary) || contacts[0];
       const leads: Lead[] = leadsResult.data || [];
-      const opportunities: Opportunity[] = opportunitiesResult.data || [];
       const quotes: Quote[] = quotesResult.data || [];
       const contracts: Contract[] = contractsResult.data || [];
       const subscriptions: CustomerSubscription[] = subscriptionsResult.data || [];
       const invoices: Invoice[] = invoicesResult.data || [];
+
+      // 4. Opportunities (Fetch by customer_id OR lead_id / source_lead_id of customer leads)
+      const leadIds = leads.map(l => l.id).filter(Boolean);
+      let oppsQuery = supabase
+        .from('opportunities')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (leadIds.length > 0) {
+        oppsQuery = oppsQuery.or(`customer_id.eq.${customerId},lead_id.in.(${leadIds.join(',')}),source_lead_id.in.(${leadIds.join(',')})`);
+      } else {
+        oppsQuery = oppsQuery.eq('customer_id', customerId);
+      }
+
+      const opportunitiesResult = await oppsQuery;
+      const opportunities: Opportunity[] = opportunitiesResult.data || [];
 
       // 9. Payments (for all fetched invoice IDs)
       let payments: Payment[] = [];

@@ -549,14 +549,20 @@ class ContractService {
   /**
    * Get contract statistics
    */
-  async getStatistics(): Promise<ContractStatistics> {
+  async getStatistics(companySettingsId?: string): Promise<ContractStatistics> {
     if (!isSupabaseConfigured) {
       throw new Error('Database is not configured');
     }
 
-    const { data: contracts, error } = await supabase
+    let query = supabase
       .from('contracts')
-      .select('status, contract_type, contract_value, currency_code, expiry_date');
+      .select('status, contract_type, contract_value, currency_code, expiry_date, company_settings_id');
+
+    if (companySettingsId) {
+      query = query.eq('company_settings_id', companySettingsId);
+    }
+
+    const { data: contracts, error } = await query;
 
     if (error) throw error;
 

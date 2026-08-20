@@ -556,7 +556,7 @@ The complete sales pipeline with status/stage transitions:
 ### Customer 360° Hub (`src/components/customer/Customer360Hub.tsx`)
 
 A centralized 360-degree operational dashboard connecting all records for a customer across Kdadks:
-- **Core Service (`src/services/customer360Service.ts`):** Parallel fetching and metrics calculation aggregating Customer Profile, Contacts, Leads, Opportunities, Quotes, Contracts, Subscriptions, Invoices, Payments, and Activity Timelines.
+- **Core Service (`src/services/customer360Service.ts`):** Parallel fetching and metrics calculation aggregating Customer Profile, Contacts, Leads, Opportunities, Quotes, Contracts, Subscriptions, Invoices, Payments, and Activity Timelines. Opportunities query matches direct `customer_id` as well as linked `lead_id` / `source_lead_id` across all customer leads.
 - **Multi-Entity Currency Conversion:** Automatically detects the active entity context. For **Indian Entity**, all invoices, quotes, revenue metrics, and actual payment values are converted and displayed in **INR (₹)** using actual `inr_amount` / `inr_total_amount` or live exchange rates via `convertCurrency()`. For **Irish Entity**, values are displayed in **Euro (€)**.
 - **Type Definitions (`src/types/customer360.ts`):** Defines `Customer360Data`, `CustomerFinancialMetrics`, and `CustomerActivityTimelineItem`.
 - **Executive KPI Cards:** Lifetime Revenue (LTV), Total Collected Revenue, Outstanding Balance, Subscription MRR, Open Sales Pipeline Value, and Opportunity Win Rate.
@@ -682,16 +682,13 @@ npm validate         # Validate deployment configuration
 | `src/services/invoiceService.ts` | 2323-line core service for invoices, customers, products, countries, company settings |
 | `src/components/admin/SimpleAdminDashboard.tsx` | 1548-line admin shell with sidebar, routing, dashboard stats |
 | `src/components/invoice/InvoiceManagement.tsx` | 6071-line core invoicing component |
-| `src/components/lead/LeadManagement.tsx` | Lead management UI (dashboard + CRUD + notes + follow-up tasks + timeline) |
 | `src/components/lead/OpportunityManagement.tsx` | Opportunity management UI (pipeline stages) |
-| `src/services/leadFollowUpService.ts` | Follow-up task service (CRUD, overdue detection, stale leads, alerts) |
+| `src/services/leadFollowUpService.ts` | Follow-up task service (CRUD, Action Notes, overdue detection, alerts) |
 | `src/services/leadActivityService.ts` | Activity service with unified timeline generation for leads/opportunities |
-| `src/types/lead.ts` | 450+ lines — lead, opportunity, activity, follow-up task, timeline, alert types |
 | `src/utils/taxUtils.ts` | 542-line multi-country tax & banking field utilities |
 | `src/utils/leadEntityUtils.ts` | Entity prefix, tax label, validation for leads/opportunities |
 | `src/types/invoice.ts` | 574 lines — core domain type definitions |
 | `netlify.toml` | Build config, redirects (SPA fallback), security headers, scheduled functions |
-| `.env.example` | Template for all required environment variables |
 
 ---
 

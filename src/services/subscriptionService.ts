@@ -12,7 +12,7 @@ import type {
 class SubscriptionService {
   // ── Plans ──────────────────────────────────────────────────────────────────
 
-  async getPlans(includeInactive = false): Promise<SubscriptionPlan[]> {
+  async getPlans(includeInactive = false, companySettingsId?: string): Promise<SubscriptionPlan[]> {
     let query = supabase
       .from('subscription_plans')
       .select('*')
@@ -24,7 +24,13 @@ class SubscriptionService {
 
     const { data, error } = await query;
     if (error) throw error;
-    return data || [];
+    let plans: SubscriptionPlan[] = data || [];
+
+    if (companySettingsId) {
+      plans = plans.filter(p => !p.company_settings_id || p.company_settings_id === companySettingsId);
+    }
+
+    return plans;
   }
 
   async getPlanById(id: string): Promise<SubscriptionPlan | null> {
@@ -73,7 +79,7 @@ class SubscriptionService {
       .from('customer_subscriptions')
       .select(`
         *,
-        customer:customers(id, company_name, contact_person, email, customer_code),
+        customer:customers(id, company_name, contact_person, email, customer_code, company_settings_id),
         plan:subscription_plans(*)
       `)
       .order('created_at', { ascending: false });
@@ -81,11 +87,21 @@ class SubscriptionService {
     if (filters?.status) query = query.eq('status', filters.status);
     if (filters?.customer_id) query = query.eq('customer_id', filters.customer_id);
     if (filters?.plan_id) query = query.eq('plan_id', filters.plan_id);
-    if (filters?.company_settings_id) query = query.eq('company_settings_id', filters.company_settings_id);
 
     const { data, error } = await query;
     if (error) throw error;
-    return data || [];
+    let results: CustomerSubscription[] = data || [];
+
+    // Filter by company_settings_id via subscription or customer relation if entity filter is provided
+    if (filters?.company_settings_id) {
+      results = results.filter(sub => 
+        (!sub.company_settings_id && !sub.customer?.company_settings_id) ||
+        sub.company_settings_id === filters.company_settings_id ||
+        sub.customer?.company_settings_id === filters.company_settings_id
+      );
+    }
+
+    return results;
   }
 
   async getSubscriptionById(id: string): Promise<CustomerSubscription | null> {

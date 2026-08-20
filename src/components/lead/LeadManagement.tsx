@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Search, Eye, Edit, Trash2, X, Users, RefreshCw, TrendingUp, UserCheck, UserX, Mail, Phone, Building2, Filter, Bell, AlertTriangle, CheckCircle, Clock, Calendar, Flag, Activity, ChevronDown, ChevronRight, AlertCircle } from 'lucide-react';
+import { Plus, Search, Eye, Edit, Trash2, X, Users, RefreshCw, TrendingUp, UserCheck, UserX, Mail, Phone, Building2, Filter, Bell, AlertTriangle, CheckCircle, Clock, Calendar, Flag, Activity, ChevronDown, ChevronRight, AlertCircle, MessageSquare, CheckSquare } from 'lucide-react';
 import { leadService } from '../../services/leadService';
 import { leadActivityService } from '../../services/leadActivityService';
 import { leadFollowUpTaskService } from '../../services/leadFollowUpService';
@@ -65,6 +65,18 @@ const LeadManagement: React.FC = () => {
     due_date: '',
     priority: 'medium',
     recurrence: 'none'
+  });
+  
+  // Action Task Modal with Notes state
+  const [showActionTaskModal, setShowActionTaskModal] = useState(false);
+  const [actionTask, setActionTask] = useState<LeadFollowUpTask | null>(null);
+  const [actionType, setActionType] = useState<'complete' | 'in_progress' | 'cancel'>('complete');
+  const [actionNotes, setActionNotes] = useState('');
+  const [scheduleNextTask, setScheduleNextTask] = useState(false);
+  const [nextTaskData, setNextTaskData] = useState({
+    title: '',
+    due_date: '',
+    priority: 'medium' as FollowUpTaskPriority
   });
   
   const [timeline, setTimeline] = useState<LeadTimelineEntry[]>([]);
@@ -391,26 +403,58 @@ const LeadManagement: React.FC = () => {
     }
   };
 
-  const handleCompleteTask = async (task: LeadFollowUpTask) => {
+  const handleOpenActionModal = (task: LeadFollowUpTask) => {
+    setActionTask(task);
+    setActionType('complete');
+    setActionNotes('');
+    setScheduleNextTask(false);
+    const nextDate = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().slice(0, 16);
+    setNextTaskData({
+      title: `Follow up with ${task.lead ? `${task.lead.first_name} ${task.lead.last_name}` : 'Lead'}`,
+      due_date: nextDate,
+      priority: 'medium'
+    });
+    setShowActionTaskModal(true);
+  };
+
+  const handleSaveTaskAction = async () => {
+    if (!actionTask) return;
     try {
-      await leadFollowUpTaskService.completeFollowUpTask(task.id);
-      showSuccess('Task marked as completed!');
+      setTaskLoading(true);
+      await leadFollowUpTaskService.actionFollowUpTask(
+        actionTask.id,
+        actionType,
+        actionNotes.trim() || undefined,
+        scheduleNextTask ? {
+          lead_id: actionTask.lead_id,
+          company_settings_id: actionTask.company_settings_id,
+          title: nextTaskData.title || `Follow up with ${actionTask.lead?.first_name || 'Lead'}`,
+          due_date: nextTaskData.due_date,
+          priority: nextTaskData.priority
+        } : undefined
+      );
+      showSuccess(`Task ${actionType === 'complete' ? 'completed' : actionType === 'cancel' ? 'cancelled' : 'updated'} with notes logged to Lead Timeline!`);
+      setShowActionTaskModal(false);
+      setActionTask(null);
+      setActionNotes('');
       loadFollowUpTasks();
     } catch (err) {
-      showError(`Failed to complete task: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      showError(`Failed to action task: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    } finally {
+      setTaskLoading(false);
     }
   };
 
+  const handleCompleteTask = async (task: LeadFollowUpTask) => {
+    handleOpenActionModal(task);
+  };
+
   const handleCancelTask = async (task: LeadFollowUpTask) => {
-    const confirmed = await confirm({ title: 'Cancel Task', message: `Cancel task "${task.title}"?`, confirmText: 'Cancel', type: 'warning' });
-    if (!confirmed) return;
-    try {
-      await leadFollowUpTaskService.cancelFollowUpTask(task.id);
-      showSuccess('Task cancelled!');
-      loadFollowUpTasks();
-    } catch (err) {
-      showError(`Failed to cancel task: ${err instanceof Error ? err.message : 'Unknown error'}`);
-    }
+    setActionTask(task);
+    setActionType('cancel');
+    setActionNotes('');
+    setScheduleNextTask(false);
+    setShowActionTaskModal(true);
   };
 
   const handleDeleteTask = async (task: LeadFollowUpTask) => {
@@ -719,7 +763,17 @@ const LeadManagement: React.FC = () => {
                           <tr key={task.id} className="hover:bg-gray-50">
                             <td className="px-6 py-4 whitespace-nowrap">
                               <div className="text-sm font-medium text-gray-900">{task.title}</div>
-                              <div className="text-sm text-gray-500">{task.task_type}</div>
+                              <div className="text-xs text-gray-500">{task.task_type}</div>
+                              {task.completion_notes && (
+                                <div className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded mt-1 max-w-xs truncate" title={task.completion_notes}>
+                                  <strong>Notes:</strong> {task.completion_notes}
+                                </div>
+                              )}
+                              {task.cancellation_reason && !task.completion_notes && (
+                                <div className="text-xs text-red-700 bg-red-50 border border-red-200 px-2 py-0.5 rounded mt-1 max-w-xs truncate" title={task.cancellation_reason}>
+                                  <strong>Cancelled:</strong> {task.cancellation_reason}
+                                </div>
+                              )}
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{task.lead ? `${task.lead.first_name} ${task.lead.last_name}` : '—'}</td>
                             <td className="px-6 py-4 whitespace-nowrap"><span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${priorityColors[task.priority]}`}>{task.priority}</span></td>
@@ -727,9 +781,18 @@ const LeadManagement: React.FC = () => {
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{new Date(task.due_date).toLocaleDateString()}</td>
                             <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                               <div className="flex items-center justify-end space-x-2">
-                                {(task.status === 'open' || task.status === 'overdue') && <button onClick={() => handleCompleteTask(task)} className="text-green-600 hover:text-green-900" title="Mark Complete"><CheckCircle className="w-4 h-4" /></button>}
-                                {(task.status === 'open' || task.status === 'in_progress') && <button onClick={() => handleCancelTask(task)} className="text-orange-600 hover:text-orange-900" title="Cancel"><X className="w-4 h-4" /></button>}
-                                <button onClick={() => handleDeleteTask(task)} className="text-red-600 hover:text-red-900" title="Delete"><Trash2 className="w-4 h-4" /></button>
+                                <button onClick={() => handleOpenActionModal(task)} className="inline-flex items-center px-2 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded text-xs font-medium hover:bg-emerald-100" title="Action Task & Add Notes">
+                                  <MessageSquare className="w-3.5 h-3.5 mr-1" />
+                                  Action & Notes
+                                </button>
+                                {(task.status === 'open' || task.status === 'in_progress') && (
+                                  <button onClick={() => handleCancelTask(task)} className="text-orange-600 hover:text-orange-900 p-1" title="Cancel Task">
+                                    <X className="w-4 h-4" />
+                                  </button>
+                                )}
+                                <button onClick={() => handleDeleteTask(task)} className="text-red-600 hover:text-red-900 p-1" title="Delete Task">
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
                               </div>
                             </td>
                           </tr>
@@ -1013,6 +1076,165 @@ const LeadManagement: React.FC = () => {
             <div className="flex justify-end space-x-3 mt-6">
               <button onClick={() => setShowTaskModal(false)} className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md text-sm font-medium hover:bg-gray-300">Cancel</button>
               <button onClick={handleCreateTask} disabled={!taskFormData.title.trim() || !taskFormData.due_date || !taskFormData.lead_id} className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50">{taskModalMode === 'add' ? 'Create Task' : 'Update Task'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Action Task & Add Notes Modal */}
+      {showActionTaskModal && actionTask && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50 flex items-center justify-center">
+          <div className="relative mx-auto p-6 border w-11/12 max-w-xl shadow-xl rounded-lg bg-white">
+            <div className="flex items-center justify-between border-b pb-3 mb-4">
+              <div className="flex items-center space-x-2">
+                <CheckSquare className="w-5 h-5 text-emerald-600" />
+                <h3 className="text-lg font-bold text-gray-900">Action Task & Log Notes</h3>
+              </div>
+              <button onClick={() => setShowActionTaskModal(false)} className="text-gray-400 hover:text-gray-600 p-1">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              {/* Task Details Card */}
+              <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 text-xs space-y-1">
+                <div className="flex justify-between font-semibold text-gray-900 text-sm">
+                  <span>{actionTask.title}</span>
+                  <span className="capitalize px-2 py-0.5 rounded bg-blue-100 text-blue-800 text-xs">{actionTask.priority} Priority</span>
+                </div>
+                {actionTask.lead && (
+                  <p className="text-gray-600">
+                    Lead: <strong className="text-blue-700">{actionTask.lead.lead_number}</strong> - {actionTask.lead.first_name} {actionTask.lead.last_name} ({actionTask.lead.company_name || 'No Company'})
+                  </p>
+                )}
+                <div className="flex gap-4 text-gray-500 pt-1">
+                  <span>Type: {actionTask.task_type || 'Follow-up'}</span>
+                  <span>Due: {new Date(actionTask.due_date).toLocaleString()}</span>
+                </div>
+              </div>
+
+              {/* Action Selection */}
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-2">Select Action Status</label>
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setActionType('complete')}
+                    className={`py-2 px-3 rounded-md text-xs font-bold border transition ${
+                      actionType === 'complete'
+                        ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                        : 'bg-white text-gray-700 border-gray-300 hover:bg-emerald-50'
+                    }`}
+                  >
+                    ✓ Mark Complete
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActionType('in_progress')}
+                    className={`py-2 px-3 rounded-md text-xs font-bold border transition ${
+                      actionType === 'in_progress'
+                        ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
+                        : 'bg-white text-gray-700 border-gray-300 hover:bg-blue-50'
+                    }`}
+                  >
+                    ⏳ In Progress
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActionType('cancel')}
+                    className={`py-2 px-3 rounded-md text-xs font-bold border transition ${
+                      actionType === 'cancel'
+                        ? 'bg-red-600 text-white border-red-600 shadow-xs'
+                        : 'bg-white text-gray-700 border-gray-300 hover:bg-red-50'
+                    }`}
+                  >
+                    ✕ Cancel Task
+                  </button>
+                </div>
+              </div>
+
+              {/* Task Notes Textarea */}
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-1">
+                  Action / Call Notes <span className="text-gray-400 font-normal">(Logged to Lead Timeline)</span>
+                </label>
+                <textarea
+                  value={actionNotes}
+                  onChange={e => setActionNotes(e.target.value)}
+                  rows={3}
+                  placeholder="e.g. Called client, discussed pricing proposal, client requested updated terms by Friday..."
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-xs focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+
+              {/* Next Follow-up Scheduling Option */}
+              <div className="border-t border-gray-200 pt-3">
+                <label className="flex items-center space-x-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={scheduleNextTask}
+                    onChange={e => setScheduleNextTask(e.target.checked)}
+                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <span className="text-xs font-bold text-gray-900">Schedule Next Follow-Up Task Automatically</span>
+                </label>
+
+                {scheduleNextTask && (
+                  <div className="mt-3 p-3 bg-blue-50/50 border border-blue-100 rounded-lg space-y-3">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Next Task Title</label>
+                      <input
+                        type="text"
+                        value={nextTaskData.title}
+                        onChange={e => setNextTaskData(prev => ({ ...prev, title: e.target.value }))}
+                        className="w-full px-3 py-1.5 border border-gray-300 rounded text-xs bg-white focus:ring-blue-500 focus:border-blue-500"
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">Next Due Date</label>
+                        <input
+                          type="datetime-local"
+                          value={nextTaskData.due_date}
+                          onChange={e => setNextTaskData(prev => ({ ...prev, due_date: e.target.value }))}
+                          className="w-full px-3 py-1.5 border border-gray-300 rounded text-xs bg-white focus:ring-blue-500 focus:border-blue-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">Next Priority</label>
+                        <select
+                          value={nextTaskData.priority}
+                          onChange={e => setNextTaskData(prev => ({ ...prev, priority: e.target.value as FollowUpTaskPriority }))}
+                          className="w-full px-3 py-1.5 border border-gray-300 rounded text-xs bg-white focus:ring-blue-500 focus:border-blue-500"
+                        >
+                          <option value="low">Low</option>
+                          <option value="medium">Medium</option>
+                          <option value="high">High</option>
+                          <option value="urgent">Urgent</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="flex justify-end space-x-3 mt-6 border-t pt-3">
+              <button
+                type="button"
+                onClick={() => setShowActionTaskModal(false)}
+                className="px-4 py-2 bg-gray-100 text-gray-700 rounded-md text-xs font-semibold hover:bg-gray-200"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveTaskAction}
+                disabled={taskLoading}
+                className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-xs text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50"
+              >
+                {taskLoading ? 'Saving...' : 'Save Action & Log Notes'}
+              </button>
             </div>
           </div>
         </div>

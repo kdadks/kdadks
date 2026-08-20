@@ -141,7 +141,7 @@ class LeadFollowUpTaskService {
     return data;
   }
 
-  async completeFollowUpTask(id: string): Promise<LeadFollowUpTask> {
+  async completeFollowUpTask(id: string, notes?: string): Promise<LeadFollowUpTask> {
     const currentUser = await simpleAuth.getCurrentUser();
     if (!currentUser) {
       throw new Error('User not authenticated');
@@ -153,6 +153,7 @@ class LeadFollowUpTaskService {
         status: 'completed',
         completed_at: new Date().toISOString(),
         completed_by: currentUser.id,
+        completion_notes: notes || undefined,
         updated_at: new Date().toISOString()
       })
       .eq('id', id)
@@ -164,16 +165,38 @@ class LeadFollowUpTaskService {
       .single();
 
     if (error) throw error;
+
+    // Log activity record in lead_activities for activity timeline
+    if (data && data.lead_id) {
+      try {
+        await supabase
+          .from('lead_activities')
+          .insert({
+            lead_id: data.lead_id,
+            opportunity_id: data.opportunity_id || null,
+            activity_type: data.task_type || 'task',
+            subject: `Completed Task: ${data.title}`,
+            description: notes || data.description || 'Task completed.',
+            completed_at: new Date().toISOString(),
+            created_by: currentUser.id
+          });
+      } catch (actErr) {
+        console.warn('Failed to log lead activity for completed task:', actErr);
+      }
+    }
+
     return data;
   }
 
   async cancelFollowUpTask(id: string, reason?: string): Promise<LeadFollowUpTask> {
+    const currentUser = await simpleAuth.getCurrentUser();
     const { data, error } = await supabase
       .from('lead_follow_up_tasks')
       .update({
         status: 'cancelled',
         cancelled_at: new Date().toISOString(),
         cancellation_reason: reason || 'Cancelled by user',
+        completion_notes: reason || undefined,
         updated_at: new Date().toISOString()
       })
       .eq('id', id)
@@ -185,7 +208,52 @@ class LeadFollowUpTaskService {
       .single();
 
     if (error) throw error;
+
+    // Log activity record
+    if (data && data.lead_id) {
+      try {
+        await supabase
+          .from('lead_activities')
+          .insert({
+            lead_id: data.lead_id,
+            opportunity_id: data.opportunity_id || null,
+            activity_type: 'note',
+            subject: `Cancelled Task: ${data.title}`,
+            description: `Cancellation Reason: ${reason || 'Cancelled by user'}`,
+            created_by: currentUser?.id || null
+          });
+      } catch (actErr) {
+        console.warn('Failed to log lead activity for cancelled task:', actErr);
+      }
+    }
+
     return data;
+  }
+
+  async actionFollowUpTask(
+    id: string,
+    action: 'complete' | 'in_progress' | 'cancel',
+    notes?: string,
+    nextTask?: CreateLeadFollowUpTaskData
+  ): Promise<{ task: LeadFollowUpTask; nextTask?: LeadFollowUpTask }> {
+    let updatedTask: LeadFollowUpTask;
+    if (action === 'complete') {
+      updatedTask = await this.completeFollowUpTask(id, notes);
+    } else if (action === 'cancel') {
+      updatedTask = await this.cancelFollowUpTask(id, notes);
+    } else {
+      updatedTask = await this.updateFollowUpTask(id, {
+        status: 'in_progress',
+        completion_notes: notes
+      } as any);
+    }
+
+    let createdNextTask: LeadFollowUpTask | undefined = undefined;
+    if (nextTask && nextTask.title && nextTask.due_date) {
+      createdNextTask = await this.createFollowUpTask(nextTask);
+    }
+
+    return { task: updatedTask, nextTask: createdNextTask };
   }
 
   async deleteFollowUpTask(id: string): Promise<void> {

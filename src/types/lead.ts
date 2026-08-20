@@ -377,6 +377,7 @@ export interface LeadFollowUpTask {
   completed_at?: string;
   cancelled_at?: string;
   cancellation_reason?: string;
+  completion_notes?: string;
   
   created_at: string;
   updated_at: string;
@@ -407,6 +408,7 @@ export interface UpdateLeadFollowUpTaskData extends Partial<CreateLeadFollowUpTa
   completed_at?: string;
   cancelled_at?: string;
   cancellation_reason?: string;
+  completion_notes?: string;
 }
 
 export interface LeadFollowUpTaskFilters {

@@ -6,6 +6,7 @@ export interface SubscriptionPlan {
   currency_code: string;
   billing_interval: 'monthly' | 'annual';
   plan_type: 'basic' | 'premium' | 'tiered' | 'add-on';
+  company_settings_id?: string;
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -31,6 +32,7 @@ export interface CustomerSubscription {
     contact_person?: string;
     email?: string;
     customer_code?: string;
+    company_settings_id?: string;
   };
   plan?: SubscriptionPlan;
 }
@@ -42,6 +44,7 @@ export interface CreateSubscriptionPlanData {
   currency_code: string;
   billing_interval: 'monthly' | 'annual';
   plan_type: 'basic' | 'premium' | 'tiered' | 'add-on';
+  company_settings_id?: string;
 }
 
 export interface CreateCustomerSubscriptionData {

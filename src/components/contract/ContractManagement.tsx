@@ -107,7 +107,7 @@ const ContractManagement: React.FC = () => {
       setTotalPages(Math.ceil(contractsData.total / perPage));
 
       // Load statistics
-      const statsData = await contractService.getStatistics();
+      const statsData = await contractService.getStatistics(selectedCompany?.id);
       setStats(statsData);
 
     } catch (err) {

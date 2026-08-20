@@ -240,18 +240,19 @@ const SubscriptionManagement: React.FC<SubscriptionManagementProps> = () => {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
+      const entityFilter = selectedCompany?.id ? { company_settings_id: selectedCompany.id } : undefined;
       const [plansData, subsData, customersResult] = await Promise.all([
-        subscriptionService.getPlans(true),
+        subscriptionService.getPlans(true, selectedCompany?.id),
         subscriptionService.getSubscriptions(
           statusFilter !== 'all'
             ? { status: statusFilter as CustomerSubscription['status'], company_settings_id: selectedCompany?.id }
             : { company_settings_id: selectedCompany?.id },
         ),
-        invoiceService.getCustomers(undefined, 1, 500),
+        invoiceService.getCustomers(entityFilter, 1, 500),
       ]);
       setPlans(plansData);
       setSubscriptions(subsData);
-      setCustomers(customersResult.data);
+      setCustomers(customersResult.data || []);
       setExpiryDismissed(false);
     } catch {
       showError('Failed to load subscription data');
@@ -297,7 +298,10 @@ const SubscriptionManagement: React.FC<SubscriptionManagementProps> = () => {
         await subscriptionService.updatePlan(editingPlan.id, planForm);
         showSuccess('Plan updated');
       } else {
-        await subscriptionService.createPlan(planForm);
+        await subscriptionService.createPlan({
+          ...planForm,
+          company_settings_id: selectedCompany?.id,
+        });
         showSuccess('Plan created');
       }
       setShowPlanModal(false);
