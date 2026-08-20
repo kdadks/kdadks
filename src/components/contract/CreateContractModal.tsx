@@ -50,7 +50,10 @@ const CreateContractModal: React.FC<CreateContractModalProps> = ({ onSave, onClo
   const loadCustomers = async () => {
     try {
       setLoadingCustomers(true);
-      const response = await invoiceService.getCustomers({}, 1, 1000); // Get all active customers
+      const filters = {
+        company_settings_id: selectedCompany?.id ?? undefined,
+      };
+      const response = await invoiceService.getCustomers(filters, 1, 1000);
       setCustomers(response.data.filter(c => c.is_active));
     } catch (error) {
       console.error('Error loading customers:', error);

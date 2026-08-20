@@ -288,8 +288,36 @@ class InvoiceService {
     
     if (error) throw error;
     
+    const customerList: Customer[] = data || [];
+
+    // Safely load contacts if customer_contacts table exists in Supabase
+    if (customerList.length > 0) {
+      try {
+        const customerIds = customerList.map(c => c.id);
+        const { data: contactsData } = await supabase
+          .from('customer_contacts')
+          .select('*')
+          .in('customer_id', customerIds)
+          .eq('is_active', true);
+        
+        if (contactsData && contactsData.length > 0) {
+          const contactsMap: Record<string, any[]> = {};
+          contactsData.forEach(contact => {
+            contactsMap[contact.customer_id] = contactsMap[contact.customer_id] || [];
+            contactsMap[contact.customer_id].push(contact);
+          });
+
+          customerList.forEach(c => {
+            c.contacts = contactsMap[c.id] || [];
+          });
+        }
+      } catch (err) {
+        console.warn('customer_contacts table not available or query failed:', err);
+      }
+    }
+
     return {
-      data: data || [],
+      data: customerList,
       count: count || 0,
       page,
       per_page: perPage,
@@ -308,6 +336,22 @@ class InvoiceService {
       .single();
     
     if (error) throw error;
+    if (!data) return null;
+
+    // Safely load contacts if table exists
+    try {
+      const { data: contactsData } = await supabase
+        .from('customer_contacts')
+        .select('*')
+        .eq('customer_id', id)
+        .eq('is_active', true);
+
+      data.contacts = contactsData || [];
+    } catch (err) {
+      console.warn(`Could not load contacts for customer ${id}:`, err);
+      data.contacts = [];
+    }
+
     return data;
   }
 

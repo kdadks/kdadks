@@ -34,7 +34,8 @@ import {
   Settings,
   Mail,
   UserCheck,
-  Target
+  Target,
+  Compass
 } from 'lucide-react'
 import { simpleAuth, SimpleUser } from '../../utils/simpleAuth'
 import { isSupabaseConfigured, supabase } from '../../config/supabase'
@@ -48,6 +49,7 @@ import { PaymentManagement } from '../payment/PaymentManagement'
 import QuoteManagement from '../quote/QuoteManagement'
 import ContractManagement from '../contract/ContractManagement'
 import CustomerManagement from '../customer/CustomerManagement'
+import { Customer360Hub } from '../customer/Customer360Hub'
 import ProductManagement from '../product/ProductManagement'
 import LeadManagement from '../lead/LeadManagement'
 import OpportunityManagement from '../lead/OpportunityManagement'
@@ -76,6 +78,7 @@ import HRAttendanceReporting from './reporting/HRAttendanceReporting'
 import HRLeaveReporting from './reporting/HRLeaveReporting'
 import HRCompensationReporting from './reporting/HRCompensationReporting'
 import HRPerformanceReporting from './reporting/HRPerformanceReporting'
+import ReportingHub from './reporting/ReportingHub'
 import type { InvoiceStats } from '../../types/invoice'
 import type { QuoteStats } from '../../types/quote'
 
@@ -99,7 +102,7 @@ interface DashboardStats {
   settlements: number;
 }
 
-type ActiveView = 'dashboard' | 'invoices' | 'payments' | 'quotes' | 'contracts' | 'rate-cards' | 'announcements' | 'expenses' | 'income' | 'finance' | 'hr-employees' | 'hr-leave' | 'hr-attendance' | 'hr-settlement' | 'hr-tds-report' | 'hr-performance' | 'hr-compensation' | 'subscriptions' | 'board-resolutions' | 'settings' | 'customers' | 'leads' | 'opportunities' | 'products' | 'reporting-customers' | 'reporting-leads' | 'reporting-opportunities' | 'reporting-subscriptions' | 'reporting-quotes' | 'reporting-invoices' | 'reporting-hr' | 'reporting-hr-attendance' | 'reporting-hr-leave' | 'reporting-hr-compensation' | 'reporting-hr-performance';
+type ActiveView = 'dashboard' | 'invoices' | 'payments' | 'quotes' | 'contracts' | 'rate-cards' | 'announcements' | 'expenses' | 'income' | 'finance' | 'hr-employees' | 'hr-leave' | 'hr-attendance' | 'hr-settlement' | 'hr-tds-report' | 'hr-performance' | 'hr-compensation' | 'subscriptions' | 'board-resolutions' | 'settings' | 'customers' | 'customer-360' | 'leads' | 'opportunities' | 'products' | 'reporting-hub' | 'reporting-customers' | 'reporting-leads' | 'reporting-opportunities' | 'reporting-subscriptions' | 'reporting-quotes' | 'reporting-invoices' | 'reporting-hr' | 'reporting-hr-attendance' | 'reporting-hr-leave' | 'reporting-hr-compensation' | 'reporting-hr-performance';
 
 // Menu section types
 type MenuSection = 'sales' | 'finance' | 'hr' | 'communication' | 'configuration' | 'reporting';
@@ -154,10 +157,12 @@ const SimpleAdminDashboard: React.FC = () => {
     '/admin/board-resolutions': 'board-resolutions',
     '/admin/settings': 'settings',
     '/admin/customers': 'customers',
+    '/admin/customer-360': 'customer-360',
     '/admin/leads': 'leads',
     '/admin/opportunities': 'opportunities',
     '/admin/products': 'products',
-    '/admin/reporting': 'reporting-customers',
+    '/admin/reporting': 'reporting-hub',
+    '/admin/reporting/hub': 'reporting-hub',
     '/admin/reporting/customers': 'reporting-customers',
     '/admin/reporting/leads': 'reporting-leads',
     '/admin/reporting/opportunities': 'reporting-opportunities',
@@ -378,6 +383,8 @@ const SimpleAdminDashboard: React.FC = () => {
     switch (activeView) {
       case 'invoices':
         return <InvoiceManagement />;
+      case 'reporting-hub':
+        return <ReportingHub />;
       case 'reporting-invoices':
         return <InvoiceReporting />;
       case 'payments':
@@ -430,6 +437,8 @@ const SimpleAdminDashboard: React.FC = () => {
         return <InvoiceSettings />;
       case 'customers':
         return <CustomerManagement />;
+      case 'customer-360':
+        return <Customer360Hub />;
       case 'reporting-customers':
         return <CustomerReporting />;
       case 'leads':
@@ -514,6 +523,22 @@ const SimpleAdminDashboard: React.FC = () => {
                   >
                     <Users className="w-5 h-5 flex-shrink-0" />
                     {sidebarOpen && <span className="ml-3">Customers</span>}
+                  </button>
+                </li>
+
+                {/* Customer 360 Hub */}
+                <li>
+                  <button
+                    onClick={() => navigate('/admin/customer-360')}
+                    title={!sidebarOpen ? 'Customer 360° Hub' : undefined}
+                    className={`w-full flex items-center ${!sidebarOpen ? 'justify-center' : ''} px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                      activeView === 'customer-360'
+                        ? 'bg-orange-100 text-orange-800 font-semibold'
+                        : 'text-gray-700 hover:bg-gray-100'
+                    }`}
+                  >
+                    <Compass className="w-5 h-5 flex-shrink-0 text-orange-600" />
+                    {sidebarOpen && <span className="ml-3">Customer 360° Hub</span>}
                   </button>
                 </li>
 
@@ -897,6 +922,22 @@ const SimpleAdminDashboard: React.FC = () => {
              {/* Reporting & Analytics Items */}
              {(openSections.reporting || !sidebarOpen) && (
                <>
+                 {/* Reporting Hub */}
+                 <li>
+                   <button
+                     onClick={() => navigate('/admin/reporting/hub')}
+                     title={!sidebarOpen ? 'Reporting Hub' : undefined}
+                     className={`w-full flex items-center ${!sidebarOpen ? 'justify-center' : ''} px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                       activeView === 'reporting-hub'
+                         ? 'bg-blue-100 text-blue-700'
+                         : 'text-gray-700 hover:bg-gray-100'
+                     }`}
+                   >
+                     <BarChart3 className="w-5 h-5 flex-shrink-0" />
+                     {sidebarOpen && <span className="ml-3">Reporting Hub</span>}
+                   </button>
+                 </li>
+
                  {/* Customer Reporting */}
                  <li>
                    <button

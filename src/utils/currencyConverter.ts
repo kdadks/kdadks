@@ -260,3 +260,23 @@ export function formatCurrencyWithSymbol(amount: number, currencyCode: string): 
   const symbol = symbols[currencyCode.toUpperCase()] || currencyCode;
   return `${symbol} ${amount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
+
+/**
+ * Convert amount from any source currency to target currency
+ * @param amount - Source amount
+ * @param fromCurrency - Source currency code (USD, EUR, INR, etc.)
+ * @param toCurrency - Target currency code (INR, EUR, USD, etc.)
+ * @returns Amount converted to target currency
+ */
+export function convertCurrency(amount: number, fromCurrency: string, toCurrency: string): number {
+  if (!amount || amount === 0) return 0;
+  const from = (fromCurrency || 'INR').toUpperCase();
+  const to = (toCurrency || 'INR').toUpperCase();
+  if (from === to) return amount;
+  
+  // Convert from -> INR
+  const inrAmount = from === 'INR' ? amount : convertToINR(amount, from);
+  // Convert INR -> to
+  if (to === 'INR') return inrAmount;
+  return convertFromINR(inrAmount, to);
+}

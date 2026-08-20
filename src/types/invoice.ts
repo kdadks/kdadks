@@ -113,6 +113,8 @@ export interface TermsTemplate {
   updated_at: string;
 }
 
+import type { CustomerContact } from './customerContact';
+
 export interface Customer {
   id: string;
   company_name?: string;
@@ -148,6 +150,8 @@ export interface Customer {
   
   // Populated from relations
   country?: Country;
+  contacts?: CustomerContact[];
+  primary_contact?: CustomerContact;
 }
 
 export interface Product {

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Search, Eye, Edit, Trash2, X, Users, RefreshCw, Globe, Building2 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Plus, Search, Eye, Edit, Trash2, X, Users, RefreshCw, Globe, Building2, UserCheck, Contact, Compass } from 'lucide-react';
 import { invoiceService } from '../../services/invoiceService';
 import { useToast } from '../ui/ToastProvider';
 import ConfirmDialog from '../ui/ConfirmDialog';
@@ -7,12 +8,14 @@ import { useConfirmDialog } from '../../hooks/useConfirmDialog';
 import { useCompanyContext } from '../../contexts/CompanyContext';
 import { getTaxRegistrationLabel, getTaxLabel } from '../../utils/taxUtils';
 import { getCustomerDisplayIds } from '../../utils/customerCodeUtils';
+import { CustomerContactModal } from './CustomerContactModal';
 import type { Customer, Country, CreateCustomerData } from '../../types/invoice';
 
 // Sentinel meaning the customer is shared across all entities (company_settings_id = null)
 const SHARED_VALUE = '__shared__';
 
 const CustomerManagement: React.FC = () => {
+  const navigate = useNavigate();
   const { selectedCompany, companies } = useCompanyContext();
   const { showSuccess, showError } = useToast();
   const { confirm, dialogProps } = useConfirmDialog();
@@ -29,6 +32,21 @@ const CustomerManagement: React.FC = () => {
   const [modalMode, setModalMode] = useState<'view' | 'edit' | 'add'>('view');
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [modalLoading, setModalLoading] = useState(false);
+
+  // Contacts Modal state
+  const [contactModalOpen, setContactModalOpen] = useState(false);
+  const [contactModalCustomer, setContactModalCustomer] = useState<Customer | null>(null);
+
+  const openContactModal = (customer: Customer) => {
+    setContactModalCustomer(customer);
+    setContactModalOpen(true);
+  };
+
+  const closeContactModal = () => {
+    setContactModalOpen(false);
+    setContactModalCustomer(null);
+    loadCustomers();
+  };
   const [formData, setFormData] = useState<CreateCustomerData>({
     company_name: '',
     contact_person: '',
@@ -343,8 +361,19 @@ const CustomerManagement: React.FC = () => {
                         )}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">{customer.email}</div>
-                        <div className="text-sm text-gray-500">{customer.phone}</div>
+                        <div className="text-sm text-gray-900">{customer.email || '—'}</div>
+                        <div className="text-sm text-gray-500">{customer.phone || '—'}</div>
+                        <button
+                          onClick={() => openContactModal(customer)}
+                          className="mt-1 inline-flex items-center space-x-1 px-2 py-0.5 rounded text-[11px] font-medium bg-purple-50 text-purple-700 border border-purple-200 hover:bg-purple-100 transition"
+                        >
+                          <UserCheck className="w-3 h-3" />
+                          <span>
+                            {customer.contacts && customer.contacts.length > 0
+                              ? `${customer.contacts.filter(c => c.is_active).length} contact${customer.contacts.filter(c => c.is_active).length !== 1 ? 's' : ''}`
+                              : 'Manage Contacts'}
+                          </span>
+                        </button>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm text-gray-900">{[customer.city, customer.state].filter(Boolean).join(', ')}</div>
@@ -374,6 +403,17 @@ const CustomerManagement: React.FC = () => {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                         <div className="flex items-center justify-end space-x-2">
+                          <button
+                            onClick={() => navigate(`/admin/customer-360?id=${customer.id}`)}
+                            className="text-orange-600 hover:text-orange-900 flex items-center gap-1 font-semibold text-xs bg-orange-50 hover:bg-orange-100 px-2.5 py-1 rounded border border-orange-200 shadow-2xs transition"
+                            title="Open Customer 360° Hub"
+                          >
+                            <Compass className="w-3.5 h-3.5 text-orange-600" />
+                            360° Hub
+                          </button>
+                          <button onClick={() => openContactModal(customer)} className="text-purple-600 hover:text-purple-900" title="Manage Contacts">
+                            <UserCheck className="w-4 h-4" />
+                          </button>
                           <button onClick={() => openModal('view', customer)} className="text-blue-600 hover:text-blue-900" title="View">
                             <Eye className="w-4 h-4" />
                           </button>
@@ -447,6 +487,33 @@ const CustomerManagement: React.FC = () => {
                   {!selectedCustomer.company_settings_id && companies.length > 1 && (
                     <p className="text-xs text-indigo-500 mt-1">This shared customer has an ID for each entity.</p>
                   )}
+                </div>
+              )}
+
+              {/* Contact Persons Banner */}
+              {selectedCustomer && (
+                <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 flex items-center justify-between">
+                  <div>
+                    <h4 className="text-xs font-bold text-purple-900 uppercase tracking-wider flex items-center gap-1.5">
+                      <UserCheck className="w-4 h-4 text-purple-600" />
+                      Contact Persons ({selectedCustomer.contacts?.filter(c => c.is_active).length || 0})
+                    </h4>
+                    <p className="text-xs text-purple-700 mt-0.5">
+                      {selectedCustomer.contacts && selectedCustomer.contacts.length > 0
+                        ? `Primary Contact: ${selectedCustomer.contacts.find(c => c.is_primary)?.name || selectedCustomer.contact_person || 'Not set'}`
+                        : 'No custom contact profiles added yet.'}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      closeModal();
+                      openContactModal(selectedCustomer);
+                    }}
+                    className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold rounded-md shadow transition"
+                  >
+                    Manage Contacts
+                  </button>
                 </div>
               )}
               {modalMode === 'add' && (
@@ -609,6 +676,14 @@ const CustomerManagement: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Contacts Management Modal */}
+      <CustomerContactModal
+        isOpen={contactModalOpen}
+        onClose={closeContactModal}
+        customer={contactModalCustomer}
+        onContactsUpdated={loadCustomers}
+      />
     </div>
   );
 };

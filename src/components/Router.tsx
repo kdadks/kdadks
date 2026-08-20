@@ -228,12 +228,14 @@ const Router = () => {
             <Route path="/admin/board-resolutions" element={<SimpleAdminDashboard />} />
             <Route path="/admin/settings" element={<SimpleAdminDashboard />} />
             <Route path="/admin/customers" element={<SimpleAdminDashboard />} />
+            <Route path="/admin/customer-360" element={<SimpleAdminDashboard />} />
             <Route path="/admin/leads" element={<SimpleAdminDashboard />} />
             <Route path="/admin/opportunities" element={<SimpleAdminDashboard />} />
             <Route path="/admin/products" element={<SimpleAdminDashboard />} />
             
             {/* Reporting & Analytics routes */}
             <Route path="/admin/reporting" element={<SimpleAdminDashboard />} />
+            <Route path="/admin/reporting/hub" element={<SimpleAdminDashboard />} />
             <Route path="/admin/reporting/customers" element={<SimpleAdminDashboard />} />
             <Route path="/admin/reporting/leads" element={<SimpleAdminDashboard />} />
             <Route path="/admin/reporting/opportunities" element={<SimpleAdminDashboard />} />

@@ -1,283 +1,528 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Receipt,
   CheckCircle,
   Clock,
   AlertTriangle,
-  XCircle,
-  TrendingUp,
   DollarSign,
+  TrendingUp,
   Users,
+  RefreshCw,
+  Percent,
 } from 'lucide-react';
 import { supabase } from '../../../config/supabase';
 import { useCompanyContext } from '../../../contexts/CompanyContext';
 import ReportingCard from './ReportingCard';
 import SimpleBarChart from './SimpleBarChart';
+import DateRangeFilter, { DateRange, getDefaultDateRange } from './DateRangeFilter';
+import ExportButton from './ExportButton';
+
+interface InvoiceRow {
+  id: string;
+  invoice_number?: string;
+  status: string;
+  payment_status: string;
+  total_amount: number;
+  inr_total_amount?: number;
+  invoice_date?: string;
+  due_date?: string;
+  created_at: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  customer?: any;
+  currency_code?: string;
+}
 
 const InvoiceReporting: React.FC = () => {
   const { selectedCompany } = useCompanyContext();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [stats, setStats] = useState<{
+  const [dateRange, setDateRange] = useState<DateRange>(getDefaultDateRange());
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  interface Stats {
     total: number;
+    prevTotal: number;
     paid: number;
     pending: number;
     overdue: number;
     cancelled: number;
     totalRevenue: number;
+    prevRevenue: number;
     pendingAmount: number;
+    overdueAmount: number;
     thisMonthRevenue: number;
-    monthlyData: { label: string; value: number }[];
+    collectionRate: number;
+    dso: number;
+    monthlyIssued: { label: string; value: number }[];
+    monthlyRevenue: { label: string; value: number }[];
+    aging: { label: string; value: number; color: string }[];
     topCustomers: { name: string; value: number }[];
-  } | null>(null);
+    byCurrency: { currency: string; amount: number; count: number }[];
+    invoices: InvoiceRow[];
+  }
 
+  const [stats, setStats] = useState<Stats | null>(null);
   const companyId = selectedCompany?.id ?? null;
 
-  useEffect(() => {
-    fetchStats();
-  }, [companyId]);
-
-  const fetchStats = async () => {
+  const fetchData = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
 
-      let query = supabase
+      // Main invoice fetch in period
+      let q = supabase
         .from('invoices')
-        .select('id, status, payment_status, total_amount, inr_total_amount, invoice_date, customer_id, customer:customers(company_name, contact_person)', { count: 'exact' })
-        .order('created_at', { ascending: false });
+        .select(
+          'id, invoice_number, status, payment_status, total_amount, inr_total_amount, invoice_date, due_date, created_at, currency_code, customer:customers(company_name, contact_person)'
+        )
+        .gte('invoice_date', dateRange.from)
+        .lte('invoice_date', dateRange.to)
+        .order('invoice_date', { ascending: false });
+      if (companyId) q = q.eq('company_settings_id', companyId);
+      const { data: invoices, error: invErr } = await q;
+      if (invErr) throw invErr;
 
-      if (companyId) {
-        query = query.eq('company_settings_id', companyId);
-      }
+      // Prior period revenue
+      const fromDate = new Date(dateRange.from);
+      const toDate = new Date(dateRange.to);
+      const duration = toDate.getTime() - fromDate.getTime();
+      const prevFrom = new Date(fromDate.getTime() - duration).toISOString().split('T')[0];
+      let prevQ = supabase
+        .from('invoices')
+        .select('inr_total_amount, total_amount, payment_status')
+        .gte('invoice_date', prevFrom)
+        .lte('invoice_date', dateRange.from);
+      if (companyId) prevQ = prevQ.eq('company_settings_id', companyId);
+      const { data: prevInvoices } = await prevQ;
 
-      const { data: invoices, count, error: invoicesError } = await query;
-
-      if (invoicesError) throw invoicesError;
-
-      const allInvoices = invoices || [];
-      const total = count || allInvoices.length;
-      const paid = allInvoices.filter((inv) => inv.payment_status === 'paid').length;
-      const pending = allInvoices.filter((inv) => inv.status === 'draft' || inv.status === 'sent').length;
-      const overdue = allInvoices.filter((inv) => inv.status === 'overdue').length;
-      const cancelled = allInvoices.filter((inv) => inv.status === 'cancelled').length;
-      const totalRevenue = allInvoices
-        .filter((inv) => inv.payment_status === 'paid')
-        .reduce((sum, inv) => sum + (inv.inr_total_amount || inv.total_amount || 0), 0);
-      const pendingAmount = allInvoices
-        .filter((inv) => inv.status === 'draft' || inv.status === 'sent')
-        .reduce((sum, inv) => sum + (inv.inr_total_amount || inv.total_amount || 0), 0);
-
+      // Monthly trend (last 6 months)
       const now = new Date();
-      const thisMonthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
-      const thisMonthRevenue = allInvoices
-        .filter((inv) => inv.payment_status === 'paid' && inv.invoice_date && inv.invoice_date >= thisMonthStart)
-        .reduce((sum, inv) => sum + (inv.inr_total_amount || inv.total_amount || 0), 0);
-
-      const months: { label: string; value: number }[] = [];
+      const monthlyIssued: { label: string; value: number }[] = [];
+      const monthlyRevenue: { label: string; value: number }[] = [];
       for (let i = 5; i >= 0; i--) {
         const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
         const label = d.toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
         const start = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
-        const end = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-31`;
-        let monthQuery = supabase
+        const end = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+        const endStr = `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, '0')}-${String(end.getDate()).padStart(2, '0')}`;
+
+        let issuedQ = supabase
           .from('invoices')
-          .select('*', { count: 'exact', head: true })
+          .select('id', { count: 'exact', head: true })
           .gte('invoice_date', start)
-          .lte('invoice_date', end)
-          .eq('payment_status', 'paid');
-        if (companyId) {
-          monthQuery = monthQuery.eq('company_settings_id', companyId);
-        }
-        const { count: monthCount } = await monthQuery;
-        const monthRevenue = (monthCount || 0) > 0 
-          ? allInvoices
-              .filter((inv) => inv.payment_status === 'paid' && inv.invoice_date && inv.invoice_date >= start && inv.invoice_date <= end)
-              .reduce((sum, inv) => sum + (inv.inr_total_amount || inv.total_amount || 0), 0)
-          : 0;
-        months.push({ label, value: monthRevenue });
+          .lte('invoice_date', endStr);
+        if (companyId) issuedQ = issuedQ.eq('company_settings_id', companyId);
+        const { count: ic } = await issuedQ;
+
+        let revQ = supabase
+          .from('invoices')
+          .select('inr_total_amount, total_amount')
+          .eq('payment_status', 'paid')
+          .gte('invoice_date', start)
+          .lte('invoice_date', endStr);
+        if (companyId) revQ = revQ.eq('company_settings_id', companyId);
+        const { data: revData } = await revQ;
+        const rev = (revData || []).reduce(
+          (s, inv) => s + (inv.inr_total_amount || inv.total_amount || 0),
+          0
+        );
+
+        monthlyIssued.push({ label, value: ic || 0 });
+        monthlyRevenue.push({ label, value: Math.round(rev / 1000) }); // in thousands for readability
       }
 
-      const customerMap = new Map<string, number>();
-      allInvoices.forEach((inv) => {
-        const customerData = Array.isArray(inv.customer) ? inv.customer[0] : inv.customer;
-        const name = customerData?.company_name || customerData?.contact_person || 'Unknown';
-        const current = customerMap.get(name) || 0;
-        customerMap.set(name, current + (inv.inr_total_amount || inv.total_amount || 0));
+      const allInvoices: InvoiceRow[] = invoices || [];
+      const today = new Date();
+
+      const paid = allInvoices.filter((inv) => inv.payment_status === 'paid');
+      const pendingInvs = allInvoices.filter(
+        (inv) => inv.payment_status !== 'paid' && !['cancelled'].includes(inv.status)
+      );
+      const overdueInvs = pendingInvs.filter((inv) => {
+        if (!inv.due_date) return false;
+        return new Date(inv.due_date) < today;
       });
-      const topCustomers = Array.from(customerMap.entries())
+
+      const totalRevenue = paid.reduce(
+        (s, inv) => s + (inv.inr_total_amount || inv.total_amount || 0),
+        0
+      );
+      const prevRevenue = (prevInvoices || [])
+        .filter((inv) => inv.payment_status === 'paid')
+        .reduce((s, inv) => s + (inv.inr_total_amount || inv.total_amount || 0), 0);
+      const pendingAmount = pendingInvs.reduce(
+        (s, inv) => s + (inv.inr_total_amount || inv.total_amount || 0),
+        0
+      );
+      const overdueAmount = overdueInvs.reduce(
+        (s, inv) => s + (inv.inr_total_amount || inv.total_amount || 0),
+        0
+      );
+      const totalIssued = allInvoices.reduce(
+        (s, inv) => s + (inv.inr_total_amount || inv.total_amount || 0),
+        0
+      );
+      const collectionRate = totalIssued > 0 ? Math.round((totalRevenue / totalIssued) * 100) : 0;
+
+      // Real aging buckets from due_date
+      const aging = [
+        { label: '0-30 Days', max: 30, color: 'bg-green-500' },
+        { label: '31-60 Days', max: 60, color: 'bg-yellow-500' },
+        { label: '61-90 Days', max: 90, color: 'bg-orange-500' },
+        { label: '90+ Days', max: Infinity, color: 'bg-red-500' },
+      ].map(({ label, max, color }) => {
+        const prev = max === 30 ? 0 : max === 60 ? 31 : max === 90 ? 61 : 91;
+        const sum = overdueInvs
+          .filter((inv) => {
+            if (!inv.due_date) return false;
+            const daysOverdue = Math.floor(
+              (today.getTime() - new Date(inv.due_date).getTime()) / 864e5
+            );
+            return daysOverdue >= prev && (max === Infinity || daysOverdue <= max);
+          })
+          .reduce((s, inv) => s + (inv.inr_total_amount || inv.total_amount || 0), 0);
+        return { label, value: Math.round(sum / 1000), color }; // in thousands
+      });
+
+      // DSO = (outstanding receivables / total revenue) * days in period
+      const periodDays = Math.round(duration / 864e5);
+      const dso = totalRevenue > 0 ? Math.round((pendingAmount / totalRevenue) * periodDays) : 0;
+
+      // Top customers by collected revenue
+      const custMap = new Map<string, number>();
+      allInvoices.forEach((inv) => {
+        const cust = Array.isArray(inv.customer) ? inv.customer[0] : inv.customer;
+        const name = cust?.company_name || cust?.contact_person || 'Unknown';
+        custMap.set(name, (custMap.get(name) || 0) + (inv.inr_total_amount || inv.total_amount || 0));
+      });
+      const topCustomers = Array.from(custMap.entries())
         .sort((a, b) => b[1] - a[1])
-        .slice(0, 5)
+        .slice(0, 6)
         .map(([name, value]) => ({ name, value }));
 
+      // Currency breakdown
+      const currMap = new Map<string, { amount: number; count: number }>();
+      allInvoices.forEach((inv) => {
+        const cc = inv.currency_code || 'INR';
+        const existing = currMap.get(cc) || { amount: 0, count: 0 };
+        currMap.set(cc, {
+          amount: existing.amount + (inv.total_amount || 0),
+          count: existing.count + 1,
+        });
+      });
+      const byCurrency = Array.from(currMap.entries())
+        .sort((a, b) => b[1].amount - a[1].amount)
+        .map(([currency, { amount, count }]) => ({ currency, amount, count }));
+
+      const now2 = new Date();
+      const thisMonthStart = `${now2.getFullYear()}-${String(now2.getMonth() + 1).padStart(2, '0')}-01`;
+      const thisMonthRevenue = paid
+        .filter((inv) => inv.invoice_date && inv.invoice_date >= thisMonthStart)
+        .reduce((s, inv) => s + (inv.inr_total_amount || inv.total_amount || 0), 0);
+
       setStats({
-        total,
-        paid,
-        pending,
-        overdue,
-        cancelled,
+        total: allInvoices.length,
+        prevTotal: (prevInvoices || []).length,
+        paid: paid.length,
+        pending: pendingInvs.length,
+        overdue: allInvoices.filter((inv) => inv.status === 'overdue').length,
+        cancelled: allInvoices.filter((inv) => inv.status === 'cancelled').length,
         totalRevenue,
+        prevRevenue,
         pendingAmount,
+        overdueAmount,
         thisMonthRevenue,
-        monthlyData: months,
+        collectionRate,
+        dso,
+        monthlyIssued,
+        monthlyRevenue,
+        aging,
         topCustomers,
+        byCurrency,
+        invoices: allInvoices,
       });
     } catch (err) {
-      console.error('InvoiceReporting fetchStats error:', err);
+      console.error('InvoiceReporting error:', err);
       setError(err instanceof Error ? err.message : 'Failed to fetch invoice stats');
     } finally {
       setLoading(false);
     }
+  }, [companyId, dateRange, refreshKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  const formatCurrency = (v: number) => {
+    if (v >= 10000000) return `₹${(v / 10000000).toFixed(1)}Cr`;
+    if (v >= 100000) return `₹${(v / 100000).toFixed(1)}L`;
+    if (v >= 1000) return `₹${(v / 1000).toFixed(1)}K`;
+    return `₹${Math.round(v)}`;
   };
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600" />
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
-        {error}
-      </div>
-    );
-  }
-
-  if (!stats) return null;
-
-  const formatCurrency = (value: number) => {
-    if (value >= 10000000) return `₹${(value / 10000000).toFixed(1)}Cr`;
-    if (value >= 100000) return `₹${(value / 100000).toFixed(1)}L`;
-    if (value >= 1000) return `₹${(value / 1000).toFixed(1)}K`;
-    return `₹${value}`;
-  };
-
-  const agingData = [
-    { label: '0-30 Days', value: Math.round(stats.pendingAmount * 0.5), color: 'bg-green-500' },
-    { label: '31-60 Days', value: Math.round(stats.pendingAmount * 0.3), color: 'bg-yellow-500' },
-    { label: '61-90 Days', value: Math.round(stats.pendingAmount * 0.15), color: 'bg-orange-500' },
-    { label: '90+ Days', value: Math.round(stats.pendingAmount * 0.05), color: 'bg-red-500' },
-  ];
+  const exportData = (stats?.invoices || []).map((inv) => {
+    const cust = Array.isArray(inv.customer) ? inv.customer[0] : inv.customer;
+    return {
+      'Invoice #': inv.invoice_number || '',
+      Customer: cust?.company_name || cust?.contact_person || '',
+      Status: inv.status,
+      'Payment Status': inv.payment_status,
+      Amount: inv.inr_total_amount || inv.total_amount || 0,
+      Currency: inv.currency_code || 'INR',
+      'Invoice Date': inv.invoice_date || '',
+      'Due Date': inv.due_date || '',
+    };
+  });
 
   return (
     <div className="space-y-6">
-      <h2 className="text-2xl font-bold text-gray-900">Invoice Analytics</h2>
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h2 className="text-2xl font-bold text-gray-900">Invoice Analytics</h2>
+          <p className="text-sm text-gray-500 mt-0.5">
+            {selectedCompany ? selectedCompany.company_name : 'All Entities'}
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <ExportButton data={exportData} filename="invoice-report" />
+          <button
+            onClick={() => setRefreshKey((k) => k + 1)}
+            className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+          >
+            <RefreshCw className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* Date Filter */}
+      <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
+        <DateRangeFilter value={dateRange} onChange={setDateRange} />
+      </div>
+
+      {error && (
+        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
+          {error}
+        </div>
+      )}
+
+      {/* KPI Row 1 */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <ReportingCard
-          title="Total Invoices"
-          value={stats.total}
-          icon={<Receipt className="w-6 h-6" />}
+          title={`Invoices (${dateRange.label})`}
+          value={loading ? '—' : stats?.total ?? 0}
+          previousValue={stats?.prevTotal}
+          currentNumericValue={stats?.total}
+          icon={<Receipt className="w-5 h-5" />}
           color="blue"
+          loading={loading}
         />
         <ReportingCard
-          title="Paid Invoices"
-          value={stats.paid}
-          icon={<CheckCircle className="w-6 h-6" />}
+          title="Collected Revenue"
+          value={loading ? '—' : formatCurrency(stats?.totalRevenue ?? 0)}
+          previousValue={stats?.prevRevenue}
+          currentNumericValue={stats?.totalRevenue}
+          icon={<DollarSign className="w-5 h-5" />}
           color="green"
+          loading={loading}
         />
         <ReportingCard
-          title="Pending"
-          value={stats.pending}
-          icon={<Clock className="w-6 h-6" />}
-          color="yellow"
+          title="Collection Rate"
+          value={loading ? '—' : `${stats?.collectionRate ?? 0}%`}
+          trend={stats && (stats.collectionRate || 0) >= 80 ? 'up' : 'down'}
+          trendValue={stats ? (stats.collectionRate >= 80 ? 'Healthy' : 'Below 80%') : undefined}
+          icon={<Percent className="w-5 h-5" />}
+          color="teal"
+          loading={loading}
         />
         <ReportingCard
-          title="Overdue"
-          value={stats.overdue}
-          icon={<AlertTriangle className="w-6 h-6" />}
-          color="red"
+          title="DSO (Days)"
+          value={loading ? '—' : `${stats?.dso ?? 0} days`}
+          subtitle="Days Sales Outstanding"
+          trend={stats && (stats.dso || 0) <= 30 ? 'up' : 'down'}
+          icon={<Clock className="w-5 h-5" />}
+          color={stats && (stats.dso || 0) <= 30 ? 'green' : 'red'}
+          loading={loading}
+          invertTrend
         />
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
         <ReportingCard
-          title="Total Revenue"
-          value={formatCurrency(stats.totalRevenue)}
-          icon={<DollarSign className="w-6 h-6" />}
-          color="green"
+          title="Outstanding Amount"
+          value={loading ? '—' : formatCurrency(stats?.pendingAmount ?? 0)}
+          icon={<Clock className="w-5 h-5" />}
+          color="yellow"
+          loading={loading}
         />
         <ReportingCard
-          title="Pending Amount"
-          value={formatCurrency(stats.pendingAmount)}
-          icon={<Clock className="w-6 h-6" />}
-          color="yellow"
+          title="Overdue Amount"
+          value={loading ? '—' : formatCurrency(stats?.overdueAmount ?? 0)}
+          trend={stats && (stats.overdueAmount || 0) > 0 ? 'down' : 'neutral'}
+          icon={<AlertTriangle className="w-5 h-5" />}
+          color="red"
+          loading={loading}
         />
         <ReportingCard
           title="This Month Revenue"
-          value={formatCurrency(stats.thisMonthRevenue)}
-          icon={<TrendingUp className="w-6 h-6" />}
+          value={loading ? '—' : formatCurrency(stats?.thisMonthRevenue ?? 0)}
+          icon={<TrendingUp className="w-5 h-5" />}
           color="purple"
+          loading={loading}
         />
       </div>
 
+      {/* Revenue Waterfall */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Revenue Trend</h3>
-          <SimpleBarChart
-            data={stats.monthlyData.map((d) => ({ ...d, color: 'bg-indigo-500' }))}
-            height={200}
-          />
+          <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-4">
+            Invoices Issued (Last 6 Months)
+          </h3>
+          {loading ? (
+            <div className="h-48 bg-gray-100 rounded animate-pulse" />
+          ) : (
+            <SimpleBarChart
+              data={(stats?.monthlyIssued || []).map((d) => ({ ...d, color: 'bg-blue-400' }))}
+              height={200}
+            />
+          )}
         </div>
 
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Payment Status Breakdown</h3>
-          <div className="space-y-3">
-            {[
-              { label: 'Paid', value: stats.paid, color: 'bg-green-500' },
-              { label: 'Pending', value: stats.pending, color: 'bg-yellow-500' },
-              { label: 'Overdue', value: stats.overdue, color: 'bg-red-500' },
-              { label: 'Cancelled', value: stats.cancelled, color: 'bg-gray-400' },
-            ].map((item) => {
-              const percentage = stats.total > 0 ? (item.value / stats.total) * 100 : 0;
-              return (
-                <div key={item.label} className="flex items-center gap-3">
-                  <span className="text-sm font-medium text-gray-600 w-24">{item.label}</span>
-                  <div className="flex-1 bg-gray-100 rounded-full h-6 overflow-hidden">
-                    <div
-                      className={`${item.color} h-full rounded-full flex items-center justify-end pr-2 transition-all duration-500`}
-                      style={{ width: `${Math.max(percentage, 3)}%` }}
-                    >
-                      <span className="text-xs font-bold text-white">{item.value}</span>
+          <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-4">
+            Revenue Collected — ₹K (Last 6 Months)
+          </h3>
+          {loading ? (
+            <div className="h-48 bg-gray-100 rounded animate-pulse" />
+          ) : (
+            <SimpleBarChart
+              data={(stats?.monthlyRevenue || []).map((d) => ({ ...d, color: 'bg-green-500' }))}
+              height={200}
+            />
+          )}
+        </div>
+      </div>
+
+      {/* Payment Status + Aging */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+          <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-4">
+            Payment Status Breakdown
+          </h3>
+          {loading ? (
+            <div className="space-y-3">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <div key={i} className="h-8 bg-gray-100 rounded animate-pulse" />
+              ))}
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {[
+                { label: 'Paid', value: stats?.paid ?? 0, color: 'bg-green-500' },
+                { label: 'Pending', value: stats?.pending ?? 0, color: 'bg-yellow-500' },
+                { label: 'Overdue', value: stats?.overdue ?? 0, color: 'bg-red-500' },
+                { label: 'Cancelled', value: stats?.cancelled ?? 0, color: 'bg-gray-400' },
+              ].map((item) => {
+                const total = stats?.total || 1;
+                const pct = (item.value / total) * 100;
+                return (
+                  <div key={item.label} className="flex items-center gap-3">
+                    <span className="text-sm font-medium text-gray-600 w-20">{item.label}</span>
+                    <div className="flex-1 bg-gray-100 rounded-full h-6 overflow-hidden">
+                      <div
+                        className={`${item.color} h-full rounded-full flex items-center justify-end pr-2 transition-all duration-700`}
+                        style={{ width: `${Math.max(pct, 3)}%` }}
+                      >
+                        <span className="text-xs font-bold text-white">{item.value}</span>
+                      </div>
                     </div>
+                    <span className="text-xs text-gray-500 w-12 text-right tabular-nums">
+                      {pct.toFixed(1)}%
+                    </span>
                   </div>
-                  <span className="text-sm text-gray-500 w-12 text-right">
-                    {percentage.toFixed(1)}%
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+          <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-4">
+            Aging Analysis — Overdue ₹K
+          </h3>
+          {loading ? (
+            <div className="h-48 bg-gray-100 rounded animate-pulse" />
+          ) : (
+            <SimpleBarChart data={stats?.aging || []} height={200} />
+          )}
+        </div>
+      </div>
+
+      {/* Top Customers + Currency */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+          <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-4 flex items-center gap-2">
+            <Users className="w-4 h-4 text-indigo-500" />
+            Top Customers by Invoice Value
+          </h3>
+          <div className="space-y-3">
+            {(stats?.topCustomers || []).map((c, idx) => {
+              const totalRev = (stats?.topCustomers || []).reduce((a, b) => a + b.value, 0);
+              const pct = totalRev > 0 ? (c.value / totalRev) * 100 : 0;
+              return (
+                <div key={idx} className="flex items-center gap-3">
+                  <span className="text-xs text-gray-400 w-4">{idx + 1}</span>
+                  <span className="text-sm font-medium text-gray-700 flex-1 truncate">{c.name}</span>
+                  <div className="w-24 bg-gray-100 rounded-full h-1.5">
+                    <div className="bg-indigo-500 h-1.5 rounded-full" style={{ width: `${pct}%` }} />
+                  </div>
+                  <span className="text-sm font-bold text-gray-900 tabular-nums w-20 text-right">
+                    {formatCurrency(c.value)}
                   </span>
                 </div>
               );
             })}
+            {!stats?.topCustomers.length && (
+              <p className="text-sm text-gray-400 text-center py-6">No invoice data in this period</p>
+            )}
           </div>
         </div>
-      </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-            <Users className="w-5 h-5 text-indigo-500" />
-            Top Customers by Invoice Value
+          <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-4">
+            Currency Breakdown
           </h3>
-          <div className="space-y-3">
-            {stats.topCustomers.map((customer, idx) => (
-              <div key={idx} className="flex items-center justify-between">
-                <span className="text-sm font-medium text-gray-700">{customer.name}</span>
-                <span className="text-sm font-bold text-gray-900">
-                  {formatCurrency(customer.value)}
-                </span>
-              </div>
-            ))}
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-100">
+                  <th className="text-left py-2 px-2 text-xs font-semibold text-gray-500 uppercase">Currency</th>
+                  <th className="text-right py-2 px-2 text-xs font-semibold text-gray-500 uppercase">Invoices</th>
+                  <th className="text-right py-2 px-2 text-xs font-semibold text-gray-500 uppercase">Total</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {(stats?.byCurrency || []).map((c, idx) => (
+                  <tr key={idx} className="hover:bg-gray-50 transition-colors">
+                    <td className="py-2 px-2">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-indigo-50 text-indigo-700">
+                        {c.currency}
+                      </span>
+                    </td>
+                    <td className="py-2 px-2 text-right text-gray-600 tabular-nums">{c.count}</td>
+                    <td className="py-2 px-2 text-right font-bold text-gray-900 tabular-nums">
+                      {c.amount.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+                    </td>
+                  </tr>
+                ))}
+                {!stats?.byCurrency.length && (
+                  <tr>
+                    <td colSpan={3} className="py-6 text-center text-gray-400 text-sm">No data</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
           </div>
-        </div>
-
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Aging Analysis</h3>
-          <SimpleBarChart
-            data={agingData.map((d) => ({ ...d, color: d.color }))}
-            height={200}
-          />
         </div>
       </div>
     </div>

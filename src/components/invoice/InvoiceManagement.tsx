@@ -4083,87 +4083,114 @@ const getBankingCodeField = (company: CompanySettings | undefined | null): keyof
     </div>
   );
 
+  const getPaidAmount = (invoice: Invoice) => {
+    if (invoice.payments && invoice.payments.length > 0) {
+      return invoice.payments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
+    }
+    return (invoice.payment_status === 'paid' || invoice.status === 'completed' || invoice.status === 'paid')
+      ? Number(invoice.total_amount || 0)
+      : 0;
+  };
+
+  const getInrPaidAmount = (invoice: Invoice) => {
+    if (invoice.payments && invoice.payments.length > 0) {
+      return invoice.payments.reduce((sum, p) => sum + Number(p.inr_amount || p.amount || 0), 0);
+    }
+    return (invoice.payment_status === 'paid' || invoice.status === 'completed' || invoice.status === 'paid')
+      ? Number(invoice.inr_total_amount || invoice.total_amount || 0)
+      : 0;
+  };
+
   const renderInvoiceTable = (invoiceList: Invoice[] = invoices) => (
-    <table className="min-w-full divide-y divide-gray-200">
+    <table className="min-w-full divide-y divide-gray-200 text-xs">
       <thead className="bg-gray-50">
         <tr>
-          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+          <th className="px-4 py-3 text-left font-semibold text-gray-600 uppercase tracking-wider">
             Invoice
           </th>
-          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+          <th className="px-4 py-3 text-left font-semibold text-gray-600 uppercase tracking-wider">
             Customer
           </th>
-          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+          <th className="px-4 py-3 text-left font-semibold text-gray-600 uppercase tracking-wider">
             Date
           </th>
-          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-            Amount
+          <th className="px-4 py-3 text-left font-semibold text-gray-600 uppercase tracking-wider">
+            Amount & INR Value
           </th>
-          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+          <th className="px-4 py-3 text-left font-semibold text-gray-600 uppercase tracking-wider">
             Status
           </th>
-          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+          <th className="px-4 py-3 text-left font-semibold text-gray-600 uppercase tracking-wider">
             Payment
           </th>
-          <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+          <th className="px-4 py-3 text-right font-semibold text-gray-600 uppercase tracking-wider sticky right-0 bg-gray-50 border-l border-gray-200 shadow-xs z-10">
             Actions
           </th>
         </tr>
       </thead>
       <tbody className="bg-white divide-y divide-gray-200">
         {invoiceList.map((invoice) => (
-          <tr key={invoice.id} className={`hover:bg-gray-50 ${invoice.status === 'cancelled' ? 'opacity-60 bg-gray-50' : ''}`}>
-            <td className="px-6 py-4 whitespace-nowrap">
-              <div className={`text-sm font-medium ${invoice.status === 'cancelled' ? 'text-gray-500 line-through' : 'text-gray-900'}`}>
+          <tr key={invoice.id} className={`hover:bg-gray-50 transition ${invoice.status === 'cancelled' ? 'opacity-60 bg-gray-50' : ''}`}>
+            <td className="px-4 py-3 whitespace-nowrap">
+              <div className={`font-bold ${invoice.status === 'cancelled' ? 'text-gray-500 line-through' : 'text-gray-900'}`}>
                 {invoice.invoice_number}
               </div>
               {invoice.subscription_id && (
-                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-700 mt-0.5">
+                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-purple-100 text-purple-700 mt-0.5">
                   Subscription
                 </span>
               )}
             </td>
-            <td className="px-6 py-4 whitespace-nowrap">
-              <div className="text-sm text-gray-900">
+            <td className="px-4 py-3 whitespace-nowrap">
+              <div className="font-medium text-gray-900">
                 {invoice.customer?.company_name || invoice.customer?.contact_person || 'N/A'}
               </div>
               {invoice.customer?.customer_code && (
-                <div className="text-xs font-mono text-indigo-600 mt-0.5">
+                <div className="text-[11px] font-mono text-indigo-600 mt-0.5">
                   {getPrimaryCustomerId(invoice.customer, companySettings, selectedCompany)}
                 </div>
               )}
             </td>
-            <td className="px-6 py-4 whitespace-nowrap">
-              <div className="text-sm text-gray-900">
-                {new Date(invoice.invoice_date).toLocaleDateString()}
-              </div>
+            <td className="px-4 py-3 whitespace-nowrap text-gray-600 font-medium">
+              {new Date(invoice.invoice_date).toLocaleDateString()}
             </td>
-            <td className="px-6 py-4 whitespace-nowrap">
-              <div className="text-sm font-medium text-gray-900">
+            <td className="px-4 py-3 whitespace-nowrap">
+              <div className="font-bold text-gray-900">
                 <CurrencyDisplay 
                   amount={invoice.total_amount}
                   currencyCode={invoice.currency_code}
                   inrAmount={invoice.inr_total_amount}
-                  showBothCurrencies={false}
+                  showBothCurrencies={true}
                   conversionDate={invoice.invoice_date}
                 />
               </div>
+              {(invoice.payment_status === 'paid' || invoice.status === 'completed' || invoice.status === 'paid') && (
+                <div className="mt-1 text-[11px] text-emerald-700 font-semibold bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded inline-flex items-center gap-1">
+                  <span>Paid:</span>
+                  <CurrencyDisplay 
+                    amount={getPaidAmount(invoice)} 
+                    currencyCode={invoice.currency_code} 
+                    inrAmount={getInrPaidAmount(invoice)} 
+                    showBothCurrencies={true} 
+                  />
+                </div>
+              )}
             </td>
-            <td className="px-6 py-4 whitespace-nowrap">
-              <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(invoice.status)}`}>
+            <td className="px-4 py-3 whitespace-nowrap">
+              <span className={`inline-flex px-2 py-0.5 text-[11px] font-bold rounded-full uppercase ${getStatusColor(invoice.status)}`}>
                 {invoice.status}
               </span>
             </td>
-            <td className="px-6 py-4 whitespace-nowrap">
-              <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getPaymentStatusColor(invoice.payment_status)}`}>
+            <td className="px-4 py-3 whitespace-nowrap">
+              <span className={`inline-flex px-2 py-0.5 text-[11px] font-bold rounded-full uppercase ${getPaymentStatusColor(invoice.payment_status)}`}>
                 {getPaymentStatusLabel(invoice.payment_status)}
               </span>
             </td>
-            <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+            <td className="px-4 py-3 whitespace-nowrap text-right font-medium sticky right-0 bg-white border-l border-gray-200 shadow-xs z-10">
               <div className="flex items-center justify-end space-x-2">
                 <button 
                   onClick={() => handleViewInvoice(invoice)}
-                  className="text-blue-600 hover:text-blue-900"
+                  className="p-1 text-blue-600 hover:text-blue-900 hover:bg-blue-50 rounded transition"
                   title="View Invoice"
                 >
                   <Eye className="w-4 h-4" />
@@ -4171,7 +4198,7 @@ const getBankingCodeField = (company: CompanySettings | undefined | null): keyof
                 {(invoice.status === 'draft' || invoice.status === 'sent') && (
                   <button 
                     onClick={() => handleEditInvoice(invoice)}
-                    className="text-gray-600 hover:text-gray-900"
+                    className="p-1 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded transition"
                     title={invoice.status === 'draft' ? 'Edit draft invoice' : 'Edit sent invoice (creates new version)'}
                   >
                     <Edit className="w-4 h-4" />
@@ -4180,7 +4207,7 @@ const getBankingCodeField = (company: CompanySettings | undefined | null): keyof
                 {invoice.status !== 'cancelled' && (
                   <button 
                     onClick={() => handleDownloadInvoice(invoice)}
-                    className="text-green-600 hover:text-green-900"
+                    className="p-1 text-emerald-600 hover:text-emerald-900 hover:bg-emerald-50 rounded transition"
                     title="Download Invoice"
                   >
                     <Download className="w-4 h-4" />
@@ -4189,7 +4216,7 @@ const getBankingCodeField = (company: CompanySettings | undefined | null): keyof
                 {invoice.status !== 'cancelled' && (
                   <button 
                     onClick={() => handleEmailInvoice(invoice)}
-                    className="text-purple-600 hover:text-purple-900"
+                    className="p-1 text-purple-600 hover:text-purple-900 hover:bg-purple-50 rounded transition"
                     title="Email Invoice"
                   >
                     <Mail className="w-4 h-4" />
@@ -4200,7 +4227,7 @@ const getBankingCodeField = (company: CompanySettings | undefined | null): keyof
                 {(invoice.status === 'sent' || invoice.status === 'draft') && invoice.payment_status !== 'paid' && (
                   <button 
                     onClick={() => handleMarkAsPaid(invoice)}
-                    className="text-green-600 hover:text-green-900"
+                    className="p-1 text-emerald-600 hover:text-emerald-900 hover:bg-emerald-50 rounded transition"
                     title="Mark as Paid"
                   >
                     <CheckCircle className="w-4 h-4" />
@@ -4211,7 +4238,7 @@ const getBankingCodeField = (company: CompanySettings | undefined | null): keyof
                 {invoice.status !== 'cancelled' && (
                   <button 
                     onClick={() => handleDeleteInvoice(invoice)}
-                    className="text-red-600 hover:text-red-900"
+                    className="p-1 text-red-600 hover:text-red-900 hover:bg-red-50 rounded transition"
                     title="Delete Invoice"
                   >
                     <Trash2 className="w-4 h-4" />
@@ -4227,86 +4254,95 @@ const getBankingCodeField = (company: CompanySettings | undefined | null): keyof
 
   // Separate table for recent invoices with limited actions
   const renderRecentInvoicesTable = (invoiceList: Invoice[]) => (
-    <table className="min-w-full divide-y divide-gray-200">
+    <table className="min-w-full divide-y divide-gray-200 text-xs">
       <thead className="bg-gray-50">
         <tr>
-          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+          <th className="px-4 py-3 text-left font-semibold text-gray-600 uppercase tracking-wider">
             Invoice
           </th>
-          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+          <th className="px-4 py-3 text-left font-semibold text-gray-600 uppercase tracking-wider">
             Customer
           </th>
-          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+          <th className="px-4 py-3 text-left font-semibold text-gray-600 uppercase tracking-wider">
             Date
           </th>
-          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-            Amount
+          <th className="px-4 py-3 text-left font-semibold text-gray-600 uppercase tracking-wider">
+            Amount & INR Value
           </th>
-          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+          <th className="px-4 py-3 text-left font-semibold text-gray-600 uppercase tracking-wider">
             Status
           </th>
-          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+          <th className="px-4 py-3 text-left font-semibold text-gray-600 uppercase tracking-wider">
             Payment
           </th>
-          <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+          <th className="px-4 py-3 text-right font-semibold text-gray-600 uppercase tracking-wider sticky right-0 bg-gray-50 border-l border-gray-200 shadow-xs z-10">
             Actions
           </th>
         </tr>
       </thead>
       <tbody className="bg-white divide-y divide-gray-200">
         {invoiceList.map((invoice) => (
-          <tr key={invoice.id} className={`hover:bg-gray-50 ${invoice.status === 'cancelled' ? 'opacity-60 bg-gray-50' : ''}`}>
-            <td className="px-6 py-4 whitespace-nowrap">
-              <div className={`text-sm font-medium ${invoice.status === 'cancelled' ? 'text-gray-500 line-through' : 'text-gray-900'}`}>
+          <tr key={invoice.id} className={`hover:bg-gray-50 transition ${invoice.status === 'cancelled' ? 'opacity-60 bg-gray-50' : ''}`}>
+            <td className="px-4 py-3 whitespace-nowrap">
+              <div className={`font-bold ${invoice.status === 'cancelled' ? 'text-gray-500 line-through' : 'text-gray-900'}`}>
                 {invoice.invoice_number}
               </div>
               {invoice.subscription_id && (
-                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-700 mt-0.5">
+                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-purple-100 text-purple-700 mt-0.5">
                   Subscription
                 </span>
               )}
             </td>
-            <td className="px-6 py-4 whitespace-nowrap">
-              <div className="text-sm text-gray-900">
+            <td className="px-4 py-3 whitespace-nowrap">
+              <div className="font-medium text-gray-900">
                 {invoice.customer?.company_name || invoice.customer?.contact_person || 'N/A'}
               </div>
               {invoice.customer?.customer_code && (
-                <div className="text-xs font-mono text-indigo-600 mt-0.5">
+                <div className="text-[11px] font-mono text-indigo-600 mt-0.5">
                   {getPrimaryCustomerId(invoice.customer, companySettings, selectedCompany)}
                 </div>
               )}
             </td>
-            <td className="px-6 py-4 whitespace-nowrap">
-              <div className="text-sm text-gray-900">
-                {new Date(invoice.invoice_date).toLocaleDateString()}
-              </div>
+            <td className="px-4 py-3 whitespace-nowrap text-gray-600 font-medium">
+              {new Date(invoice.invoice_date).toLocaleDateString()}
             </td>
-            <td className="px-6 py-4 whitespace-nowrap">
-              <div className="text-sm font-medium text-gray-900">
+            <td className="px-4 py-3 whitespace-nowrap">
+              <div className="font-bold text-gray-900">
                 <CurrencyDisplay 
                   amount={invoice.total_amount}
                   currencyCode={invoice.currency_code}
                   inrAmount={invoice.inr_total_amount}
-                  showBothCurrencies={false}
+                  showBothCurrencies={true}
                   conversionDate={invoice.invoice_date}
                 />
               </div>
+              {(invoice.payment_status === 'paid' || invoice.status === 'completed' || invoice.status === 'paid') && (
+                <div className="mt-1 text-[11px] text-emerald-700 font-semibold bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded inline-flex items-center gap-1">
+                  <span>Paid:</span>
+                  <CurrencyDisplay 
+                    amount={getPaidAmount(invoice)} 
+                    currencyCode={invoice.currency_code} 
+                    inrAmount={getInrPaidAmount(invoice)} 
+                    showBothCurrencies={true} 
+                  />
+                </div>
+              )}
             </td>
-            <td className="px-6 py-4 whitespace-nowrap">
-              <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(invoice.status)}`}>
+            <td className="px-4 py-3 whitespace-nowrap">
+              <span className={`inline-flex px-2 py-0.5 text-[11px] font-bold rounded-full uppercase ${getStatusColor(invoice.status)}`}>
                 {invoice.status}
               </span>
             </td>
-            <td className="px-6 py-4 whitespace-nowrap">
-              <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getPaymentStatusColor(invoice.payment_status)}`}>
+            <td className="px-4 py-3 whitespace-nowrap">
+              <span className={`inline-flex px-2 py-0.5 text-[11px] font-bold rounded-full uppercase ${getPaymentStatusColor(invoice.payment_status)}`}>
                 {getPaymentStatusLabel(invoice.payment_status)}
               </span>
             </td>
-            <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+            <td className="px-4 py-3 whitespace-nowrap text-right font-medium sticky right-0 bg-white border-l border-gray-200 shadow-xs z-10">
               <div className="flex items-center justify-end space-x-2">
                 <button 
                   onClick={() => handleViewInvoice(invoice)}
-                  className="text-blue-600 hover:text-blue-900"
+                  className="p-1 text-blue-600 hover:text-blue-900 hover:bg-blue-50 rounded transition"
                   title="View Invoice"
                 >
                   <Eye className="w-4 h-4" />
@@ -4314,7 +4350,7 @@ const getBankingCodeField = (company: CompanySettings | undefined | null): keyof
                 {invoice.status !== 'cancelled' && (
                   <button 
                     onClick={() => handleDownloadInvoice(invoice)}
-                    className="text-green-600 hover:text-green-900"
+                    className="p-1 text-emerald-600 hover:text-emerald-900 hover:bg-emerald-50 rounded transition"
                     title="Download Invoice"
                   >
                     <Download className="w-4 h-4" />
@@ -4403,7 +4439,7 @@ const getBankingCodeField = (company: CompanySettings | undefined | null): keyof
 
       {/* Invoices Table */}
       <div className="bg-white rounded-lg shadow overflow-hidden">
-        <div>
+        <div className="overflow-x-auto relative">
           {renderInvoiceTable()}
         </div>
         

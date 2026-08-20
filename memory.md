@@ -1,6 +1,6 @@
 # Project Memory — KDADKS Website
 
-> Auto-updated by Kilo agent after every implementation. Last updated: 2026-08-18
+> Auto-updated by Kilo agent after every implementation. Last updated: 2026-08-20 16:06 IST
 
 A comprehensive knowledge base for the KDADKS website codebase. This file serves as a single source of truth for project architecture, conventions, patterns, and key implementation details.
 
@@ -97,6 +97,7 @@ Routes are defined in `src/components/Router.tsx`. Admin routes all go to `Simpl
 | `/admin/quotes`               | QuoteManagement          |
 | `/admin/contracts`            | ContractManagement       |
 | `/admin/customers`            | CustomerManagement       |
+| `/admin/customer-360`         | Customer360Hub           |
 | `/admin/leads`                | LeadManagement           |
 | `/admin/opportunities`        | OpportunityManagement    |
 | `/admin/products`             | ProductManagement        |
@@ -196,7 +197,8 @@ src/
 │   │   ├── StatusUpdateModal.tsx
 │   │   └── ViewContractModal.tsx
 │   ├── customer/
-│   │   └── CustomerManagement.tsx
+│   │   ├── CustomerManagement.tsx
+│   │   └── CustomerContactModal.tsx
 │   ├── employee/                # Employee portal components
 │   │   ├── EmployeeLayout.tsx
 │   │   ├── EmployeeDashboard.tsx
@@ -530,9 +532,9 @@ The complete sales pipeline with status/stage transitions:
 - 6071-line monolithic component handling full invoice lifecycle
 - Tab-based: dashboard, invoices, customers, products, settings
 - IGST-compliant with HSN/SAC codes
-- Multi-currency support
-- PDF generation with `PDFBrandingUtils`
-- Payment tracking and status management
+- Multi-currency support (EUR, USD, INR) with live/cached exchange rate conversion via `exchangeRateService`.
+- Multi-currency grid view displaying both primary currency and calculated INR value (`(~₹...)`) in both **Dashboard** and **Invoices** tabs.
+- Exact paid amount tracking displaying the user-entered payment value under Amount and Payment status columns once an invoice is marked as paid.
 
 ### Lead/Opportunity Activity Tracking
 
@@ -550,6 +552,17 @@ The complete sales pipeline with status/stage transitions:
 - Overdue task detection
 - Stale lead detection (configurable days of inactivity)
 - Upcoming task reminders
+
+### Customer 360° Hub (`src/components/customer/Customer360Hub.tsx`)
+
+A centralized 360-degree operational dashboard connecting all records for a customer across Kdadks:
+- **Core Service (`src/services/customer360Service.ts`):** Parallel fetching and metrics calculation aggregating Customer Profile, Contacts, Leads, Opportunities, Quotes, Contracts, Subscriptions, Invoices, Payments, and Activity Timelines.
+- **Multi-Entity Currency Conversion:** Automatically detects the active entity context. For **Indian Entity**, all invoices, quotes, revenue metrics, and actual payment values are converted and displayed in **INR (₹)** using actual `inr_amount` / `inr_total_amount` or live exchange rates via `convertCurrency()`. For **Irish Entity**, values are displayed in **Euro (€)**.
+- **Type Definitions (`src/types/customer360.ts`):** Defines `Customer360Data`, `CustomerFinancialMetrics`, and `CustomerActivityTimelineItem`.
+- **Executive KPI Cards:** Lifetime Revenue (LTV), Total Collected Revenue, Outstanding Balance, Subscription MRR, Open Sales Pipeline Value, and Opportunity Win Rate.
+- **Tabbed Operational Drill-Down:** Overview (Tax/Banking & Profile), Contacts (`customer_contacts`), Leads, Opportunities, Quotes, Contracts, Subscriptions, Invoices & Payments, and Unified Activity Timeline.
+- **Action Shortcuts:** Quick triggers to create Leads, Opportunities, Quotes, Invoices, Contracts, or Contacts prefilled with customer details.
+- **Deep Linking & Navigation:** Search/selector bar with URL query param support (`/admin/customer-360?id=<customerId>`) and direct "360° Hub" launch buttons on customer rows in `CustomerManagement.tsx`.
 
 ---
 
@@ -570,9 +583,10 @@ The database uses **9+ interconnected tables** with foreign key relationships (S
 | payments           | → invoices                             |
 | terms_templates    | → company_settings                     |
 
-### CRM Tables (recently added)
+### CRM & Customer Tables (recently added)
 | Table              | Relationships                          |
 |--------------------|----------------------------------------|
+| customer_contacts  | → customers, company_settings           |
 | leads              | → customers, company_settings, countries |
 | opportunities      | → leads, customers, company_settings    |
 | lead_activities    | → leads, opportunities (polymorphic)    |
@@ -598,11 +612,12 @@ The database uses **9+ interconnected tables** with foreign key relationships (S
 ### Database Migrations
 
 Migrations are in `database/migrations/` (40+ SQL files). Key recent migrations:
-- `025_lead_opportunity_workflow.sql` — CRM pipeline tables
-- `026_lead_opportunity_id_sequences.sql` — number generation sequences
-- `027_fix_lead_country_foreign_key.sql`
-- `028_add_lead_currency_code.sql`
+- `030_customer_contacts.sql` — multiple contacts per customer (Primary, Billing, Sales, Support), soft-deletes, unique active primary index
 - `029_lead_follow_up_tasks.sql` — follow-up tasks, priorities, recurrence, alerts
+- `028_add_lead_currency_code.sql`
+- `027_fix_lead_country_foreign_key.sql`
+- `026_lead_opportunity_id_sequences.sql` — number generation sequences
+- `025_lead_opportunity_workflow.sql` — CRM pipeline tables
 - `022_add_iban_swift_to_company_settings.sql`
 - `023_add_cro_vat_to_company_settings.sql`
 
@@ -700,25 +715,45 @@ npm validate         # Validate deployment configuration
 
 ## 10. Reporting Pattern
 
-All reporting components follow a consistent pattern:
+All reporting components follow a consistent enterprise-grade pattern:
 - Import `useCompanyContext` for entity filtering
-- Import `ReportingCard` and `SimpleBarChart` for UI components
+- Import `ReportingCard`, `SimpleBarChart`, `DateRangeFilter`, and `ExportButton` for UI
 - Direct Supabase queries (not through service layer) for analytics
-- `companyId`/`companyName` used for entity filtering
-- 6-month historical data with monthly breakdown
-- Loading and error states with spinner
+- `companyId` used for entity filtering
+- Date range filtering via `DateRangeFilter` component with presets (This Month, Last 3M, Last 6M, YTD, Custom)
+- Period-over-period trend comparison on KPI cards
+- Loading skeleton states via `loading` prop on `ReportingCard`
+- CSV export via `ExportButton` (browser Blob API)
+- Refresh button with `refreshKey` state pattern
 
-**Reporting components:**
-- `CustomerReporting.tsx` — customers by month, active/inactive, top customers
-- `LeadReporting.tsx` — lead funnel, source breakdown, conversion rate
-- `OpportunityReporting.tsx` — stage breakdown, pipeline value, win/loss ratio
-- `QuoteReporting.tsx` — quote status, revenue, conversion
-- `InvoiceReporting.tsx` — invoice stats, revenue, aging
-- `SubscriptionReporting.tsx` — MRR, churn, retention
+**Shared infrastructure (`src/components/admin/reporting/`):**
+- `DateRangeFilter.tsx` — reusable date range picker with preset buttons and custom date inputs
+- `ExportButton.tsx` — CSV download trigger via Blob API
+- `ReportingCard.tsx` — enhanced KPI card with trend %, subtitle, loading skeleton, invertTrend
+- `SimpleBarChart.tsx` — reusable bar chart component
+
+**Reporting components (enterprise-grade):**
+- `ReportingHub.tsx` — unified landing page with executive KPI summary, 6 module cards with live metrics, business health scorecard (at `/admin/reporting`)
+- `CustomerReporting.tsx` — revenue linkage via invoice join, acquisition trend, country segmentation, CSV export
+- `LeadReporting.tsx` — full source breakdown (8 sources), monthly trend, stage funnel with drop-off %, stale leads count, date filter
+- `OpportunityReporting.tsx` — weighted pipeline, stage velocity, win/loss monthly trend, top opportunities table, avg deal size
+- `QuoteReporting.tsx` — acceptance/conversion rates, cycle time, expiry risk panel (7/14/30 days), issued vs accepted trend
+- `InvoiceReporting.tsx` — real aging buckets from actual due dates, DSO metric, collection rate, revenue waterfall, currency breakdown
+- `SubscriptionReporting.tsx` — MRR/ARR cards, churn rate, net new subscriptions, plan revenue table, upcoming renewals
 - `HRAttendanceReporting.tsx` — attendance by department, monthly trend
 - `HRLeaveReporting.tsx` — leave by type, department
 - `HRCompensationReporting.tsx` — salary ranges, department averages, recent increments
 - `HRPerformanceReporting.tsx` — performance metrics
+
+**Routes:**
+- `/admin/reporting` → `reporting-hub` (ReportingHub landing)
+- `/admin/reporting/hub` → `reporting-hub`
+- `/admin/reporting/customers` → `reporting-customers`
+- `/admin/reporting/leads` → `reporting-leads`
+- `/admin/reporting/opportunities` → `reporting-opportunities`
+- `/admin/reporting/quotes` → `reporting-quotes`
+- `/admin/reporting/invoices` → `reporting-invoices`
+- `/admin/reporting/subscriptions` → `reporting-subscriptions`
 
 ---
 
