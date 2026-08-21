@@ -865,10 +865,16 @@ class QuoteService {
   }
 
   // Dashboard Statistics
-  async getQuoteStats(): Promise<QuoteStats> {
-    const { data: quotes, error: quotesError } = await supabase
+  async getQuoteStats(companySettingsId?: string): Promise<QuoteStats> {
+    let query = supabase
       .from('quotes')
       .select('status, total_amount, inr_total_amount, original_currency_code, quote_date');
+
+    if (companySettingsId) {
+      query = query.eq('company_settings_id', companySettingsId);
+    }
+    
+    const { data: quotes, error: quotesError } = await query;
     
     if (quotesError) throw quotesError;
 

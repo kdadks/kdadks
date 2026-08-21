@@ -1,6 +1,6 @@
 # Project Memory — KDADKS Website
 
-> Auto-updated by Kilo agent after every implementation. Last updated: 2026-08-21 11:40 IST
+> Auto-updated by Kilo agent after every implementation. Last updated: 2026-08-21 15:30 IST
 
 A comprehensive knowledge base for the KDADKS website codebase. This file serves as a single source of truth for project architecture, conventions, patterns, and key implementation details.
 
@@ -66,18 +66,18 @@ Key utility functions in `src/utils/taxUtils.ts`:
 
 ---
 
-## 2. Architecture
+## 2. Core Architecture & Folder Structure
 
-### Application Entry Point
+### Entry Point & Layout
 
-- `src/main.tsx` — React entry point with StrictMode
-- `src/App.tsx` — root component (likely minimal, delegates to Router)
+- `src/main.tsx` — mounts `<App />` into `#root`
+- `src/App.tsx` — wraps application with `<CompanyProvider>` and `<RouterProvider>`
 - `src/components/Router.tsx` — BrowserRouter with all routes, lazy-loaded public pages, direct imports for admin/employee
 
 ### Admin Dashboard Shell
 
-`src/components/admin/SimpleAdminDashboard.tsx` (1548 lines) is the central admin shell:
-- Sidebar navigation with collapsible sections: Sales & Revenue, Finance & Accounting, HR & Operations, Communication, Configuration, Reporting & Analytics
+`src/components/admin/SimpleAdminDashboard.tsx` is the central admin shell:
+- Sidebar navigation with collapsible sections: Sales, Customers, Catalog & Pricing, Billing & Revenue, Finance, HR & Operations, Communication, Governance, Reporting & Analytics, Settings
 - `pathToView` record maps URL paths to `ActiveView` type (40+ views)
 - `renderMainContent()` switch statement renders the appropriate component per view
 - Auth check via `simpleAuth.isAuthenticated()` — redirects to `/admin/login` if not authenticated

@@ -1654,13 +1654,19 @@ class InvoiceService {
   }
 
   // Dashboard Statistics
-  async getInvoiceStats(): Promise<InvoiceStats> {
-    console.log('📊 Starting getInvoiceStats calculation...');
+  async getInvoiceStats(companySettingsId?: string): Promise<InvoiceStats> {
+    console.log('📊 Starting getInvoiceStats calculation...', { companySettingsId });
     
     // Fetch raw invoice data
-    const { data: invoices, error: invoicesError } = await supabase
+    let query = supabase
       .from('invoices')
       .select('id, status, payment_status, total_amount, inr_total_amount, original_currency_code, invoice_date');
+
+    if (companySettingsId) {
+      query = query.eq('company_settings_id', companySettingsId);
+    }
+    
+    const { data: invoices, error: invoicesError } = await query;
     
     if (invoicesError) {
       console.error('❌ Failed to fetch invoices for stats:', invoicesError);
@@ -1699,10 +1705,11 @@ class InvoiceService {
       return new Date(p.payment_date).getFullYear() === currentYear;
     }).reduce((sum, p) => sum + (p.amount || 0), 0);
 
-    // Pending = invoice amounts not yet paid
+    // Pending = invoice amounts not yet paid.
+    // Use native total_amount when companySettingsId is specified so currency value matches the entity currency.
     const pending_amount = invoices
       ?.filter(i => i.payment_status !== 'paid' && i.status !== 'cancelled')
-      .reduce((sum, i) => sum + (i.inr_total_amount || i.total_amount || 0), 0) || 0;
+      .reduce((sum, i) => sum + (companySettingsId ? (i.total_amount || 0) : (i.inr_total_amount || i.total_amount || 0)), 0) || 0;
 
     const stats: InvoiceStats = {
       total_invoices: invoices?.length || 0,

@@ -97,6 +97,16 @@ interface DashboardStats {
     total: number;
     totalAmount: number;
   };
+  customers: {
+    total: number;
+  };
+  leads: {
+    total: number;
+  };
+  subscriptions: {
+    total: number;
+    active: number;
+  };
   salarySlips: number;
   documents: number;
   settlements: number;
@@ -105,7 +115,7 @@ interface DashboardStats {
 type ActiveView = 'dashboard' | 'invoices' | 'payments' | 'quotes' | 'contracts' | 'rate-cards' | 'announcements' | 'expenses' | 'income' | 'finance' | 'hr-employees' | 'hr-leave' | 'hr-attendance' | 'hr-settlement' | 'hr-tds-report' | 'hr-performance' | 'hr-compensation' | 'subscriptions' | 'board-resolutions' | 'settings' | 'customers' | 'customer-360' | 'leads' | 'opportunities' | 'products' | 'reporting-hub' | 'reporting-customers' | 'reporting-leads' | 'reporting-opportunities' | 'reporting-subscriptions' | 'reporting-quotes' | 'reporting-invoices' | 'reporting-hr' | 'reporting-hr-attendance' | 'reporting-hr-leave' | 'reporting-hr-compensation' | 'reporting-hr-performance';
 
 // Menu section types
-type MenuSection = 'sales' | 'finance' | 'hr' | 'communication' | 'configuration' | 'reporting';
+type MenuSection = 'sales' | 'customers' | 'catalog' | 'billing' | 'finance' | 'hr' | 'communication' | 'governance' | 'reporting' | 'configuration';
 
 const SimpleAdminDashboard: React.FC = () => {
   const [user, setUser] = useState<SimpleUser | null>(null)
@@ -115,11 +125,15 @@ const SimpleAdminDashboard: React.FC = () => {
   // Collapsible menu sections - all open by default
   const [openSections, setOpenSections] = useState<Record<MenuSection, boolean>>({
     sales: true,
+    customers: true,
+    catalog: true,
+    billing: true,
     finance: true,
     hr: true,
     communication: true,
-    configuration: true,
-    reporting: true
+    governance: true,
+    reporting: true,
+    configuration: true
   })
   const [dashboardStats, setDashboardStats] = useState<DashboardStats>({
     invoices: null,
@@ -127,12 +141,21 @@ const SimpleAdminDashboard: React.FC = () => {
     contracts: { total: 0, active: 0 },
     employees: { total: 0, active: 0 },
     payments: { total: 0, totalAmount: 0 },
+    customers: { total: 0 },
+    leads: { total: 0 },
+    subscriptions: { total: 0, active: 0 },
     salarySlips: 0,
     documents: 0,
     settlements: 0
   })
   const [statsLoading, setStatsLoading] = useState(false)
   const { companies, selectedCompany, selectCompany, refreshCompanies } = useCompanyContext()
+
+  const currencySymbol = selectedCompany?.country?.currency_symbol || (
+    selectedCompany?.country_id === 'IE' || selectedCompany?.country?.code === 'IE' || selectedCompany?.country?.code === 'IRL' ? '€' :
+    selectedCompany?.country_id === 'US' || selectedCompany?.country?.code === 'US' || selectedCompany?.country?.code === 'USA' ? '$' :
+    selectedCompany?.country_id === 'GB' || selectedCompany?.country_id === 'UK' || selectedCompany?.country?.code === 'GB' ? '£' : '₹'
+  )
   const navigate = useNavigate()
   const location = useLocation()
   const pathToView: Record<string, ActiveView> = {
@@ -250,14 +273,29 @@ const SimpleAdminDashboard: React.FC = () => {
   const loadDashboardStats = async () => {
     try {
       setStatsLoading(true)
+      const companyId = selectedCompany?.id
       
       // Fetch all stats in parallel
-      const [invoiceStats, quoteStats, contractsResult, employeesResult, paymentsResult, salarySlipsResult, documentsResult, settlementsResult] = await Promise.all([
-        invoiceService.getInvoiceStats().catch(() => null),
-        quoteService.getQuoteStats().catch(() => null),
+      const [
+        invoiceStats,
+        quoteStats,
+        contractsResult,
+        employeesResult,
+        paymentsResult,
+        salarySlipsResult,
+        documentsResult,
+        settlementsResult,
+        customersResult,
+        leadsResult,
+        subscriptionsResult
+      ] = await Promise.all([
+        invoiceService.getInvoiceStats(companyId).catch(() => null),
+        quoteService.getQuoteStats(companyId).catch(() => null),
         (async () => {
           try {
-            const { data } = await supabase.from('contracts').select('id, status')
+            let q = supabase.from('contracts').select('id, status')
+            if (companyId) q = q.eq('company_settings_id', companyId)
+            const { data } = await q
             return {
               total: data?.length || 0,
               active: data?.filter(c => c.status === 'active').length || 0
@@ -268,7 +306,9 @@ const SimpleAdminDashboard: React.FC = () => {
         })(),
         (async () => {
           try {
-            const { data } = await supabase.from('employees').select('id, employment_status')
+            let q = supabase.from('employees').select('id, employment_status')
+            if (companyId) q = q.or(`company_settings_id.eq.${companyId},company_settings_id.is.null`)
+            const { data } = await q
             return {
               total: data?.length || 0,
               active: data?.filter(e => e.employment_status === 'active').length || 0
@@ -279,10 +319,17 @@ const SimpleAdminDashboard: React.FC = () => {
         })(),
         (async () => {
           try {
-            const { data } = await supabase.from('payments').select('id, amount')
+            const { data } = await supabase
+              .from('payments')
+              .select('id, amount, invoices!inner(company_settings_id)')
+
+            const filteredPayments = companyId
+              ? (data || []).filter((p: any) => p.invoices?.company_settings_id === companyId)
+              : (data || [])
+
             return {
-              total: data?.length || 0,
-              totalAmount: data?.reduce((sum, p) => sum + (p.amount || 0), 0) || 0
+              total: filteredPayments.length,
+              totalAmount: filteredPayments.reduce((sum: number, p: any) => sum + (p.amount || 0), 0)
             }
           } catch {
             return { total: 0, totalAmount: 0 }
@@ -311,6 +358,39 @@ const SimpleAdminDashboard: React.FC = () => {
           } catch {
             return 0
           }
+        })(),
+        (async () => {
+          try {
+            let q = supabase.from('customers').select('id', { count: 'exact', head: true })
+            if (companyId) q = q.or(`company_settings_id.eq.${companyId},company_settings_id.is.null`)
+            const { count } = await q
+            return { total: count || 0 }
+          } catch {
+            return { total: 0 }
+          }
+        })(),
+        (async () => {
+          try {
+            let q = supabase.from('leads').select('id', { count: 'exact', head: true })
+            if (companyId) q = q.eq('company_settings_id', companyId)
+            const { count } = await q
+            return { total: count || 0 }
+          } catch {
+            return { total: 0 }
+          }
+        })(),
+        (async () => {
+          try {
+            let q = supabase.from('subscriptions').select('id, status')
+            if (companyId) q = q.eq('company_settings_id', companyId)
+            const { data } = await q
+            return {
+              total: data?.length || 0,
+              active: data?.filter(s => s.status === 'active' || s.status === 'ACTIVE').length || 0
+            }
+          } catch {
+            return { total: 0, active: 0 }
+          }
         })()
       ])
 
@@ -322,7 +402,10 @@ const SimpleAdminDashboard: React.FC = () => {
         payments: paymentsResult,
         salarySlips: salarySlipsResult,
         documents: documentsResult,
-        settlements: settlementsResult
+        settlements: settlementsResult,
+        customers: customersResult,
+        leads: leadsResult,
+        subscriptions: subscriptionsResult
       })
     } catch (error) {
       console.error('Error loading dashboard stats:', error)
@@ -335,7 +418,7 @@ const SimpleAdminDashboard: React.FC = () => {
     if (activeView === 'dashboard' && user) {
       loadDashboardStats()
     }
-  }, [activeView, user])
+  }, [activeView, user, selectedCompany?.id])
 
   // Auto-hide success message after 10 seconds
   useEffect(() => {
@@ -417,6 +500,7 @@ const SimpleAdminDashboard: React.FC = () => {
         return <TDSReport />;
       case 'hr-attendance':
         return <AttendanceManagement />;
+      case 'reporting-hr':
       case 'reporting-hr-attendance':
         return <HRAttendanceReporting />;
       case 'hr-performance':
@@ -492,14 +576,14 @@ const SimpleAdminDashboard: React.FC = () => {
               </button>
               </li>
 
-              {/* Section: Sales & Revenue */}
+              {/* Section: Sales */}
             <li className="pt-3">
               {sidebarOpen ? (
                 <button
                   onClick={() => toggleSection('sales')}
                   className="w-full flex items-center justify-between px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider hover:bg-gray-50 rounded-md transition-colors"
                 >
-                  <span>Sales & Revenue</span>
+                  <span>Sales</span>
                   {openSections.sales ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
                 </button>
               ) : (
@@ -507,41 +591,9 @@ const SimpleAdminDashboard: React.FC = () => {
               )}
             </li>
 
-            {/* Sales & Revenue Items */}
+            {/* Sales Items */}
             {(openSections.sales || !sidebarOpen) && (
               <>
-                {/* Customers */}
-                <li>
-                  <button
-                    onClick={() => navigate('/admin/customers')}
-                    title={!sidebarOpen ? 'Customers' : undefined}
-                    className={`w-full flex items-center ${!sidebarOpen ? 'justify-center' : ''} px-3 py-2 text-sm font-medium rounded-md transition-colors ${
-                      activeView === 'customers'
-                        ? 'bg-blue-100 text-blue-700'
-                        : 'text-gray-700 hover:bg-gray-100'
-                    }`}
-                  >
-                    <Users className="w-5 h-5 flex-shrink-0" />
-                    {sidebarOpen && <span className="ml-3">Customers</span>}
-                  </button>
-                </li>
-
-                {/* Customer 360 Hub */}
-                <li>
-                  <button
-                    onClick={() => navigate('/admin/customer-360')}
-                    title={!sidebarOpen ? 'Customer 360° Hub' : undefined}
-                    className={`w-full flex items-center ${!sidebarOpen ? 'justify-center' : ''} px-3 py-2 text-sm font-medium rounded-md transition-colors ${
-                      activeView === 'customer-360'
-                        ? 'bg-orange-100 text-orange-800 font-semibold'
-                        : 'text-gray-700 hover:bg-gray-100'
-                    }`}
-                  >
-                    <Compass className="w-5 h-5 flex-shrink-0 text-orange-600" />
-                    {sidebarOpen && <span className="ml-3">Customer 360° Hub</span>}
-                  </button>
-                </li>
-
                 {/* Leads */}
                 <li>
                   <button
@@ -574,6 +626,110 @@ const SimpleAdminDashboard: React.FC = () => {
                   </button>
                 </li>
 
+                {/* Quotes */}
+                <li>
+                  <button
+                    onClick={() => navigate('/admin/quotes')}
+                    title={!sidebarOpen ? 'Quotes' : undefined}
+                    className={`w-full flex items-center ${!sidebarOpen ? 'justify-center' : ''} px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                      activeView === 'quotes'
+                        ? 'bg-blue-100 text-blue-700'
+                        : 'text-gray-700 hover:bg-gray-100'
+                    }`}
+                  >
+                    <FileText className="w-5 h-5 flex-shrink-0" />
+                    {sidebarOpen && <span className="ml-3">Quotes</span>}
+                  </button>
+                </li>
+
+                {/* Contracts */}
+                <li>
+                  <button
+                    onClick={() => navigate('/admin/contracts')}
+                    title={!sidebarOpen ? 'Contracts' : undefined}
+                    className={`w-full flex items-center ${!sidebarOpen ? 'justify-center' : ''} px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                      activeView === 'contracts'
+                        ? 'bg-blue-100 text-blue-700'
+                        : 'text-gray-700 hover:bg-gray-100'
+                    }`}
+                  >
+                    <FileCheck className="w-5 h-5 flex-shrink-0" />
+                    {sidebarOpen && <span className="ml-3">Contracts</span>}
+                  </button>
+                </li>
+              </>
+            )}
+
+            {/* Section: Customers */}
+            <li className="pt-3">
+              {sidebarOpen ? (
+                <button
+                  onClick={() => toggleSection('customers')}
+                  className="w-full flex items-center justify-between px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider hover:bg-gray-50 rounded-md transition-colors"
+                >
+                  <span>Customers</span>
+                  {openSections.customers ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                </button>
+              ) : (
+                <hr className="border-gray-200 my-2" />
+              )}
+            </li>
+
+            {/* Customers Items */}
+            {(openSections.customers || !sidebarOpen) && (
+              <>
+                {/* Customers */}
+                <li>
+                  <button
+                    onClick={() => navigate('/admin/customers')}
+                    title={!sidebarOpen ? 'Customers' : undefined}
+                    className={`w-full flex items-center ${!sidebarOpen ? 'justify-center' : ''} px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                      activeView === 'customers'
+                        ? 'bg-blue-100 text-blue-700'
+                        : 'text-gray-700 hover:bg-gray-100'
+                    }`}
+                  >
+                    <Users className="w-5 h-5 flex-shrink-0" />
+                    {sidebarOpen && <span className="ml-3">Customers</span>}
+                  </button>
+                </li>
+
+                {/* Customer 360 Hub */}
+                <li>
+                  <button
+                    onClick={() => navigate('/admin/customer-360')}
+                    title={!sidebarOpen ? 'Customer 360° Hub' : undefined}
+                    className={`w-full flex items-center ${!sidebarOpen ? 'justify-center' : ''} px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                      activeView === 'customer-360'
+                        ? 'bg-orange-100 text-orange-800 font-semibold'
+                        : 'text-gray-700 hover:bg-gray-100'
+                    }`}
+                  >
+                    <Compass className="w-5 h-5 flex-shrink-0 text-orange-600" />
+                    {sidebarOpen && <span className="ml-3">Customer 360 Hub</span>}
+                  </button>
+                </li>
+              </>
+            )}
+
+            {/* Section: Catalog & Pricing */}
+            <li className="pt-3">
+              {sidebarOpen ? (
+                <button
+                  onClick={() => toggleSection('catalog')}
+                  className="w-full flex items-center justify-between px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider hover:bg-gray-50 rounded-md transition-colors"
+                >
+                  <span>Catalog & Pricing</span>
+                  {openSections.catalog ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                </button>
+              ) : (
+                <hr className="border-gray-200 my-2" />
+              )}
+            </li>
+
+            {/* Catalog & Pricing Items */}
+            {(openSections.catalog || !sidebarOpen) && (
+              <>
                 {/* Products */}
                 <li>
                   <button
@@ -587,6 +743,58 @@ const SimpleAdminDashboard: React.FC = () => {
                   >
                     <Layers className="w-5 h-5 flex-shrink-0" />
                     {sidebarOpen && <span className="ml-3">Products</span>}
+                  </button>
+                </li>
+
+                {/* Rate Cards */}
+                <li>
+                  <button
+                    onClick={() => navigate('/admin/rate-cards')}
+                    title={!sidebarOpen ? 'Rate Cards' : undefined}
+                    className={`w-full flex items-center ${!sidebarOpen ? 'justify-center' : ''} px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                      activeView === 'rate-cards'
+                        ? 'bg-blue-100 text-blue-700'
+                        : 'text-gray-700 hover:bg-gray-100'
+                    }`}
+                  >
+                    <Calculator className="w-5 h-5 flex-shrink-0" />
+                    {sidebarOpen && <span className="ml-3">Rate Cards</span>}
+                  </button>
+                </li>
+              </>
+            )}
+
+            {/* Section: Billing & Revenue */}
+            <li className="pt-3">
+              {sidebarOpen ? (
+                <button
+                  onClick={() => toggleSection('billing')}
+                  className="w-full flex items-center justify-between px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider hover:bg-gray-50 rounded-md transition-colors"
+                >
+                  <span>Billing & Revenue</span>
+                  {openSections.billing ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                </button>
+              ) : (
+                <hr className="border-gray-200 my-2" />
+              )}
+            </li>
+
+            {/* Billing & Revenue Items */}
+            {(openSections.billing || !sidebarOpen) && (
+              <>
+                {/* Subscriptions */}
+                <li>
+                  <button
+                    onClick={() => navigate('/admin/subscriptions')}
+                    title={!sidebarOpen ? 'Subscriptions' : undefined}
+                    className={`w-full flex items-center ${!sidebarOpen ? 'justify-center' : ''} px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                      activeView === 'subscriptions'
+                        ? 'bg-blue-100 text-blue-700'
+                        : 'text-gray-700 hover:bg-gray-100'
+                    }`}
+                  >
+                    <RefreshCw className="w-5 h-5 flex-shrink-0" />
+                    {sidebarOpen && <span className="ml-3">Subscriptions</span>}
                   </button>
                 </li>
 
@@ -606,54 +814,6 @@ const SimpleAdminDashboard: React.FC = () => {
                   </button>
                 </li>
 
-                {/* Quotes */}
-                <li>
-                  <button
-                    onClick={() => navigate('/admin/quotes')}
-                    title={!sidebarOpen ? 'Quotes' : undefined}
-                    className={`w-full flex items-center ${!sidebarOpen ? 'justify-center' : ''} px-3 py-2 text-sm font-medium rounded-md transition-colors ${
-                      activeView === 'quotes'
-                        ? 'bg-blue-100 text-blue-700'
-                        : 'text-gray-700 hover:bg-gray-100'
-                    }`}
-                  >
-                    <FileText className="w-5 h-5 flex-shrink-0" />
-                    {sidebarOpen && <span className="ml-3">Quotes</span>}
-                  </button>
-                </li>
-
-                {/* Rate Cards */}
-                <li>
-                  <button
-                    onClick={() => navigate('/admin/rate-cards')}
-                    title={!sidebarOpen ? 'Rate Cards' : undefined}
-                    className={`w-full flex items-center ${!sidebarOpen ? 'justify-center' : ''} px-3 py-2 text-sm font-medium rounded-md transition-colors ${
-                      activeView === 'rate-cards'
-                        ? 'bg-blue-100 text-blue-700'
-                        : 'text-gray-700 hover:bg-gray-100'
-                    }`}
-                  >
-                    <Calculator className="w-5 h-5 flex-shrink-0" />
-                    {sidebarOpen && <span className="ml-3">Rate Cards</span>}
-                  </button>
-                </li>
-
-                {/* Contracts */}
-                <li>
-                  <button
-                    onClick={() => navigate('/admin/contracts')}
-                    title={!sidebarOpen ? 'Contracts' : undefined}
-                    className={`w-full flex items-center ${!sidebarOpen ? 'justify-center' : ''} px-3 py-2 text-sm font-medium rounded-md transition-colors ${
-                      activeView === 'contracts'
-                        ? 'bg-blue-100 text-blue-700'
-                        : 'text-gray-700 hover:bg-gray-100'
-                    }`}
-                  >
-                    <FileCheck className="w-5 h-5 flex-shrink-0" />
-                    {sidebarOpen && <span className="ml-3">Contracts</span>}
-                  </button>
-                </li>
-
                 {/* Payments */}
                 <li>
                   <button
@@ -669,49 +829,17 @@ const SimpleAdminDashboard: React.FC = () => {
                     {sidebarOpen && <span className="ml-3">Payments</span>}
                   </button>
                 </li>
-
-                {/* Subscriptions */}
-                <li>
-                  <button
-                    onClick={() => navigate('/admin/subscriptions')}
-                    title={!sidebarOpen ? 'Subscriptions' : undefined}
-                    className={`w-full flex items-center ${!sidebarOpen ? 'justify-center' : ''} px-3 py-2 text-sm font-medium rounded-md transition-colors ${
-                      activeView === 'subscriptions'
-                        ? 'bg-blue-100 text-blue-700'
-                        : 'text-gray-700 hover:bg-gray-100'
-                    }`}
-                  >
-                    <Layers className="w-5 h-5 flex-shrink-0" />
-                    {sidebarOpen && <span className="ml-3">Subscriptions</span>}
-                  </button>
-                </li>
-
-                {/* Board Resolutions */}
-                <li>
-                  <button
-                    onClick={() => navigate('/admin/board-resolutions')}
-                    title={!sidebarOpen ? 'Board Resolutions' : undefined}
-                    className={`w-full flex items-center ${!sidebarOpen ? 'justify-center' : ''} px-3 py-2 text-sm font-medium rounded-md transition-colors ${
-                      activeView === 'board-resolutions'
-                        ? 'bg-blue-100 text-blue-700'
-                        : 'text-gray-700 hover:bg-gray-100'
-                    }`}
-                  >
-                    <Gavel className="w-5 h-5 flex-shrink-0" />
-                    {sidebarOpen && <span className="ml-3">Board Resolutions</span>}
-                  </button>
-                </li>
               </>
             )}
 
-            {/* Section: Finance & Accounting */}
+            {/* Section: Finance */}
             <li className="pt-3">
               {sidebarOpen ? (
                 <button
                   onClick={() => toggleSection('finance')}
                   className="w-full flex items-center justify-between px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider hover:bg-gray-50 rounded-md transition-colors"
                 >
-                  <span>Finance & Accounting</span>
+                  <span>Finance</span>
                   {openSections.finance ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
                 </button>
               ) : (
@@ -719,10 +847,10 @@ const SimpleAdminDashboard: React.FC = () => {
               )}
             </li>
 
-            {/* Finance & Accounting Items */}
+            {/* Finance Items */}
             {(openSections.finance || !sidebarOpen) && (
               <>
-                {/* Finance */}
+                {/* Finance Reports */}
                 <li>
                   <button
                     onClick={() => navigate('/admin/finance')}
@@ -735,22 +863,6 @@ const SimpleAdminDashboard: React.FC = () => {
                   >
                     <BarChart3 className="w-5 h-5 flex-shrink-0" />
                     {sidebarOpen && <span className="ml-3">Finance Reports</span>}
-                  </button>
-                </li>
-
-                {/* Expenses */}
-                <li>
-                  <button
-                    onClick={() => navigate('/admin/expenses')}
-                    title={!sidebarOpen ? 'Expenses' : undefined}
-                    className={`w-full flex items-center ${!sidebarOpen ? 'justify-center' : ''} px-3 py-2 text-sm font-medium rounded-md transition-colors ${
-                      activeView === 'expenses'
-                        ? 'bg-orange-100 text-orange-700'
-                        : 'text-gray-700 hover:bg-gray-100'
-                    }`}
-                  >
-                    <Wallet className="w-5 h-5 flex-shrink-0" />
-                    {sidebarOpen && <span className="ml-3">Expenses</span>}
                   </button>
                 </li>
 
@@ -767,6 +879,22 @@ const SimpleAdminDashboard: React.FC = () => {
                   >
                     <TrendingUp className="w-5 h-5 flex-shrink-0" />
                     {sidebarOpen && <span className="ml-3">Income</span>}
+                  </button>
+                </li>
+
+                {/* Expenses */}
+                <li>
+                  <button
+                    onClick={() => navigate('/admin/expenses')}
+                    title={!sidebarOpen ? 'Expenses' : undefined}
+                    className={`w-full flex items-center ${!sidebarOpen ? 'justify-center' : ''} px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                      activeView === 'expenses'
+                        ? 'bg-orange-100 text-orange-700'
+                        : 'text-gray-700 hover:bg-gray-100'
+                    }`}
+                  >
+                    <Wallet className="w-5 h-5 flex-shrink-0" />
+                    {sidebarOpen && <span className="ml-3">Expenses</span>}
                   </button>
                 </li>
               </>
@@ -854,6 +982,38 @@ const SimpleAdminDashboard: React.FC = () => {
                   </button>
                 </li>
 
+                {/* Reviews & Feedback */}
+                <li>
+                  <button
+                    onClick={() => navigate('/admin/hr/performance')}
+                    title={!sidebarOpen ? 'Reviews & Feedback' : undefined}
+                    className={`w-full flex items-center ${!sidebarOpen ? 'justify-center' : ''} px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                      activeView === 'hr-performance'
+                        ? 'bg-blue-100 text-blue-700'
+                        : 'text-gray-700 hover:bg-gray-100'
+                    }`}
+                  >
+                    <Award className="w-5 h-5 flex-shrink-0" />
+                    {sidebarOpen && <span className="ml-3">Reviews & Feedback</span>}
+                  </button>
+                </li>
+
+                {/* Settlement */}
+                <li>
+                  <button
+                    onClick={() => navigate('/admin/hr/settlement')}
+                    title={!sidebarOpen ? 'Settlement' : undefined}
+                    className={`w-full flex items-center ${!sidebarOpen ? 'justify-center' : ''} px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                      activeView === 'hr-settlement'
+                        ? 'bg-blue-100 text-blue-700'
+                        : 'text-gray-700 hover:bg-gray-100'
+                    }`}
+                  >
+                    <DollarSign className="w-5 h-5 flex-shrink-0" />
+                    {sidebarOpen && <span className="ml-3">Settlement</span>}
+                  </button>
+                </li>
+
                 {/* TDS Report */}
                 <li>
                   <button
@@ -869,258 +1029,10 @@ const SimpleAdminDashboard: React.FC = () => {
                     {sidebarOpen && <span className="ml-3">TDS Report</span>}
                   </button>
                 </li>
+              </>
+            )}
 
-                {/* F&F Settlement */}
-                <li>
-                  <button
-                    onClick={() => navigate('/admin/hr/settlement')}
-                    title={!sidebarOpen ? 'F&F Settlement' : undefined}
-                    className={`w-full flex items-center ${!sidebarOpen ? 'justify-center' : ''} px-3 py-2 text-sm font-medium rounded-md transition-colors ${
-                      activeView === 'hr-settlement'
-                        ? 'bg-blue-100 text-blue-700'
-                        : 'text-gray-700 hover:bg-gray-100'
-                    }`}
-                  >
-                    <DollarSign className="w-5 h-5 flex-shrink-0" />
-                    {sidebarOpen && <span className="ml-3">F&F Settlement</span>}
-                  </button>
-                </li>
-
-                {/* Performance */}
-                <li>
-                  <button
-                    onClick={() => navigate('/admin/hr/performance')}
-                    title={!sidebarOpen ? 'Reviews & Feedback' : undefined}
-                    className={`w-full flex items-center ${!sidebarOpen ? 'justify-center' : ''} px-3 py-2 text-sm font-medium rounded-md transition-colors ${
-                      activeView === 'hr-performance'
-                        ? 'bg-blue-100 text-blue-700'
-                        : 'text-gray-700 hover:bg-gray-100'
-                    }`}
-                  >
-                    <Award className="w-5 h-5 flex-shrink-0" />
-                    {sidebarOpen && <span className="ml-3">Reviews & Feedback</span>}
-                  </button>
-                </li>
-               </>
-             )}
-
-             {/* Section: Reporting & Analytics */}
-             <li className="pt-3">
-               {sidebarOpen ? (
-                 <button
-                   onClick={() => toggleSection('reporting')}
-                   className="w-full flex items-center justify-between px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider hover:bg-gray-50 rounded-md transition-colors"
-                 >
-                   <span>Reporting & Analytics</span>
-                   {openSections.reporting ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-                 </button>
-               ) : (
-                 <hr className="border-gray-200 my-2" />
-               )}
-             </li>
-
-             {/* Reporting & Analytics Items */}
-             {(openSections.reporting || !sidebarOpen) && (
-               <>
-                 {/* Reporting Hub */}
-                 <li>
-                   <button
-                     onClick={() => navigate('/admin/reporting/hub')}
-                     title={!sidebarOpen ? 'Reporting Hub' : undefined}
-                     className={`w-full flex items-center ${!sidebarOpen ? 'justify-center' : ''} px-3 py-2 text-sm font-medium rounded-md transition-colors ${
-                       activeView === 'reporting-hub'
-                         ? 'bg-blue-100 text-blue-700'
-                         : 'text-gray-700 hover:bg-gray-100'
-                     }`}
-                   >
-                     <BarChart3 className="w-5 h-5 flex-shrink-0" />
-                     {sidebarOpen && <span className="ml-3">Reporting Hub</span>}
-                   </button>
-                 </li>
-
-                 {/* Customer Reporting */}
-                 <li>
-                   <button
-                     onClick={() => navigate('/admin/reporting/customers')}
-                     title={!sidebarOpen ? 'Customer Reporting' : undefined}
-                     className={`w-full flex items-center ${!sidebarOpen ? 'justify-center' : ''} px-3 py-2 text-sm font-medium rounded-md transition-colors ${
-                       activeView === 'reporting-customers'
-                         ? 'bg-blue-100 text-blue-700'
-                         : 'text-gray-700 hover:bg-gray-100'
-                     }`}
-                   >
-                     <Users className="w-5 h-5 flex-shrink-0" />
-                     {sidebarOpen && <span className="ml-3">Customer Reporting</span>}
-                   </button>
-                 </li>
-
-                 {/* Lead Reporting */}
-                 <li>
-                   <button
-                     onClick={() => navigate('/admin/reporting/leads')}
-                     title={!sidebarOpen ? 'Lead Reporting' : undefined}
-                     className={`w-full flex items-center ${!sidebarOpen ? 'justify-center' : ''} px-3 py-2 text-sm font-medium rounded-md transition-colors ${
-                       activeView === 'reporting-leads'
-                         ? 'bg-blue-100 text-blue-700'
-                         : 'text-gray-700 hover:bg-gray-100'
-                     }`}
-                   >
-                     <Mail className="w-5 h-5 flex-shrink-0" />
-                     {sidebarOpen && <span className="ml-3">Lead Reporting</span>}
-                   </button>
-                 </li>
-
-                 {/* Opportunity Reporting */}
-                 <li>
-                   <button
-                     onClick={() => navigate('/admin/reporting/opportunities')}
-                     title={!sidebarOpen ? 'Opportunity Reporting' : undefined}
-                     className={`w-full flex items-center ${!sidebarOpen ? 'justify-center' : ''} px-3 py-2 text-sm font-medium rounded-md transition-colors ${
-                       activeView === 'reporting-opportunities'
-                         ? 'bg-blue-100 text-blue-700'
-                         : 'text-gray-700 hover:bg-gray-100'
-                     }`}
-                   >
-                     <Target className="w-5 h-5 flex-shrink-0" />
-                     {sidebarOpen && <span className="ml-3">Opportunity Reporting</span>}
-                   </button>
-                 </li>
-
-                 {/* Subscription Reporting */}
-                 <li>
-                   <button
-                     onClick={() => navigate('/admin/reporting/subscriptions')}
-                     title={!sidebarOpen ? 'Subscription Reporting' : undefined}
-                     className={`w-full flex items-center ${!sidebarOpen ? 'justify-center' : ''} px-3 py-2 text-sm font-medium rounded-md transition-colors ${
-                       activeView === 'reporting-subscriptions'
-                         ? 'bg-blue-100 text-blue-700'
-                         : 'text-gray-700 hover:bg-gray-100'
-                     }`}
-                   >
-                     <Wallet className="w-5 h-5 flex-shrink-0" />
-                     {sidebarOpen && <span className="ml-3">Subscription Reporting</span>}
-                   </button>
-                 </li>
-
-                 {/* Quote Reporting */}
-                 <li>
-                   <button
-                     onClick={() => navigate('/admin/reporting/quotes')}
-                     title={!sidebarOpen ? 'Quote Reporting' : undefined}
-                     className={`w-full flex items-center ${!sidebarOpen ? 'justify-center' : ''} px-3 py-2 text-sm font-medium rounded-md transition-colors ${
-                       activeView === 'reporting-quotes'
-                         ? 'bg-blue-100 text-blue-700'
-                         : 'text-gray-700 hover:bg-gray-100'
-                     }`}
-                   >
-                     <FileText className="w-5 h-5 flex-shrink-0" />
-                     {sidebarOpen && <span className="ml-3">Quote Reporting</span>}
-                   </button>
-                 </li>
-
-                 {/* Invoice Reporting */}
-                 <li>
-                   <button
-                     onClick={() => navigate('/admin/reporting/invoices')}
-                     title={!sidebarOpen ? 'Invoice Reporting' : undefined}
-                     className={`w-full flex items-center ${!sidebarOpen ? 'justify-center' : ''} px-3 py-2 text-sm font-medium rounded-md transition-colors ${
-                       activeView === 'reporting-invoices'
-                         ? 'bg-blue-100 text-blue-700'
-                         : 'text-gray-700 hover:bg-gray-100'
-                     }`}
-                   >
-                     <Receipt className="w-5 h-5 flex-shrink-0" />
-                     {sidebarOpen && <span className="ml-3">Invoice Reporting</span>}
-                   </button>
-                 </li>
-
-                 {/* HR Reporting */}
-                 <li>
-                   {sidebarOpen ? (
-                     <button
-                       onClick={() => toggleReportingSub('hr')}
-                       className={`w-full flex items-center justify-between px-3 py-2 text-sm font-medium rounded-md transition-colors ${
-                         activeView.startsWith('reporting-hr')
-                           ? 'bg-blue-100 text-blue-700'
-                           : 'text-gray-700 hover:bg-gray-100'
-                       }`}
-                     >
-                       <span className="flex items-center">
-                         <UserCheck className="w-5 h-5 flex-shrink-0" />
-                         <span className="ml-3">HR Reporting</span>
-                       </span>
-                       {reportingSubOpen['hr'] ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-                     </button>
-                   ) : (
-                     <button
-                       onClick={() => navigate('/admin/reporting/hr')}
-                       title="HR Reporting"
-                       className={`w-full flex items-center justify-center px-3 py-2 text-sm font-medium rounded-md transition-colors ${
-                         activeView.startsWith('reporting-hr')
-                           ? 'bg-blue-100 text-blue-700'
-                           : 'text-gray-700 hover:bg-gray-100'
-                       }`}
-                     >
-                       <UserCheck className="w-5 h-5 flex-shrink-0" />
-                     </button>
-                   )}
-                   {(reportingSubOpen['hr'] || !sidebarOpen) && (
-                     <ul className="mt-1 ml-4 space-y-1 border-l-2 border-gray-200 pl-2">
-                       <li>
-                         <button
-                           onClick={() => navigate('/admin/reporting/hr/attendance')}
-                           className={`w-full flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors ${
-                             activeView === 'reporting-hr-attendance'
-                               ? 'bg-blue-100 text-blue-700'
-                               : 'text-gray-600 hover:bg-gray-100'
-                           }`}
-                         >
-                           Employee Attendance
-                         </button>
-                       </li>
-                       <li>
-                         <button
-                           onClick={() => navigate('/admin/reporting/hr/leave')}
-                           className={`w-full flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors ${
-                             activeView === 'reporting-hr-leave'
-                               ? 'bg-blue-100 text-blue-700'
-                               : 'text-gray-600 hover:bg-gray-100'
-                           }`}
-                         >
-                           Leave
-                         </button>
-                       </li>
-                       <li>
-                         <button
-                           onClick={() => navigate('/admin/reporting/hr/compensation')}
-                           className={`w-full flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors ${
-                             activeView === 'reporting-hr-compensation'
-                               ? 'bg-blue-100 text-blue-700'
-                               : 'text-gray-600 hover:bg-gray-100'
-                           }`}
-                         >
-                           Compensation
-                         </button>
-                       </li>
-                       <li>
-                         <button
-                           onClick={() => navigate('/admin/reporting/hr/performance')}
-                           className={`w-full flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors ${
-                             activeView === 'reporting-hr-performance'
-                               ? 'bg-blue-100 text-blue-700'
-                               : 'text-gray-600 hover:bg-gray-100'
-                           }`}
-                         >
-                           Review & Feedback
-                         </button>
-                       </li>
-                     </ul>
-                   )}
-                 </li>
-               </>
-             )}
-
-             {/* Section: Communication */}
+            {/* Section: Communication */}
             <li className="pt-3">
               {sidebarOpen ? (
                 <button
@@ -1156,6 +1068,258 @@ const SimpleAdminDashboard: React.FC = () => {
               </>
             )}
 
+            {/* Section: Governance */}
+            <li className="pt-3">
+              {sidebarOpen ? (
+                <button
+                  onClick={() => toggleSection('governance')}
+                  className="w-full flex items-center justify-between px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider hover:bg-gray-50 rounded-md transition-colors"
+                >
+                  <span>Governance</span>
+                  {openSections.governance ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                </button>
+              ) : (
+                <hr className="border-gray-200 my-2" />
+              )}
+            </li>
+
+            {/* Governance Items */}
+            {(openSections.governance || !sidebarOpen) && (
+              <>
+                {/* Board Resolutions */}
+                <li>
+                  <button
+                    onClick={() => navigate('/admin/board-resolutions')}
+                    title={!sidebarOpen ? 'Board Resolutions' : undefined}
+                    className={`w-full flex items-center ${!sidebarOpen ? 'justify-center' : ''} px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                      activeView === 'board-resolutions'
+                        ? 'bg-blue-100 text-blue-700'
+                        : 'text-gray-700 hover:bg-gray-100'
+                    }`}
+                  >
+                    <Gavel className="w-5 h-5 flex-shrink-0" />
+                    {sidebarOpen && <span className="ml-3">Board Resolutions</span>}
+                  </button>
+                </li>
+              </>
+            )}
+
+            {/* Section: Reporting & Analytics */}
+            <li className="pt-3">
+              {sidebarOpen ? (
+                <button
+                  onClick={() => toggleSection('reporting')}
+                  className="w-full flex items-center justify-between px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider hover:bg-gray-50 rounded-md transition-colors"
+                >
+                  <span>Reporting & Analytics</span>
+                  {openSections.reporting ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                </button>
+              ) : (
+                <hr className="border-gray-200 my-2" />
+              )}
+            </li>
+
+            {/* Reporting & Analytics Items */}
+            {(openSections.reporting || !sidebarOpen) && (
+              <>
+                {/* Reporting Hub */}
+                <li>
+                  <button
+                    onClick={() => navigate('/admin/reporting/hub')}
+                    title={!sidebarOpen ? 'Reporting Hub' : undefined}
+                    className={`w-full flex items-center ${!sidebarOpen ? 'justify-center' : ''} px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                      activeView === 'reporting-hub'
+                        ? 'bg-blue-100 text-blue-700'
+                        : 'text-gray-700 hover:bg-gray-100'
+                    }`}
+                  >
+                    <BarChart3 className="w-5 h-5 flex-shrink-0" />
+                    {sidebarOpen && <span className="ml-3">Reporting Hub</span>}
+                  </button>
+                </li>
+
+                {/* Customer Reporting */}
+                <li>
+                  <button
+                    onClick={() => navigate('/admin/reporting/customers')}
+                    title={!sidebarOpen ? 'Customer Reporting' : undefined}
+                    className={`w-full flex items-center ${!sidebarOpen ? 'justify-center' : ''} px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                      activeView === 'reporting-customers'
+                        ? 'bg-blue-100 text-blue-700'
+                        : 'text-gray-700 hover:bg-gray-100'
+                    }`}
+                  >
+                    <Users className="w-5 h-5 flex-shrink-0" />
+                    {sidebarOpen && <span className="ml-3">Customer Reporting</span>}
+                  </button>
+                </li>
+
+                {/* Lead Reporting */}
+                <li>
+                  <button
+                    onClick={() => navigate('/admin/reporting/leads')}
+                    title={!sidebarOpen ? 'Lead Reporting' : undefined}
+                    className={`w-full flex items-center ${!sidebarOpen ? 'justify-center' : ''} px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                      activeView === 'reporting-leads'
+                        ? 'bg-blue-100 text-blue-700'
+                        : 'text-gray-700 hover:bg-gray-100'
+                    }`}
+                  >
+                    <Mail className="w-5 h-5 flex-shrink-0" />
+                    {sidebarOpen && <span className="ml-3">Lead Reporting</span>}
+                  </button>
+                </li>
+
+                {/* Opportunity Reporting */}
+                <li>
+                  <button
+                    onClick={() => navigate('/admin/reporting/opportunities')}
+                    title={!sidebarOpen ? 'Opportunity Reporting' : undefined}
+                    className={`w-full flex items-center ${!sidebarOpen ? 'justify-center' : ''} px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                      activeView === 'reporting-opportunities'
+                        ? 'bg-blue-100 text-blue-700'
+                        : 'text-gray-700 hover:bg-gray-100'
+                    }`}
+                  >
+                    <Target className="w-5 h-5 flex-shrink-0" />
+                    {sidebarOpen && <span className="ml-3">Opportunity Reporting</span>}
+                  </button>
+                </li>
+
+                {/* Subscription Reporting */}
+                <li>
+                  <button
+                    onClick={() => navigate('/admin/reporting/subscriptions')}
+                    title={!sidebarOpen ? 'Subscription Reporting' : undefined}
+                    className={`w-full flex items-center ${!sidebarOpen ? 'justify-center' : ''} px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                      activeView === 'reporting-subscriptions'
+                        ? 'bg-blue-100 text-blue-700'
+                        : 'text-gray-700 hover:bg-gray-100'
+                    }`}
+                  >
+                    <Wallet className="w-5 h-5 flex-shrink-0" />
+                    {sidebarOpen && <span className="ml-3">Subscription Reporting</span>}
+                  </button>
+                </li>
+
+                {/* Quote Reporting */}
+                <li>
+                  <button
+                    onClick={() => navigate('/admin/reporting/quotes')}
+                    title={!sidebarOpen ? 'Quote Reporting' : undefined}
+                    className={`w-full flex items-center ${!sidebarOpen ? 'justify-center' : ''} px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                      activeView === 'reporting-quotes'
+                        ? 'bg-blue-100 text-blue-700'
+                        : 'text-gray-700 hover:bg-gray-100'
+                    }`}
+                  >
+                    <FileText className="w-5 h-5 flex-shrink-0" />
+                    {sidebarOpen && <span className="ml-3">Quote Reporting</span>}
+                  </button>
+                </li>
+
+                {/* Invoice Reporting */}
+                <li>
+                  <button
+                    onClick={() => navigate('/admin/reporting/invoices')}
+                    title={!sidebarOpen ? 'Invoice Reporting' : undefined}
+                    className={`w-full flex items-center ${!sidebarOpen ? 'justify-center' : ''} px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                      activeView === 'reporting-invoices'
+                        ? 'bg-blue-100 text-blue-700'
+                        : 'text-gray-700 hover:bg-gray-100'
+                    }`}
+                  >
+                    <Receipt className="w-5 h-5 flex-shrink-0" />
+                    {sidebarOpen && <span className="ml-3">Invoice Reporting</span>}
+                  </button>
+                </li>
+
+                {/* HR Reporting */}
+                <li>
+                  {sidebarOpen ? (
+                    <button
+                      onClick={() => toggleReportingSub('hr')}
+                      className={`w-full flex items-center justify-between px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                        activeView.startsWith('reporting-hr')
+                          ? 'bg-blue-100 text-blue-700'
+                          : 'text-gray-700 hover:bg-gray-100'
+                      }`}
+                    >
+                      <span className="flex items-center">
+                        <UserCheck className="w-5 h-5 flex-shrink-0" />
+                        <span className="ml-3">HR Reporting</span>
+                      </span>
+                      {reportingSubOpen['hr'] ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => navigate('/admin/reporting/hr')}
+                      title="HR Reporting"
+                      className={`w-full flex items-center justify-center px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                        activeView.startsWith('reporting-hr')
+                          ? 'bg-blue-100 text-blue-700'
+                          : 'text-gray-700 hover:bg-gray-100'
+                      }`}
+                    >
+                      <UserCheck className="w-5 h-5 flex-shrink-0" />
+                    </button>
+                  )}
+                  {(reportingSubOpen['hr'] || !sidebarOpen) && (
+                    <ul className="mt-1 ml-4 space-y-1 border-l-2 border-gray-200 pl-2">
+                      <li>
+                        <button
+                          onClick={() => navigate('/admin/reporting/hr/attendance')}
+                          className={`w-full flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                            activeView === 'reporting-hr-attendance'
+                              ? 'bg-blue-100 text-blue-700'
+                              : 'text-gray-600 hover:bg-gray-100'
+                          }`}
+                        >
+                          Employee Attendance
+                        </button>
+                      </li>
+                      <li>
+                        <button
+                          onClick={() => navigate('/admin/reporting/hr/leave')}
+                          className={`w-full flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                            activeView === 'reporting-hr-leave'
+                              ? 'bg-blue-100 text-blue-700'
+                              : 'text-gray-600 hover:bg-gray-100'
+                          }`}
+                        >
+                          Leave
+                        </button>
+                      </li>
+                      <li>
+                        <button
+                          onClick={() => navigate('/admin/reporting/hr/compensation')}
+                          className={`w-full flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                            activeView === 'reporting-hr-compensation'
+                              ? 'bg-blue-100 text-blue-700'
+                              : 'text-gray-600 hover:bg-gray-100'
+                          }`}
+                        >
+                          Compensation
+                        </button>
+                      </li>
+                      <li>
+                        <button
+                          onClick={() => navigate('/admin/reporting/hr/performance')}
+                          className={`w-full flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                            activeView === 'reporting-hr-performance'
+                              ? 'bg-blue-100 text-blue-700'
+                              : 'text-gray-600 hover:bg-gray-100'
+                          }`}
+                        >
+                          Review & Feedback
+                        </button>
+                      </li>
+                    </ul>
+                  )}
+                </li>
+              </>
+            )}
+
             {/* Section: Configuration */}
             <li className="pt-3">
               {sidebarOpen ? (
@@ -1163,7 +1327,7 @@ const SimpleAdminDashboard: React.FC = () => {
                   onClick={() => toggleSection('configuration')}
                   className="w-full flex items-center justify-between px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider hover:bg-gray-50 rounded-md transition-colors"
                 >
-                  <span>Configuration</span>
+                  <span>Settings</span>
                   {openSections.configuration ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
                 </button>
               ) : (
@@ -1171,7 +1335,7 @@ const SimpleAdminDashboard: React.FC = () => {
               )}
             </li>
 
-            {/* Configuration Items */}
+            {/* Settings Items */}
             {(openSections.configuration || !sidebarOpen) && (
               <>
                 {/* Settings */}
@@ -1280,253 +1444,330 @@ const SimpleAdminDashboard: React.FC = () => {
                 </button>
               </div>
 
-              {/* Main Stats Cards */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-                {/* Invoices Card */}
-                <div 
-                  className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 cursor-pointer hover:shadow-md transition-shadow"
-                  onClick={() => navigate('/admin/invoices')}
-                >
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-gray-600">Total Invoices</p>
-                      <p className="text-2xl font-semibold text-gray-900 mt-1">
-                        {statsLoading ? '...' : (dashboardStats.invoices?.total_invoices || 0)}
-                      </p>
-                      <p className="text-xs text-green-600 mt-1">
-                        {dashboardStats.invoices?.paid_invoices || 0} Paid
-                      </p>
+              {/* Overview Section 1: Sales & Customer Operations */}
+              <div className="mb-6">
+                <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">Sales & Customer Operations</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                  {/* Leads Card */}
+                  <div 
+                    className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 cursor-pointer hover:shadow-md transition-shadow"
+                    onClick={() => navigate('/admin/leads')}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm text-gray-600">Leads & Pipeline</p>
+                        <p className="text-2xl font-semibold text-gray-900 mt-1">
+                          {statsLoading ? '...' : dashboardStats.leads.total}
+                        </p>
+                        <p className="text-xs text-blue-600 mt-1">Active CRM Prospects</p>
+                      </div>
+                      <Mail className="w-8 h-8 text-blue-600" />
                     </div>
-                    <Receipt className="w-8 h-8 text-blue-600" />
                   </div>
-                </div>
 
-                {/* Payments Card */}
-                <div 
-                  className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 cursor-pointer hover:shadow-md transition-shadow"
-                  onClick={() => navigate('/admin/payments')}
-                >
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-gray-600">Payments</p>
-                      <p className="text-2xl font-semibold text-gray-900 mt-1">
-                        {statsLoading ? '...' : dashboardStats.payments.total}
-                      </p>
-                      <p className="text-xs text-green-600 mt-1">
-                        ₹{(dashboardStats.payments.totalAmount || 0).toLocaleString('en-IN')}
-                      </p>
+                  {/* Quotes Card */}
+                  <div 
+                    className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 cursor-pointer hover:shadow-md transition-shadow"
+                    onClick={() => navigate('/admin/quotes')}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm text-gray-600">Quotes & Proposals</p>
+                        <p className="text-2xl font-semibold text-gray-900 mt-1">
+                          {statsLoading ? '...' : (dashboardStats.quotes?.total_quotes || 0)}
+                        </p>
+                        <p className="text-xs text-green-600 mt-1">
+                          {dashboardStats.quotes?.accepted_quotes || 0} Accepted
+                        </p>
+                      </div>
+                      <FileText className="w-8 h-8 text-purple-600" />
                     </div>
-                    <CreditCard className="w-8 h-8 text-green-600" />
                   </div>
-                </div>
 
-                {/* Quotes Card */}
-                <div 
-                  className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 cursor-pointer hover:shadow-md transition-shadow"
-                  onClick={() => navigate('/admin/quotes')}
-                >
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-gray-600">Total Quotes</p>
-                      <p className="text-2xl font-semibold text-gray-900 mt-1">
-                        {statsLoading ? '...' : (dashboardStats.quotes?.total_quotes || 0)}
-                      </p>
-                      <p className="text-xs text-green-600 mt-1">
-                        {dashboardStats.quotes?.accepted_quotes || 0} Accepted
-                      </p>
+                  {/* Customer 360 Hub Card */}
+                  <div 
+                    className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 cursor-pointer hover:shadow-md transition-shadow border-l-4 border-l-orange-500"
+                    onClick={() => navigate('/admin/customer-360')}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm text-gray-600">Customers & 360° Hub</p>
+                        <p className="text-2xl font-semibold text-gray-900 mt-1">
+                          {statsLoading ? '...' : dashboardStats.customers.total}
+                        </p>
+                        <p className="text-xs text-orange-600 mt-1 font-medium">Single Pane Overview</p>
+                      </div>
+                      <Compass className="w-8 h-8 text-orange-600" />
                     </div>
-                    <FileText className="w-8 h-8 text-purple-600" />
                   </div>
-                </div>
 
-                {/* Employees Card */}
-                <div 
-                  className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 cursor-pointer hover:shadow-md transition-shadow"
-                  onClick={() => navigate('/admin/hr/employees')}
-                >
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-gray-600">Employees</p>
-                      <p className="text-2xl font-semibold text-gray-900 mt-1">
-                        {statsLoading ? '...' : dashboardStats.employees.total}
-                      </p>
-                      <p className="text-xs text-green-600 mt-1">
-                        {dashboardStats.employees.active} Active
-                      </p>
+                  {/* Contracts Card */}
+                  <div 
+                    className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 cursor-pointer hover:shadow-md transition-shadow"
+                    onClick={() => navigate('/admin/contracts')}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm text-gray-600">Client Contracts</p>
+                        <p className="text-2xl font-semibold text-gray-900 mt-1">
+                          {statsLoading ? '...' : dashboardStats.contracts.total}
+                        </p>
+                        <p className="text-xs text-cyan-600 mt-1">
+                          {dashboardStats.contracts.active} Active Contracts
+                        </p>
+                      </div>
+                      <FileCheck className="w-8 h-8 text-cyan-600" />
                     </div>
-                    <Users className="w-8 h-8 text-orange-600" />
                   </div>
                 </div>
               </div>
 
-              {/* Secondary Stats - HR Documents, Salary Slips, Contracts & Revenue */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-                {/* Contracts Card */}
-                <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
-                  <div className="flex items-center justify-between mb-4">
-                    <div>
-                      <p className="text-sm text-gray-600">Contracts</p>
-                      <p className="text-2xl font-semibold text-gray-900 mt-1">
-                        {statsLoading ? '...' : dashboardStats.contracts.total}
-                      </p>
-                      <p className="text-xs text-green-600 mt-1">
-                        {dashboardStats.contracts.active} Active
-                      </p>
-                    </div>
-                    <FileCheck className="w-8 h-8 text-cyan-600" />
-                  </div>
-                  <button
-                    onClick={() => navigate('/admin/contracts')}
-                    className="w-full flex items-center justify-center px-3 py-2 text-sm font-medium text-cyan-600 bg-cyan-50 rounded-md hover:bg-cyan-100"
-                  >
-                    <Eye className="w-4 h-4 mr-2" />
-                    View Contracts
-                  </button>
-                </div>
-
-                {/* Documents Card */}
-                <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
-                  <div className="flex items-center justify-between mb-4">
-                    <div>
-                      <p className="text-sm text-gray-600">HR Documents</p>
-                      <p className="text-2xl font-semibold text-gray-900 mt-1">
-                        {statsLoading ? '...' : dashboardStats.documents}
-                      </p>
-                    </div>
-                    <FileCheck className="w-8 h-8 text-indigo-600" />
-                  </div>
-                  <button
-                    onClick={() => navigate('/admin/hr/employees')}
-                    className="w-full flex items-center justify-center px-3 py-2 text-sm font-medium text-indigo-600 bg-indigo-50 rounded-md hover:bg-indigo-100"
-                  >
-                    <Eye className="w-4 h-4 mr-2" />
-                    View Documents
-                  </button>
-                </div>
-
-                {/* Salary Slips Card */}
-                <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
-                  <div className="flex items-center justify-between mb-4">
-                    <div>
-                      <p className="text-sm text-gray-600">Salary Slips</p>
-                      <p className="text-2xl font-semibold text-gray-900 mt-1">
-                        {statsLoading ? '...' : dashboardStats.salarySlips}
-                      </p>
-                    </div>
-                    <DollarSign className="w-8 h-8 text-teal-600" />
-                  </div>
-                  <button
-                    onClick={() => navigate('/admin/hr/employees')}
-                    className="w-full flex items-center justify-center px-3 py-2 text-sm font-medium text-teal-600 bg-teal-50 rounded-md hover:bg-teal-100"
-                  >
-                    <Eye className="w-4 h-4 mr-2" />
-                    View Salary Slips
-                  </button>
-                </div>
-
-                {/* Revenue Card */}
-                <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
-                  <div className="flex items-center justify-between mb-4">
-                    <div>
-                      <p className="text-sm text-gray-600">Total Revenue</p>
-                      <p className="text-2xl font-semibold text-gray-900 mt-1">
-                        ₹{statsLoading ? '...' : ((dashboardStats.invoices?.total_revenue_inr || dashboardStats.invoices?.total_revenue || 0) / 100000).toFixed(1)}L
-                      </p>
-                      <p className="text-xs text-yellow-600 mt-1">
-                        Pending: ₹{((dashboardStats.invoices?.pending_amount_inr || dashboardStats.invoices?.pending_amount || 0) / 100000).toFixed(1)}L
-                      </p>
-                    </div>
-                    <TrendingUp className="w-8 h-8 text-emerald-600" />
-                  </div>
-                  <button
+              {/* Overview Section 2: Catalog, Billing & Revenue */}
+              <div className="mb-6">
+                <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">Billing & Revenue</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                  {/* Invoices Card */}
+                  <div 
+                    className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 cursor-pointer hover:shadow-md transition-shadow"
                     onClick={() => navigate('/admin/invoices')}
-                    className="w-full flex items-center justify-center px-3 py-2 text-sm font-medium text-emerald-600 bg-emerald-50 rounded-md hover:bg-emerald-100"
                   >
-                    <Eye className="w-4 h-4 mr-2" />
-                    View Details
-                  </button>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm text-gray-600">Invoices</p>
+                        <p className="text-2xl font-semibold text-gray-900 mt-1">
+                          {statsLoading ? '...' : (dashboardStats.invoices?.total_invoices || 0)}
+                        </p>
+                        <p className="text-xs text-green-600 mt-1">
+                          {dashboardStats.invoices?.paid_invoices || 0} Paid Invoices
+                        </p>
+                      </div>
+                      <Receipt className="w-8 h-8 text-blue-600" />
+                    </div>
+                  </div>
+
+                  {/* Payments Card */}
+                  <div 
+                    className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 cursor-pointer hover:shadow-md transition-shadow"
+                    onClick={() => navigate('/admin/payments')}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm text-gray-600">Payments Collection</p>
+                        <p className="text-2xl font-semibold text-gray-900 mt-1">
+                          {statsLoading ? '...' : dashboardStats.payments.total}
+                        </p>
+                        <p className="text-xs text-green-600 mt-1">
+                          {currencySymbol}{(dashboardStats.payments.totalAmount || 0).toLocaleString()}
+                        </p>
+                      </div>
+                      <CreditCard className="w-8 h-8 text-green-600" />
+                    </div>
+                  </div>
+
+                  {/* Subscriptions Card */}
+                  <div 
+                    className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 cursor-pointer hover:shadow-md transition-shadow"
+                    onClick={() => navigate('/admin/subscriptions')}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm text-gray-600">Subscriptions</p>
+                        <p className="text-2xl font-semibold text-gray-900 mt-1">
+                          {statsLoading ? '...' : dashboardStats.subscriptions.total}
+                        </p>
+                        <p className="text-xs text-indigo-600 mt-1">
+                          {dashboardStats.subscriptions.active} Active Recurring
+                        </p>
+                      </div>
+                      <RefreshCw className="w-8 h-8 text-indigo-600" />
+                    </div>
+                  </div>
+
+                  {/* Revenue Card */}
+                  <div 
+                    className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 cursor-pointer hover:shadow-md transition-shadow"
+                    onClick={() => navigate('/admin/finance')}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm text-gray-600">Total Revenue</p>
+                        <p className="text-2xl font-semibold text-gray-900 mt-1">
+                          {currencySymbol}{statsLoading ? '...' : ((dashboardStats.invoices?.total_revenue || 0).toLocaleString())}
+                        </p>
+                        <p className="text-xs text-amber-600 mt-1">
+                          Pending: {currencySymbol}{(dashboardStats.invoices?.pending_amount || 0).toLocaleString()}
+                        </p>
+                      </div>
+                      <TrendingUp className="w-8 h-8 text-emerald-600" />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Overview Section 3: Finance, HR & Operations */}
+              <div className="mb-8">
+                <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">HR & Operations</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                  {/* Employees Card */}
+                  <div 
+                    className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 cursor-pointer hover:shadow-md transition-shadow"
+                    onClick={() => navigate('/admin/hr/employees')}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm text-gray-600">Employees</p>
+                        <p className="text-2xl font-semibold text-gray-900 mt-1">
+                          {statsLoading ? '...' : dashboardStats.employees.total}
+                        </p>
+                        <p className="text-xs text-green-600 mt-1">
+                          {dashboardStats.employees.active} Active Staff
+                        </p>
+                      </div>
+                      <Users className="w-8 h-8 text-orange-600" />
+                    </div>
+                  </div>
+
+                  {/* Documents Card */}
+                  <div 
+                    className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 cursor-pointer hover:shadow-md transition-shadow"
+                    onClick={() => navigate('/admin/hr/employees')}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm text-gray-600">HR Documents</p>
+                        <p className="text-2xl font-semibold text-gray-900 mt-1">
+                          {statsLoading ? '...' : dashboardStats.documents}
+                        </p>
+                        <p className="text-xs text-indigo-600 mt-1">Employment Records</p>
+                      </div>
+                      <FileCheck className="w-8 h-8 text-indigo-600" />
+                    </div>
+                  </div>
+
+                  {/* Salary Slips Card */}
+                  <div 
+                    className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 cursor-pointer hover:shadow-md transition-shadow"
+                    onClick={() => navigate('/admin/hr/employees')}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm text-gray-600">Salary Slips</p>
+                        <p className="text-2xl font-semibold text-gray-900 mt-1">
+                          {statsLoading ? '...' : dashboardStats.salarySlips}
+                        </p>
+                        <p className="text-xs text-teal-600 mt-1">Payroll Records</p>
+                      </div>
+                      <Banknote className="w-8 h-8 text-teal-600" />
+                    </div>
+                  </div>
+
+                  {/* Finance Reports Card */}
+                  <div 
+                    className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 cursor-pointer hover:shadow-md transition-shadow"
+                    onClick={() => navigate('/admin/finance')}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm text-gray-600">Finance Reports</p>
+                        <p className="text-2xl font-semibold text-gray-900 mt-1">Overview</p>
+                        <p className="text-xs text-emerald-600 mt-1">Income & Expenses</p>
+                      </div>
+                      <BarChart3 className="w-8 h-8 text-emerald-600" />
+                    </div>
+                  </div>
                 </div>
               </div>
 
               {/* Quick Actions Section */}
               <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 mb-8">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h3>
-                <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
-                  {/* Add Employee */}
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions & Shortcuts</h3>
+                <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4">
+                  {/* Customer 360 Hub */}
                   <button
-                    onClick={() => navigate('/admin/hr/employees')}
-                    className="flex flex-col items-center p-4 bg-orange-50 rounded-lg hover:bg-orange-100 transition-colors"
+                    onClick={() => navigate('/admin/customer-360')}
+                    className="flex flex-col items-center p-3 bg-orange-50 rounded-lg hover:bg-orange-100 transition-colors"
                   >
-                    <div className="w-10 h-10 bg-orange-100 rounded-full flex items-center justify-center mb-2">
-                      <Plus className="w-5 h-5 text-orange-600" />
+                    <div className="w-9 h-9 bg-orange-100 rounded-full flex items-center justify-center mb-2">
+                      <Compass className="w-5 h-5 text-orange-600" />
                     </div>
-                    <span className="text-sm font-medium text-orange-700">Add Employee</span>
+                    <span className="text-xs font-medium text-orange-700 text-center">Customer 360</span>
+                  </button>
+
+                  {/* Leads */}
+                  <button
+                    onClick={() => navigate('/admin/leads')}
+                    className="flex flex-col items-center p-3 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors"
+                  >
+                    <div className="w-9 h-9 bg-blue-100 rounded-full flex items-center justify-center mb-2">
+                      <Mail className="w-5 h-5 text-blue-600" />
+                    </div>
+                    <span className="text-xs font-medium text-blue-700 text-center">Leads</span>
                   </button>
 
                   {/* Create Invoice */}
                   <button
                     onClick={() => navigate('/admin/invoices')}
-                    className="flex flex-col items-center p-4 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors"
+                    className="flex flex-col items-center p-3 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors"
                   >
-                    <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center mb-2">
+                    <div className="w-9 h-9 bg-blue-100 rounded-full flex items-center justify-center mb-2">
                       <Receipt className="w-5 h-5 text-blue-600" />
                     </div>
-                    <span className="text-sm font-medium text-blue-700">New Invoice</span>
+                    <span className="text-xs font-medium text-blue-700 text-center">New Invoice</span>
                   </button>
 
                   {/* Create Quote */}
                   <button
                     onClick={() => navigate('/admin/quotes')}
-                    className="flex flex-col items-center p-4 bg-purple-50 rounded-lg hover:bg-purple-100 transition-colors"
+                    className="flex flex-col items-center p-3 bg-purple-50 rounded-lg hover:bg-purple-100 transition-colors"
                   >
-                    <div className="w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center mb-2">
+                    <div className="w-9 h-9 bg-purple-100 rounded-full flex items-center justify-center mb-2">
                       <FileText className="w-5 h-5 text-purple-600" />
                     </div>
-                    <span className="text-sm font-medium text-purple-700">New Quote</span>
+                    <span className="text-xs font-medium text-purple-700 text-center">New Quote</span>
                   </button>
 
                   {/* Create Contract */}
                   <button
                     onClick={() => navigate('/admin/contracts')}
-                    className="flex flex-col items-center p-4 bg-cyan-50 rounded-lg hover:bg-cyan-100 transition-colors"
+                    className="flex flex-col items-center p-3 bg-cyan-50 rounded-lg hover:bg-cyan-100 transition-colors"
                   >
-                    <div className="w-10 h-10 bg-cyan-100 rounded-full flex items-center justify-center mb-2">
+                    <div className="w-9 h-9 bg-cyan-100 rounded-full flex items-center justify-center mb-2">
                       <FileCheck className="w-5 h-5 text-cyan-600" />
                     </div>
-                    <span className="text-sm font-medium text-cyan-700">New Contract</span>
+                    <span className="text-xs font-medium text-cyan-700 text-center">New Contract</span>
                   </button>
 
-                  {/* Generate Document */}
+                  {/* Subscriptions */}
+                  <button
+                    onClick={() => navigate('/admin/subscriptions')}
+                    className="flex flex-col items-center p-3 bg-indigo-50 rounded-lg hover:bg-indigo-100 transition-colors"
+                  >
+                    <div className="w-9 h-9 bg-indigo-100 rounded-full flex items-center justify-center mb-2">
+                      <RefreshCw className="w-5 h-5 text-indigo-600" />
+                    </div>
+                    <span className="text-xs font-medium text-indigo-700 text-center">Subscriptions</span>
+                  </button>
+
+                  {/* Add Employee */}
                   <button
                     onClick={() => navigate('/admin/hr/employees')}
-                    className="flex flex-col items-center p-4 bg-indigo-50 rounded-lg hover:bg-indigo-100 transition-colors"
+                    className="flex flex-col items-center p-3 bg-emerald-50 rounded-lg hover:bg-emerald-100 transition-colors"
                   >
-                    <div className="w-10 h-10 bg-indigo-100 rounded-full flex items-center justify-center mb-2">
-                      <FileCheck className="w-5 h-5 text-indigo-600" />
+                    <div className="w-9 h-9 bg-emerald-100 rounded-full flex items-center justify-center mb-2">
+                      <Plus className="w-5 h-5 text-emerald-600" />
                     </div>
-                    <span className="text-sm font-medium text-indigo-700">Gen. Document</span>
+                    <span className="text-xs font-medium text-emerald-700 text-center">Add Employee</span>
                   </button>
 
-                  {/* Generate Salary Slip */}
+                  {/* Finance Reports */}
                   <button
-                    onClick={() => navigate('/admin/hr/employees')}
-                    className="flex flex-col items-center p-4 bg-teal-50 rounded-lg hover:bg-teal-100 transition-colors"
+                    onClick={() => navigate('/admin/finance')}
+                    className="flex flex-col items-center p-3 bg-green-50 rounded-lg hover:bg-green-100 transition-colors"
                   >
-                    <div className="w-10 h-10 bg-teal-100 rounded-full flex items-center justify-center mb-2">
-                      <DollarSign className="w-5 h-5 text-teal-600" />
+                    <div className="w-9 h-9 bg-green-100 rounded-full flex items-center justify-center mb-2">
+                      <BarChart3 className="w-5 h-5 text-green-600" />
                     </div>
-                    <span className="text-sm font-medium text-teal-700">Gen. Salary Slip</span>
-                  </button>
-
-                  {/* Mark Attendance */}
-                  <button
-                    onClick={() => navigate('/admin/hr/attendance')}
-                    className="flex flex-col items-center p-4 bg-green-50 rounded-lg hover:bg-green-100 transition-colors"
-                  >
-                    <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center mb-2">
-                      <Clock className="w-5 h-5 text-green-600" />
-                    </div>
-                    <span className="text-sm font-medium text-green-700">Attendance</span>
+                    <span className="text-xs font-medium text-green-700 text-center">Finance Reports</span>
                   </button>
                 </div>
               </div>
