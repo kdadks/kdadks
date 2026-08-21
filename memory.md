@@ -1,6 +1,6 @@
 # Project Memory — KDADKS Website
 
-> Auto-updated by Kilo agent after every implementation. Last updated: 2026-08-20 16:06 IST
+> Auto-updated by Kilo agent after every implementation. Last updated: 2026-08-21 11:40 IST
 
 A comprehensive knowledge base for the KDADKS website codebase. This file serves as a single source of truth for project architecture, conventions, patterns, and key implementation details.
 
@@ -285,7 +285,7 @@ src/
 │   ├── attendanceService.ts     # — attendance
 │   ├── leaveService.ts          # — leave management
 │   ├── expenseService.ts        # — expenses
-│   ├── financeService.ts        # — finance
+│   ├── financeService.ts        # — finance & financial reports (P&L, Health, Trends, multi-company filtered)
 │   ├── incomeService.ts         # — income
 │   ├── emailService.ts          # — email (Resend)
 │   ├── backupEmailService.ts    # — backup email (SMTP)
@@ -556,13 +556,23 @@ The complete sales pipeline with status/stage transitions:
 ### Customer 360° Hub (`src/components/customer/Customer360Hub.tsx`)
 
 A centralized 360-degree operational dashboard connecting all records for a customer across Kdadks:
-- **Core Service (`src/services/customer360Service.ts`):** Parallel fetching and metrics calculation aggregating Customer Profile, Contacts, Leads, Opportunities, Quotes, Contracts, Subscriptions, Invoices, Payments, and Activity Timelines. Opportunities query matches direct `customer_id` as well as linked `lead_id` / `source_lead_id` across all customer leads.
-- **Multi-Entity Currency Conversion:** Automatically detects the active entity context. For **Indian Entity**, all invoices, quotes, revenue metrics, and actual payment values are converted and displayed in **INR (₹)** using actual `inr_amount` / `inr_total_amount` or live exchange rates via `convertCurrency()`. For **Irish Entity**, values are displayed in **Euro (€)**.
-- **Type Definitions (`src/types/customer360.ts`):** Defines `Customer360Data`, `CustomerFinancialMetrics`, and `CustomerActivityTimelineItem`.
+- **Core Service (`src/services/customer360Service.ts`):** Parallel fetching and metrics calculation aggregating Customer Profile, Contacts, Leads, Opportunities, Quotes, Contracts, Subscriptions, Invoices, Payments, B2B Relationships, and Contact Cross-Links.
+- **Multi-Entity Currency Conversion:** Automatically detects the active entity context. For **Indian Entity**, all invoices, quotes, revenue metrics, and actual payment values are converted and displayed in **INR (₹)**. For **Irish Entity**, values are displayed in **Euro (€)**.
+- **Type Definitions (`src/types/customer360.ts`):** Defines `Customer360Data` (includes `relationships[]` and `contactLinks[]`), `CustomerFinancialMetrics`, and `CustomerActivityTimelineItem`.
 - **Executive KPI Cards:** Lifetime Revenue (LTV), Total Collected Revenue, Outstanding Balance, Subscription MRR, Open Sales Pipeline Value, and Opportunity Win Rate.
-- **Tabbed Operational Drill-Down:** Overview (Tax/Banking & Profile), Contacts (`customer_contacts`), Leads, Opportunities, Quotes, Contracts, Subscriptions, Invoices & Payments, and Unified Activity Timeline.
+- **Tabbed Operational Drill-Down:** Overview, Contacts, Leads, Opportunities, Quotes, Contracts, Subscriptions, Invoices & Payments, Activity Timeline, **Hierarchy (B2B org chart)**, and **Contact Network (cross-company contacts)**.
 - **Action Shortcuts:** Quick triggers to create Leads, Opportunities, Quotes, Invoices, Contracts, or Contacts prefilled with customer details.
-- **Deep Linking & Navigation:** Search/selector bar with URL query param support (`/admin/customer-360?id=<customerId>`) and direct "360° Hub" launch buttons on customer rows in `CustomerManagement.tsx`.
+- **Deep Linking & Navigation:** URL query params `?id=<customerId>&tab=<tabName>` — CustomerManagement has a direct "Hierarchy" button per row.
+
+### B2B Hierarchy System (`src/services/customerHierarchyService.ts`)
+
+- **Company ↔ Company Relationships** (`customer_relationships` table): parent, subsidiary, affiliate, partner, sibling, division, franchisor, franchisee, other. Adding a relationship auto-creates the inverse (e.g., adding A→parent→B auto-creates B→subsidiary→A).
+- **Contact ↔ Company Cross-Links** (`contact_customer_links` table): A contact can serve multiple companies with different roles per company. Cross-links are additive to the existing primary company association.
+- **Hierarchy Tree Builder:** `getCustomerHierarchyTree(customerId, maxDepth=2)` — builds a recursive org chart tree up to N levels.
+- **UI Components:**
+  - `CustomerHierarchyPanel.tsx` — visual org chart, add/remove relationship modal, relationship list (outgoing + incoming)
+  - `ContactNetworkPanel.tsx` — per-contact cross-company links, expandable view, add/remove cross-link modal
+- **Types:** `src/types/customerHierarchy.ts` — `CustomerRelationship`, `ContactCustomerLink`, `CustomerHierarchyNode`, `RELATIONSHIP_TYPE_LABELS`, `RELATIONSHIP_TYPE_BADGE_CLASSES`, `INVERSE_RELATIONSHIP`
 
 ---
 
@@ -593,6 +603,8 @@ The database uses **9+ interconnected tables** with foreign key relationships (S
 | lead_follow_up_tasks | → leads, opportunities, company_settings |
 | quotes             | → customers, company_settings          |
 | quote_items        | → quotes, products                     |
+| customer_relationships | → customers (from/to), company_settings — B2B many-to-many company hierarchy |
+| contact_customer_links | → customer_contacts, customers — many-to-many contact-to-company cross-links |
 
 ### HR Tables
 | Table              | Relationships                          |
@@ -612,7 +624,10 @@ The database uses **9+ interconnected tables** with foreign key relationships (S
 ### Database Migrations
 
 Migrations are in `database/migrations/` (40+ SQL files). Key recent migrations:
-- `030_customer_contacts.sql` — multiple contacts per customer (Primary, Billing, Sales, Support), soft-deletes, unique active primary index
+- `033_customer_b2b_hierarchy.sql` — B2B hierarchy tables: `customer_relationships` (company↔company many-to-many) and `contact_customer_links` (contact↔company many-to-many cross-links)
+- `032_add_company_settings_id_to_subscription_plans.sql`
+- `031_add_completion_notes_to_lead_follow_up_tasks.sql`
+- `030_customer_contacts.sql` — multiple contacts per customer
 - `029_lead_follow_up_tasks.sql` — follow-up tasks, priorities, recurrence, alerts
 - `028_add_lead_currency_code.sql`
 - `027_fix_lead_country_foreign_key.sql`

@@ -15,7 +15,7 @@ import {
   PaginatedResponse
 } from '../../services/expenseService';
 import { invoiceService } from '../../services/invoiceService';
-import type { Country } from '../../types/invoice';
+import type { Country, CompanySettings } from '../../types/invoice';
 import { useToast } from '../ui/ToastProvider';
 import { useConfirmDialog } from '../../hooks/useConfirmDialog';
 import ConfirmDialog from '../ui/ConfirmDialog';
@@ -44,12 +44,37 @@ const statusColors: Record<string, string> = {
   cancelled: 'bg-gray-100 text-gray-800'
 };
 
-const formatCurrency = (amount: number) => {
-  return new Intl.NumberFormat('en-IN', {
-    style: 'currency',
-    currency: 'INR',
-    maximumFractionDigits: 0
-  }).format(amount);
+export const getCompanyCurrency = (comp: CompanySettings | null): string => {
+  if (!comp) return 'INR';
+  if (comp.country?.currency_code) return comp.country.currency_code;
+  const cCode = comp.country?.code?.toUpperCase();
+  if (cCode === 'IE' || cCode === 'IRL') return 'EUR';
+  if (cCode === 'IN' || cCode === 'IND') return 'INR';
+  if (cCode === 'US' || cCode === 'USA') return 'USD';
+  if (cCode === 'GB' || cCode === 'GBR') return 'GBP';
+  if (cCode === 'AE' || cCode === 'ARE') return 'AED';
+  return 'INR';
+};
+
+const formatCurrency = (amount: number, currencyCode: string = 'INR') => {
+  const code = (currencyCode || 'INR').toUpperCase();
+  const localeMap: Record<string, string> = {
+    INR: 'en-IN',
+    EUR: 'en-IE',
+    USD: 'en-US',
+    GBP: 'en-GB',
+    AED: 'en-AE',
+  };
+  const locale = localeMap[code] || 'en-US';
+  try {
+    return new Intl.NumberFormat(locale, {
+      style: 'currency',
+      currency: code,
+      maximumFractionDigits: 2
+    }).format(amount);
+  } catch (e) {
+    return `${code} ${amount.toFixed(2)}`;
+  }
 };
 
 const formatDate = (date: string) => {
@@ -59,7 +84,7 @@ const formatDate = (date: string) => {
 const ExpenseManagement: React.FC = () => {
   const { showError, showSuccess } = useToast();
   const { confirm, dialogProps } = useConfirmDialog();
-  const { selectedCompany } = useCompanyContext();
+  const { selectedCompany, companies } = useCompanyContext();
 
   // Reject dialog state
   const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
@@ -130,7 +155,7 @@ const ExpenseManagement: React.FC = () => {
         expenseService.getExpenses({ company_settings_id: selectedCompany?.id }, currentPage, itemsPerPage),
         expenseService.getVendors(),
         expenseService.getCategories(),
-        expenseService.getExpenseStats()
+        expenseService.getExpenseStats(undefined, undefined, selectedCompany?.id)
       ]);
       setExpenses(expenseData.data);
       setTotalPages(expenseData.total_pages);
@@ -161,6 +186,7 @@ const ExpenseManagement: React.FC = () => {
       setExpenses(data.data);
       setTotalPages(data.total_pages);
       setTotalCount(data.count);
+      expenseService.getExpenseStats(undefined, undefined, selectedCompany?.id).then(setStats);
     } catch (error) {
       console.error('Error loading expenses:', error);
     }
@@ -199,7 +225,7 @@ const ExpenseManagement: React.FC = () => {
       // Reload expenses with current filters to maintain filter state
       await loadExpenses();
       // Reload stats in the background
-      expenseService.getExpenseStats().then(setStats);
+      expenseService.getExpenseStats(undefined, undefined, selectedCompany?.id).then(setStats);
       showSuccess('Expense saved successfully');
     } catch (error) {
       console.error('Error saving expense:', error);
@@ -251,7 +277,7 @@ const ExpenseManagement: React.FC = () => {
     try {
       await expenseService.approveExpense(id);
       await loadExpenses();
-      expenseService.getExpenseStats().then(setStats);
+      expenseService.getExpenseStats(undefined, undefined, selectedCompany?.id).then(setStats);
     } catch (error) {
       console.error('Error approving expense:', error);
     }
@@ -269,7 +295,7 @@ const ExpenseManagement: React.FC = () => {
     try {
       await expenseService.rejectExpense(rejectTargetId, rejectReason);
       await loadExpenses();
-      expenseService.getExpenseStats().then(setStats);
+      expenseService.getExpenseStats(undefined, undefined, selectedCompany?.id).then(setStats);
       setRejectDialogOpen(false);
     } catch (error) {
       console.error('Error rejecting expense:', error);
@@ -289,7 +315,7 @@ const ExpenseManagement: React.FC = () => {
     try {
       await expenseService.markExpensePaid(markPaidTargetId, markPaidDate);
       await loadExpenses();
-      expenseService.getExpenseStats().then(setStats);
+      expenseService.getExpenseStats(undefined, undefined, selectedCompany?.id).then(setStats);
       setMarkPaidDialogOpen(false);
     } catch (error) {
       console.error('Error marking expense paid:', error);
@@ -311,7 +337,7 @@ const ExpenseManagement: React.FC = () => {
         case 'expense':
           await expenseService.deleteExpense(id);
           await loadExpenses();
-          expenseService.getExpenseStats().then(setStats);
+          expenseService.getExpenseStats(undefined, undefined, selectedCompany?.id).then(setStats);
           break;
         case 'vendor':
           await expenseService.deleteVendor(id);
@@ -380,7 +406,7 @@ const ExpenseManagement: React.FC = () => {
               </div>
               <div>
                 <p className="text-sm text-gray-600">Total Amount</p>
-                <p className="text-lg font-bold text-gray-900">{formatCurrency(stats.totalAmount)}</p>
+                <p className="text-lg font-bold text-gray-900">{formatCurrency(stats.totalAmount, getCompanyCurrency(selectedCompany))}</p>
               </div>
             </div>
           </div>
@@ -413,7 +439,7 @@ const ExpenseManagement: React.FC = () => {
               </div>
               <div>
                 <p className="text-sm text-gray-600">Paid This Month</p>
-                <p className="text-lg font-bold text-gray-900">{formatCurrency(stats.paidThisMonth)}</p>
+                <p className="text-lg font-bold text-gray-900">{formatCurrency(stats.paidThisMonth, getCompanyCurrency(selectedCompany))}</p>
               </div>
             </div>
           </div>
@@ -546,261 +572,233 @@ const ExpenseManagement: React.FC = () => {
         </div>
 
         {/* Content */}
-        <div className="p-4">
-          {loading ? (
-            <div className="flex justify-center items-center py-12">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-600"></div>
-            </div>
-          ) : (
-            <>
-              {/* Expenses Tab */}
-              {activeTab === 'expenses' && (
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead>
-                      <tr className="border-b border-gray-200">
-                        <th className="text-left py-3 px-4 text-sm font-medium text-gray-600">Expense #</th>
-                        <th className="text-left py-3 px-4 text-sm font-medium text-gray-600">Title</th>
-                        <th className="text-left py-3 px-4 text-sm font-medium text-gray-600">Category</th>
-                        <th className="text-left py-3 px-4 text-sm font-medium text-gray-600">Vendor</th>
-                        <th className="text-left py-3 px-4 text-sm font-medium text-gray-600">Date</th>
-                        <th className="text-right py-3 px-4 text-sm font-medium text-gray-600">Amount</th>
-                        <th className="text-center py-3 px-4 text-sm font-medium text-gray-600">Status</th>
-                        <th className="text-center py-3 px-4 text-sm font-medium text-gray-600">Payment</th>
-                        <th className="text-center py-3 px-4 text-sm font-medium text-gray-600">Actions</th>
+        {activeTab === 'expenses' && (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-gray-50 border-b border-gray-200 text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                  <th className="py-3 px-4">Expense #</th>
+                  <th className="py-3 px-4">Title</th>
+                  <th className="py-3 px-4">Category</th>
+                  <th className="py-3 px-4">Vendor</th>
+                  <th className="py-3 px-4">Date</th>
+                  <th className="py-3 px-4 text-right">Amount</th>
+                  <th className="py-3 px-4 text-center">Status</th>
+                  <th className="py-3 px-4 text-center">Payment</th>
+                  <th className="py-3 px-4 text-center">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                {loading ? (
+                  <tr>
+                    <td colSpan={9} className="text-center py-12">
+                      <RefreshCw className="w-8 h-8 text-orange-500 animate-spin mx-auto mb-2" />
+                      <p className="text-gray-500">Loading expenses...</p>
+                    </td>
+                  </tr>
+                ) : (
+                  <>
+                    {filteredExpenses.length === 0 ? (
+                      <tr>
+                        <td colSpan={9} className="text-center py-12 text-gray-500">
+                          No expenses found
+                        </td>
                       </tr>
-                    </thead>
-                    <tbody>
-                      {filteredExpenses.length === 0 ? (
-                        <tr>
-                          <td colSpan={9} className="text-center py-12 text-gray-500">
-                            No expenses found
+                    ) : (
+                      filteredExpenses.map((expense) => (
+                        <tr key={expense.id} className="border-b border-gray-100 hover:bg-gray-50">
+                          <td className="py-3 px-4">
+                            <span className="font-mono text-sm">{expense.expense_number}</span>
                           </td>
-                        </tr>
-                      ) : (
-                        filteredExpenses.map((expense) => (
-                          <tr key={expense.id} className="border-b border-gray-100 hover:bg-gray-50">
-                            <td className="py-3 px-4">
-                              <span className="font-mono text-sm">{expense.expense_number}</span>
-                            </td>
-                            <td className="py-3 px-4">
-                              <p className="font-medium text-gray-900">{expense.title}</p>
-                              {expense.description && (
-                                <p className="text-sm text-gray-500 truncate max-w-xs">{expense.description}</p>
-                              )}
-                            </td>
-                            <td className="py-3 px-4 text-sm text-gray-600">
-                              {expense.expense_categories?.name || '-'}
-                            </td>
-                            <td className="py-3 px-4 text-sm text-gray-600">
-                              {expense.vendors?.name || expense.vendor_name || '-'}
-                            </td>
-                            <td className="py-3 px-4 text-sm text-gray-600">
-                              {formatDate(expense.expense_date)}
-                            </td>
-                            <td className="py-3 px-4 text-right font-medium">
-                              {formatCurrency(expense.total_amount)}
-                            </td>
-                            <td className="py-3 px-4 text-center">
-                              <span className={`px-2 py-1 text-xs font-medium rounded-full ${statusColors[expense.status]}`}>
-                                {expense.status}
-                              </span>
-                            </td>
-                            <td className="py-3 px-4 text-center">
-                              <span className={`px-2 py-1 text-xs font-medium rounded-full ${statusColors[expense.payment_status]}`}>
-                                {expense.payment_status}
-                              </span>
-                            </td>
-                            <td className="py-3 px-4">
-                              <div className="flex items-center justify-center gap-1">
-                                <button
-                                  onClick={() => openModal('expense', 'view', expense)}
-                                  className="p-1.5 text-gray-600 hover:bg-gray-100 rounded"
-                                  title="View"
-                                >
-                                  <Eye className="w-4 h-4" />
-                                </button>
-                                <button
-                                  onClick={() => openModal('expense', 'edit', expense)}
-                                  className="p-1.5 text-blue-600 hover:bg-blue-50 rounded"
-                                  title="Edit"
-                                >
-                                  <Edit className="w-4 h-4" />
-                                </button>
-                                {expense.status === 'pending' && (
-                                  <>
-                                    <button
-                                      onClick={() => handleApprove(expense.id)}
-                                      className="p-1.5 text-green-600 hover:bg-green-50 rounded"
-                                      title="Approve"
-                                    >
-                                      <CheckCircle className="w-4 h-4" />
-                                    </button>
-                                    <button
-                                      onClick={() => handleReject(expense.id)}
-                                      className="p-1.5 text-red-600 hover:bg-red-50 rounded"
-                                      title="Reject"
-                                    >
-                                      <XCircle className="w-4 h-4" />
-                                    </button>
-                                  </>
-                                )}
-                                {expense.status === 'approved' && expense.payment_status === 'pending' && (
-                                  <button
-                                    onClick={() => handleMarkPaid(expense.id)}
-                                    className="p-1.5 text-green-600 hover:bg-green-50 rounded"
-                                    title="Mark Paid"
-                                  >
-                                    <CreditCard className="w-4 h-4" />
-                                  </button>
-                                )}
-                                <button
-                                  onClick={() => handleDelete('expense', expense.id)}
-                                  className="p-1.5 text-red-600 hover:bg-red-50 rounded"
-                                  title="Delete"
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
-                  
-                  {/* Pagination */}
-                  {filteredExpenses.length > 0 && totalPages > 1 && (
-                    <div className="mt-4 flex items-center justify-between border-t border-gray-200 pt-4">
-                      <p className="text-sm text-gray-600">
-                        Showing {((currentPage - 1) * itemsPerPage) + 1} to {Math.min(currentPage * itemsPerPage, totalCount)} of {totalCount} expenses
-                      </p>
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
-                          disabled={currentPage === 1}
-                          className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          Previous
-                        </button>
-                        <span className="text-sm text-gray-600">
-                          Page {currentPage} of {totalPages}
-                        </span>
-                        <button
-                          onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
-                          disabled={currentPage === totalPages}
-                          className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          Next
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Vendors Tab */}
-              {activeTab === 'vendors' && (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {filteredVendors.length === 0 ? (
-                    <div className="col-span-full text-center py-12 text-gray-500">
-                      No vendors found
-                    </div>
-                  ) : (
-                    filteredVendors.map((vendor) => (
-                      <div key={vendor.id} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
-                        <div className="flex items-start justify-between">
-                          <div className="flex items-center gap-3">
-                            <div className="p-2 bg-gray-100 rounded-lg">
-                              <Building2 className="w-5 h-5 text-gray-600" />
-                            </div>
-                            <div>
-                              <h3 className="font-medium text-gray-900">{vendor.name}</h3>
-                              {vendor.contact_person && (
-                                <p className="text-sm text-gray-500">{vendor.contact_person}</p>
-                              )}
-                            </div>
-                          </div>
-                          <div className="flex gap-1">
-                            <button
-                              onClick={() => openModal('vendor', 'edit', vendor)}
-                              className="p-1.5 text-blue-600 hover:bg-blue-50 rounded"
-                            >
-                              <Edit className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={() => handleDelete('vendor', vendor.id)}
-                              className="p-1.5 text-red-600 hover:bg-red-50 rounded"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
-                        </div>
-                        <div className="mt-3 space-y-1 text-sm text-gray-600">
-                          {vendor.email && <p>📧 {vendor.email}</p>}
-                          {vendor.phone && <p>📞 {vendor.phone}</p>}
-                          {vendor.gstin && <p>🏷️ GSTIN: {vendor.gstin}</p>}
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-              )}
-
-              {/* Categories Tab */}
-              {activeTab === 'categories' && (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {categories.length === 0 ? (
-                    <div className="col-span-full text-center py-12 text-gray-500">
-                      No categories found
-                    </div>
-                  ) : (
-                    categories.map((category) => {
-                      const categoryStats = stats?.byCategory.find(c => c.category === category.name);
-                      return (
-                        <div key={category.id} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
-                          <div className="flex items-start justify-between">
-                            <div className="flex items-center gap-3">
-                              <div className="p-2 bg-orange-100 rounded-lg">
-                                <Tag className="w-5 h-5 text-orange-600" />
-                              </div>
-                              <div>
-                                <h3 className="font-medium text-gray-900">{category.name}</h3>
-                                {category.description && (
-                                  <p className="text-sm text-gray-500">{category.description}</p>
-                                )}
-                              </div>
-                            </div>
-                            <div className="flex gap-1">
+                          <td className="py-3 px-4">
+                            <p className="font-medium text-gray-900">{expense.title}</p>
+                            {expense.description && (
+                              <p className="text-sm text-gray-500 truncate max-w-xs">{expense.description}</p>
+                            )}
+                          </td>
+                          <td className="py-3 px-4 text-sm text-gray-600">
+                            {expense.expense_categories?.name || '-'}
+                          </td>
+                          <td className="py-3 px-4 text-sm text-gray-600">
+                            {expense.vendors?.name || expense.vendor_name || '-'}
+                          </td>
+                          <td className="py-3 px-4 text-sm text-gray-600">
+                            {formatDate(expense.expense_date)}
+                          </td>
+                          <td className="py-3 px-4 text-right font-medium">
+                            {formatCurrency(expense.total_amount || expense.amount, expense.currency || expense.original_currency_code || getCompanyCurrency(selectedCompany))}
+                          </td>
+                          <td className="py-3 px-4 text-center">
+                            <span className={`px-2 py-1 text-xs font-medium rounded-full ${statusColors[expense.status]}`}>
+                              {expense.status}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 text-center">
+                            <span className={`px-2 py-1 text-xs font-medium rounded-full ${statusColors[expense.payment_status]}`}>
+                              {expense.payment_status}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4">
+                            <div className="flex items-center justify-center gap-1">
                               <button
-                                onClick={() => openModal('category', 'edit', category)}
+                                onClick={() => openModal('expense', 'view', expense)}
+                                className="p-1.5 text-gray-600 hover:bg-gray-100 rounded"
+                                title="View"
+                              >
+                                <Eye className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => openModal('expense', 'edit', expense)}
                                 className="p-1.5 text-blue-600 hover:bg-blue-50 rounded"
+                                title="Edit"
                               >
                                 <Edit className="w-4 h-4" />
                               </button>
+                              {expense.status === 'pending' && (
+                                <>
+                                  <button
+                                    onClick={() => handleApprove(expense.id)}
+                                    className="p-1.5 text-green-600 hover:bg-green-50 rounded"
+                                    title="Approve"
+                                  >
+                                    <CheckCircle className="w-4 h-4" />
+                                  </button>
+                                  <button
+                                    onClick={() => handleReject(expense.id)}
+                                    className="p-1.5 text-red-600 hover:bg-red-50 rounded"
+                                    title="Reject"
+                                  >
+                                    <XCircle className="w-4 h-4" />
+                                  </button>
+                                </>
+                              )}
+                              {expense.status === 'approved' && expense.payment_status === 'pending' && (
+                                <button
+                                  onClick={() => handleMarkPaid(expense.id)}
+                                  className="p-1.5 text-green-600 hover:bg-green-50 rounded"
+                                  title="Mark Paid"
+                                >
+                                  <DollarSign className="w-4 h-4" />
+                                </button>
+                              )}
                               <button
-                                onClick={() => handleDelete('category', category.id)}
+                                onClick={() => handleDelete('expense', expense.id)}
                                 className="p-1.5 text-red-600 hover:bg-red-50 rounded"
+                                title="Delete"
                               >
                                 <Trash2 className="w-4 h-4" />
                               </button>
                             </div>
-                          </div>
-                          {categoryStats && (
-                            <div className="mt-3 pt-3 border-t border-gray-100 flex justify-between text-sm">
-                              <span className="text-gray-500">{categoryStats.count} expenses</span>
-                              <span className="font-medium text-gray-900">{formatCurrency(categoryStats.amount)}</span>
-                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </>
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* Vendors Tab */}
+        {activeTab === 'vendors' && (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-4">
+            {filteredVendors.length === 0 ? (
+              <div className="col-span-full text-center py-12 text-gray-500">
+                No vendors found
+              </div>
+            ) : (
+              filteredVendors.map((vendor) => (
+                <div key={vendor.id} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-gray-100 rounded-lg">
+                        <Building2 className="w-5 h-5 text-gray-600" />
+                      </div>
+                      <div>
+                        <h3 className="font-medium text-gray-900">{vendor.name}</h3>
+                        {vendor.contact_person && (
+                          <p className="text-sm text-gray-500">{vendor.contact_person}</p>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex gap-1">
+                      <button
+                        onClick={() => openModal('vendor', 'edit', vendor)}
+                        className="p-1.5 text-blue-600 hover:bg-blue-50 rounded"
+                      >
+                        <Edit className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => handleDelete('vendor', vendor.id)}
+                        className="p-1.5 text-red-600 hover:bg-red-50 rounded"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                  <div className="mt-3 space-y-1 text-sm text-gray-600">
+                    {vendor.email && <p>📧 {vendor.email}</p>}
+                    {vendor.phone && <p>📞 {vendor.phone}</p>}
+                    {vendor.gstin && <p>🏷️ GSTIN: {vendor.gstin}</p>}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        )}
+
+        {/* Categories Tab */}
+        {activeTab === 'categories' && (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-4">
+            {categories.length === 0 ? (
+              <div className="col-span-full text-center py-12 text-gray-500">
+                No categories found
+              </div>
+            ) : (
+              categories.map((category) => {
+                const categoryStats = stats?.byCategory.find(c => c.category === category.name);
+                return (
+                  <div key={category.id} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 bg-orange-100 rounded-lg">
+                          <Tag className="w-5 h-5 text-orange-600" />
+                        </div>
+                        <div>
+                          <h3 className="font-medium text-gray-900">{category.name}</h3>
+                          {category.description && (
+                            <p className="text-sm text-gray-500">{category.description}</p>
                           )}
                         </div>
-                      );
-                    })
-                  )}
-                </div>
-              )}
-            </>
-          )}
-        </div>
+                      </div>
+                      <div className="flex gap-1">
+                        <button
+                          onClick={() => openModal('category', 'edit', category)}
+                          className="p-1.5 text-blue-600 hover:bg-blue-50 rounded"
+                        >
+                          <Edit className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => handleDelete('category', category.id)}
+                          className="p-1.5 text-red-600 hover:bg-red-50 rounded"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                    {categoryStats && (
+                      <div className="mt-3 pt-3 border-t border-gray-100 flex justify-between text-sm">
+                        <span className="text-gray-500">{categoryStats.count} expenses</span>
+                        <span className="font-medium text-gray-900">{formatCurrency(categoryStats.amount, getCompanyCurrency(selectedCompany))}</span>
+                      </div>
+                    )}
+                  </div>
+                );
+              })
+            )}
+          </div>
+        )}
       </div>
 
       {/* Modals */}
@@ -811,6 +809,8 @@ const ExpenseManagement: React.FC = () => {
           categories={categories}
           vendors={vendors}
           countries={countries}
+          companies={companies}
+          selectedCompany={selectedCompany}
           onClose={closeModal}
           onSave={handleSaveExpense}
         />
@@ -832,70 +832,62 @@ const ExpenseManagement: React.FC = () => {
         />
       )}
 
-      {/* Reject Expense Dialog */}
+      {/* Reject Modal */}
       {rejectDialogOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-xl p-6 max-w-md w-full mx-4">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-semibold text-gray-900">Reject Expense</h3>
-              <button onClick={() => setRejectDialogOpen(false)} className="text-gray-400 hover:text-gray-600">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <p className="text-gray-600 text-sm mb-4">Please provide a reason for rejecting this expense.</p>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl w-full max-w-md p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Reject Expense</h3>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Reason for Rejection *</label>
             <textarea
               value={rejectReason}
-              onChange={e => setRejectReason(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg p-3 text-sm focus:ring-2 focus:ring-red-500 focus:border-red-500"
+              onChange={(e) => setRejectReason(e.target.value)}
               rows={3}
-              placeholder="Enter rejection reason..."
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 mb-4"
+              placeholder="Provide a reason..."
+              required
             />
-            <div className="flex justify-end gap-3 mt-4">
+            <div className="flex justify-end gap-3">
               <button
                 onClick={() => setRejectDialogOpen(false)}
-                className="px-4 py-2 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50"
+                className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
               >
                 Cancel
               </button>
               <button
                 onClick={submitReject}
-                disabled={!rejectReason.trim() || rejectLoading}
+                disabled={rejectLoading || !rejectReason.trim()}
                 className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50"
               >
-                {rejectLoading ? 'Rejecting...' : 'Reject'}
+                {rejectLoading ? 'Rejecting...' : 'Confirm Rejection'}
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Mark Paid Dialog */}
+      {/* Mark Paid Modal */}
       {markPaidDialogOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-xl p-6 max-w-sm w-full mx-4">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-semibold text-gray-900">Mark as Paid</h3>
-              <button onClick={() => setMarkPaidDialogOpen(false)} className="text-gray-400 hover:text-gray-600">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <p className="text-gray-600 text-sm mb-4">Select the payment date for this expense.</p>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl w-full max-w-md p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Mark Expense as Paid</h3>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Payment Date *</label>
             <input
               type="date"
               value={markPaidDate}
-              onChange={e => setMarkPaidDate(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg p-3 text-sm focus:ring-2 focus:ring-green-500 focus:border-green-500"
+              onChange={(e) => setMarkPaidDate(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 mb-4"
+              required
             />
-            <div className="flex justify-end gap-3 mt-4">
+            <div className="flex justify-end gap-3">
               <button
                 onClick={() => setMarkPaidDialogOpen(false)}
-                className="px-4 py-2 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50"
+                className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
               >
                 Cancel
               </button>
               <button
                 onClick={submitMarkPaid}
-                disabled={!markPaidDate || markPaidLoading}
+                disabled={markPaidLoading}
                 className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
               >
                 {markPaidLoading ? 'Saving...' : 'Mark Paid'}
@@ -917,9 +909,13 @@ const ExpenseModal: React.FC<{
   categories: ExpenseCategory[];
   vendors: Vendor[];
   countries: Country[];
+  companies: CompanySettings[];
+  selectedCompany: CompanySettings | null;
   onClose: () => void;
   onSave: (data: CreateExpenseData) => void;
-}> = ({ mode, expense, categories, vendors, countries, onClose, onSave }) => {
+}> = ({ mode, expense, categories, vendors, countries, companies, selectedCompany, onClose, onSave }) => {
+  const initialCurrency = expense?.currency || expense?.original_currency_code || getCompanyCurrency(selectedCompany);
+
   const [formData, setFormData] = useState<CreateExpenseData>(() => {
     if (expense && mode !== 'create') {
       return {
@@ -931,9 +927,10 @@ const ExpenseModal: React.FC<{
         expense_date: expense.expense_date,
         amount: expense.amount,
         tax_amount: expense.tax_amount,
-        currency: expense.currency,
+        currency: expense.currency || initialCurrency,
+        company_settings_id: expense.company_settings_id || undefined,
         // Multi-currency fields
-        original_currency_code: expense.original_currency_code || 'INR',
+        original_currency_code: expense.original_currency_code || initialCurrency,
         original_amount: expense.original_amount || expense.amount,
         exchange_rate: expense.exchange_rate || 1,
         exchange_rate_date: expense.exchange_rate_date || undefined,
@@ -959,9 +956,10 @@ const ExpenseModal: React.FC<{
       expense_date: new Date().toISOString().split('T')[0],
       amount: 0,
       tax_amount: 0,
-      currency: 'INR',
+      currency: initialCurrency,
+      company_settings_id: selectedCompany?.id || undefined,
       // Multi-currency defaults
-      original_currency_code: 'INR',
+      original_currency_code: initialCurrency,
       original_amount: 0,
       exchange_rate: 1,
       exchange_rate_date: new Date().toISOString().split('T')[0],
@@ -976,16 +974,14 @@ const ExpenseModal: React.FC<{
     };
   });
   
-  const [fetchingRate, setFetchingRate] = useState(false);
-
   const isReadOnly = mode === 'view';
   const isCurrencyLocked = expense?.is_currency_locked || false;
   
   // Get currency symbol for display
   const getSelectedCurrency = () => {
-    const currency = formData.original_currency_code || 'INR';
+    const currency = formData.original_currency_code || initialCurrency;
     const country = countries.find(c => c.currency_code === currency);
-    return country ? { code: currency, symbol: country.currency_symbol, name: country.currency_name } : { code: 'INR', symbol: '₹', name: 'Indian Rupee' };
+    return country ? { code: currency, symbol: country.currency_symbol, name: country.currency_name } : { code: currency, symbol: currency === 'EUR' ? '€' : currency === 'INR' ? '₹' : '$', name: currency };
   };
 
   // Calculate INR values when amount or exchange rate changes
@@ -998,8 +994,7 @@ const ExpenseModal: React.FC<{
 
   // Handle currency change
   const handleCurrencyChange = (currencyCode: string) => {
-    const isINR = currencyCode === 'INR';
-    const newRate = isINR ? 1 : formData.exchange_rate || 1;
+    const newRate = 1;
     
     setFormData(prev => {
       const { inrAmount, inrTaxAmount, inrTotalAmount } = calculateINRValues(
@@ -1016,8 +1011,7 @@ const ExpenseModal: React.FC<{
         inr_amount: inrAmount,
         inr_tax_amount: inrTaxAmount,
         inr_total_amount: inrTotalAmount,
-        // Also update the base amount for INR
-        amount: inrAmount
+        amount: prev.original_amount || 0
       };
     });
   };
@@ -1036,7 +1030,7 @@ const ExpenseModal: React.FC<{
         inr_amount: inrAmount,
         inr_tax_amount: inrTaxAmount,
         inr_total_amount: inrTotalAmount,
-        amount: inrAmount
+        amount: amount
       };
     });
   };
@@ -1073,14 +1067,29 @@ const ExpenseModal: React.FC<{
         inr_amount: inrAmount,
         inr_tax_amount: inrTaxAmount,
         inr_total_amount: inrTotalAmount,
-        amount: inrAmount
+        amount: prev.original_amount || 0
       };
     });
   };
 
+  const handleCompanySelectChange = (companyId: string) => {
+    const comp = companies.find(c => c.id === companyId) || null;
+    const newCurr = getCompanyCurrency(comp);
+    setFormData(prev => ({
+      ...prev,
+      company_settings_id: companyId || null,
+      currency: newCurr,
+      original_currency_code: newCurr
+    }));
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSave(formData);
+    onSave({
+      ...formData,
+      currency: formData.original_currency_code || initialCurrency,
+      amount: formData.original_amount || 0
+    });
   };
 
   // Get unique currencies from countries
@@ -1107,6 +1116,22 @@ const ExpenseModal: React.FC<{
 
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="md:col-span-2">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Company / Entity</label>
+              <select
+                value={formData.company_settings_id || ''}
+                onChange={(e) => handleCompanySelectChange(e.target.value)}
+                disabled={isReadOnly}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 disabled:bg-gray-100"
+              >
+                <option value="">Unassigned (All Companies)</option>
+                {companies.map((comp) => (
+                  <option key={comp.id} value={comp.id}>
+                    {comp.company_name}{comp.country?.code ? ` (${comp.country.code})` : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
             <div className="md:col-span-2">
               <label className="block text-sm font-medium text-gray-700 mb-1">Title *</label>
               <input

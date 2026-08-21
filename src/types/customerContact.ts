@@ -24,7 +24,10 @@ export interface CustomerContact {
   notes?: string | null;
   created_at: string;
   updated_at: string;
+  /** Cross-company links: other companies this contact also serves */
+  linkedCustomers?: import('./customerHierarchy').ContactCustomerLink[];
 }
+
 
 export interface CreateCustomerContactData {
   customer_id: string;

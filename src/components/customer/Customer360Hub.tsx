@@ -4,7 +4,7 @@ import {
   Users, Building2, Search, ArrowRight, DollarSign, FileText,
   Briefcase, RefreshCw, Plus, CheckCircle, AlertTriangle,
   Phone, Mail, MapPin, Globe, CreditCard, Clock, Award,
-  TrendingUp, Compass, UserPlus, FilePlus, ShieldCheck
+  TrendingUp, Compass, UserPlus, FilePlus, ShieldCheck, Network, GitBranch
 } from 'lucide-react';
 import { customer360Service } from '../../services/customer360Service';
 import { invoiceService } from '../../services/invoiceService';
@@ -13,10 +13,12 @@ import { formatCurrencyWithSymbol, convertCurrency } from '../../utils/currencyC
 import { getTaxRegistrationLabel } from '../../utils/taxUtils';
 import { getPrimaryCustomerId } from '../../utils/customerCodeUtils';
 import { CustomerContactModal } from './CustomerContactModal';
+import { CustomerHierarchyPanel } from './CustomerHierarchyPanel';
+import { ContactNetworkPanel } from './ContactNetworkPanel';
 import type { Customer } from '../../types/invoice';
 import type { Customer360Data } from '../../types/customer360';
 
-type TabType = 'overview' | 'contacts' | 'leads' | 'opportunities' | 'quotes' | 'contracts' | 'subscriptions' | 'invoices' | 'timeline';
+type TabType = 'overview' | 'contacts' | 'leads' | 'opportunities' | 'quotes' | 'contracts' | 'subscriptions' | 'invoices' | 'timeline' | 'hierarchy' | 'network';
 
 export const Customer360Hub: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -24,13 +26,14 @@ export const Customer360Hub: React.FC = () => {
   const { selectedCompany, companies } = useCompanyContext();
 
   const urlCustomerId = searchParams.get('id') || '';
+  const urlTab = searchParams.get('tab') as TabType | null;
 
   const [allCustomers, setAllCustomers] = useState<Customer[]>([]);
   const [selectedCustomerId, setSelectedCustomerId] = useState<string>(urlCustomerId);
   const [data360, setData360] = useState<Customer360Data | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [loadingCustomers, setLoadingCustomers] = useState<boolean>(true);
-  const [activeTab, setActiveTab] = useState<TabType>('overview');
+  const [activeTab, setActiveTab] = useState<TabType>(urlTab || 'overview');
 
   // Contact Modal state
   const [contactModalOpen, setContactModalOpen] = useState<boolean>(false);
@@ -64,7 +67,11 @@ export const Customer360Hub: React.FC = () => {
     if (urlCustomerId && urlCustomerId !== selectedCustomerId) {
       setSelectedCustomerId(urlCustomerId);
     }
-  }, [urlCustomerId]);
+    // Also sync tab from URL
+    if (urlTab && urlTab !== activeTab) {
+      setActiveTab(urlTab);
+    }
+  }, [urlCustomerId, urlTab]);
 
   const loadCustomerList = async () => {
     try {
@@ -365,6 +372,8 @@ export const Customer360Hub: React.FC = () => {
                 { id: 'subscriptions', label: `Subscriptions (${data360.subscriptions.length})`, icon: CreditCard },
                 { id: 'invoices', label: `Invoices & Payments (${data360.invoices.length})`, icon: DollarSign },
                 { id: 'timeline', label: `Activity Timeline (${data360.timeline.length})`, icon: Clock },
+                { id: 'hierarchy', label: `Hierarchy (${data360.relationships.length})`, icon: GitBranch },
+                { id: 'network', label: 'Contact Network', icon: Network },
               ].map((tab) => {
                 const Icon = tab.icon;
                 const isActive = activeTab === tab.id;
@@ -1075,6 +1084,25 @@ export const Customer360Hub: React.FC = () => {
                     </div>
                   )}
                 </div>
+              )}
+
+              {/* 10. HIERARCHY TAB */}
+              {activeTab === 'hierarchy' && (
+                <CustomerHierarchyPanel
+                  customerId={currentCustomer.id}
+                  customerName={currentCustomer.company_name || 'Customer'}
+                  initialRelationships={data360.relationships}
+                />
+              )}
+
+              {/* 11. CONTACT NETWORK TAB */}
+              {activeTab === 'network' && (
+                <ContactNetworkPanel
+                  customerId={currentCustomer.id}
+                  customerName={currentCustomer.company_name || 'Customer'}
+                  contacts={data360.contacts}
+                  initialContactLinks={data360.contactLinks}
+                />
               )}
             </div>
           </div>

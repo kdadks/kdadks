@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Search, Eye, Edit, Trash2, X, Users, RefreshCw, Globe, Building2, UserCheck, Contact, Compass } from 'lucide-react';
+import { Plus, Search, Eye, Edit, Trash2, X, Users, RefreshCw, Globe, Building2, UserCheck, Contact, Compass, GitBranch } from 'lucide-react';
 import { invoiceService } from '../../services/invoiceService';
 import { useToast } from '../ui/ToastProvider';
 import ConfirmDialog from '../ui/ConfirmDialog';
@@ -410,6 +410,14 @@ const CustomerManagement: React.FC = () => {
                           >
                             <Compass className="w-3.5 h-3.5 text-orange-600" />
                             360° Hub
+                          </button>
+                          <button
+                            onClick={() => navigate(`/admin/customer-360?id=${customer.id}&tab=hierarchy`)}
+                            className="text-violet-600 hover:text-violet-900 flex items-center gap-1 font-semibold text-xs bg-violet-50 hover:bg-violet-100 px-2.5 py-1 rounded border border-violet-200 shadow-2xs transition"
+                            title="Manage B2B Hierarchy"
+                          >
+                            <GitBranch className="w-3.5 h-3.5" />
+                            Hierarchy
                           </button>
                           <button onClick={() => openContactModal(customer)} className="text-purple-600 hover:text-purple-900" title="Manage Contacts">
                             <UserCheck className="w-4 h-4" />

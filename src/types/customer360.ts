@@ -4,6 +4,7 @@ import type { Lead, Opportunity } from './lead';
 import type { Quote } from './quote';
 import type { Contract } from './contract';
 import type { CustomerSubscription } from './subscription';
+import type { CustomerRelationship, ContactCustomerLink } from './customerHierarchy';
 
 export interface CustomerFinancialMetrics {
   totalInvoiced: number;      // Lifetime value / total invoiced amount
@@ -54,6 +55,10 @@ export interface Customer360Data {
   payments: Payment[];
   metrics: CustomerFinancialMetrics;
   timeline: CustomerActivityTimelineItem[];
+  /** All B2B hierarchy relationships this customer is involved in */
+  relationships: CustomerRelationship[];
+  /** Cross-company contact links for contacts associated with this customer */
+  contactLinks: ContactCustomerLink[];
 }
 
 export interface Customer360Filter {

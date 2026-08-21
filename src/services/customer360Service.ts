@@ -1,5 +1,6 @@
 import { supabase, isSupabaseConfigured } from '../config/supabase';
 import { convertCurrency } from '../utils/currencyConverter';
+import { customerHierarchyService } from './customerHierarchyService';
 import type { Customer, Invoice, Payment } from '../types/invoice';
 import type { CustomerContact } from '../types/customerContact';
 import type { Lead, Opportunity } from '../types/lead';
@@ -7,6 +8,7 @@ import type { Quote } from '../types/quote';
 import type { Contract } from '../types/contract';
 import type { CustomerSubscription } from '../types/subscription';
 import type { Customer360Data, CustomerFinancialMetrics, CustomerActivityTimelineItem } from '../types/customer360';
+import type { CustomerRelationship, ContactCustomerLink } from '../types/customerHierarchy';
 
 class Customer360Service {
   /**
@@ -47,6 +49,8 @@ class Customer360Service {
         contractsResult,
         subscriptionsResult,
         invoicesResult,
+        relationships,
+        contactLinks,
       ] = await Promise.all([
         // 2. Contacts
         supabase
@@ -90,6 +94,12 @@ class Customer360Service {
           .select('*, items:invoice_items(*)')
           .eq('customer_id', customerId)
           .order('created_at', { ascending: false }),
+
+        // 9. B2B Hierarchy Relationships
+        customerHierarchyService.getRelationships(customerId).catch(() => [] as CustomerRelationship[]),
+
+        // 10. Contact cross-company links
+        customerHierarchyService.getLinksForCustomer(customerId).catch(() => [] as ContactCustomerLink[]),
       ]);
 
       const contacts: CustomerContact[] = contactsResult.data || [];
@@ -149,6 +159,8 @@ class Customer360Service {
         payments,
         metrics,
         timeline,
+        relationships: Array.isArray(relationships) ? relationships : [],
+        contactLinks: Array.isArray(contactLinks) ? contactLinks : [],
       };
     } catch (error) {
       console.error('Error fetching Customer 360 Data:', error);

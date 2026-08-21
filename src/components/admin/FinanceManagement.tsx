@@ -36,12 +36,37 @@ const sourceColors: Record<string, { bg: string; text: string; icon: React.Compo
   manual: { bg: 'bg-gray-100', text: 'text-gray-700', icon: CreditCard }
 };
 
-const formatCurrency = (amount: number) => {
-  return new Intl.NumberFormat('en-IN', {
-    style: 'currency',
-    currency: 'INR',
-    maximumFractionDigits: 0
-  }).format(amount);
+export const getCompanyCurrency = (comp: CompanySettings | null): string => {
+  if (!comp) return 'INR';
+  if (comp.country?.currency_code) return comp.country.currency_code;
+  const cCode = comp.country?.code?.toUpperCase();
+  if (cCode === 'IE' || cCode === 'IRL') return 'EUR';
+  if (cCode === 'IN' || cCode === 'IND') return 'INR';
+  if (cCode === 'US' || cCode === 'USA') return 'USD';
+  if (cCode === 'GB' || cCode === 'GBR') return 'GBP';
+  if (cCode === 'AE' || cCode === 'ARE') return 'AED';
+  return 'INR';
+};
+
+const formatCurrency = (amount: number, currencyCode: string = 'INR') => {
+  const code = (currencyCode || 'INR').toUpperCase();
+  const localeMap: Record<string, string> = {
+    INR: 'en-IN',
+    EUR: 'en-IE',
+    USD: 'en-US',
+    GBP: 'en-GB',
+    AED: 'en-AE',
+  };
+  const locale = localeMap[code] || 'en-US';
+  try {
+    return new Intl.NumberFormat(locale, {
+      style: 'currency',
+      currency: code,
+      maximumFractionDigits: 2
+    }).format(amount);
+  } catch (e) {
+    return `${code} ${amount.toFixed(2)}`;
+  }
 };
 
 const formatDate = (date: string) => {
@@ -52,6 +77,8 @@ const FinanceManagement: React.FC = () => {
   const { showError, showSuccess } = useToast();
   const { confirm, dialogProps } = useConfirmDialog();
   const { selectedCompany } = useCompanyContext();
+  const activeCurrency = getCompanyCurrency(selectedCompany);
+  const fmtCurr = (amount: number, currencyCode?: string) => formatCurrency(amount, currencyCode || activeCurrency);
   const [activeView, setActiveView] = useState<ViewType>('dashboard');
   const [loading, setLoading] = useState(true);
   const [periodType, setPeriodType] = useState<PeriodType>('monthly');
@@ -161,18 +188,19 @@ const FinanceManagement: React.FC = () => {
     setLoading(true);
     try {
       const { startDate, endDate } = getDateRange();
-      console.log('📊 Finance Dashboard: Loading data for period', { periodType, startDate, endDate, selectedYear, selectedMonth, selectedQuarter });
+      console.log('📊 Finance Dashboard: Loading data for period', { periodType, startDate, endDate, selectedYear, selectedMonth, selectedQuarter, companyId: selectedCompany?.id });
       
       const [summaryData, healthData, incomeData, expenseData, trendData] = await Promise.all([
-        financeService.getFinancialSummary(startDate, endDate),
-        financeService.getFinancialHealth(),
-        financeService.getIncomeData(startDate, endDate),
-        financeService.getExpenseData(startDate, endDate),
-        financeService.getMonthlyTrend(12)
+        financeService.getFinancialSummary(startDate, endDate, undefined, selectedCompany?.id),
+        financeService.getFinancialHealth(selectedCompany?.id),
+        financeService.getIncomeData(startDate, endDate, selectedCompany?.id),
+        financeService.getExpenseData(startDate, endDate, selectedCompany?.id),
+        financeService.getMonthlyTrend(12, selectedCompany?.id)
       ]);
 
       console.log('📊 Finance Dashboard: Data loaded', { 
         periodType,
+        companyId: selectedCompany?.id,
         dateRange: { startDate, endDate },
         incomeTotal: summaryData.income.total,
         expenseTotal: summaryData.expenses.total,
@@ -194,9 +222,13 @@ const FinanceManagement: React.FC = () => {
 
   const loadCompanySettings = async () => {
     try {
-      const companies = await invoiceService.getCompanySettings();
-      const defaultCompany = companies.find(c => c.is_default) || companies[0];
-      setCompanySettings(defaultCompany || null);
+      if (selectedCompany) {
+        setCompanySettings(selectedCompany);
+      } else {
+        const companies = await invoiceService.getCompanySettings();
+        const defaultCompany = companies.find(c => c.is_default) || companies[0];
+        setCompanySettings(defaultCompany || null);
+      }
     } catch (error) {
       console.error('Error loading company settings:', error);
     }
@@ -340,11 +372,11 @@ const FinanceManagement: React.FC = () => {
       pdf.setTextColor(0, 0, 0);
 
       summary.income.breakdown.forEach(({ label, amount }) => {
-        drawTableRow(label, formatCurrency(amount));
+        drawTableRow(label, fmtCurr(amount));
       });
       pdf.setDrawColor(200, 200, 200);
       pdf.line(leftMargin, currentY - 2, pageWidth - rightMargin, currentY - 2);
-      drawTableRow('Total Income', formatCurrency(summary.income.total), true);
+      drawTableRow('Total Income', fmtCurr(summary.income.total), true);
       currentY += 6;
 
       // Capital Section (separate from income)
@@ -357,11 +389,11 @@ const FinanceManagement: React.FC = () => {
         pdf.setTextColor(0, 0, 0);
 
         summary.capital.breakdown.forEach(({ label, amount }) => {
-          drawTableRow(label, formatCurrency(amount));
+          drawTableRow(label, fmtCurr(amount));
         });
         pdf.setDrawColor(200, 200, 200);
         pdf.line(leftMargin, currentY - 2, pageWidth - rightMargin, currentY - 2);
-        drawTableRow('Total Capital', formatCurrency(summary.capital.total), true);
+        drawTableRow('Total Capital', fmtCurr(summary.capital.total), true);
         currentY += 6;
       }
 
@@ -374,10 +406,10 @@ const FinanceManagement: React.FC = () => {
       pdf.setTextColor(0, 0, 0);
 
       summary.expenses.breakdown.forEach(({ label, amount }) => {
-        drawTableRow(label, formatCurrency(amount));
+        drawTableRow(label, fmtCurr(amount));
       });
       pdf.line(leftMargin, currentY - 2, pageWidth - rightMargin, currentY - 2);
-      drawTableRow('Total Expenses', formatCurrency(summary.expenses.total), true);
+      drawTableRow('Total Expenses', fmtCurr(summary.expenses.total), true);
       currentY += 8;
 
       // Net Profit
@@ -388,7 +420,7 @@ const FinanceManagement: React.FC = () => {
       currentY += 4;
       pdf.setFont('helvetica', 'bold');
       pdf.setFontSize(12);
-      drawTableRow('NET PROFIT / (LOSS)', formatCurrency(summary.netProfit), true, true);
+      drawTableRow('NET PROFIT / (LOSS)', fmtCurr(summary.netProfit), true, true);
       pdf.setLineWidth(0.2);
       currentY += 10;
 
@@ -399,9 +431,9 @@ const FinanceManagement: React.FC = () => {
       const metrics = [
         { label: 'Gross Profit Margin', value: `${summary.profitMargin.toFixed(1)}%` },
         { label: 'Operating Expenses Ratio', value: `${summary.income.total > 0 ? ((summary.expenses.total / summary.income.total) * 100).toFixed(1) : 0}%` },
-        { label: 'YTD Profit', value: formatCurrency(health?.yearToDateProfit || 0) },
-        { label: 'Average Monthly Revenue', value: formatCurrency(health?.averageMonthlyRevenue || 0) },
-        { label: 'Average Monthly Expense', value: formatCurrency(health?.averageMonthlyExpense || 0) },
+        { label: 'YTD Profit', value: fmtCurr(health?.yearToDateProfit || 0) },
+        { label: 'Average Monthly Revenue', value: fmtCurr(health?.averageMonthlyRevenue || 0) },
+        { label: 'Average Monthly Expense', value: fmtCurr(health?.averageMonthlyExpense || 0) },
         { label: 'Month-over-Month Growth', value: `${(health?.monthOverMonthGrowth || 0).toFixed(1)}%` }
       ];
 
@@ -433,7 +465,7 @@ const FinanceManagement: React.FC = () => {
           pdf.text(new Date(txn.transaction_date).toLocaleDateString('en-IN'), leftMargin + 5, currentY);
           pdf.text(txn.reference_number.substring(0, 25), leftMargin + 32, currentY);
           pdf.text(txn.description.substring(0, 40), leftMargin + 72, currentY);
-          pdf.text(formatCurrency(txn.net_amount), pageWidth - rightMargin - 8, currentY, { align: 'right' });
+          pdf.text(fmtCurr(txn.net_amount, txn.currency), pageWidth - rightMargin - 8, currentY, { align: 'right' });
           currentY += 5;
         }
         currentY += 8;
@@ -462,7 +494,7 @@ const FinanceManagement: React.FC = () => {
           pdf.text(new Date(txn.transaction_date).toLocaleDateString('en-IN'), leftMargin + 5, currentY);
           pdf.text(txn.reference_number.substring(0, 25), leftMargin + 32, currentY);
           pdf.text(txn.description.substring(0, 40), leftMargin + 72, currentY);
-          pdf.text(formatCurrency(txn.net_amount), pageWidth - rightMargin - 8, currentY, { align: 'right' });
+          pdf.text(fmtCurr(txn.net_amount, txn.currency), pageWidth - rightMargin - 8, currentY, { align: 'right' });
           currentY += 5;
         }
         currentY += 8;
@@ -791,15 +823,15 @@ const FinanceManagement: React.FC = () => {
                       <div className="mt-4 grid grid-cols-3 gap-4 pt-4 border-t border-white/20">
                         <div>
                           <p className="text-sm opacity-75">Avg Monthly Revenue</p>
-                          <p className="text-xl font-semibold">{formatCurrency(health.averageMonthlyRevenue)}</p>
+                          <p className="text-xl font-semibold">{fmtCurr(health.averageMonthlyRevenue)}</p>
                         </div>
                         <div>
                           <p className="text-sm opacity-75">Avg Monthly Expense</p>
-                          <p className="text-xl font-semibold">{formatCurrency(health.averageMonthlyExpense)}</p>
+                          <p className="text-xl font-semibold">{fmtCurr(health.averageMonthlyExpense)}</p>
                         </div>
                         <div>
                           <p className="text-sm opacity-75">YTD Profit</p>
-                          <p className="text-xl font-semibold">{formatCurrency(health.yearToDateProfit)}</p>
+                          <p className="text-xl font-semibold">{fmtCurr(health.yearToDateProfit)}</p>
                         </div>
                       </div>
                     </div>
@@ -814,7 +846,7 @@ const FinanceManagement: React.FC = () => {
                         </div>
                         <div>
                           <p className="text-sm text-gray-600">Period Income</p>
-                          <p className="text-xl font-bold text-green-600">{formatCurrency(summary.income.total)}</p>
+                          <p className="text-xl font-bold text-green-600">{fmtCurr(summary.income.total)}</p>
                         </div>
                       </div>
                     </div>
@@ -825,7 +857,7 @@ const FinanceManagement: React.FC = () => {
                         </div>
                         <div>
                           <p className="text-sm text-gray-600">Period Expenses</p>
-                          <p className="text-xl font-bold text-red-600">{formatCurrency(summary.expenses.total)}</p>
+                          <p className="text-xl font-bold text-red-600">{fmtCurr(summary.expenses.total)}</p>
                         </div>
                       </div>
                     </div>
@@ -837,7 +869,7 @@ const FinanceManagement: React.FC = () => {
                         <div>
                           <p className="text-sm text-gray-600">Net Profit</p>
                           <p className={`text-xl font-bold ${summary.netProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                            {formatCurrency(summary.netProfit)}
+                            {fmtCurr(summary.netProfit)}
                           </p>
                         </div>
                       </div>
@@ -879,14 +911,14 @@ const FinanceManagement: React.FC = () => {
                                 </span>
                                 <span className="text-sm">{label}</span>
                               </div>
-                              <span className="font-medium">{formatCurrency(amount)}</span>
+                              <span className="font-medium">{fmtCurr(amount)}</span>
                             </div>
                           ));
                         })()}
                         {summary.income.total > 0 && (
                           <div className="flex justify-between font-medium text-green-600 pt-2 border-t border-gray-200">
                             <span>Total Income</span>
-                            <span>{formatCurrency(summary.income.total)}</span>
+                            <span>{fmtCurr(summary.income.total)}</span>
                           </div>
                         )}
                       </div>
@@ -912,14 +944,14 @@ const FinanceManagement: React.FC = () => {
                                 </span>
                                 <span className="text-sm">{label}</span>
                               </div>
-                              <span className="font-medium">{formatCurrency(amount)}</span>
+                              <span className="font-medium">{fmtCurr(amount)}</span>
                             </div>
                           ));
                         })()}
                         {summary.capital.total > 0 && (
                           <div className="flex justify-between font-medium text-blue-600 pt-2 border-t border-gray-200">
                             <span>Total Capital</span>
-                            <span>{formatCurrency(summary.capital.total)}</span>
+                            <span>{fmtCurr(summary.capital.total)}</span>
                           </div>
                         )}
                       </div>
@@ -945,14 +977,14 @@ const FinanceManagement: React.FC = () => {
                                 </span>
                                 <span className="text-sm">{label}</span>
                               </div>
-                              <span className="font-medium">{formatCurrency(amount)}</span>
+                              <span className="font-medium">{fmtCurr(amount)}</span>
                             </div>
                           ));
                         })()}
                         {summary.expenses.total > 0 && (
                           <div className="flex justify-between font-medium text-red-600 pt-2 border-t border-gray-200">
                             <span>Total Expenses</span>
-                            <span>{formatCurrency(summary.expenses.total)}</span>
+                            <span>{fmtCurr(summary.expenses.total)}</span>
                           </div>
                         )}
                       </div>
@@ -977,10 +1009,10 @@ const FinanceManagement: React.FC = () => {
                             {monthlyTrend.map((item, index) => (
                               <tr key={index} className="border-b border-gray-100">
                                 <td className="py-2 px-3 text-sm">{item.month}</td>
-                                <td className="py-2 px-3 text-sm text-right text-green-600">{formatCurrency(item.income)}</td>
-                                <td className="py-2 px-3 text-sm text-right text-red-600">{formatCurrency(item.expenses)}</td>
+                                <td className="py-2 px-3 text-sm text-right text-green-600">{fmtCurr(item.income)}</td>
+                                <td className="py-2 px-3 text-sm text-right text-red-600">{fmtCurr(item.expenses)}</td>
                                 <td className={`py-2 px-3 text-sm text-right font-medium ${item.profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                  {formatCurrency(item.profit)}
+                                  {fmtCurr(item.profit)}
                                 </td>
                               </tr>
                             ))}
@@ -999,7 +1031,7 @@ const FinanceManagement: React.FC = () => {
                         </div>
                         <div>
                           <p className="text-sm text-gray-600">Pending Receivables</p>
-                          <p className="text-xl font-bold text-blue-600">{formatCurrency(health.pendingReceivables)}</p>
+                          <p className="text-xl font-bold text-blue-600">{fmtCurr(health.pendingReceivables)}</p>
                           <p className="text-xs text-gray-500">Unpaid invoices</p>
                         </div>
                       </div>
@@ -1011,7 +1043,7 @@ const FinanceManagement: React.FC = () => {
                         </div>
                         <div>
                           <p className="text-sm text-gray-600">Pending Payables</p>
-                          <p className="text-xl font-bold text-orange-600">{formatCurrency(health.pendingPayables)}</p>
+                          <p className="text-xl font-bold text-orange-600">{fmtCurr(health.pendingPayables)}</p>
                           <p className="text-xs text-gray-500">Approved unpaid expenses</p>
                         </div>
                       </div>
@@ -1093,7 +1125,7 @@ const FinanceManagement: React.FC = () => {
                               <td className={`py-3 px-4 text-right font-medium ${
                                 transaction.transactionType === 'income' ? 'text-green-600' : 'text-red-600'
                               }`}>
-                                {transaction.transactionType === 'income' ? '+' : '-'}{formatCurrency(transaction.net_amount)}
+                                {transaction.transactionType === 'income' ? '+' : '-'}{fmtCurr(transaction.net_amount, transaction.currency)}
                               </td>
                             </tr>
                           ))
@@ -1185,19 +1217,19 @@ const FinanceManagement: React.FC = () => {
                             summary.income.breakdown.map(({ label, amount }) => (
                               <div key={label} className="flex justify-between text-sm">
                                 <span>{label}</span>
-                                <span>{formatCurrency(amount)}</span>
+                                <span>{fmtCurr(amount)}</span>
                               </div>
                             ))
                           ) : (
                             <div className="flex justify-between text-sm text-gray-400">
                               <span>No income recorded</span>
-                              <span>{formatCurrency(0)}</span>
+                              <span>{fmtCurr(0)}</span>
                             </div>
                           )}
                         </div>
                         <div className="flex justify-between font-medium text-green-600 mt-2 pt-2 border-t border-gray-200">
                           <span>Total Income</span>
-                          <span>{formatCurrency(summary.income.total)}</span>
+                          <span>{fmtCurr(summary.income.total)}</span>
                         </div>
                       </div>
 
@@ -1209,13 +1241,13 @@ const FinanceManagement: React.FC = () => {
                             {summary.capital.breakdown.map(({ label, amount }) => (
                               <div key={label} className="flex justify-between text-sm">
                                 <span>{label}</span>
-                                <span>{formatCurrency(amount)}</span>
+                                <span>{fmtCurr(amount)}</span>
                               </div>
                             ))}
                           </div>
                           <div className="flex justify-between font-medium text-blue-600 mt-2 pt-2 border-t border-gray-200">
                             <span>Total Capital</span>
-                            <span>{formatCurrency(summary.capital.total)}</span>
+                            <span>{fmtCurr(summary.capital.total)}</span>
                           </div>
                         </div>
                       )}
@@ -1228,19 +1260,19 @@ const FinanceManagement: React.FC = () => {
                             summary.expenses.breakdown.map(({ label, amount }) => (
                               <div key={label} className="flex justify-between text-sm">
                                 <span>{label}</span>
-                                <span>{formatCurrency(amount)}</span>
+                                <span>{fmtCurr(amount)}</span>
                               </div>
                             ))
                           ) : (
                             <div className="flex justify-between text-sm text-gray-400">
                               <span>No expenses recorded</span>
-                              <span>{formatCurrency(0)}</span>
+                              <span>{fmtCurr(0)}</span>
                             </div>
                           )}
                         </div>
                         <div className="flex justify-between font-medium text-red-600 mt-2 pt-2 border-t border-gray-200">
                           <span>Total Expenses</span>
-                          <span>{formatCurrency(summary.expenses.total)}</span>
+                          <span>{fmtCurr(summary.expenses.total)}</span>
                         </div>
                       </div>
 
@@ -1248,7 +1280,7 @@ const FinanceManagement: React.FC = () => {
                       <div className="flex justify-between text-lg font-bold pt-4 border-t-2 border-gray-300">
                         <span>Net Profit / (Loss)</span>
                         <span className={summary.netProfit >= 0 ? 'text-green-600' : 'text-red-600'}>
-                          {formatCurrency(summary.netProfit)}
+                          {fmtCurr(summary.netProfit)}
                         </span>
                       </div>
                     </div>
@@ -1273,7 +1305,7 @@ const FinanceManagement: React.FC = () => {
                     <div className="bg-white border border-gray-200 rounded-xl p-4">
                       <h4 className="text-sm font-medium text-gray-600 mb-2">YTD Profit</h4>
                       <p className={`text-2xl font-bold ${health.yearToDateProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                        {formatCurrency(health.yearToDateProfit)}
+                        {fmtCurr(health.yearToDateProfit)}
                       </p>
                     </div>
                   </div>

@@ -14,6 +14,7 @@ import { useToast } from '../ui/ToastProvider';
 import { useConfirmDialog } from '../../hooks/useConfirmDialog';
 import ConfirmDialog from '../ui/ConfirmDialog';
 import { useCompanyContext } from '../../contexts/CompanyContext';
+import type { CompanySettings } from '../../types/invoice';
 
 type TabType = 'income' | 'categories';
 
@@ -28,12 +29,37 @@ const paymentMethods = [
   { value: 'other', label: 'Other' }
 ];
 
-const formatCurrency = (amount: number) => {
-  return new Intl.NumberFormat('en-IN', {
-    style: 'currency',
-    currency: 'INR',
-    maximumFractionDigits: 0
-  }).format(amount);
+export const getCompanyCurrency = (comp: CompanySettings | null): string => {
+  if (!comp) return 'INR';
+  if (comp.country?.currency_code) return comp.country.currency_code;
+  const cCode = comp.country?.code?.toUpperCase();
+  if (cCode === 'IE' || cCode === 'IRL') return 'EUR';
+  if (cCode === 'IN' || cCode === 'IND') return 'INR';
+  if (cCode === 'US' || cCode === 'USA') return 'USD';
+  if (cCode === 'GB' || cCode === 'GBR') return 'GBP';
+  if (cCode === 'AE' || cCode === 'ARE') return 'AED';
+  return 'INR';
+};
+
+const formatCurrency = (amount: number, currencyCode: string = 'INR') => {
+  const code = (currencyCode || 'INR').toUpperCase();
+  const localeMap: Record<string, string> = {
+    INR: 'en-IN',
+    EUR: 'en-IE',
+    USD: 'en-US',
+    GBP: 'en-GB',
+    AED: 'en-AE',
+  };
+  const locale = localeMap[code] || 'en-US';
+  try {
+    return new Intl.NumberFormat(locale, {
+      style: 'currency',
+      currency: code,
+      maximumFractionDigits: 2
+    }).format(amount);
+  } catch (e) {
+    return `${code} ${amount.toFixed(2)}`;
+  }
 };
 
 const formatDate = (date: string) => {
@@ -52,7 +78,7 @@ interface IncomeStats {
 const IncomeManagement: React.FC = () => {
   const { showError, showSuccess } = useToast();
   const { confirm, dialogProps } = useConfirmDialog();
-  const { selectedCompany } = useCompanyContext();
+  const { selectedCompany, companies } = useCompanyContext();
 
   // Tabs
   const [activeTab, setActiveTab] = useState<TabType>('income');
@@ -171,7 +197,7 @@ const IncomeManagement: React.FC = () => {
   const handleSaveEntry = async (data: CreateTransactionData) => {
     try {
       if (entryModalMode === 'create') {
-        await financeService.createTransaction({ ...data, transaction_type: 'income' });
+        await financeService.createTransaction({ ...data, transaction_type: 'income', company_settings_id: selectedCompany?.id });
         showSuccess('Income entry added successfully');
       } else if (selectedEntry) {
         await financeService.updateTransaction(selectedEntry.id, data);
@@ -477,189 +503,156 @@ const IncomeManagement: React.FC = () => {
                   )}
                 </div>
 
-                {/* Table */}
-                {filteredEntries.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-16 text-gray-400">
-                    <TrendingUp className="w-12 h-12 mb-3 opacity-40" />
-                    <p className="text-lg font-medium">
-                      {entries.length === 0 ? 'No income entries yet' : 'No entries match your filters'}
-                    </p>
-                    {entries.length === 0 && (
-                      <button
-                        onClick={() => openEntryModal('create')}
-                        className="mt-4 flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm"
-                      >
-                        <Plus className="w-4 h-4" />
-                        Add First Entry
-                      </button>
-                    )}
-                  </div>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="bg-gray-50 text-left">
-                          <th className="px-4 py-3 font-semibold text-gray-700">Reference</th>
-                          <th className="px-4 py-3 font-semibold text-gray-700">Date</th>
-                          <th className="px-4 py-3 font-semibold text-gray-700">Title</th>
-                          <th className="px-4 py-3 font-semibold text-gray-700">Category</th>
-                          <th className="px-4 py-3 font-semibold text-gray-700">Party</th>
-                          <th className="px-4 py-3 font-semibold text-gray-700 text-right">Amount</th>
-                          <th className="px-4 py-3 font-semibold text-gray-700 text-right">Net Amount</th>
-                          <th className="px-4 py-3 font-semibold text-gray-700">Payment</th>
-                          <th className="px-4 py-3 font-semibold text-gray-700 text-center">Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-100">
-                        {filteredEntries.map(entry => (
-                          <tr key={entry.id} className="hover:bg-gray-50 transition-colors">
-                            <td className="px-4 py-3">
-                              <span className="font-mono text-xs text-gray-500">{entry.transaction_number}</span>
-                            </td>
-                            <td className="px-4 py-3 text-gray-700">{formatDate(entry.transaction_date)}</td>
-                            <td className="px-4 py-3">
-                              <div className="font-medium text-gray-900">{entry.title}</div>
-                              {entry.description && (
-                                <div className="text-xs text-gray-500 truncate max-w-[200px]">{entry.description}</div>
-                              )}
-                            </td>
-                            <td className="px-4 py-3">
-                              {entry.category ? (
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-xs font-medium">
-                                  <Tag className="w-3 h-3" />
-                                  {entry.category}
-                                </span>
-                              ) : (
-                                <span className="text-gray-400 text-xs">—</span>
-                              )}
-                            </td>
-                            <td className="px-4 py-3 text-gray-700">
-                              {entry.party_name || <span className="text-gray-400">—</span>}
-                            </td>
-                            <td className="px-4 py-3 text-right font-medium text-gray-900">
-                              {formatCurrency(entry.amount)}
-                            </td>
-                            <td className="px-4 py-3 text-right">
-                              <span className="font-semibold text-green-700">{formatCurrency(entry.net_amount)}</span>
-                            </td>
-                            <td className="px-4 py-3">
-                              {entry.payment_method ? (
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-50 text-blue-700 rounded-full text-xs">
-                                  <CreditCard className="w-3 h-3" />
-                                  {paymentMethods.find(p => p.value === entry.payment_method)?.label || entry.payment_method}
-                                </span>
-                              ) : (
-                                <span className="text-gray-400 text-xs">—</span>
-                              )}
-                            </td>
-                            <td className="px-4 py-3">
-                              <div className="flex items-center justify-center gap-2">
-                                <button
-                                  onClick={() => openEntryModal('view', entry)}
-                                  title="View"
-                                  className="p-1.5 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                                >
-                                  <CheckCircle className="w-4 h-4" />
-                                </button>
-                                <button
-                                  onClick={() => openEntryModal('edit', entry)}
-                                  title="Edit"
-                                  className="p-1.5 text-gray-500 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
-                                >
-                                  <Edit className="w-4 h-4" />
-                                </button>
-                                <button
-                                  onClick={() => handleDeleteEntry(entry.id)}
-                                  title="Delete"
-                                  className="p-1.5 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                    <div className="px-4 py-3 border-t border-gray-100 text-sm text-gray-500">
-                      Showing {filteredEntries.length} of {entries.length} entries
-                    </div>
-                  </div>
-                )}
-              </>
-            )}
-
-            {/* ===== CATEGORIES TAB ===== */}
-            {activeTab === 'categories' && (
-              <div className="p-6">
-                {categories.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-16 text-gray-400">
-                    <Tag className="w-12 h-12 mb-3 opacity-40" />
-                    <p className="text-lg font-medium">No categories yet</p>
-                    <p className="text-sm mt-1">Create categories to organise your income entries</p>
-                    <button
-                      onClick={() => openCategoryModal('create')}
-                      className="mt-4 flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm"
-                    >
-                      <Plus className="w-4 h-4" />
-                      Add First Category
-                    </button>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {categories.map(cat => {
-                      const catStats = stats?.byCategory.find(c => c.category === cat.name);
-                      return (
-                        <div
-                          key={cat.id}
-                          className="border border-gray-200 rounded-xl p-4 hover:shadow-md transition-shadow"
-                        >
-                          <div className="flex items-start justify-between">
-                            <div className="flex items-center gap-3">
-                              <div className="p-2 bg-green-100 rounded-lg flex-shrink-0">
-                                <Tag className="w-5 h-5 text-green-600" />
-                              </div>
-                              <div>
-                                <h3 className="font-semibold text-gray-900">{cat.name}</h3>
-                                {cat.description && (
-                                  <p className="text-sm text-gray-500 mt-0.5">{cat.description}</p>
-                                )}
-                              </div>
-                            </div>
-                            <div className="flex gap-1 flex-shrink-0 ml-2">
-                              <button
-                                onClick={() => openCategoryModal('edit', cat)}
-                                title="Edit"
-                                className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                              >
-                                <Edit className="w-4 h-4" />
-                              </button>
-                              <button
-                                onClick={() => handleDeleteCategory(cat.id)}
-                                title="Delete"
-                                className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            </div>
-                          </div>
-                          {catStats ? (
-                            <div className="mt-3 pt-3 border-t border-gray-100 flex justify-between text-sm">
-                              <span className="text-gray-500">{catStats.count} {catStats.count === 1 ? 'entry' : 'entries'}</span>
-                              <span className="font-semibold text-green-700">{formatCurrency(catStats.amount)}</span>
-                            </div>
-                          ) : (
-                            <div className="mt-3 pt-3 border-t border-gray-100">
-                              <span className="text-xs text-gray-400">No entries yet</span>
-                            </div>
+            {/* Table */}
+            {loading ? (
+              <div className="flex justify-center items-center py-16">
+                <RefreshCw className="w-8 h-8 text-green-500 animate-spin" />
+              </div>
+            ) : filteredEntries.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-16 text-gray-400">
+                <ArrowUpCircle className="w-12 h-12 mb-3 opacity-40" />
+                <p className="text-lg font-medium">No income entries found</p>
+                <p className="text-sm mt-1">Click "Add Income" to create your first entry</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm">
+                  <thead className="bg-gray-50 border-b border-gray-200 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                    <tr>
+                      <th className="px-4 py-3">Date</th>
+                      <th className="px-4 py-3">Title</th>
+                      <th className="px-4 py-3">Category</th>
+                      <th className="px-4 py-3">Received From</th>
+                      <th className="px-4 py-3 text-right">Gross Amount</th>
+                      <th className="px-4 py-3 text-right">Net Amount</th>
+                      <th className="px-4 py-3">Payment Method</th>
+                      <th className="px-4 py-3 text-center">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {filteredEntries.map((entry) => (
+                      <tr key={entry.id} className="hover:bg-gray-50/80 transition-colors">
+                        <td className="px-4 py-3 text-gray-700">{formatDate(entry.transaction_date)}</td>
+                        <td className="px-4 py-3">
+                          <div className="font-medium text-gray-900">{entry.title}</div>
+                          {entry.description && (
+                            <div className="text-xs text-gray-500 truncate max-w-[200px]">{entry.description}</div>
                           )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
+                        </td>
+                        <td className="px-4 py-3">
+                          {entry.category ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-xs font-medium">
+                              <Tag className="w-3 h-3" />
+                              {entry.category}
+                            </span>
+                          ) : (
+                            <span className="text-gray-400 text-xs">—</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-gray-700">
+                          {entry.party_name || <span className="text-gray-400">—</span>}
+                        </td>
+                        <td className="px-4 py-3 text-right font-medium text-gray-900">
+                          {formatCurrency(entry.amount, entry.currency || entry.original_currency_code || getCompanyCurrency(selectedCompany))}
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <span className="font-semibold text-green-700">{formatCurrency(entry.net_amount, entry.currency || entry.original_currency_code || getCompanyCurrency(selectedCompany))}</span>
+                        </td>
+                        <td className="px-4 py-3">
+                          {entry.payment_method ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-50 text-blue-700 rounded-full text-xs">
+                              <CreditCard className="w-3 h-3" />
+                              {paymentMethods.find(p => p.value === entry.payment_method)?.label || entry.payment_method}
+                            </span>
+                          ) : (
+                            <span className="text-gray-400 text-xs">—</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center justify-center gap-2">
+                            <button
+                              onClick={() => openEntryModal('view', entry)}
+                              title="View"
+                              className="p-1.5 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                            >
+                              <CheckCircle className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => openEntryModal('edit', entry)}
+                              title="Edit"
+                              className="p-1.5 text-gray-500 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                            >
+                              <Edit className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteEntry(entry.id)}
+                              title="Delete"
+                              className="p-1.5 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <div className="px-4 py-3 border-t border-gray-100 text-sm text-gray-500">
+                  Showing {filteredEntries.length} of {entries.length} entries
+                </div>
               </div>
             )}
+          </>
+        )}
+
+        {/* ===== CATEGORIES TAB ===== */}
+        {activeTab === 'categories' && (
+          <div className="p-6">
+            {categories.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-16 text-gray-400">
+                <Tag className="w-12 h-12 mb-3 opacity-40" />
+                <p className="text-lg font-medium">No categories yet</p>
+                <p className="text-sm mt-1">Create categories to organise your income entries</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {categories.map((cat) => {
+                  const categoryStats = stats?.byCategory.find(c => c.category === cat.name);
+                  return (
+                    <div key={cat.id} className="border border-gray-200 rounded-xl p-4 hover:shadow-md transition-all bg-white">
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <h4 className="font-semibold text-gray-900">{cat.name}</h4>
+                          {cat.description && (
+                            <p className="text-xs text-gray-500 mt-0.5">{cat.description}</p>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => openCategoryModal('edit', cat)}
+                            className="p-1 text-gray-400 hover:text-green-600 rounded"
+                          >
+                            <Edit className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteCategory(cat.id)}
+                            className="p-1 text-gray-400 hover:text-red-600 rounded"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                      <div className="mt-3 pt-3 border-t border-gray-100 flex items-center justify-between text-xs text-gray-500">
+                        <span>{categoryStats?.count || 0} entries</span>
+                        <span className="font-semibold text-gray-900">{formatCurrency(categoryStats?.amount || 0, getCompanyCurrency(selectedCompany))}</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
           </>
         )}
       </div>
@@ -670,6 +663,8 @@ const IncomeManagement: React.FC = () => {
           mode={entryModalMode}
           entry={selectedEntry}
           categories={categories}
+          companies={companies}
+          selectedCompany={selectedCompany}
           onClose={closeEntryModal}
           onSave={handleSaveEntry}
         />
@@ -696,11 +691,14 @@ const IncomeEntryModal: React.FC<{
   mode: 'create' | 'edit' | 'view';
   entry: ManualTransaction | null;
   categories: IncomeCategory[];
+  companies: CompanySettings[];
+  selectedCompany: CompanySettings | null;
   onClose: () => void;
   onSave: (data: CreateTransactionData) => void;
-}> = ({ mode, entry, categories, onClose, onSave }) => {
+}> = ({ mode, entry, categories, companies, selectedCompany, onClose, onSave }) => {
   const isView = mode === 'view';
   const today = new Date().toISOString().split('T')[0];
+  const initialCurrency = entry?.currency || entry?.original_currency_code || getCompanyCurrency(selectedCompany);
 
   const [formData, setFormData] = useState<CreateTransactionData>(() => {
     if (entry && (mode === 'edit' || mode === 'view')) {
@@ -710,7 +708,8 @@ const IncomeEntryModal: React.FC<{
         description: entry.description || '',
         amount: entry.amount,
         tax_amount: entry.tax_amount || 0,
-        original_currency_code: entry.original_currency_code || 'INR',
+        currency: entry.currency || initialCurrency,
+        original_currency_code: entry.original_currency_code || initialCurrency,
         original_amount: entry.original_amount || entry.amount,
         exchange_rate: entry.exchange_rate || 1,
         inr_amount: entry.inr_amount || entry.amount,
@@ -722,7 +721,8 @@ const IncomeEntryModal: React.FC<{
         payment_reference: entry.payment_reference || '',
         party_name: entry.party_name || '',
         party_type: entry.party_type || 'customer',
-        notes: entry.notes || ''
+        notes: entry.notes || '',
+        company_settings_id: entry.company_settings_id || undefined
       };
     }
     return {
@@ -731,7 +731,8 @@ const IncomeEntryModal: React.FC<{
       description: '',
       amount: 0,
       tax_amount: 0,
-      original_currency_code: 'INR',
+      currency: initialCurrency,
+      original_currency_code: initialCurrency,
       original_amount: 0,
       exchange_rate: 1,
       inr_amount: 0,
@@ -743,44 +744,83 @@ const IncomeEntryModal: React.FC<{
       payment_reference: '',
       party_name: '',
       party_type: 'customer',
-      notes: ''
+      notes: '',
+      company_settings_id: selectedCompany?.id || undefined
     };
   });
+
+  const currencies = [
+    { code: 'INR', symbol: '₹', name: 'Indian Rupee' },
+    { code: 'EUR', symbol: '€', name: 'Euro' },
+    { code: 'USD', symbol: '$', name: 'US Dollar' },
+    { code: 'GBP', symbol: '£', name: 'British Pound' },
+    { code: 'AED', symbol: 'AED', name: 'UAE Dirham' }
+  ];
+
+  const currentCurrency = currencies.find(c => c.code === (formData.original_currency_code || initialCurrency)) || {
+    code: formData.original_currency_code || initialCurrency,
+    symbol: (formData.original_currency_code || initialCurrency) === 'EUR' ? '€' : (formData.original_currency_code || initialCurrency) === 'INR' ? '₹' : '$'
+  };
 
   // Recalculate net amount whenever amount or tax changes
   const netAmount = (formData.original_amount || 0) - (formData.tax_amount || 0);
 
   const handleAmountChange = (val: number) => {
+    const exRate = formData.exchange_rate || 1;
     const net = val - (formData.tax_amount || 0);
     setFormData(prev => ({
       ...prev,
       original_amount: val,
       amount: val,
-      inr_amount: val,
-      inr_net_amount: net,
-      inr_tax_amount: prev.tax_amount || 0
+      inr_amount: val * exRate,
+      inr_net_amount: net * exRate,
+      inr_tax_amount: (prev.tax_amount || 0) * exRate
     }));
   };
 
   const handleTaxChange = (val: number) => {
+    const exRate = formData.exchange_rate || 1;
     const net = (formData.original_amount || 0) - val;
     setFormData(prev => ({
       ...prev,
       tax_amount: val,
-      inr_tax_amount: val,
-      inr_net_amount: net
+      inr_tax_amount: val * exRate,
+      inr_net_amount: net * exRate
+    }));
+  };
+
+  const handleCompanyChange = (companyId: string) => {
+    const comp = companies.find(c => c.id === companyId) || null;
+    const newCurr = getCompanyCurrency(comp);
+    setFormData(prev => ({
+      ...prev,
+      company_settings_id: companyId || null,
+      currency: newCurr,
+      original_currency_code: newCurr
     }));
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    const currCode = formData.original_currency_code || initialCurrency;
+    const exRate = currCode === 'INR' ? 1 : (formData.exchange_rate || 1);
+    const origAmount = formData.original_amount || 0;
+    const taxAmt = formData.tax_amount || 0;
+    const netAmt = origAmount - taxAmt;
+
     onSave({
       ...formData,
       transaction_type: 'income',
-      amount: formData.original_amount || 0,
-      inr_amount: formData.original_amount || 0,
-      inr_net_amount: netAmount,
-      inr_tax_amount: formData.tax_amount || 0
+      currency: currCode,
+      original_currency_code: currCode,
+      amount: origAmount,
+      original_amount: origAmount,
+      tax_amount: taxAmt,
+      net_amount: netAmt,
+      exchange_rate: exRate,
+      inr_amount: origAmount * exRate,
+      inr_tax_amount: taxAmt * exRate,
+      inr_net_amount: netAmt * exRate
     });
   };
 
@@ -800,6 +840,24 @@ const IncomeEntryModal: React.FC<{
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          {/* Company / Entity */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Company / Entity</label>
+            <select
+              value={formData.company_settings_id || ''}
+              onChange={(e) => handleCompanyChange(e.target.value)}
+              disabled={isView}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 disabled:bg-gray-50"
+            >
+              <option value="">Unassigned (All Companies)</option>
+              {companies.map((comp) => (
+                <option key={comp.id} value={comp.id}>
+                  {comp.company_name}{comp.country?.code ? ` (${comp.country.code})` : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+
           {/* Title */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -829,19 +887,20 @@ const IncomeEntryModal: React.FC<{
             />
           </div>
 
-          {/* Category & Date */}
+          {/* Currency & Date */}
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Currency *</label>
               <select
-                value={formData.category || ''}
-                onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                value={formData.original_currency_code || initialCurrency}
+                onChange={(e) => setFormData({ ...formData, currency: e.target.value, original_currency_code: e.target.value })}
                 disabled={isView}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 disabled:bg-gray-50"
               >
-                <option value="">Select Category</option>
-                {categories.map(cat => (
-                  <option key={cat.id} value={cat.name}>{cat.name}</option>
+                {currencies.map((curr) => (
+                  <option key={curr.code} value={curr.code}>
+                    {curr.code} ({curr.symbol})
+                  </option>
                 ))}
               </select>
             </div>
@@ -860,11 +919,27 @@ const IncomeEntryModal: React.FC<{
             </div>
           </div>
 
+          {/* Category */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+            <select
+              value={formData.category || ''}
+              onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+              disabled={isView}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 disabled:bg-gray-50"
+            >
+              <option value="">Select Category</option>
+              {categories.map(cat => (
+                <option key={cat.id} value={cat.name}>{cat.name}</option>
+              ))}
+            </select>
+          </div>
+
           {/* Amount & Tax */}
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Amount (₹) <span className="text-red-500">*</span>
+                Amount ({currentCurrency.symbol}) <span className="text-red-500">*</span>
               </label>
               <input
                 type="number"
@@ -879,7 +954,7 @@ const IncomeEntryModal: React.FC<{
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Tax Deducted (TDS/GST ₹)</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Tax Deducted ({currentCurrency.symbol})</label>
               <input
                 type="number"
                 value={formData.tax_amount || ''}
@@ -896,7 +971,7 @@ const IncomeEntryModal: React.FC<{
           {/* Net Amount Display */}
           <div className="bg-green-50 border border-green-200 rounded-lg px-4 py-3 flex justify-between items-center">
             <span className="text-sm font-medium text-green-800">Net Amount Received</span>
-            <span className="text-lg font-bold text-green-700">{formatCurrency(netAmount)}</span>
+            <span className="text-lg font-bold text-green-700">{formatCurrency(netAmount, currentCurrency.code)}</span>
           </div>
 
           {/* Party & Payment Method */}

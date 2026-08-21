@@ -45,6 +45,7 @@ export interface ManualTransaction {
   reconciled_by: string | null;
   notes: string | null;
   attachments: string[] | null;
+  company_settings_id?: string | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;
@@ -57,6 +58,7 @@ export interface CreateTransactionData {
   category?: string;
   amount: number;
   tax_amount?: number;
+  net_amount?: number;
   currency?: string;
   // Multi-currency fields
   original_currency_code?: string;
@@ -77,6 +79,7 @@ export interface CreateTransactionData {
   reference_id?: string;
   notes?: string;
   attachments?: string[];
+  company_settings_id?: string | null;
   created_by?: string;
 }
 
@@ -195,6 +198,20 @@ export const financeService = {
     if (error) throw error;
   },
 
+  async getIndianCompanyId(): Promise<string | null> {
+    try {
+      const { data } = await supabase
+        .from('company_settings')
+        .select('id, is_default, country_code')
+        .eq('is_active', true);
+      if (!data || data.length === 0) return null;
+      const indian = data.find(c => c.is_default || c.country_code === 'IN') || data[0];
+      return indian?.id || null;
+    } catch (error) {
+      return null;
+    }
+  },
+
   // ==================== MANUAL TRANSACTIONS ====================
 
   async getTransactions(filters?: {
@@ -213,7 +230,15 @@ export const financeService = {
     if (filters?.startDate) query = query.gte('transaction_date', filters.startDate);
     if (filters?.endDate) query = query.lte('transaction_date', filters.endDate);
     if (filters?.reconciled !== undefined) query = query.eq('is_reconciled', filters.reconciled);
-    if (filters?.company_settings_id) query = query.or(`company_settings_id.eq.${filters.company_settings_id},company_settings_id.is.null`);
+    if (filters?.company_settings_id) {
+      const indianCompanyId = await this.getIndianCompanyId();
+      const isIndian = indianCompanyId && filters.company_settings_id === indianCompanyId;
+      if (isIndian) {
+        query = query.or(`company_settings_id.eq.${filters.company_settings_id},company_settings_id.is.null`);
+      } else {
+        query = query.eq('company_settings_id', filters.company_settings_id);
+      }
+    }
 
     const { data, error } = await query;
     if (error) throw error;
@@ -232,9 +257,14 @@ export const financeService = {
   },
 
   async createTransaction(transactionData: CreateTransactionData): Promise<ManualTransaction> {
+    let companySettingsId = transactionData.company_settings_id;
+    if (!companySettingsId) {
+      companySettingsId = (await this.getIndianCompanyId()) || undefined;
+    }
+
     const { data, error } = await supabase
       .from('manual_transactions')
-      .insert(transactionData)
+      .insert({ ...transactionData, company_settings_id: companySettingsId })
       .select()
       .single();
 
@@ -295,9 +325,11 @@ export const financeService = {
 
   // ==================== FINANCIAL REPORTS ====================
 
-  async getIncomeData(startDate: string, endDate: string): Promise<FinancialTransaction[]> {
-    console.log('💰 getIncomeData called with date range:', { startDate, endDate });
-    
+  async getIncomeData(startDate: string, endDate: string, companySettingsId?: string): Promise<FinancialTransaction[]> {
+    console.log('💰 getIncomeData called with date range:', { startDate, endDate, companySettingsId });
+    const indianCompanyId = await this.getIndianCompanyId();
+    const isIndian = !companySettingsId || (indianCompanyId && companySettingsId === indianCompanyId);
+
     // Get payments from invoices (actual cash received)
     const { data: payments, error: paymentError } = await supabase
       .from('payments')
@@ -314,6 +346,7 @@ export const financeService = {
           total_amount, 
           tax_amount, 
           currency_code,
+          company_settings_id,
           customers(company_name)
         )
       `)
@@ -325,16 +358,26 @@ export const financeService = {
     if (paymentError) {
       console.error('Payment query error:', paymentError);
       // Fallback to old logic if payments table doesn't exist or query fails
-      return this.getIncomeDataFallback(startDate, endDate);
+      return this.getIncomeDataFallback(startDate, endDate, companySettingsId);
     }
 
     // Get manual income
-    const { data: manualIncome, error: manualError } = await supabase
+    let manualQuery = supabase
       .from('manual_transactions')
       .select('*')
       .eq('transaction_type', 'income')
       .gte('transaction_date', startDate)
       .lte('transaction_date', endDate);
+
+    if (companySettingsId) {
+      if (isIndian) {
+        manualQuery = manualQuery.or(`company_settings_id.eq.${companySettingsId},company_settings_id.is.null`);
+      } else {
+        manualQuery = manualQuery.eq('company_settings_id', companySettingsId);
+      }
+    }
+
+    const { data: manualIncome, error: manualError } = await manualQuery;
 
     if (manualError) throw manualError;
 
@@ -344,6 +387,13 @@ export const financeService = {
     (payments || []).forEach((payment: any) => {
       const inv = payment.invoices;
       if (!inv) return;
+      if (companySettingsId) {
+        if (isIndian) {
+          if (inv.company_settings_id && inv.company_settings_id !== companySettingsId) return;
+        } else {
+          if (inv.company_settings_id !== companySettingsId) return;
+        }
+      }
       income.push({
         source_type: 'invoice',
         source_id: inv.id,
@@ -381,24 +431,47 @@ export const financeService = {
   },
 
   // Fallback method for income data if payments table query fails
-  async getIncomeDataFallback(startDate: string, endDate: string): Promise<FinancialTransaction[]> {
+  async getIncomeDataFallback(startDate: string, endDate: string, companySettingsId?: string): Promise<FinancialTransaction[]> {
+    const indianCompanyId = await this.getIndianCompanyId();
+    const isIndian = !companySettingsId || (indianCompanyId && companySettingsId === indianCompanyId);
+
     // Get paid invoices (by invoice_date as fallback)
-    const { data: invoices, error: invoiceError } = await supabase
+    let invoiceQuery = supabase
       .from('invoices')
-      .select('id, invoice_number, invoice_date, total_amount, tax_amount, currency_code, customers(company_name)')
+      .select('id, invoice_number, invoice_date, total_amount, tax_amount, currency_code, company_settings_id, customers(company_name)')
       .eq('status', 'paid')
       .gte('invoice_date', startDate)
       .lte('invoice_date', endDate);
 
+    if (companySettingsId) {
+      if (isIndian) {
+        invoiceQuery = invoiceQuery.or(`company_settings_id.eq.${companySettingsId},company_settings_id.is.null`);
+      } else {
+        invoiceQuery = invoiceQuery.eq('company_settings_id', companySettingsId);
+      }
+    }
+
+    const { data: invoices, error: invoiceError } = await invoiceQuery;
+
     if (invoiceError) throw invoiceError;
 
     // Get manual income
-    const { data: manualIncome, error: manualError } = await supabase
+    let manualQuery = supabase
       .from('manual_transactions')
       .select('*')
       .eq('transaction_type', 'income')
       .gte('transaction_date', startDate)
       .lte('transaction_date', endDate);
+
+    if (companySettingsId) {
+      if (isIndian) {
+        manualQuery = manualQuery.or(`company_settings_id.eq.${companySettingsId},company_settings_id.is.null`);
+      } else {
+        manualQuery = manualQuery.eq('company_settings_id', companySettingsId);
+      }
+    }
+
+    const { data: manualIncome, error: manualError } = await manualQuery;
 
     if (manualError) throw manualError;
 
@@ -442,9 +515,12 @@ export const financeService = {
     return income.sort((a, b) => new Date(b.transaction_date).getTime() - new Date(a.transaction_date).getTime());
   },
 
-  async getExpenseData(startDate: string, endDate: string): Promise<FinancialTransaction[]> {
+  async getExpenseData(startDate: string, endDate: string, companySettingsId?: string): Promise<FinancialTransaction[]> {
+    const indianCompanyId = await this.getIndianCompanyId();
+    const isIndian = !companySettingsId || (indianCompanyId && companySettingsId === indianCompanyId);
+
     // Get paid expenses
-    const { data: expenses, error: expenseError } = await supabase
+    let expenseQuery = supabase
       .from('expenses')
       .select('*, expense_categories(name), vendors(name)')
       .eq('status', 'approved')
@@ -452,12 +528,22 @@ export const financeService = {
       .gte('payment_date', startDate)
       .lte('payment_date', endDate);
 
+    if (companySettingsId) {
+      if (isIndian) {
+        expenseQuery = expenseQuery.or(`company_settings_id.eq.${companySettingsId},company_settings_id.is.null`);
+      } else {
+        expenseQuery = expenseQuery.eq('company_settings_id', companySettingsId);
+      }
+    }
+
+    const { data: expenses, error: expenseError } = await expenseQuery;
+
     if (expenseError) throw expenseError;
 
     // Get paid salary slips
     const { data: salaries, error: salaryError } = await supabase
       .from('salary_slips')
-      .select('*, employees(full_name)')
+      .select('*, employees(full_name, company_settings_id)')
       .eq('status', 'paid')
       .gte('payment_date', startDate)
       .lte('payment_date', endDate);
@@ -467,7 +553,7 @@ export const financeService = {
     // Get paid bonuses
     const { data: bonuses, error: bonusError } = await supabase
       .from('employee_bonuses')
-      .select('*, employees:employee_id(full_name)')
+      .select('*, employees:employee_id(full_name, company_settings_id)')
       .eq('payment_status', 'paid')
       .gte('payment_date', startDate)
       .lte('payment_date', endDate);
@@ -475,14 +561,42 @@ export const financeService = {
     if (bonusError) throw bonusError;
 
     // Get manual expenses
-    const { data: manualExpenses, error: manualError } = await supabase
+    let manualQuery = supabase
       .from('manual_transactions')
       .select('*')
       .eq('transaction_type', 'expense')
       .gte('transaction_date', startDate)
       .lte('transaction_date', endDate);
 
+    if (companySettingsId) {
+      if (isIndian) {
+        manualQuery = manualQuery.or(`company_settings_id.eq.${companySettingsId},company_settings_id.is.null`);
+      } else {
+        manualQuery = manualQuery.eq('company_settings_id', companySettingsId);
+      }
+    }
+
+    const { data: manualExpenses, error: manualError } = await manualQuery;
+
     if (manualError) throw manualError;
+
+    const filteredSalaries = (salaries || []).filter((sal: any) => {
+      if (!companySettingsId) return true;
+      const salCompanyId = sal.company_settings_id || sal.employees?.company_settings_id;
+      if (isIndian) {
+        return !salCompanyId || salCompanyId === companySettingsId;
+      }
+      return salCompanyId === companySettingsId;
+    });
+
+    const filteredBonuses = (bonuses || []).filter((bon: any) => {
+      if (!companySettingsId) return true;
+      const bonCompanyId = bon.company_settings_id || bon.employees?.company_settings_id;
+      if (isIndian) {
+        return !bonCompanyId || bonCompanyId === companySettingsId;
+      }
+      return bonCompanyId === companySettingsId;
+    });
 
     const expenseList: FinancialTransaction[] = [];
 
@@ -505,7 +619,7 @@ export const financeService = {
     });
 
     // Transform salaries
-    (salaries || []).forEach((sal: any) => {
+    filteredSalaries.forEach((sal: any) => {
       const salaryDate = new Date(sal.salary_year, sal.salary_month - 1, 1);
       expenseList.push({
         source_type: 'salary',
@@ -524,7 +638,7 @@ export const financeService = {
     });
 
     // Transform bonuses
-    (bonuses || []).forEach((bon: any) => {
+    filteredBonuses.forEach((bon: any) => {
       expenseList.push({
         source_type: 'bonus',
         source_id: bon.id,
@@ -562,9 +676,9 @@ export const financeService = {
     return expenseList.sort((a, b) => new Date(b.transaction_date).getTime() - new Date(a.transaction_date).getTime());
   },
 
-  async getFinancialSummary(startDate: string, endDate: string, periodName?: string): Promise<FinancialSummary> {
-    const income = await this.getIncomeData(startDate, endDate);
-    const expenses = await this.getExpenseData(startDate, endDate);
+  async getFinancialSummary(startDate: string, endDate: string, periodName?: string, companySettingsId?: string): Promise<FinancialSummary> {
+    const income = await this.getIncomeData(startDate, endDate, companySettingsId);
+    const expenses = await this.getExpenseData(startDate, endDate, companySettingsId);
 
     // Separate capital from income (capital is a balance-sheet item, not P&L income)
     const isCapital = (t: FinancialTransaction) => t.source_type !== 'invoice' && t.category === 'Capital';
@@ -652,7 +766,7 @@ export const financeService = {
     };
   },
 
-  async getFinancialHealth(): Promise<FinancialHealth> {
+  async getFinancialHealth(companySettingsId?: string): Promise<FinancialHealth> {
     const today = new Date();
     const currentMonth = new Date(today.getFullYear(), today.getMonth(), 1);
     const lastMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
@@ -666,35 +780,53 @@ export const financeService = {
     // Get current month summary
     const currentSummary = await this.getFinancialSummary(
       currentMonth.toISOString().split('T')[0],
-      currentMonthEnd.toISOString().split('T')[0]
+      currentMonthEnd.toISOString().split('T')[0],
+      undefined,
+      companySettingsId
     );
 
     // Get last month summary
     const lastSummary = await this.getFinancialSummary(
       lastMonth.toISOString().split('T')[0],
-      lastMonthEnd.toISOString().split('T')[0]
+      lastMonthEnd.toISOString().split('T')[0],
+      undefined,
+      companySettingsId
     );
 
     // Get YTD summary
     const ytdSummary = await this.getFinancialSummary(
       yearStart.toISOString().split('T')[0],
-      today.toISOString().split('T')[0]
+      today.toISOString().split('T')[0],
+      undefined,
+      companySettingsId
     );
 
     // Get pending receivables (unpaid invoices)
-    const { data: unpaidInvoices } = await supabase
+    let unpaidQuery = supabase
       .from('invoices')
       .select('total_amount')
       .in('status', ['sent', 'overdue']);
 
+    if (companySettingsId) {
+      unpaidQuery = unpaidQuery.or(`company_settings_id.eq.${companySettingsId},company_settings_id.is.null`);
+    }
+
+    const { data: unpaidInvoices } = await unpaidQuery;
+
     const pendingReceivables = (unpaidInvoices || []).reduce((sum: number, inv: any) => sum + (inv.total_amount || 0), 0);
 
     // Get pending payables (approved but unpaid expenses)
-    const { data: unpaidExpenses } = await supabase
+    let unpaidExpQuery = supabase
       .from('expenses')
       .select('total_amount')
       .eq('status', 'approved')
       .eq('payment_status', 'pending');
+
+    if (companySettingsId) {
+      unpaidExpQuery = unpaidExpQuery.or(`company_settings_id.eq.${companySettingsId},company_settings_id.is.null`);
+    }
+
+    const { data: unpaidExpenses } = await unpaidExpQuery;
 
     const pendingPayables = (unpaidExpenses || []).reduce((sum: number, exp: any) => sum + (exp.total_amount || 0), 0);
 
@@ -720,7 +852,7 @@ export const financeService = {
     };
   },
 
-  async getMonthlyTrend(months: number = 12): Promise<{ month: string; income: number; expenses: number; profit: number }[]> {
+  async getMonthlyTrend(months: number = 12, companySettingsId?: string): Promise<{ month: string; income: number; expenses: number; profit: number }[]> {
     const trend = [];
     const today = new Date();
 
@@ -730,7 +862,9 @@ export const financeService = {
 
       const summary = await this.getFinancialSummary(
         monthStart.toISOString().split('T')[0],
-        monthEnd.toISOString().split('T')[0]
+        monthEnd.toISOString().split('T')[0],
+        undefined,
+        companySettingsId
       );
 
       trend.push({

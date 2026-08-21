@@ -75,6 +75,7 @@ export interface Expense {
   reimbursement_date: string | null;
   notes: string | null;
   tags: string[] | null;
+  company_settings_id?: string | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;
@@ -112,6 +113,7 @@ export interface CreateExpenseData {
   is_reimbursable?: boolean;
   notes?: string;
   tags?: string[];
+  company_settings_id?: string | null;
   created_by?: string;
 }
 
@@ -277,7 +279,18 @@ export const expenseService = {
     if (filters?.vendorId) query = query.eq('vendor_id', filters.vendorId);
     if (filters?.startDate) query = query.gte('expense_date', filters.startDate);
     if (filters?.endDate) query = query.lte('expense_date', filters.endDate);
-    if (filters?.company_settings_id) query = query.or(`company_settings_id.eq.${filters.company_settings_id},company_settings_id.is.null`);
+    if (filters?.company_settings_id) {
+      const { data: companies } = await supabase
+        .from('company_settings')
+        .select('id, is_default, country_code')
+        .eq('is_active', true);
+      const indianCompany = companies?.find(c => c.is_default || c.country_code === 'IN');
+      if (indianCompany && filters.company_settings_id === indianCompany.id) {
+        query = query.or(`company_settings_id.eq.${filters.company_settings_id},company_settings_id.is.null`);
+      } else {
+        query = query.eq('company_settings_id', filters.company_settings_id);
+      }
+    }
 
     const from = (page - 1) * perPage;
     const to = from + perPage - 1;
@@ -310,9 +323,21 @@ export const expenseService = {
   },
 
   async createExpense(expenseData: CreateExpenseData): Promise<Expense> {
+    let companySettingsId = expenseData.company_settings_id;
+    if (!companySettingsId) {
+      const { data: companies } = await supabase
+        .from('company_settings')
+        .select('id, is_default, country_code')
+        .eq('is_active', true);
+      const indianCompany = companies?.find(c => c.is_default || c.country_code === 'IN');
+      if (indianCompany) {
+        companySettingsId = indianCompany.id;
+      }
+    }
+
     const { data, error } = await supabase
       .from('expenses')
-      .insert(expenseData)
+      .insert({ ...expenseData, company_settings_id: companySettingsId })
       .select()
       .single();
 
@@ -381,7 +406,7 @@ export const expenseService = {
     if (error) throw error;
   },
 
-  async getExpenseStats(startDate?: string, endDate?: string): Promise<ExpenseStats> {
+  async getExpenseStats(startDate?: string, endDate?: string, companySettingsId?: string): Promise<ExpenseStats> {
     const today = new Date();
     const monthStart = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().split('T')[0];
     const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0).toISOString().split('T')[0];
@@ -390,6 +415,19 @@ export const expenseService = {
     let query = supabase.from('expenses').select('*, expense_categories(name)');
     if (startDate) query = query.gte('expense_date', startDate);
     if (endDate) query = query.lte('expense_date', endDate);
+
+    if (companySettingsId) {
+      const { data: companies } = await supabase
+        .from('company_settings')
+        .select('id, is_default, country_code')
+        .eq('is_active', true);
+      const indianCompany = companies?.find(c => c.is_default || c.country_code === 'IN');
+      if (indianCompany && companySettingsId === indianCompany.id) {
+        query = query.or(`company_settings_id.eq.${companySettingsId},company_settings_id.is.null`);
+      } else {
+        query = query.eq('company_settings_id', companySettingsId);
+      }
+    }
 
     const { data: expenses, error } = await query;
     if (error) throw error;
