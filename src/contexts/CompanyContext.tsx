@@ -1,6 +1,7 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
 import { invoiceService } from '../services/invoiceService';
 import type { CompanySettings } from '../types/invoice';
+import { supabase } from '../config/supabase';
 
 interface CompanyContextType {
   companies: CompanySettings[];
@@ -19,29 +20,60 @@ export const CompanyProvider: React.FC<{ children: ReactNode }> = ({ children })
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const loadCompanies = async () => {
+  const loadCompanies = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
       const data = await invoiceService.getCompanySettings();
       setCompanies(data);
       setSelectedCompany(prev => {
-        if (prev && data.some(c => c.id === prev.id)) return prev;
+        if (prev && data.some(c => c.id === prev.id)) {
+          return data.find(c => c.id === prev.id) || prev;
+        }
+        const storedId = localStorage.getItem('kdadks_selected_company_id');
+        if (storedId && data.some(c => c.id === storedId)) {
+          return data.find(c => c.id === storedId) || null;
+        }
         const def = data.find(c => c.is_default) || data[0] || null;
+        if (def) {
+          localStorage.setItem('kdadks_selected_company_id', def.id);
+        }
         return def;
       });
     } catch (err) {
+      console.error('Failed to load company settings:', err);
       setError(err instanceof Error ? err.message : 'Failed to load companies');
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  useEffect(() => { loadCompanies(); }, []);
+  useEffect(() => {
+    loadCompanies();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'INITIAL_SESSION') {
+        loadCompanies();
+      } else if (event === 'SIGNED_OUT') {
+        setCompanies([]);
+        setSelectedCompany(null);
+        localStorage.removeItem('kdadks_selected_company_id');
+      }
+    });
+
+    return () => {
+      subscription?.unsubscribe();
+    };
+  }, [loadCompanies]);
 
   const selectCompany = (id: string) => {
     const found = companies.find(c => c.id === id) || null;
     setSelectedCompany(found);
+    if (found) {
+      localStorage.setItem('kdadks_selected_company_id', found.id);
+    } else {
+      localStorage.removeItem('kdadks_selected_company_id');
+    }
   };
 
   return (

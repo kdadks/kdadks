@@ -42,7 +42,116 @@ const OpportunityManagement: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'opportunities' | 'create-opportunity'>('dashboard');
   const [filters, setFilters] = useState<OpportunityFilters>({});
 
+  // Convert Opportunity to Draft Quote Modal state
+  const [showQuoteModal, setShowQuoteModal] = useState(false);
+  const [opportunityToConvert, setOpportunityToConvert] = useState<Opportunity | null>(null);
+  const [quoteModalLoading, setQuoteModalLoading] = useState(false);
+  const [quotePayload, setQuotePayload] = useState<{
+    project_title: string;
+    company_contact_name: string;
+    company_contact_email: string;
+    company_contact_phone: string;
+    estimated_time: string;
+    notes: string;
+    terms_conditions: string;
+    default_tax_rate: number;
+    items: Array<{
+      item_name: string;
+      description: string;
+      quantity: number;
+      unit: string;
+      unit_price: number;
+      tax_rate: number;
+    }>;
+  }>({
+    project_title: '',
+    company_contact_name: '',
+    company_contact_email: '',
+    company_contact_phone: '',
+    estimated_time: '1 Month',
+    notes: '',
+    terms_conditions: '1. Quote valid for 30 days.\n2. Payment terms: 50% advance, 50% upon completion.',
+    default_tax_rate: 18,
+    items: []
+  });
+
   const entityId = selectedCompany?.id ?? null;
+
+  const handleOpenConvertQuoteModal = (opp: Opportunity) => {
+    setOpportunityToConvert(opp);
+    const contactName = opp.lead ? `${opp.lead.first_name} ${opp.lead.last_name}` : opp.customer?.contact_person || '';
+    const contactEmail = opp.lead?.email || opp.customer?.email || '';
+    const contactPhone = opp.lead?.phone || opp.customer?.phone || '';
+    const defaultTax = selectedCompany?.country_id === 'IN' ? 18 : 0;
+
+    setQuotePayload({
+      project_title: opp.opportunity_name,
+      company_contact_name: contactName,
+      company_contact_email: contactEmail,
+      company_contact_phone: contactPhone,
+      estimated_time: '1 Month',
+      notes: opp.description || '',
+      terms_conditions: '1. Quote valid for 30 days.\n2. Payment terms: 50% advance, 50% upon completion.',
+      default_tax_rate: defaultTax,
+      items: [
+        {
+          item_name: opp.opportunity_name || 'Professional Services',
+          description: opp.description || 'Deliverables and scope of work as per Opportunity requirements',
+          quantity: 1,
+          unit: 'pcs',
+          unit_price: opp.estimated_value || 0,
+          tax_rate: defaultTax
+        }
+      ]
+    });
+    setShowQuoteModal(true);
+  };
+
+  const handleExecuteConvertQuote = async () => {
+    if (!opportunityToConvert) return;
+    try {
+      setQuoteModalLoading(true);
+      const result = await opportunityService.convertOpportunityToQuote(
+        opportunityToConvert.id,
+        quotePayload,
+        true
+      );
+      showSuccess(`Opportunity converted to draft Quote ${result.quoteNumber} successfully!`);
+      setShowQuoteModal(false);
+      setOpportunityToConvert(null);
+      loadData();
+    } catch (err) {
+      showError(`Failed to convert opportunity to quote: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    } finally {
+      setQuoteModalLoading(false);
+    }
+  };
+
+  const handleAddQuoteItem = () => {
+    const defaultTax = selectedCompany?.country_id === 'IN' ? 18 : 0;
+    setQuotePayload(prev => ({
+      ...prev,
+      items: [
+        ...prev.items,
+        { item_name: 'Additional Line Item', description: '', quantity: 1, unit: 'pcs', unit_price: 0, tax_rate: defaultTax }
+      ]
+    }));
+  };
+
+  const handleRemoveQuoteItem = (index: number) => {
+    setQuotePayload(prev => ({
+      ...prev,
+      items: prev.items.filter((_, i) => i !== index)
+    }));
+  };
+
+  const handleQuoteItemChange = (index: number, field: string, value: any) => {
+    setQuotePayload(prev => {
+      const updated = [...prev.items];
+      updated[index] = { ...updated[index], [field]: value };
+      return { ...prev, items: updated };
+    });
+  };
 
   const [showModal, setShowModal] = useState(false);
   const [modalMode, setModalMode] = useState<'view' | 'edit' | 'add'>('view');
@@ -366,7 +475,7 @@ const OpportunityManagement: React.FC = () => {
                               {opp.stage === 'qualification' && <button onClick={() => handleStageChange(opp, 'proposal')} className="text-blue-600 hover:text-blue-900" title="Move to Proposal">→</button>}
                               {opp.stage === 'proposal' && <button onClick={() => handleStageChange(opp, 'negotiation')} className="text-blue-600 hover:text-blue-900" title="Move to Negotiation">→</button>}
                               {opp.stage === 'negotiation' && <><button onClick={() => handleStageChange(opp, 'closed_won')} className="text-green-600 hover:text-green-900" title="Close Won"><UserCheck className="w-4 h-4" /></button><button onClick={() => handleStageChange(opp, 'closed_lost')} className="text-red-600 hover:text-red-900" title="Close Lost"><UserX className="w-4 h-4" /></button></>}
-                              {opp.stage === 'closed_won' && <button onClick={() => handleConvertToQuote(opp)} className="text-purple-600 hover:text-purple-900" title="Convert to Quote"><ArrowRightCircle className="w-4 h-4" /></button>}
+                              <button onClick={() => handleOpenConvertQuoteModal(opp)} className="text-purple-600 hover:text-purple-900" title="Convert Opportunity to Draft Quote"><ArrowRightCircle className="w-4 h-4" /></button>
                               <button onClick={() => handleDelete(opp)} className="text-red-600 hover:text-red-900" title="Delete"><Trash2 className="w-4 h-4" /></button>
                             </div>
                           </td>
@@ -474,6 +583,206 @@ const OpportunityManagement: React.FC = () => {
                 <button onClick={handleSave} disabled={modalLoading} className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50">{modalLoading ? 'Saving...' : 'Save Opportunity'}</button>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Generate Draft Quote Modal */}
+      {showQuoteModal && opportunityToConvert && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 overflow-y-auto">
+          <div className="bg-white rounded-lg max-w-3xl w-full p-6 space-y-4 shadow-xl">
+            <div className="flex justify-between items-center border-b pb-3">
+              <div className="flex items-center space-x-2">
+                <ArrowRightCircle className="w-6 h-6 text-purple-600" />
+                <h3 className="text-lg font-semibold text-gray-900">Generate Draft Quote from Opportunity</h3>
+              </div>
+              <button onClick={() => setShowQuoteModal(false)} className="text-gray-400 hover:text-gray-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {opportunityToConvert.stage !== 'closed_won' && (
+              <div className="bg-amber-50 border border-amber-200 rounded-md p-3 text-xs text-amber-900 space-y-1">
+                <p className="font-semibold">Admin Override Control Active:</p>
+                <p>
+                  Opportunity stage is currently <span className="font-bold">{opportunityToConvert.stage.replace('_', ' ')}</span>.
+                  Administrative privileges allow generating a Draft Quote prior to Closing Won.
+                </p>
+              </div>
+            )}
+
+            <div className="bg-purple-50 border border-purple-200 rounded-md p-3 text-xs text-purple-900">
+              <span className="font-semibold">Company Context Isolation:</span> Creating Draft Quote for{' '}
+              <span className="font-bold">{opportunityToConvert.company_settings?.company_name || selectedCompany?.company_name || 'Selected Entity'}</span>.
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="md:col-span-2">
+                <label className="block text-xs font-semibold text-gray-700 uppercase mb-1">Project / Quote Title *</label>
+                <input
+                  type="text"
+                  value={quotePayload.project_title}
+                  onChange={e => setQuotePayload(prev => ({ ...prev, project_title: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-purple-500 focus:border-purple-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 uppercase mb-1">Contact Name</label>
+                <input
+                  type="text"
+                  value={quotePayload.company_contact_name}
+                  onChange={e => setQuotePayload(prev => ({ ...prev, company_contact_name: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-purple-500 focus:border-purple-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 uppercase mb-1">Contact Email</label>
+                <input
+                  type="email"
+                  value={quotePayload.company_contact_email}
+                  onChange={e => setQuotePayload(prev => ({ ...prev, company_contact_email: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-purple-500 focus:border-purple-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 uppercase mb-1">Contact Phone</label>
+                <input
+                  type="tel"
+                  value={quotePayload.company_contact_phone}
+                  onChange={e => setQuotePayload(prev => ({ ...prev, company_contact_phone: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-purple-500 focus:border-purple-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 uppercase mb-1">Estimated Timeframe</label>
+                <input
+                  type="text"
+                  value={quotePayload.estimated_time}
+                  onChange={e => setQuotePayload(prev => ({ ...prev, estimated_time: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-purple-500 focus:border-purple-500"
+                  placeholder="e.g. 2 Weeks / 1 Month"
+                />
+              </div>
+            </div>
+
+            {/* Transferred Line Items Section */}
+            <div className="border-t pt-3">
+              <div className="flex justify-between items-center mb-2">
+                <label className="block text-xs font-bold text-gray-900 uppercase">Quote Line Items & Pricing</label>
+                <button
+                  type="button"
+                  onClick={handleAddQuoteItem}
+                  className="text-xs text-purple-600 font-semibold hover:text-purple-800 flex items-center"
+                >
+                  <Plus className="w-3.5 h-3.5 mr-1" /> Add Line Item
+                </button>
+              </div>
+
+              <div className="space-y-3 max-h-60 overflow-y-auto pr-1">
+                {quotePayload.items.map((item, idx) => (
+                  <div key={idx} className="p-3 bg-gray-50 border border-gray-200 rounded-md grid grid-cols-12 gap-2 text-xs items-center">
+                    <div className="col-span-4">
+                      <label className="block text-[10px] text-gray-500 mb-0.5">Item Name</label>
+                      <input
+                        type="text"
+                        value={item.item_name}
+                        onChange={e => handleQuoteItemChange(idx, 'item_name', e.target.value)}
+                        className="w-full px-2 py-1 border border-gray-300 rounded bg-white"
+                      />
+                    </div>
+                    <div className="col-span-3">
+                      <label className="block text-[10px] text-gray-500 mb-0.5">Unit Price ({opportunityToConvert.currency_code || 'INR'})</label>
+                      <input
+                        type="number"
+                        min="0"
+                        value={item.unit_price}
+                        onChange={e => handleQuoteItemChange(idx, 'unit_price', parseFloat(e.target.value) || 0)}
+                        className="w-full px-2 py-1 border border-gray-300 rounded bg-white"
+                      />
+                    </div>
+                    <div className="col-span-2">
+                      <label className="block text-[10px] text-gray-500 mb-0.5">Qty</label>
+                      <input
+                        type="number"
+                        min="1"
+                        value={item.quantity}
+                        onChange={e => handleQuoteItemChange(idx, 'quantity', parseInt(e.target.value) || 1)}
+                        className="w-full px-2 py-1 border border-gray-300 rounded bg-white"
+                      />
+                    </div>
+                    <div className="col-span-2">
+                      <label className="block text-[10px] text-gray-500 mb-0.5">Tax %</label>
+                      <input
+                        type="number"
+                        min="0"
+                        value={item.tax_rate}
+                        onChange={e => handleQuoteItemChange(idx, 'tax_rate', parseFloat(e.target.value) || 0)}
+                        className="w-full px-2 py-1 border border-gray-300 rounded bg-white"
+                      />
+                    </div>
+                    <div className="col-span-1 text-right pt-3">
+                      {quotePayload.items.length > 1 && (
+                        <button type="button" onClick={() => handleRemoveQuoteItem(idx)} className="text-red-500 hover:text-red-700">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+                    <div className="col-span-12 mt-1">
+                      <input
+                        type="text"
+                        value={item.description}
+                        onChange={e => handleQuoteItemChange(idx, 'description', e.target.value)}
+                        placeholder="Description..."
+                        className="w-full px-2 py-1 border border-gray-200 rounded text-gray-600 bg-white"
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-t pt-3">
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 uppercase mb-1">Quote Notes</label>
+                <textarea
+                  value={quotePayload.notes}
+                  onChange={e => setQuotePayload(prev => ({ ...prev, notes: e.target.value }))}
+                  rows={2}
+                  className="w-full px-3 py-1.5 border border-gray-300 rounded-md text-xs focus:ring-purple-500 focus:border-purple-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 uppercase mb-1">Terms & Conditions</label>
+                <textarea
+                  value={quotePayload.terms_conditions}
+                  onChange={e => setQuotePayload(prev => ({ ...prev, terms_conditions: e.target.value }))}
+                  rows={2}
+                  className="w-full px-3 py-1.5 border border-gray-300 rounded-md text-xs focus:ring-purple-500 focus:border-purple-500"
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end space-x-3 border-t pt-3">
+              <button
+                type="button"
+                onClick={() => setShowQuoteModal(false)}
+                className="px-4 py-2 bg-gray-100 text-gray-700 rounded-md text-xs font-semibold hover:bg-gray-200"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleExecuteConvertQuote}
+                disabled={quoteModalLoading}
+                className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-xs font-bold text-white bg-purple-600 hover:bg-purple-700 disabled:opacity-50"
+              >
+                {quoteModalLoading ? 'Generating...' : 'Create Draft Quote'}
+              </button>
+            </div>
           </div>
         </div>
       )}

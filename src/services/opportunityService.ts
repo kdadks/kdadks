@@ -255,20 +255,57 @@ class OpportunityService {
 
     const leadRecord = lead.data as Lead;
 
-    if (leadRecord.status !== 'qualified') {
-      throw new Error('Only qualified leads can be converted to opportunities');
+    // Resolve or auto-create Customer association
+    let customerId = leadRecord.customer_id;
+    if (!customerId) {
+      if (opportunityData.customer_id) {
+        customerId = opportunityData.customer_id;
+      } else {
+        const companyName = leadRecord.company_name || `${leadRecord.first_name} ${leadRecord.last_name}`;
+        const { data: newCust, error: custErr } = await supabase
+          .from('customers')
+          .insert({
+            company_name: companyName,
+            contact_person: `${leadRecord.first_name} ${leadRecord.last_name}`.trim(),
+            email: leadRecord.email || '',
+            phone: leadRecord.phone || '',
+            address_line1: leadRecord.address_line1 || '',
+            address_line2: leadRecord.address_line2 || '',
+            city: leadRecord.city || '',
+            state: leadRecord.state || '',
+            postal_code: leadRecord.postal_code || '',
+            country_id: leadRecord.country_id || 'IN',
+            company_settings_id: leadRecord.company_settings_id || undefined,
+            gstin: leadRecord.gstin || undefined,
+            pan: leadRecord.pan || undefined,
+            vat_number: leadRecord.vat_number || undefined,
+            cro_number: leadRecord.cro_number || undefined
+          })
+          .select()
+          .single();
+
+        if (custErr) throw custErr;
+        customerId = newCust.id;
+
+        await supabase
+          .from('leads')
+          .update({ customer_id: customerId })
+          .eq('id', leadId);
+      }
     }
 
     const opportunity = await this.createOpportunity({
       ...opportunityData,
       lead_id: leadId,
       source_lead_id: leadId,
-      customer_id: leadRecord.customer_id || '',
-      company_settings_id: leadRecord.company_settings_id || undefined,
-      opportunity_name: opportunityData.opportunity_name || `${leadRecord.first_name} ${leadRecord.last_name} - ${leadRecord.company_name || 'Opportunity'}`,
-      estimated_value: opportunityData.estimated_value || leadRecord.budget_max || 0,
-      currency_code: opportunityData.currency_code || 'INR',
-      expected_close_date: opportunityData.expected_close_date || leadRecord.expected_close_date || undefined
+      customer_id: customerId || '',
+      company_settings_id: leadRecord.company_settings_id || opportunityData.company_settings_id || undefined,
+      opportunity_name: opportunityData.opportunity_name || `${leadRecord.company_name || `${leadRecord.first_name} ${leadRecord.last_name}`} - Opportunity`,
+      estimated_value: opportunityData.estimated_value ?? leadRecord.budget_max ?? leadRecord.budget_min ?? 0,
+      currency_code: opportunityData.currency_code || leadRecord.currency_code || 'INR',
+      expected_close_date: opportunityData.expected_close_date || leadRecord.expected_close_date || undefined,
+      description: opportunityData.description || leadRecord.description || undefined,
+      stage: opportunityData.stage || 'prospecting'
     });
 
     await supabase
@@ -280,17 +317,33 @@ class OpportunityService {
       })
       .eq('id', leadId);
 
+    try {
+      await supabase.from('lead_activities').insert({
+        lead_id: leadId,
+        opportunity_id: opportunity.id,
+        activity_type: 'status_change',
+        subject: 'Lead Converted to Draft Opportunity',
+        description: `Lead was converted to Opportunity ${opportunity.opportunity_number}`
+      });
+    } catch (actErr) {
+      console.warn('Could not record conversion activity log:', actErr);
+    }
+
     return opportunity;
   }
 
-  async convertOpportunityToQuote(opportunityId: string, quotePayload: Partial<QuoteHandoffPayload>): Promise<{ quoteId: string; quoteNumber: string }> {
+  async convertOpportunityToQuote(
+    opportunityId: string, 
+    quotePayload: Partial<QuoteHandoffPayload>,
+    allowAdminOverride: boolean = true
+  ): Promise<{ quoteId: string; quoteNumber: string }> {
     const opportunity = await this.getOpportunityById(opportunityId);
     if (!opportunity) {
       throw new Error('Opportunity not found');
     }
 
-    if (opportunity.stage !== 'closed_won') {
-      throw new Error('Only closed-won opportunities can be converted to quotes');
+    if (!allowAdminOverride && opportunity.stage !== 'closed_won') {
+      throw new Error('Only closed-won opportunities can be converted to quotes without admin override');
     }
 
     const lead = opportunity.lead;
@@ -304,8 +357,8 @@ class OpportunityService {
 
     const quoteItems: QuoteHandoffItem[] = quotePayload.items?.length ? quotePayload.items : [
       {
-        item_name: 'Services',
-        description: quotePayload.project_title || 'Professional services',
+        item_name: opportunity.opportunity_name || 'Services',
+        description: quotePayload.project_title || opportunity.description || 'Professional services based on Opportunity details',
         quantity: 1,
         unit: 'pcs',
         unit_price: opportunity.estimated_value || 0,
@@ -313,16 +366,18 @@ class OpportunityService {
       }
     ];
 
+    const defaultValidUntil = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
     const quoteData = {
       customer_id: customer.id,
       company_settings_id: opportunity.company_settings_id || customer.company_settings_id || undefined,
       quote_date: new Date().toISOString().split('T')[0],
-      valid_until: '',
+      valid_until: quotePayload.terms_conditions && !quotePayload.items ? '' : defaultValidUntil,
       project_title: quotePayload.project_title || opportunity.opportunity_name,
       estimated_time: quotePayload.estimated_time || '',
-      company_contact_name: quotePayload.company_contact_name || lead?.first_name || '',
-      company_contact_email: quotePayload.company_contact_email || lead?.email || '',
-      company_contact_phone: quotePayload.company_contact_phone || lead?.phone || '',
+      company_contact_name: quotePayload.company_contact_name || (lead ? `${lead.first_name} ${lead.last_name}` : customer.contact_person || ''),
+      company_contact_email: quotePayload.company_contact_email || lead?.email || customer.email || '',
+      company_contact_phone: quotePayload.company_contact_phone || lead?.phone || customer.phone || '',
       notes: quotePayload.notes || opportunity.description || '',
       terms_conditions: quotePayload.terms_conditions || '',
       items: quoteItems.map(item => ({
@@ -350,6 +405,18 @@ class OpportunityService {
         updated_at: new Date().toISOString()
       })
       .eq('id', opportunityId);
+
+    try {
+      await supabase.from('lead_activities').insert({
+        opportunity_id: opportunityId,
+        lead_id: opportunity.lead_id || undefined,
+        activity_type: 'status_change',
+        subject: 'Opportunity Converted to Draft Quote',
+        description: `Draft Quote ${quote.quote_number} was generated from Opportunity ${opportunity.opportunity_number}`
+      });
+    } catch (actErr) {
+      console.warn('Could not record quote conversion activity:', actErr);
+    }
 
     return {
       quoteId: quote.id,

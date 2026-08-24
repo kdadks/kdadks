@@ -894,6 +894,7 @@ export const Customer360Hub: React.FC = () => {
                       <table className="w-full text-xs text-left">
                         <thead className="bg-gray-50 text-gray-700 uppercase font-semibold border-b border-gray-200">
                           <tr>
+                            <th className="px-4 py-3">Sub ID</th>
                             <th className="px-4 py-3">Plan Name</th>
                             <th className="px-4 py-3">Billing Interval</th>
                             <th className="px-4 py-3">Price ({targetCurrency})</th>
@@ -905,8 +906,10 @@ export const Customer360Hub: React.FC = () => {
                         <tbody className="divide-y divide-gray-200 bg-white">
                           {data360.subscriptions.map((s) => {
                             const priceInTarget = convertCurrency(s.plan?.price || 0, s.plan?.currency_code || 'INR', targetCurrency);
+                            const subNum = s.subscription_number || s.id.slice(0, 8);
                             return (
                               <tr key={s.id} className="hover:bg-gray-50 transition">
+                                <td className="px-4 py-3 font-mono text-xs font-semibold text-indigo-700">{subNum}</td>
                                 <td className="px-4 py-3 font-semibold text-gray-900">{s.plan?.name || 'Subscription Plan'}</td>
                                 <td className="px-4 py-3 text-gray-600 capitalize">{s.plan?.billing_interval || 'monthly'}</td>
                                 <td className="px-4 py-3 font-bold text-gray-900">
@@ -919,6 +922,7 @@ export const Customer360Hub: React.FC = () => {
                                 <td className="px-4 py-3">
                                   <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
                                     s.status === 'active' ? 'bg-emerald-100 text-emerald-800' :
+                                    s.status === 'draft' ? 'bg-slate-100 text-slate-800 border border-slate-200' :
                                     s.status === 'cancelled' ? 'bg-red-100 text-red-800' :
                                     'bg-amber-100 text-amber-800'
                                   }`}>

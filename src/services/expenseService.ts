@@ -260,6 +260,7 @@ export const expenseService = {
       startDate?: string;
       endDate?: string;
       company_settings_id?: string;
+      search?: string;
     },
     page: number = 1,
     perPage: number = 20
@@ -271,7 +272,8 @@ export const expenseService = {
         expense_categories (id, name),
         vendors (id, name)
       `, { count: 'exact' })
-      .order('expense_date', { ascending: false });
+      .order('expense_date', { ascending: false })
+      .order('created_at', { ascending: false });
 
     if (filters?.status) query = query.eq('status', filters.status);
     if (filters?.paymentStatus) query = query.eq('payment_status', filters.paymentStatus);
@@ -279,6 +281,10 @@ export const expenseService = {
     if (filters?.vendorId) query = query.eq('vendor_id', filters.vendorId);
     if (filters?.startDate) query = query.gte('expense_date', filters.startDate);
     if (filters?.endDate) query = query.lte('expense_date', filters.endDate);
+    if (filters?.search?.trim()) {
+      const term = filters.search.trim();
+      query = query.or(`expense_number.ilike.%${term}%,title.ilike.%${term}%,vendor_name.ilike.%${term}%,description.ilike.%${term}%`);
+    }
     if (filters?.company_settings_id) {
       const { data: companies } = await supabase
         .from('company_settings')
@@ -416,12 +422,17 @@ export const expenseService = {
     if (startDate) query = query.gte('expense_date', startDate);
     if (endDate) query = query.lte('expense_date', endDate);
 
+    let isIndianCompany = true;
     if (companySettingsId) {
       const { data: companies } = await supabase
         .from('company_settings')
         .select('id, is_default, country_code')
         .eq('is_active', true);
       const indianCompany = companies?.find(c => c.is_default || c.country_code === 'IN');
+      const targetCompany = companies?.find(c => c.id === companySettingsId);
+      if (targetCompany) {
+        isIndianCompany = targetCompany.is_default || targetCompany.country_code === 'IN';
+      }
       if (indianCompany && companySettingsId === indianCompany.id) {
         query = query.or(`company_settings_id.eq.${companySettingsId},company_settings_id.is.null`);
       } else {
@@ -434,16 +445,23 @@ export const expenseService = {
 
     const allExpenses = expenses || [];
 
+    const getExpenseTotal = (e: Expense) => {
+      if (isIndianCompany) {
+        return e.inr_total_amount ?? ((e.total_amount || ((e.amount || 0) + (e.tax_amount || 0))) * (e.exchange_rate || 1));
+      }
+      return e.total_amount || ((e.amount || 0) + (e.tax_amount || 0));
+    };
+
     // Calculate stats
     const totalExpenses = allExpenses.length;
-    const totalAmount = allExpenses.reduce((sum, e) => sum + (e.total_amount || 0), 0);
+    const totalAmount = allExpenses.reduce((sum, e) => sum + getExpenseTotal(e), 0);
     const pendingApproval = allExpenses.filter(e => e.status === 'pending').length;
     const pendingPayment = allExpenses.filter(e => e.status === 'approved' && e.payment_status === 'pending').length;
 
     // Paid this month
     const paidThisMonth = allExpenses
-      .filter(e => e.payment_status === 'paid' && e.payment_date >= monthStart && e.payment_date <= monthEnd)
-      .reduce((sum, e) => sum + (e.total_amount || 0), 0);
+      .filter(e => e.payment_status === 'paid' && e.payment_date && e.payment_date >= monthStart && e.payment_date <= monthEnd)
+      .reduce((sum, e) => sum + getExpenseTotal(e), 0);
 
     // By category
     const categoryMap = new Map<string, { amount: number; count: number }>();
@@ -451,7 +469,7 @@ export const expenseService = {
       const cat = e.expense_categories?.name || 'Uncategorized';
       const existing = categoryMap.get(cat) || { amount: 0, count: 0 };
       categoryMap.set(cat, {
-        amount: existing.amount + (e.total_amount || 0),
+        amount: existing.amount + getExpenseTotal(e),
         count: existing.count + 1
       });
     });

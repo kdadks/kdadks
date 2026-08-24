@@ -117,7 +117,7 @@ const ExpenseManagement: React.FC = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
-  const itemsPerPage = 20;
+  const [itemsPerPage, setItemsPerPage] = useState(20);
 
   // Modal state
   const [modalType, setModalType] = useState<ModalType>(null);
@@ -146,13 +146,13 @@ const ExpenseManagement: React.FC = () => {
     if (activeTab === 'expenses') {
       loadExpenses();
     }
-  }, [filters, currentPage]);
+  }, [filters, currentPage, searchTerm, itemsPerPage]);
 
   const loadData = async () => {
     setLoading(true);
     try {
       const [expenseData, vendorData, categoryData, statsData] = await Promise.all([
-        expenseService.getExpenses({ company_settings_id: selectedCompany?.id }, currentPage, itemsPerPage),
+        expenseService.getExpenses({ company_settings_id: selectedCompany?.id, search: searchTerm || undefined }, currentPage, itemsPerPage),
         expenseService.getVendors(),
         expenseService.getCategories(),
         expenseService.getExpenseStats(undefined, undefined, selectedCompany?.id)
@@ -179,6 +179,7 @@ const ExpenseManagement: React.FC = () => {
           categoryId: filters.categoryId || undefined,
           vendorId: filters.vendorId || undefined,
           company_settings_id: selectedCompany?.id,
+          search: searchTerm || undefined,
         },
         currentPage,
         itemsPerPage
@@ -582,7 +583,9 @@ const ExpenseManagement: React.FC = () => {
                   <th className="py-3 px-4">Category</th>
                   <th className="py-3 px-4">Vendor</th>
                   <th className="py-3 px-4">Date</th>
-                  <th className="py-3 px-4 text-right">Amount</th>
+                  <th className="py-3 px-4 text-right">Amt</th>
+                  <th className="py-3 px-4 text-right">Tax</th>
+                  <th className="py-3 px-4 text-right">Total Amt</th>
                   <th className="py-3 px-4 text-center">Status</th>
                   <th className="py-3 px-4 text-center">Payment</th>
                   <th className="py-3 px-4 text-center">Actions</th>
@@ -591,7 +594,7 @@ const ExpenseManagement: React.FC = () => {
               <tbody className="divide-y divide-gray-200">
                 {loading ? (
                   <tr>
-                    <td colSpan={9} className="text-center py-12">
+                    <td colSpan={11} className="text-center py-12">
                       <RefreshCw className="w-8 h-8 text-orange-500 animate-spin mx-auto mb-2" />
                       <p className="text-gray-500">Loading expenses...</p>
                     </td>
@@ -600,103 +603,182 @@ const ExpenseManagement: React.FC = () => {
                   <>
                     {filteredExpenses.length === 0 ? (
                       <tr>
-                        <td colSpan={9} className="text-center py-12 text-gray-500">
+                        <td colSpan={11} className="text-center py-12 text-gray-500">
                           No expenses found
                         </td>
                       </tr>
                     ) : (
-                      filteredExpenses.map((expense) => (
-                        <tr key={expense.id} className="border-b border-gray-100 hover:bg-gray-50">
-                          <td className="py-3 px-4">
-                            <span className="font-mono text-sm">{expense.expense_number}</span>
-                          </td>
-                          <td className="py-3 px-4">
-                            <p className="font-medium text-gray-900">{expense.title}</p>
-                            {expense.description && (
-                              <p className="text-sm text-gray-500 truncate max-w-xs">{expense.description}</p>
-                            )}
-                          </td>
-                          <td className="py-3 px-4 text-sm text-gray-600">
-                            {expense.expense_categories?.name || '-'}
-                          </td>
-                          <td className="py-3 px-4 text-sm text-gray-600">
-                            {expense.vendors?.name || expense.vendor_name || '-'}
-                          </td>
-                          <td className="py-3 px-4 text-sm text-gray-600">
-                            {formatDate(expense.expense_date)}
-                          </td>
-                          <td className="py-3 px-4 text-right font-medium">
-                            {formatCurrency(expense.total_amount || expense.amount, expense.currency || expense.original_currency_code || getCompanyCurrency(selectedCompany))}
-                          </td>
-                          <td className="py-3 px-4 text-center">
-                            <span className={`px-2 py-1 text-xs font-medium rounded-full ${statusColors[expense.status]}`}>
-                              {expense.status}
-                            </span>
-                          </td>
-                          <td className="py-3 px-4 text-center">
-                            <span className={`px-2 py-1 text-xs font-medium rounded-full ${statusColors[expense.payment_status]}`}>
-                              {expense.payment_status}
-                            </span>
-                          </td>
-                          <td className="py-3 px-4">
-                            <div className="flex items-center justify-center gap-1">
-                              <button
-                                onClick={() => openModal('expense', 'view', expense)}
-                                className="p-1.5 text-gray-600 hover:bg-gray-100 rounded"
-                                title="View"
-                              >
-                                <Eye className="w-4 h-4" />
-                              </button>
-                              <button
-                                onClick={() => openModal('expense', 'edit', expense)}
-                                className="p-1.5 text-blue-600 hover:bg-blue-50 rounded"
-                                title="Edit"
-                              >
-                                <Edit className="w-4 h-4" />
-                              </button>
-                              {expense.status === 'pending' && (
-                                <>
-                                  <button
-                                    onClick={() => handleApprove(expense.id)}
-                                    className="p-1.5 text-green-600 hover:bg-green-50 rounded"
-                                    title="Approve"
-                                  >
-                                    <CheckCircle className="w-4 h-4" />
-                                  </button>
-                                  <button
-                                    onClick={() => handleReject(expense.id)}
-                                    className="p-1.5 text-red-600 hover:bg-red-50 rounded"
-                                    title="Reject"
-                                  >
-                                    <XCircle className="w-4 h-4" />
-                                  </button>
-                                </>
+                      filteredExpenses.map((expense) => {
+                        const companyCurrency = getCompanyCurrency(selectedCompany);
+                        const isIndianCompany = companyCurrency === 'INR';
+
+                        let displayCurrency = companyCurrency;
+                        let amt = expense.amount;
+                        let tax = expense.tax_amount || 0;
+                        let total = expense.total_amount || (amt + tax);
+
+                        if (isIndianCompany) {
+                          displayCurrency = 'INR';
+                          const rate = expense.exchange_rate || 1;
+                          amt = expense.inr_amount ?? ((expense.amount || expense.original_amount || 0) * rate);
+                          tax = expense.inr_tax_amount ?? ((expense.tax_amount || 0) * rate);
+                          total = expense.inr_total_amount ?? ((expense.total_amount || ((expense.amount || 0) + (expense.tax_amount || 0))) * rate);
+                        } else {
+                          displayCurrency = expense.currency || expense.original_currency_code || companyCurrency;
+                        }
+
+                        const isForeign = isIndianCompany && expense.original_currency_code && expense.original_currency_code !== 'INR';
+
+                        return (
+                          <tr key={expense.id} className="border-b border-gray-100 hover:bg-gray-50">
+                            <td className="py-3 px-4">
+                              <span className="font-mono text-sm">{expense.expense_number}</span>
+                            </td>
+                            <td className="py-3 px-4">
+                              <p className="font-medium text-gray-900">{expense.title}</p>
+                              {expense.description && (
+                                <p className="text-sm text-gray-500 truncate max-w-xs">{expense.description}</p>
                               )}
-                              {expense.status === 'approved' && expense.payment_status === 'pending' && (
+                            </td>
+                            <td className="py-3 px-4 text-sm text-gray-600">
+                              {expense.expense_categories?.name || '-'}
+                            </td>
+                            <td className="py-3 px-4 text-sm text-gray-600">
+                              {expense.vendors?.name || expense.vendor_name || '-'}
+                            </td>
+                            <td className="py-3 px-4 text-sm text-gray-600">
+                              {formatDate(expense.expense_date)}
+                            </td>
+                            <td className="py-3 px-4 text-right text-sm text-gray-700">
+                              {formatCurrency(amt, displayCurrency)}
+                            </td>
+                            <td className="py-3 px-4 text-right text-sm text-gray-600">
+                              {formatCurrency(tax, displayCurrency)}
+                            </td>
+                            <td className="py-3 px-4 text-right font-semibold text-gray-900">
+                              <div>{formatCurrency(total, displayCurrency)}</div>
+                              {isForeign && (
+                                <div className="text-xs text-gray-400 font-normal">
+                                  ({expense.original_currency_code} {(expense.original_amount || expense.amount).toFixed(2)})
+                                </div>
+                              )}
+                            </td>
+                            <td className="py-3 px-4 text-center">
+                              <span className={`px-2 py-1 text-xs font-medium rounded-full ${statusColors[expense.status]}`}>
+                                {expense.status}
+                              </span>
+                            </td>
+                            <td className="py-3 px-4 text-center">
+                              <span className={`px-2 py-1 text-xs font-medium rounded-full ${statusColors[expense.payment_status]}`}>
+                                {expense.payment_status}
+                              </span>
+                            </td>
+                            <td className="py-3 px-4">
+                              <div className="flex items-center justify-center gap-1">
                                 <button
-                                  onClick={() => handleMarkPaid(expense.id)}
-                                  className="p-1.5 text-green-600 hover:bg-green-50 rounded"
-                                  title="Mark Paid"
+                                  onClick={() => openModal('expense', 'view', expense)}
+                                  className="p-1.5 text-gray-600 hover:bg-gray-100 rounded"
+                                  title="View"
                                 >
-                                  <DollarSign className="w-4 h-4" />
+                                  <Eye className="w-4 h-4" />
                                 </button>
-                              )}
-                              <button
-                                onClick={() => handleDelete('expense', expense.id)}
-                                className="p-1.5 text-red-600 hover:bg-red-50 rounded"
-                                title="Delete"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))
+                                <button
+                                  onClick={() => openModal('expense', 'edit', expense)}
+                                  className="p-1.5 text-blue-600 hover:bg-blue-50 rounded"
+                                  title="Edit"
+                                >
+                                  <Edit className="w-4 h-4" />
+                                </button>
+                                {expense.status === 'pending' && (
+                                  <>
+                                    <button
+                                      onClick={() => handleApprove(expense.id)}
+                                      className="p-1.5 text-green-600 hover:bg-green-50 rounded"
+                                      title="Approve"
+                                    >
+                                      <CheckCircle className="w-4 h-4" />
+                                    </button>
+                                    <button
+                                      onClick={() => handleReject(expense.id)}
+                                      className="p-1.5 text-red-600 hover:bg-red-50 rounded"
+                                      title="Reject"
+                                    >
+                                      <XCircle className="w-4 h-4" />
+                                    </button>
+                                  </>
+                                )}
+                                {expense.status === 'approved' && expense.payment_status === 'pending' && (
+                                  <button
+                                    onClick={() => handleMarkPaid(expense.id)}
+                                    className="p-1.5 text-green-600 hover:bg-green-50 rounded"
+                                    title="Mark Paid"
+                                  >
+                                    <DollarSign className="w-4 h-4" />
+                                  </button>
+                                )}
+                                <button
+                                  onClick={() => handleDelete('expense', expense.id)}
+                                  className="p-1.5 text-red-600 hover:bg-red-50 rounded"
+                                  title="Delete"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })
                     )}
                   </>
                 )}
               </tbody>
             </table>
+          </div>
+        )}
+
+        {/* Expenses Pagination Bar */}
+        {activeTab === 'expenses' && totalCount > 0 && (
+          <div className="px-4 py-3 bg-white border-t border-gray-200 flex flex-col sm:flex-row items-center justify-between gap-3 text-sm text-gray-700">
+            <div className="flex items-center gap-2">
+              <span>
+                Showing {Math.min((currentPage - 1) * itemsPerPage + 1, totalCount)} to{' '}
+                {Math.min(currentPage * itemsPerPage, totalCount)} of {totalCount} expenses
+              </span>
+              <select
+                value={itemsPerPage}
+                onChange={(e) => {
+                  setItemsPerPage(Number(e.target.value));
+                  setCurrentPage(1);
+                }}
+                className="ml-2 px-2 py-1 border border-gray-300 rounded text-xs focus:ring-1 focus:ring-orange-500"
+              >
+                <option value={10}>10 / page</option>
+                <option value={20}>20 / page</option>
+                <option value={50}>50 / page</option>
+                <option value={100}>100 / page</option>
+              </select>
+            </div>
+            {totalPages > 1 && (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                  disabled={currentPage === 1}
+                  className="px-3 py-1 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  Previous
+                </button>
+                <span className="font-medium text-gray-900">
+                  Page {currentPage} of {totalPages}
+                </span>
+                <button
+                  onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                  disabled={currentPage === totalPages}
+                  className="px-3 py-1 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  Next
+                </button>
+              </div>
+            )}
           </div>
         )}
 

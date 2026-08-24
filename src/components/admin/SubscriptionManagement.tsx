@@ -16,6 +16,7 @@ import {
   Bell,
   X,
   FileText,
+  Copy,
 } from 'lucide-react';
 import { supabase } from '../../config/supabase';
 import { subscriptionService } from '../../services/subscriptionService';
@@ -23,6 +24,7 @@ import { invoiceService } from '../../services/invoiceService';
 import { useToast } from '../ui/ToastProvider';
 import { useCompanyContext } from '../../contexts/CompanyContext';
 import { formatCustomerOption, getPrimaryCustomerId } from '../../utils/customerCodeUtils';
+import { formatCurrencyWithSymbol } from '../../utils/currencyConverter';
 import type {
   SubscriptionPlan,
   CustomerSubscription,
@@ -38,6 +40,7 @@ const CURRENCIES = ['INR', 'USD', 'GBP', 'EUR', 'AUD', 'SGD', 'AED'];
 
 const statusIcon = (status: CustomerSubscription['status']) => {
   switch (status) {
+    case 'draft':    return <FileText className="w-4 h-4 text-slate-500" />;
     case 'active':   return <CheckCircle className="w-4 h-4 text-green-500" />;
     case 'paused':   return <PauseCircle className="w-4 h-4 text-yellow-500" />;
     case 'cancelled': return <XCircle className="w-4 h-4 text-red-500" />;
@@ -47,6 +50,7 @@ const statusIcon = (status: CustomerSubscription['status']) => {
 
 const statusBadge = (status: CustomerSubscription['status']) => {
   const map = {
+    draft:     'bg-slate-100 text-slate-700 border border-slate-200',
     active:    'bg-green-100 text-green-800',
     paused:    'bg-yellow-100 text-yellow-800',
     cancelled: 'bg-red-100 text-red-800',
@@ -70,6 +74,7 @@ const emptySubForm = (): CreateCustomerSubscriptionData => ({
   start_date: new Date().toISOString().split('T')[0],
   end_date: '',
   notes: '',
+  status: 'active',
 });
 
 interface EditSubForm {
@@ -87,7 +92,9 @@ const ActionMenu: React.FC<{
   onStatusChange: (sub: CustomerSubscription, status: CustomerSubscription['status']) => void;
   onEdit: (sub: CustomerSubscription) => void;
   onGenerateInvoice: (sub: CustomerSubscription) => void;
-}> = ({ sub, onStatusChange, onEdit, onGenerateInvoice }) => {
+  onClone: (sub: CustomerSubscription) => void;
+  onDeleteDraft: (sub: CustomerSubscription) => void;
+}> = ({ sub, onStatusChange, onEdit, onGenerateInvoice, onClone, onDeleteDraft }) => {
   const [open, setOpen] = useState(false);
   const btnRef = useRef<HTMLButtonElement>(null);
   const [pos, setPos] = useState<DropdownPos>({ top: 0, right: 0 });
@@ -95,9 +102,11 @@ const ActionMenu: React.FC<{
   const openMenu = () => {
     if (btnRef.current) {
       const rect = btnRef.current.getBoundingClientRect();
+      const calculatedRight = window.innerWidth - rect.right;
+      const safeRight = Math.max(16, Math.min(calculatedRight, window.innerWidth - 200));
       setPos({
         top: rect.bottom + 4,
-        right: window.innerWidth - rect.right,
+        right: safeRight,
       });
     }
     setOpen(true);
@@ -105,6 +114,7 @@ const ActionMenu: React.FC<{
 
   const allOptions: { label: string; status: CustomerSubscription['status'] }[] = [
     { label: 'Set Active',   status: 'active' },
+    { label: 'Save as Draft',status: 'draft' },
     { label: 'Pause',        status: 'paused' },
     { label: 'Cancel',       status: 'cancelled' },
     { label: 'Mark Expired', status: 'expired' },
@@ -128,20 +138,36 @@ const ActionMenu: React.FC<{
           {/* menu — fixed so it escapes overflow-hidden on the table wrapper */}
           <div
             style={{ position: 'fixed', top: pos.top, right: pos.right, zIndex: 50 }}
-            className="w-40 bg-white rounded-lg shadow-xl border border-gray-200 py-1"
+            className="w-48 bg-white rounded-lg shadow-xl border border-gray-200 py-1"
           >
             <button
               onClick={() => { setOpen(false); onEdit(sub); }}
               className="w-full text-left flex items-center gap-2 px-3 py-1.5 text-sm text-blue-600 hover:bg-blue-50"
             >
-              <Edit className="w-3 h-3" /> Edit
+              <Edit className="w-3.5 h-3.5" /> Edit
             </button>
             <button
-              onClick={() => { setOpen(false); onGenerateInvoice(sub); }}
-              className="w-full text-left flex items-center gap-2 px-3 py-1.5 text-sm text-green-600 hover:bg-green-50"
+              onClick={() => { setOpen(false); onClone(sub); }}
+              className="w-full text-left flex items-center gap-2 px-3 py-1.5 text-sm text-indigo-600 hover:bg-indigo-50"
             >
-              <FileText className="w-3 h-3" /> Generate Draft Invoice
+              <Copy className="w-3.5 h-3.5" /> Clone as Draft
             </button>
+            {sub.status === 'active' && (
+              <button
+                onClick={() => { setOpen(false); onGenerateInvoice(sub); }}
+                className="w-full text-left flex items-center gap-2 px-3 py-1.5 text-sm text-green-600 hover:bg-green-50"
+              >
+                <FileText className="w-3.5 h-3.5" /> Generate Draft Invoice
+              </button>
+            )}
+            {sub.status === 'draft' && (
+              <button
+                onClick={() => { setOpen(false); onDeleteDraft(sub); }}
+                className="w-full text-left flex items-center gap-2 px-3 py-1.5 text-sm text-red-600 hover:bg-red-50"
+              >
+                <Trash2 className="w-3.5 h-3.5" /> Delete Draft
+              </button>
+            )}
             <div className="border-t border-gray-100 my-1" />
             {statusOptions.map(o => (
               <button
@@ -399,7 +425,7 @@ const SubscriptionManagement: React.FC<SubscriptionManagementProps> = () => {
 
    const changeSubStatus = async (sub: CustomerSubscription, status: CustomerSubscription['status']) => {
      const labels: Record<CustomerSubscription['status'], string> = {
-       active: 'activate', paused: 'pause', cancelled: 'cancel', expired: 'expire',
+       active: 'activate', draft: 'save as draft', paused: 'pause', cancelled: 'cancel', expired: 'expire',
      };
      const label = labels[status];
      if (!confirm(
@@ -407,9 +433,32 @@ const SubscriptionManagement: React.FC<SubscriptionManagementProps> = () => {
      )) return;
      try {
        await subscriptionService.updateSubscriptionStatus(sub.id, status);
-       showSuccess(`Subscription ${label}d`);
+       showSuccess(`Subscription status updated to ${status}`);
        loadData();
-     } catch { showError('Failed to update status'); }
+     } catch (err) {
+       showError(err instanceof Error ? err.message : 'Failed to update status');
+     }
+   };
+
+   const handleCloneSubscription = async (sub: CustomerSubscription) => {
+     try {
+       const cloned = await subscriptionService.cloneSubscription(sub.id);
+       showSuccess(`Subscription cloned as Draft (${cloned.subscription_number || cloned.id.slice(0, 8)})`);
+       loadData();
+     } catch (err) {
+       showError(err instanceof Error ? err.message : 'Failed to clone subscription');
+     }
+   };
+
+   const handleDeleteSubscription = async (sub: CustomerSubscription) => {
+     if (!confirm(`Delete draft subscription ${sub.subscription_number || ''}?`)) return;
+     try {
+       await subscriptionService.deleteSubscription(sub.id);
+       showSuccess('Draft subscription deleted');
+       loadData();
+     } catch (err) {
+       showError(err instanceof Error ? err.message : 'Failed to delete draft subscription');
+     }
    };
 
    const handleGenerateDraftInvoice = async (sub: CustomerSubscription) => {
@@ -643,7 +692,7 @@ const SubscriptionManagement: React.FC<SubscriptionManagementProps> = () => {
                   <option value="">Select plan…</option>
                   {plans.filter(p => p.is_active).map(p => (
                     <option key={p.id} value={p.id}>
-                      {p.name} — {p.currency_code} {p.price.toLocaleString()} / {p.billing_interval}
+                      {p.name} — {formatCurrencyWithSymbol(p.price, p.currency_code)} / {p.billing_interval}
                     </option>
                   ))}
                 </select>
@@ -735,7 +784,7 @@ const SubscriptionManagement: React.FC<SubscriptionManagementProps> = () => {
                 >
                   {plans.filter(p => p.is_active || p.id === editSubForm.plan_id).map(p => (
                     <option key={p.id} value={p.id}>
-                      {p.name} — {p.currency_code} {p.price.toLocaleString()} / {p.billing_interval}
+                      {p.name} — {formatCurrencyWithSymbol(p.price, p.currency_code)} / {p.billing_interval}
                       {!p.is_active ? ' (inactive)' : ''}
                     </option>
                   ))}
@@ -841,8 +890,8 @@ const SubscriptionManagement: React.FC<SubscriptionManagementProps> = () => {
                   </span>
                 </div>
                 <div className="flex items-baseline gap-1">
-                  <span className="text-2xl font-bold text-gray-900">{plan.price.toLocaleString()}</span>
-                  <span className="text-sm text-gray-500">{plan.currency_code} / {plan.billing_interval}</span>
+                  <span className="text-2xl font-bold text-gray-900">{formatCurrencyWithSymbol(plan.price, plan.currency_code)}</span>
+                  <span className="text-sm text-gray-500">/ {plan.billing_interval}</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="text-xs px-2 py-0.5 bg-blue-50 text-blue-700 rounded-full capitalize">{plan.plan_type}</span>
@@ -895,6 +944,7 @@ const SubscriptionManagement: React.FC<SubscriptionManagementProps> = () => {
              >
                <option value="all">All Status</option>
                <option value="active">Active</option>
+               <option value="draft">Draft</option>
                <option value="paused">Paused</option>
                <option value="cancelled">Cancelled</option>
                <option value="expired">Expired</option>
@@ -925,26 +975,37 @@ const SubscriptionManagement: React.FC<SubscriptionManagementProps> = () => {
             </button>
           </div>
         ) : (
-          /* No overflow-hidden — lets fixed-position dropdown escape the container */
-          <div className="bg-white rounded-xl border border-gray-200">
-            <table className="min-w-full divide-y divide-gray-200">
+          <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto shadow-sm">
+            <table className="w-full min-w-[980px] divide-y divide-gray-200 text-sm">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Customer</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Plan</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Next Invoice</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Expires</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Sub ID</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Customer</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Plan</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Amount</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Next Invoice</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Expires</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider sticky right-0 bg-gray-50 z-10 shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.05)]">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
                 {subscriptions.map(sub => {
                   const isExpiringSoon = expiringSoon.some(e => e.id === sub.id);
+                  const subNumber = sub.subscription_number || sub.id.slice(0, 8);
                   return (
-                    <tr key={sub.id} className={`hover:bg-gray-50 ${isExpiringSoon ? 'bg-amber-50/40' : ''}`}>
-                      <td className="px-6 py-4 whitespace-nowrap">
+                    <tr key={sub.id} className={`group hover:bg-gray-50 transition-colors ${isExpiringSoon ? 'bg-amber-50/40' : ''}`}>
+                      <td className="px-4 py-3.5 whitespace-nowrap">
+                        <div className="inline-flex items-center gap-1.5 font-mono text-xs text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-1 rounded font-semibold">
+                          {subNumber}
+                        </div>
+                        {sub.source_subscription && (
+                          <div className="text-[11px] text-gray-500 flex items-center gap-1 mt-1">
+                            <Copy className="w-3 h-3 text-gray-400" /> Cloned from {sub.source_subscription.subscription_number || 'parent draft'}
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-4 py-3.5 whitespace-nowrap">
                         <div className="text-sm font-medium text-gray-900">
                           {sub.customer?.company_name || sub.customer?.contact_person || '—'}
                         </div>
@@ -961,25 +1022,25 @@ const SubscriptionManagement: React.FC<SubscriptionManagementProps> = () => {
                           <div className="text-xs text-gray-500">{sub.customer.email}</div>
                         )}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
+                      <td className="px-4 py-3.5 whitespace-nowrap">
                         <div className="text-sm text-gray-900">{sub.plan?.name || '—'}</div>
                         <div className="text-xs text-gray-500 capitalize">
                           {sub.plan?.plan_type} · {sub.plan?.billing_interval}
                         </div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
+                      <td className="px-4 py-3.5 whitespace-nowrap">
                         <div className="text-sm font-medium text-gray-900">
-                          {sub.plan ? `${sub.plan.currency_code} ${sub.plan.price.toLocaleString()}` : '—'}
+                          {sub.plan ? formatCurrencyWithSymbol(sub.plan.price, sub.plan.currency_code) : '—'}
                         </div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
+                      <td className="px-4 py-3.5 whitespace-nowrap">
                         <div className="text-sm text-gray-900">
                           {sub.status === 'active'
                             ? new Date(sub.next_billing_date).toLocaleDateString()
                             : '—'}
                         </div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
+                      <td className="px-4 py-3.5 whitespace-nowrap">
                         {sub.end_date ? (
                           <div className={`text-xs font-medium ${isExpiringSoon ? 'text-amber-600' : 'text-gray-600'}`}>
                             {isExpiringSoon && <AlertCircle className="w-3 h-3 inline mr-1" />}
@@ -989,18 +1050,20 @@ const SubscriptionManagement: React.FC<SubscriptionManagementProps> = () => {
                           <div className="text-xs text-gray-400">Ongoing</div>
                         )}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`inline-flex items-center gap-1.5 px-2 py-1 text-xs font-semibold rounded-full ${statusBadge(sub.status)}`}>
+                      <td className="px-4 py-3.5 whitespace-nowrap">
+                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-full ${statusBadge(sub.status)}`}>
                           {statusIcon(sub.status)}
                           {sub.status.charAt(0).toUpperCase() + sub.status.slice(1)}
                         </span>
                       </td>
-                       <td className="px-6 py-4 whitespace-nowrap text-right">
+                       <td className={`px-4 py-3.5 whitespace-nowrap text-right sticky right-0 z-10 shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.05)] ${isExpiringSoon ? 'bg-amber-50/90 group-hover:bg-gray-50' : 'bg-white group-hover:bg-gray-50'}`}>
                          <ActionMenu
                            sub={sub}
                            onStatusChange={changeSubStatus}
                            onEdit={openEditSub}
                            onGenerateInvoice={handleGenerateDraftInvoice}
+                           onClone={handleCloneSubscription}
+                           onDeleteDraft={handleDeleteSubscription}
                          />
                       </td>
                     </tr>

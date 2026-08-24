@@ -26,9 +26,8 @@ class ContractService {
 
   /**
    * Generate next contract number.
-   * New format: {ENTITY_PREFIX}-{CONTRACT_TYPE}-{YYYY}-{XXX}
-   * e.g. IND-MSA-2026-001, IRL-SOW-2026-003
-   * Falls back to legacy KDADKS/C/YYYY/MM/### when no entity prefix is supplied.
+   * Format: KDADKS/{ENTITY}/YYYY/MM/XXXX
+   * e.g. KDADKS/IND/2026/08/0001, KDADKS/IRL/2026/08/0002
    */
   async generateContractNumber(entityPrefix?: string, contractType?: string): Promise<string> {
     if (!isSupabaseConfigured) {
@@ -36,40 +35,39 @@ class ContractService {
     }
 
     const year = new Date().getFullYear();
+    const month = (new Date().getMonth() + 1).toString().padStart(2, '0');
 
-    if (entityPrefix && contractType) {
-      const prefix = `${entityPrefix}-${contractType}-${year}-`;
-      const { data, error } = await supabase
-        .from('contracts')
-        .select('contract_number')
-        .like('contract_number', `${prefix}%`)
-        .order('contract_number', { ascending: false })
-        .limit(1);
-      if (error) throw error;
-      let next = 1;
-      if (data && data.length > 0) {
-        const tail = data[0].contract_number.split('-').pop();
-        next = parseInt(tail || '0', 10) + 1;
+    let entity = 'IND';
+    if (entityPrefix) {
+      const upper = entityPrefix.toUpperCase();
+      if (upper === 'IRL' || upper === 'IE') {
+        entity = 'IRL';
+      } else {
+        entity = 'IND';
       }
-      return `${prefix}${next.toString().padStart(3, '0')}`;
     }
 
-    // Legacy fallback
-    const month = (new Date().getMonth() + 1).toString().padStart(2, '0');
-    const legacyPrefix = `KDADKS/C/${year}/${month}/`;
+    const prefix = `KDADKS/${entity}/${year}/${month}/`;
+
     const { data, error } = await supabase
       .from('contracts')
       .select('contract_number')
-      .like('contract_number', `${legacyPrefix}%`)
+      .like('contract_number', `${prefix}%`)
       .order('contract_number', { ascending: false })
       .limit(1);
+
     if (error) throw error;
+
     let nextNumber = 1;
     if (data && data.length > 0) {
       const lastNumber = data[0].contract_number.split('/').pop();
-      nextNumber = parseInt(lastNumber || '0', 10) + 1;
+      const parsed = parseInt(lastNumber || '0', 10);
+      if (!isNaN(parsed) && parsed > 0) {
+        nextNumber = parsed + 1;
+      }
     }
-    return `${legacyPrefix}${nextNumber.toString().padStart(3, '0')}`;
+
+    return `${prefix}${nextNumber.toString().padStart(4, '0')}`;
   }
 
   // =====================================================

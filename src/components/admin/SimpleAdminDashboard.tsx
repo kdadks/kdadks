@@ -258,6 +258,9 @@ const SimpleAdminDashboard: React.FC = () => {
         const currentUser = await simpleAuth.getCurrentUser()
         console.log('Current user:', currentUser)
         setUser(currentUser)
+        if (companies.length === 0) {
+          refreshCompanies()
+        }
       } catch (error) {
         console.error('Auth check failed:', error)
         navigate('/admin/login')
@@ -267,7 +270,7 @@ const SimpleAdminDashboard: React.FC = () => {
     }
 
     checkAuth()
-  }, [navigate])
+  }, [navigate, companies.length, refreshCompanies])
 
   // Load dashboard stats when on dashboard view
   const loadDashboardStats = async () => {

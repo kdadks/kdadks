@@ -14,15 +14,17 @@ export interface SubscriptionPlan {
 
 export interface CustomerSubscription {
   id: string;
+  subscription_number?: string;
   customer_id: string;
   plan_id: string;
   company_settings_id?: string;
-  status: 'active' | 'paused' | 'cancelled' | 'expired';
+  status: 'draft' | 'active' | 'paused' | 'cancelled' | 'expired';
   start_date: string;
   end_date?: string;
   next_billing_date: string;
   notes?: string;
   created_by?: string;
+  source_subscription_id?: string;
   created_at: string;
   updated_at: string;
   // Relations
@@ -35,6 +37,7 @@ export interface CustomerSubscription {
     company_settings_id?: string;
   };
   plan?: SubscriptionPlan;
+  source_subscription?: CustomerSubscription;
 }
 
 export interface CreateSubscriptionPlanData {
@@ -54,6 +57,9 @@ export interface CreateCustomerSubscriptionData {
   end_date?: string;
   notes?: string;
   company_settings_id?: string;
+  status?: CustomerSubscription['status'];
+  subscription_number?: string;
+  source_subscription_id?: string;
 }
 
 export interface SubscriptionFilters {
@@ -62,3 +68,4 @@ export interface SubscriptionFilters {
   plan_id?: string;
   company_settings_id?: string;
 }
+

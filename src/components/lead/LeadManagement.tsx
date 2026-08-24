@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Search, Eye, Edit, Trash2, X, Users, RefreshCw, TrendingUp, UserCheck, UserX, Mail, Phone, Building2, Filter, Bell, AlertTriangle, CheckCircle, Clock, Calendar, Flag, Activity, ChevronDown, ChevronRight, AlertCircle, MessageSquare, CheckSquare } from 'lucide-react';
+import { Plus, Search, Eye, Edit, Trash2, X, Users, RefreshCw, TrendingUp, UserCheck, UserX, Mail, Phone, Building2, Filter, Bell, AlertTriangle, CheckCircle, Clock, Calendar, Flag, Activity, ChevronDown, ChevronRight, AlertCircle, MessageSquare, CheckSquare, ArrowRightCircle } from 'lucide-react';
 import { leadService } from '../../services/leadService';
+import { opportunityService } from '../../services/opportunityService';
 import { leadActivityService } from '../../services/leadActivityService';
 import { leadFollowUpTaskService } from '../../services/leadFollowUpService';
 import { invoiceService } from '../../services/invoiceService';
@@ -86,7 +87,72 @@ const LeadManagement: React.FC = () => {
   const [alerts, setAlerts] = useState<LeadAlert[]>([]);
   const [showAlertsPanel, setShowAlertsPanel] = useState(false);
 
+  // Convert Lead to Opportunity Modal state
+  const [showConvertModal, setShowConvertModal] = useState(false);
+  const [leadToConvert, setLeadToConvert] = useState<Lead | null>(null);
+  const [convertLoading, setConvertLoading] = useState(false);
+  const [convertFormData, setConvertFormData] = useState<{
+    opportunity_name: string;
+    customer_id: string;
+    estimated_value: number;
+    currency_code: string;
+    expected_close_date: string;
+    description: string;
+    stage: 'prospecting' | 'qualification' | 'proposal' | 'negotiation' | 'closed_won' | 'closed_lost';
+  }>({
+    opportunity_name: '',
+    customer_id: '',
+    estimated_value: 0,
+    currency_code: 'INR',
+    expected_close_date: '',
+    description: '',
+    stage: 'prospecting'
+  });
+
   const entityId = selectedCompany?.id ?? null;
+
+  const handleOpenConvertModal = (lead: Lead) => {
+    setLeadToConvert(lead);
+    setConvertFormData({
+      opportunity_name: `${lead.company_name || `${lead.first_name} ${lead.last_name}`} - Opportunity`,
+      customer_id: lead.customer_id || '',
+      estimated_value: lead.budget_max || lead.budget_min || 0,
+      currency_code: lead.currency_code || selectedCompany?.country?.currency_code || 'INR',
+      expected_close_date: lead.expected_close_date || '',
+      description: lead.description || '',
+      stage: 'prospecting'
+    });
+    setShowConvertModal(true);
+  };
+
+  const handleExecuteConvertLead = async () => {
+    if (!leadToConvert) return;
+    if (!convertFormData.opportunity_name.trim()) {
+      showError('Opportunity name is required');
+      return;
+    }
+    try {
+      setConvertLoading(true);
+      const opportunity = await opportunityService.convertLeadToOpportunity(leadToConvert.id, {
+        opportunity_name: convertFormData.opportunity_name,
+        customer_id: convertFormData.customer_id || undefined,
+        estimated_value: convertFormData.estimated_value,
+        currency_code: convertFormData.currency_code,
+        expected_close_date: convertFormData.expected_close_date || undefined,
+        description: convertFormData.description,
+        stage: convertFormData.stage,
+        company_settings_id: entityId ?? undefined
+      });
+      showSuccess(`Lead successfully converted to draft Opportunity ${opportunity.opportunity_number}!`);
+      setShowConvertModal(false);
+      setLeadToConvert(null);
+      loadData();
+    } catch (err) {
+      showError(`Failed to convert lead to opportunity: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    } finally {
+      setConvertLoading(false);
+    }
+  };
 
   const [showModal, setShowModal] = useState(false);
   const [modalMode, setModalMode] = useState<'view' | 'edit' | 'add'>('view');
@@ -652,6 +718,9 @@ const LeadManagement: React.FC = () => {
                               <button onClick={() => openModal('edit', lead)} className="text-gray-600 hover:text-gray-900" title="Edit"><Edit className="w-4 h-4" /></button>
                               {lead.status === 'new' && <button onClick={() => handleStatusChange(lead, 'contacted')} className="text-blue-600 hover:text-blue-900" title="Mark Contacted"><Phone className="w-4 h-4" /></button>}
                               {lead.status === 'contacted' && <button onClick={() => handleStatusChange(lead, 'qualified')} className="text-green-600 hover:text-green-900" title="Mark Qualified"><UserCheck className="w-4 h-4" /></button>}
+                              {lead.status !== 'converted' && (
+                                <button onClick={() => handleOpenConvertModal(lead)} className="text-purple-600 hover:text-purple-900" title="Convert Lead to Draft Opportunity"><ArrowRightCircle className="w-4 h-4" /></button>
+                              )}
                               {(lead.status === 'new' || lead.status === 'contacted') && <button onClick={() => handleStatusChange(lead, 'disqualified')} className="text-red-600 hover:text-red-900" title="Disqualify"><UserX className="w-4 h-4" /></button>}
                               <button onClick={() => handleDelete(lead)} className="text-red-600 hover:text-red-900" title="Delete"><Trash2 className="w-4 h-4" /></button>
                             </div>
@@ -1234,6 +1303,141 @@ const LeadManagement: React.FC = () => {
                 className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-xs text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50"
               >
                 {taskLoading ? 'Saving...' : 'Save Action & Log Notes'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Convert Lead to Draft Opportunity Modal */}
+      {showConvertModal && leadToConvert && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 overflow-y-auto">
+          <div className="bg-white rounded-lg max-w-xl w-full p-6 space-y-4 shadow-xl">
+            <div className="flex justify-between items-center border-b pb-3">
+              <div className="flex items-center space-x-2">
+                <ArrowRightCircle className="w-6 h-6 text-purple-600" />
+                <h3 className="text-lg font-semibold text-gray-900">Convert Lead to Draft Opportunity</h3>
+              </div>
+              <button onClick={() => setShowConvertModal(false)} className="text-gray-400 hover:text-gray-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="bg-purple-50 border border-purple-200 rounded-md p-3 text-xs text-purple-900 space-y-1">
+              <p className="font-semibold">Company Entity Context:</p>
+              <p>
+                This Opportunity will be associated with{' '}
+                <span className="font-bold">
+                  {selectedCompany?.company_name || 'Selected Entity'}
+                </span>{' '}
+                to maintain strict multi-entity data isolation.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="md:col-span-2">
+                <label className="block text-xs font-semibold text-gray-700 uppercase mb-1">Opportunity Name *</label>
+                <input
+                  type="text"
+                  value={convertFormData.opportunity_name}
+                  onChange={e => setConvertFormData(prev => ({ ...prev, opportunity_name: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-purple-500 focus:border-purple-500"
+                  placeholder="e.g. Acme Corp - IT Infrastructure Project"
+                />
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="block text-xs font-semibold text-gray-700 uppercase mb-1">Customer / Account</label>
+                <select
+                  value={convertFormData.customer_id}
+                  onChange={e => setConvertFormData(prev => ({ ...prev, customer_id: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm bg-white focus:ring-purple-500 focus:border-purple-500"
+                >
+                  <option value="">Auto-create Customer from Lead Details</option>
+                  {customers.map(c => (
+                    <option key={c.id} value={c.id}>
+                      {c.company_name || c.contact_person}
+                    </option>
+                  ))}
+                </select>
+                {!convertFormData.customer_id && (
+                  <p className="text-xs text-gray-500 mt-1">
+                    No customer selected. A new Customer profile will be auto-generated from this Lead ({leadToConvert.company_name || `${leadToConvert.first_name} ${leadToConvert.last_name}`}).
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 uppercase mb-1">Expected Revenue</label>
+                <input
+                  type="number"
+                  min="0"
+                  value={convertFormData.estimated_value}
+                  onChange={e => setConvertFormData(prev => ({ ...prev, estimated_value: parseFloat(e.target.value) || 0 }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-purple-500 focus:border-purple-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 uppercase mb-1">Currency</label>
+                <input
+                  type="text"
+                  value={convertFormData.currency_code}
+                  onChange={e => setConvertFormData(prev => ({ ...prev, currency_code: e.target.value.toUpperCase() }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-purple-500 focus:border-purple-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 uppercase mb-1">Stage</label>
+                <select
+                  value={convertFormData.stage}
+                  onChange={e => setConvertFormData(prev => ({ ...prev, stage: e.target.value as any }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm bg-white focus:ring-purple-500 focus:border-purple-500"
+                >
+                  <option value="prospecting">Prospecting</option>
+                  <option value="qualification">Qualification</option>
+                  <option value="proposal">Proposal</option>
+                  <option value="negotiation">Negotiation</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 uppercase mb-1">Target Close Date</label>
+                <input
+                  type="date"
+                  value={convertFormData.expected_close_date}
+                  onChange={e => setConvertFormData(prev => ({ ...prev, expected_close_date: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-purple-500 focus:border-purple-500"
+                />
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="block text-xs font-semibold text-gray-700 uppercase mb-1">Opportunity Notes & Description</label>
+                <textarea
+                  value={convertFormData.description}
+                  onChange={e => setConvertFormData(prev => ({ ...prev, description: e.target.value }))}
+                  rows={3}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-purple-500 focus:border-purple-500"
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end space-x-3 border-t pt-3">
+              <button
+                type="button"
+                onClick={() => setShowConvertModal(false)}
+                className="px-4 py-2 bg-gray-100 text-gray-700 rounded-md text-xs font-semibold hover:bg-gray-200"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleExecuteConvertLead}
+                disabled={convertLoading}
+                className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-xs font-bold text-white bg-purple-600 hover:bg-purple-700 disabled:opacity-50"
+              >
+                {convertLoading ? 'Converting...' : 'Generate Draft Opportunity'}
               </button>
             </div>
           </div>

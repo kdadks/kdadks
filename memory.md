@@ -1,6 +1,6 @@
 # Project Memory — KDADKS Website
 
-> Auto-updated by Kilo agent after every implementation. Last updated: 2026-08-21 15:30 IST
+> Auto-updated by Kilo agent after every implementation. Last updated: 2026-08-24 14:00 IST
 
 A comprehensive knowledge base for the KDADKS website codebase. This file serves as a single source of truth for project architecture, conventions, patterns, and key implementation details.
 
@@ -123,7 +123,7 @@ Routes are defined in `src/components/Router.tsx`. Admin routes all go to `Simpl
 
 The app uses React Context + hooks (no Redux):
 
-- **CompanyContext** (`src/contexts/CompanyContext.tsx`) — provides `companies[]`, `selectedCompany`, `selectCompany()`, `refreshCompanies()`. Every admin component reads `selectedCompany` to filter data by entity.
+- **CompanyContext** (`src/contexts/CompanyContext.tsx`) — provides `companies[]`, `selectedCompany`, `selectCompany()`, `refreshCompanies()`. Listens to Supabase Auth state changes (`onAuthStateChange`) to load companies post-login, restores selected company from `localStorage` (`kdadks_selected_company_id`), and defaults to the default entity (`is_default: true`). Every admin component reads `selectedCompany` to filter data by entity.
   - `entityId = selectedCompany?.id ?? null`
   - Entity filter: `{ company_settings_id: selectedCompany?.id }`
   - Shared value sentinel: `'__shared__'` (used in `LeadManagement.tsx` and `OpportunityManagement.tsx` to represent "All Entities")
@@ -501,6 +501,7 @@ The complete sales pipeline with status/stage transitions:
 - PAN validation regex: `^[A-Z]{5}[0-9]{4}[A-Z]{1}$`
 - GSTIN/VAT/CRO fields shown conditionally based on country
 - Lead number generated via `get_next_lead_opportunity_number({ p_record_type: 'lead' })`
+- **Lead to Draft Opportunity Conversion:** Admin users can generate a draft Opportunity entity directly from any existing Lead via dedicated action button or modal. Maps standard fields (Account/Customer, Expected Revenue, Currency, Stage, Target Close Date, Description) and auto-creates/links Customer records if missing while maintaining strict multi-entity data isolation (`company_settings_id`).
 - **Follow-up Tasks tab** for managing task priorities (low/medium/high/urgent), due dates, recurring follow-ups (daily/weekly/monthly/quarterly), and task assignments
 - **Timeline & Alerts tab** for unified chronological activity log combining all touchpoints (calls, emails, meetings, notes, tasks, status changes)
 - Automated alerts for overdue tasks, stale leads (14+ days no activity), and upcoming due dates
@@ -510,9 +511,16 @@ The complete sales pipeline with status/stage transitions:
 **Stage Flow:** `prospecting` → `qualification` → `proposal` → `negotiation` → `closed_won` / `closed_lost`
 
 - Linked to leads (only qualified leads shown for association)
-- Can convert closed-won opportunity to quote via `opportunityService.convertOpportunityToQuote()`
+- **Opportunity to Draft Quote Generation:** Admin users can create a draft Quote entity directly from an existing Opportunity. Admin override controls permit draft quote generation across stages prior to Closed Won.
+- **Transferred Details & Line Items:** Transfers project metadata, contact info, estimated timeframe, line items, unit prices, tax rates, and terms & conditions into the new draft Quote while strictly enforcing company entity context isolation (`company_settings_id`).
 - Pipeline value tracking (open vs closed)
 - Opportunity number: `get_next_lead_opportunity_number({ p_record_type: 'opportunity' })`
+
+### Admin Permissions & Override Controls (`src/utils/adminPermissions.ts`)
+
+- Centralized role-based permission system (`UserRole: 'admin' | 'manager' | 'sales_rep'`)
+- Admin override controls for stage requirements during Opportunity to Quote conversion
+- Multi-entity boundary isolation validation (`validateCompanyBoundary`) enforcing strict company data isolation across Lead, Opportunity, and Quote lifecycles.
 
 ### Quote Management (`src/components/quote/QuoteManagement.tsx`)
 
@@ -624,6 +632,7 @@ The database uses **9+ interconnected tables** with foreign key relationships (S
 ### Database Migrations
 
 Migrations are in `database/migrations/` (40+ SQL files). Key recent migrations:
+- `034_subscription_unique_ids_and_drafts.sql` — Unique Subscription ID generation (`SUB-YYYY-XXXX`), `draft` status constraint, `source_subscription_id` lineage tracking, atomic sequence generator RPC `get_next_subscription_number(p_year)`.
 - `033_customer_b2b_hierarchy.sql` — B2B hierarchy tables: `customer_relationships` (company↔company many-to-many) and `contact_customer_links` (contact↔company many-to-many cross-links)
 - `032_add_company_settings_id_to_subscription_plans.sql`
 - `031_add_completion_notes_to_lead_follow_up_tasks.sql`

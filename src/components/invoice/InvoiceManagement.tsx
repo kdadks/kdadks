@@ -3807,10 +3807,19 @@ const getBankingCodeField = (company: CompanySettings | undefined | null): keyof
     if (!amount || amount <= 0) return;
     setMarkAsPaidLoading(true);
     try {
+      const isNonINR = markAsPaidInvoice.currency_code && markAsPaidInvoice.currency_code !== 'INR';
+      const exchangeRate = markAsPaidInvoice.exchange_rate || (markAsPaidInvoice.inr_total_amount && markAsPaidInvoice.total_amount ? markAsPaidInvoice.inr_total_amount / markAsPaidInvoice.total_amount : 1);
+      
+      const inrAmount = isNonINR ? amount : (amount * (exchangeRate || 1));
+      const invoiceCurrAmount = isNonINR ? (exchangeRate ? amount / exchangeRate : markAsPaidInvoice.total_amount) : amount;
+
       await invoiceService.createPayment({
         invoice_id: markAsPaidInvoice.id,
         payment_date: markAsPaidDate,
-        amount,
+        amount: invoiceCurrAmount,
+        inr_amount: inrAmount,
+        original_currency_code: isNonINR ? 'INR' : (markAsPaidInvoice.currency_code || 'INR'),
+        original_amount: amount,
         payment_method: markAsPaidMethod || undefined,
         reference_number: markAsPaidReference || undefined,
         created_by: undefined
@@ -4085,6 +4094,17 @@ const getBankingCodeField = (company: CompanySettings | undefined | null): keyof
 
   const getPaidAmount = (invoice: Invoice) => {
     if (invoice.payments && invoice.payments.length > 0) {
+      const firstPayment = invoice.payments[0];
+      const isInvoiceNonINR = invoice.currency_code && invoice.currency_code !== 'INR';
+      
+      // If payment amount is significantly larger than invoice.total_amount (e.g. 90,000 INR vs 1,000 EUR),
+      // or if original_currency_code is 'INR', p.amount was saved as INR amount instead of invoice currency.
+      if (isInvoiceNonINR && (firstPayment.amount > (invoice.total_amount || 0) * 2 || firstPayment.original_currency_code === 'INR')) {
+        const totalInrPaid = invoice.payments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
+        const exchangeRate = invoice.exchange_rate || (invoice.inr_total_amount && invoice.total_amount ? invoice.inr_total_amount / invoice.total_amount : 0);
+        return exchangeRate > 0 ? totalInrPaid / exchangeRate : (invoice.total_amount || 0);
+      }
+
       return invoice.payments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
     }
     return (invoice.payment_status === 'paid' || invoice.status === 'completed' || invoice.status === 'paid')
@@ -4094,7 +4114,15 @@ const getBankingCodeField = (company: CompanySettings | undefined | null): keyof
 
   const getInrPaidAmount = (invoice: Invoice) => {
     if (invoice.payments && invoice.payments.length > 0) {
-      return invoice.payments.reduce((sum, p) => sum + Number(p.inr_amount || p.amount || 0), 0);
+      const firstPayment = invoice.payments[0];
+      const isInvoiceNonINR = invoice.currency_code && invoice.currency_code !== 'INR';
+      
+      if (isInvoiceNonINR && (firstPayment.amount > (invoice.total_amount || 0) * 2 || firstPayment.original_currency_code === 'INR')) {
+        return invoice.payments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
+      }
+
+      return invoice.payments.reduce((sum, p) => sum + Number(p.inr_amount || (p.original_currency_code === 'INR' ? p.amount : 0) || 0), 0) ||
+        (invoice.inr_total_amount ? invoice.payments.reduce((sum, p) => sum + Number(p.amount || 0), 0) * (invoice.inr_total_amount / (invoice.total_amount || 1)) : 0);
     }
     return (invoice.payment_status === 'paid' || invoice.status === 'completed' || invoice.status === 'paid')
       ? Number(invoice.inr_total_amount || invoice.total_amount || 0)
