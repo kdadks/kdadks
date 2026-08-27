@@ -476,16 +476,20 @@ class SubscriptionService {
    * Generate a draft invoice from a subscription.
    * Creates a draft invoice populated with subscription details
    * and links it via subscription_id.
+   *
+   * Passes the subscription's company_settings_id so the correct
+   * company entity is used.  The plan's own currency_code is used
+   * as a currency override to avoid exchange-rate failures when the
+   * customer's country currency differs from the plan currency.
    */
   async generateDraftInvoice(subscriptionId: string): Promise<any> {
     const subscription = await this.getSubscriptionById(subscriptionId);
     if (!subscription) throw new Error('Subscription not found');
-    if (subscription.status !== 'active') throw new Error('Subscription is not active');
+    if (subscription.status !== 'active') throw new Error('Subscription must be active to generate an invoice');
     if (!subscription.plan) throw new Error('Subscription plan not found');
-    if (!subscription.customer) throw new Error('Customer not found');
+    if (!subscription.customer_id) throw new Error('Subscription has no associated customer');
 
     const plan = subscription.plan;
-    const customer = subscription.customer;
 
     // Determine the invoice date (use next_billing_date or today)
     const invoiceDate = subscription.next_billing_date || new Date().toISOString().split('T')[0];
@@ -496,15 +500,18 @@ class SubscriptionService {
 
     // Build line item from subscription plan
     const itemName = `${plan.name} - ${plan.billing_interval === 'monthly' ? 'Monthly' : 'Annual'} Subscription`;
-    const itemDescription = `Subscription to ${plan.name} plan (${plan.billing_interval}). ${plan.description || ''}`;
+    const itemDescription = `Subscription to ${plan.name} plan (${plan.billing_interval}).${plan.description ? ` ${plan.description}` : ''}`;
 
     const invoiceData = {
       customer_id: subscription.customer_id,
       invoice_date: invoiceDate,
       due_date: dueDate.toISOString().split('T')[0],
-      notes: `Auto-generated from subscription #${subscription.id}`,
+      notes: `Auto-generated from subscription ${subscription.subscription_number || subscription.id}`,
       terms_conditions: subscription.notes || '',
       subscription_id: subscription.id,
+      // Use the plan's currency so we don't depend on a live exchange-rate
+      // lookup against the customer's country currency.
+      currency_code_override: plan.currency_code,
       items: [
         {
           item_name: itemName,
@@ -517,13 +524,19 @@ class SubscriptionService {
       ],
     };
 
-    // Create the draft invoice (status will be 'draft')
-    const invoice = await invoiceService.createInvoice(invoiceData, undefined, undefined);
+    // Pass the subscription's company_settings_id so the correct
+    // company entity (and invoice number sequence) is used.
+    const invoice = await invoiceService.createInvoice(
+      invoiceData,
+      undefined,
+      subscription.company_settings_id || undefined,
+    );
 
-    // Update the subscription's next_billing_date
-    const newNextBillingDate = plan.billing_interval === 'monthly'
-      ? this.calculateNextBillingDate(invoiceDate, 'monthly')
-      : this.calculateNextBillingDate(invoiceDate, 'annual');
+    // Advance the subscription's next_billing_date
+    const newNextBillingDate =
+      plan.billing_interval === 'monthly'
+        ? this.calculateNextBillingDate(invoiceDate, 'monthly')
+        : this.calculateNextBillingDate(invoiceDate, 'annual');
 
     await this.updateNextBillingDate(subscriptionId, newNextBillingDate);
 

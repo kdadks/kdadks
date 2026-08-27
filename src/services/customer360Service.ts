@@ -140,11 +140,37 @@ class Customer360Service {
         payments = paymentsData || [];
       }
 
+      // 10. Fetch follow-up tasks & activities for customer leads and opportunities
+      let followUpTasks: any[] = [];
+      let leadActivities: any[] = [];
+      const oppIds = opportunities.map(o => o.id).filter(Boolean);
+
+      if (leadIds.length > 0 || oppIds.length > 0) {
+        const taskOrConds: string[] = [];
+        const actOrConds: string[] = [];
+        if (leadIds.length > 0) {
+          taskOrConds.push(`lead_id.in.(${leadIds.join(',')})`);
+          actOrConds.push(`lead_id.in.(${leadIds.join(',')})`);
+        }
+        if (oppIds.length > 0) {
+          taskOrConds.push(`opportunity_id.in.(${oppIds.join(',')})`);
+          actOrConds.push(`opportunity_id.in.(${oppIds.join(',')})`);
+        }
+
+        const [tasksRes, actsRes] = await Promise.all([
+          supabase.from('lead_follow_up_tasks').select('*').or(taskOrConds.join(',')).order('created_at', { ascending: false }),
+          supabase.from('lead_activities').select('*').or(actOrConds.join(',')).order('created_at', { ascending: false })
+        ]);
+
+        followUpTasks = tasksRes.data || [];
+        leadActivities = actsRes.data || [];
+      }
+
       // Calculate Financial Metrics in entity target currency
       const metrics = this.calculateMetrics(invoices, payments, subscriptions, opportunities, contracts, targetCurrency);
 
       // Build Chronological Timeline
-      const timeline = this.buildTimeline(customer, contacts, leads, opportunities, quotes, contracts, subscriptions, invoices, payments, targetCurrency);
+      const timeline = this.buildTimeline(customer, contacts, leads, opportunities, quotes, contracts, subscriptions, invoices, payments, followUpTasks, leadActivities, targetCurrency);
 
       return {
         customer,
@@ -200,109 +226,57 @@ class Customer360Service {
     // Valid invoices (excluding cancelled and draft)
     const validInvoices = invoices.filter(i => i.status !== 'cancelled' && i.status !== 'draft');
 
-    // Total Invoiced in target currency
     const totalInvoiced = validInvoices.reduce((sum, inv) => {
-      let invTotalInTarget = 0;
-      if (targetCurrency === 'INR' && inv.inr_total_amount) {
-        invTotalInTarget = Number(inv.inr_total_amount);
-      } else {
-        invTotalInTarget = convertCurrency(Number(inv.total_amount || 0), inv.currency_code || 'INR', targetCurrency);
-      }
-      return sum + invTotalInTarget;
+      const amtInTarget = targetCurrency === 'INR' && inv.inr_total_amount
+        ? Number(inv.inr_total_amount)
+        : convertCurrency(Number(inv.total_amount || 0), inv.currency_code || 'INR', targetCurrency);
+      return sum + amtInTarget;
     }, 0);
 
-    // Total Collected in target currency
-    const totalCollected = validInvoices.reduce((sum, inv) => {
-      let invTotalInTarget = 0;
-      if (targetCurrency === 'INR' && inv.inr_total_amount) {
-        invTotalInTarget = Number(inv.inr_total_amount);
-      } else {
-        invTotalInTarget = convertCurrency(Number(inv.total_amount || 0), inv.currency_code || 'INR', targetCurrency);
-      }
+    const totalCollected = Object.values(paymentsPerInvoiceMap).reduce((sum, amt) => sum + amt, 0);
 
-      const paidInTarget = paymentsPerInvoiceMap[inv.id] !== undefined
-        ? paymentsPerInvoiceMap[inv.id]
-        : (inv.status === 'paid' ? invTotalInTarget : 0);
-
-      return sum + Number(paidInTarget || 0);
-    }, 0);
-
-    // Outstanding Balance in target currency
     const outstandingBalance = validInvoices.reduce((sum, inv) => {
-      let invTotalInTarget = 0;
-      if (targetCurrency === 'INR' && inv.inr_total_amount) {
-        invTotalInTarget = Number(inv.inr_total_amount);
-      } else {
-        invTotalInTarget = convertCurrency(Number(inv.total_amount || 0), inv.currency_code || 'INR', targetCurrency);
-      }
-
-      const paidInTarget = paymentsPerInvoiceMap[inv.id] !== undefined
-        ? paymentsPerInvoiceMap[inv.id]
-        : (inv.status === 'paid' ? invTotalInTarget : 0);
-
-      const bal = Math.max(0, invTotalInTarget - paidInTarget);
-      return sum + bal;
+      if (inv.status === 'paid') return sum;
+      const totalInTarget = targetCurrency === 'INR' && inv.inr_total_amount
+        ? Number(inv.inr_total_amount)
+        : convertCurrency(Number(inv.total_amount || 0), inv.currency_code || 'INR', targetCurrency);
+      const paidInTarget = paymentsPerInvoiceMap[inv.id] || 0;
+      return sum + Math.max(0, totalInTarget - paidInTarget);
     }, 0);
 
-    // Overdue Balance in target currency
-    const overdueBalance = validInvoices
-      .filter(inv => {
-        let invTotalInTarget = 0;
-        if (targetCurrency === 'INR' && inv.inr_total_amount) {
-          invTotalInTarget = Number(inv.inr_total_amount);
-        } else {
-          invTotalInTarget = convertCurrency(Number(inv.total_amount || 0), inv.currency_code || 'INR', targetCurrency);
-        }
+    const overdueBalance = validInvoices.reduce((sum, inv) => {
+      const isPastDue = inv.due_date && inv.due_date < today && inv.status !== 'paid';
+      if (!isPastDue && inv.status !== 'overdue') return sum;
+      const totalInTarget = targetCurrency === 'INR' && inv.inr_total_amount
+        ? Number(inv.inr_total_amount)
+        : convertCurrency(Number(inv.total_amount || 0), inv.currency_code || 'INR', targetCurrency);
+      const paidInTarget = paymentsPerInvoiceMap[inv.id] || 0;
+      return sum + Math.max(0, totalInTarget - paidInTarget);
+    }, 0);
 
-        const paidInTarget = paymentsPerInvoiceMap[inv.id] !== undefined
-          ? paymentsPerInvoiceMap[inv.id]
-          : (inv.status === 'paid' ? invTotalInTarget : 0);
-
-        const bal = Math.max(0, invTotalInTarget - paidInTarget);
-        return inv.status === 'overdue' || (inv.due_date && inv.due_date < today && bal > 0);
-      })
-      .reduce((sum, inv) => {
-        let invTotalInTarget = 0;
-        if (targetCurrency === 'INR' && inv.inr_total_amount) {
-          invTotalInTarget = Number(inv.inr_total_amount);
-        } else {
-          invTotalInTarget = convertCurrency(Number(inv.total_amount || 0), inv.currency_code || 'INR', targetCurrency);
-        }
-
-        const paidInTarget = paymentsPerInvoiceMap[inv.id] !== undefined
-          ? paymentsPerInvoiceMap[inv.id]
-          : (inv.status === 'paid' ? invTotalInTarget : 0);
-
-        return sum + Math.max(0, invTotalInTarget - paidInTarget);
-      }, 0);
-
-    // Active Subscriptions MRR in target currency
-    const activeSubs = subscriptions.filter(s => s.status === 'active');
-    const activeSubscriptionMRR = activeSubs.reduce((sum, sub) => {
-      const originalPrice = Number(sub.plan?.price || 0);
-      const fromCurr = sub.plan?.currency_code || 'INR';
-      const priceInTarget = convertCurrency(originalPrice, fromCurr, targetCurrency);
+    const activeSubscriptionMRR = subscriptions.reduce((sum, sub) => {
+      if (sub.status !== 'active') return sum;
+      const priceInTarget = convertCurrency(Number(sub.plan?.price || 0), sub.plan?.currency_code || 'INR', targetCurrency);
       if (sub.plan?.billing_interval === 'annual') {
-        return sum + priceInTarget / 12;
+        return sum + (priceInTarget / 12);
       }
       return sum + priceInTarget;
     }, 0);
 
-    // Open Pipeline Value (Opportunities not closed_won/closed_lost) in target currency
-    const openOpps = opportunities.filter(o => o.stage !== 'closed_won' && o.stage !== 'closed_lost');
-    const openPipelineValue = openOpps.reduce((sum, opp) => {
-      const val = Number(opp.estimated_value || 0);
-      const fromCurr = opp.currency_code || 'INR';
-      return sum + convertCurrency(val, fromCurr, targetCurrency);
+    const openOppsValue = opportunities.reduce((sum, o) => {
+      if (['closed_won', 'closed_lost'].includes(o.stage)) return sum;
+      const valInTarget = convertCurrency(Number(o.estimated_value || 0), o.currency_code || 'INR', targetCurrency);
+      return sum + valInTarget;
     }, 0);
 
-    // Win Rate
-    const closedOpps = opportunities.filter(o => o.stage === 'closed_won' || o.stage === 'closed_lost');
+    const closedOpps = opportunities.filter(o => ['closed_won', 'closed_lost'].includes(o.stage));
     const wonOpps = opportunities.filter(o => o.stage === 'closed_won');
-    const winRatePercentage = closedOpps.length > 0 ? Math.round((wonOpps.length / closedOpps.length) * 100) : 0;
+    const winRatePercentage = closedOpps.length > 0
+      ? Math.round((wonOpps.length / closedOpps.length) * 100)
+      : 0;
 
-    // Active Contracts Count
-    const activeContracts = contracts.filter(c => c.status === 'active' || c.status === 'accepted');
+    const activeContracts = contracts.filter(c => c.status === 'active');
+    const paidInvoices = validInvoices.filter(i => i.status === 'paid');
 
     return {
       totalInvoiced,
@@ -310,11 +284,11 @@ class Customer360Service {
       outstandingBalance,
       overdueBalance,
       activeSubscriptionMRR,
-      openPipelineValue,
+      openPipelineValue: openOppsValue,
       winRatePercentage,
       contractsCount: activeContracts.length,
-      totalInvoicesCount: invoices.length,
-      paidInvoicesCount: invoices.filter(i => i.status === 'paid').length,
+      totalInvoicesCount: validInvoices.length,
+      paidInvoicesCount: paidInvoices.length,
     };
   }
 
@@ -331,6 +305,8 @@ class Customer360Service {
     subscriptions: CustomerSubscription[],
     invoices: Invoice[],
     payments: Payment[],
+    followUpTasks: any[],
+    leadActivities: any[],
     targetCurrency: string
   ): CustomerActivityTimelineItem[] {
     const items: CustomerActivityTimelineItem[] = [];
@@ -459,6 +435,36 @@ class Customer360Service {
         timestamp: p.payment_date || p.created_at,
         badgeText: 'Payment',
         badgeVariant: 'green',
+      });
+    });
+
+    // Follow-up Tasks & Notes
+    followUpTasks.forEach(t => {
+      const isDone = t.status === 'completed';
+      const isCancelled = t.status === 'cancelled';
+      const noteText = t.completion_notes ? `Notes: ${t.completion_notes}` : (t.description || '');
+      items.push({
+        id: `task-${t.id}`,
+        sourceType: 'lead',
+        title: isDone ? `Task Completed: ${t.title}` : isCancelled ? `Task Cancelled: ${t.title}` : `Follow-up Task: ${t.title}`,
+        description: noteText || `Priority: ${t.priority.toUpperCase()} | Status: ${t.status.toUpperCase()}`,
+        timestamp: t.completed_at || t.cancelled_at || t.updated_at || t.created_at,
+        badgeText: isDone ? 'Task Done' : isCancelled ? 'Cancelled' : 'Follow-up Task',
+        badgeVariant: isDone ? 'green' : isCancelled ? 'red' : 'blue',
+        metadata: { completion_notes: t.completion_notes, priority: t.priority, status: t.status }
+      });
+    });
+
+    // Lead & Opportunity Activities
+    leadActivities.forEach(a => {
+      items.push({
+        id: `act-${a.id}`,
+        sourceType: 'lead',
+        title: a.subject || 'Activity Note',
+        description: a.description,
+        timestamp: a.completed_at || a.created_at,
+        badgeText: 'Activity Note',
+        badgeVariant: 'purple',
       });
     });
 

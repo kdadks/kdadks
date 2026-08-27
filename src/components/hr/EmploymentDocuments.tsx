@@ -18,11 +18,15 @@ import {
   CheckCircle,
   AlertCircle,
   Key,
-  Upload
+  Upload,
+  RefreshCw,
+  Globe,
+  Shield
 } from 'lucide-react';
 import { employeeService } from '../../services/employeeService';
 import { employeeAuthService } from '../../services/employeeAuthService';
 import { employeeDocumentService } from '../../services/employeeDocumentService';
+import { compensationService } from '../../services/compensationService';
 import { PDFBrandingUtils } from '../../utils/pdfBrandingUtils';
 import { generateSalarySlipPDF } from '../../utils/salarySlipPDFGenerator';
 import {
@@ -35,8 +39,10 @@ import {
   canPerformAction,
   PROGRAM_NAME_DEFAULT,
 } from '../../utils/internDocumentTemplates';
+import { getPrefilledDocumentData, getJurisdictionInfo } from '../../utils/employmentDocumentTemplates';
 import { EmailService } from '../../services/emailService';
 import { useToast } from '../ui/ToastProvider';
+import { useActionProgress } from '../../contexts/ActionProgressContext';
 import { useCompanyContext } from '../../contexts/CompanyContext';
 import type {
   Employee,
@@ -79,6 +85,7 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
   const [employeeView, setEmployeeView] = useState<EmployeeView>('list');
   const [searchTerm, setSearchTerm] = useState('');
   const { showSuccess, showError } = useToast();
+  const { startAction, endAction } = useActionProgress();
 
   // Employee form state
   const [employeeForm, setEmployeeForm] = useState<Partial<Employee>>({
@@ -221,6 +228,7 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
   const handleDeleteEmployee = async () => {
     if (!employeeToDelete) return;
 
+    startAction('Deleting employee record…');
     try {
       await employeeService.deleteEmployee(employeeToDelete.id);
       showSuccess('Employee deleted successfully');
@@ -230,6 +238,8 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
     } catch (err) {
       console.error('Error deleting employee:', err);
       showError('Failed to delete employee');
+    } finally {
+      endAction();
     }
   };
 
@@ -669,24 +679,24 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
     currentY += LINE_HEIGHT;
     pdf.setFont('helvetica', 'normal');
 
-    // Candidate Address (use provided address or employee address)
-    if (data.candidate_address) {
-      const addressLines = pdf.splitTextToSize(data.candidate_address, dimensions.rightMargin - dimensions.leftMargin);
+    // Candidate Address (use provided multiline address or employee address)
+    const rawAddress = data.candidate_address || [
+      employee.address_line1,
+      employee.address_line2,
+      [employee.city, employee.state, employee.postal_code].filter(Boolean).join(', '),
+      employee.country
+    ].filter(Boolean).join('\n');
+
+    if (rawAddress) {
+      const addressLines = rawAddress.split('\n');
       for (const line of addressLines) {
-        pdf.text(line, dimensions.leftMargin, currentY);
-        currentY += LINE_HEIGHT;
-      }
-    } else if (employee.address_line1) {
-      pdf.text(employee.address_line1, dimensions.leftMargin, currentY);
-      currentY += LINE_HEIGHT;
-      if (employee.address_line2) {
-        pdf.text(employee.address_line2, dimensions.leftMargin, currentY);
-        currentY += LINE_HEIGHT;
-      }
-      const cityLine = [employee.city, employee.state, employee.postal_code].filter(Boolean).join(', ');
-      if (cityLine) {
-        pdf.text(cityLine, dimensions.leftMargin, currentY);
-        currentY += LINE_HEIGHT;
+        if (line.trim()) {
+          const splitLines = pdf.splitTextToSize(line.trim(), dimensions.rightMargin - dimensions.leftMargin);
+          for (const sLine of splitLines) {
+            pdf.text(sLine, dimensions.leftMargin, currentY);
+            currentY += LINE_HEIGHT;
+          }
+        }
       }
     }
     currentY += PARAGRAPH_GAP;
@@ -709,19 +719,42 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
     // 1. Position Details
     await writeSectionHeading('1. Position Details');
     
-    const positionDetails = [
-      `Job Title: ${data.position || employee.designation}`,
-      `Department: ${data.department || employee.department || 'Administration'}`,
-      `Reporting To: ${data.reporting_to || '[Manager/Designation]'}`,
-      `Work Location: ${data.work_location || '[Office Address]'}`,
-      `Employment Type: ${data.employment_type || (employee.employment_type === 'full-time' ? 'Full-time' : employee.employment_type)}`,
-      `Date of Joining: ${new Date(data.joining_date || employee.date_of_joining).toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' })}`
-    ];
-    
-    for (const detail of positionDetails) {
+    const locTypeStr = data.work_location_type ? (data.work_location_type.charAt(0).toUpperCase() + data.work_location_type.slice(1)) : 'Onsite';
+
+    const writePositionDetailRow = async (label: string, value: string) => {
+      if (!value) return;
       await checkPageBreak(LINE_HEIGHT + 2);
-      pdf.text(detail, dimensions.leftMargin, currentY);
-      currentY += PARAGRAPH_GAP;
+      pdf.setFont('helvetica', 'bold');
+      pdf.text(`${label}: `, dimensions.leftMargin, currentY);
+      const labelWidth = pdf.getTextWidth(`${label}: `);
+      pdf.setFont('helvetica', 'normal');
+
+      // Handle multiline value string (e.g. work location multiline address)
+      const valLines = value.split('\n');
+      for (let i = 0; i < valLines.length; i++) {
+        const lineStr = valLines[i].trim();
+        if (!lineStr) continue;
+        const indentX = i === 0 ? labelWidth : 0;
+        const startX = dimensions.leftMargin + indentX;
+        const splitLines = pdf.splitTextToSize(lineStr, dimensions.rightMargin - startX);
+        for (let j = 0; j < splitLines.length; j++) {
+          await checkPageBreak(LINE_HEIGHT + 2);
+          const posX = (i === 0 && j === 0) ? (dimensions.leftMargin + labelWidth) : (dimensions.leftMargin + 20);
+          pdf.text(splitLines[j], posX, currentY);
+          currentY += LINE_HEIGHT;
+        }
+      }
+      currentY += 2;
+    };
+
+    await writePositionDetailRow('Job Title', data.position || employee.designation);
+    await writePositionDetailRow('Department', data.department || employee.department || 'Administration');
+    await writePositionDetailRow('Reporting To', data.reporting_to || '[Manager/Designation]');
+    await writePositionDetailRow('Employment Type', data.employment_type || (employee.employment_type === 'full-time' ? 'Full-time' : employee.employment_type));
+    await writePositionDetailRow('Date of Joining', new Date(data.joining_date || employee.date_of_joining).toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' }));
+    await writePositionDetailRow('Work Location Type', locTypeStr);
+    if (data.work_location_type !== 'remote' && data.work_location) {
+      await writePositionDetailRow('Work Location Address', data.work_location);
     }
     currentY += SECTION_GAP - PARAGRAPH_GAP;
 
@@ -757,16 +790,116 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
     }
     currentY += SECTION_GAP - LINE_HEIGHT;
 
-    // 3. Compensation and Benefits
+    // 3. Compensation and Benefits (Tabular Format)
     await writeSectionHeading('3. Compensation and Benefits');
     
-    const grossSalary = data.salary_breakdown.gross_salary.toLocaleString('en-IN');
-    pdf.text(`Gross Salary: INR ${grossSalary} per month`, dimensions.leftMargin, currentY);
-    currentY += PARAGRAPH_GAP;
+    const curr = employee.currency_code || 'INR';
+    const grossVal = data.salary_breakdown?.gross_salary || employee.gross_salary || 0;
+    const ctcVal = data.annual_ctc || grossVal * 12;
+
+    // PDF Table for Salary Breakdown
+    const tableLeft = dimensions.leftMargin;
+    const tableRight = dimensions.rightMargin;
+    const tableWidth = tableRight - tableLeft;
     
+    const colWidths = [85, 40, 45]; // Component (85mm), Monthly (40mm), Annual (45mm)
+    const colX = [
+      tableLeft,
+      tableLeft + colWidths[0],
+      tableLeft + colWidths[0] + colWidths[1],
+    ];
+
+    const drawRow = async (cols: [string, string, string], isHeader = false, isHighlight = false) => {
+      const rowHeight = 7.5;
+      await checkPageBreak(rowHeight + 2);
+
+      if (isHeader) {
+        pdf.setFillColor(30, 41, 59); // Slate-800 header fill
+        pdf.rect(tableLeft, currentY, tableWidth, rowHeight, 'F');
+        pdf.setTextColor(255, 255, 255);
+        pdf.setFont('helvetica', 'bold');
+      } else if (isHighlight) {
+        pdf.setFillColor(241, 245, 249); // Slate-100 summary fill
+        pdf.rect(tableLeft, currentY, tableWidth, rowHeight, 'F');
+        pdf.setTextColor(15, 23, 42);
+        pdf.setFont('helvetica', 'bold');
+      } else {
+        pdf.setTextColor(30, 41, 59);
+        pdf.setFont('helvetica', 'normal');
+      }
+
+      pdf.setDrawColor(226, 232, 240); // Grid border line
+      pdf.setLineWidth(0.3);
+      pdf.rect(tableLeft, currentY, tableWidth, rowHeight, 'S');
+
+      const textY = currentY + 5;
+      pdf.setFontSize(FONT_SIZE.small);
+
+      // Col 0 (Component Label)
+      pdf.text(cols[0], colX[0] + 3, textY, { maxWidth: colWidths[0] - 6 });
+      // Col 1 (Monthly Amount)
+      pdf.text(cols[1], colX[1] + colWidths[1] - 3, textY, { align: 'right' });
+      // Col 2 (Annual Amount)
+      pdf.text(cols[2], colX[2] + colWidths[2] - 3, textY, { align: 'right' });
+
+      pdf.setTextColor(0, 0, 0);
+      currentY += rowHeight;
+    };
+
+    // Draw Table Header
+    await drawRow(['Salary Component / Benefit Item', `Monthly (${curr})`, `Annual (${curr})`], true);
+
+    const b = data.salary_breakdown || {
+      basic: employee.basic_salary,
+      hra: employee.hra || 0,
+      special_allowance: employee.special_allowance || 0,
+      other_allowances: employee.other_allowances || 0,
+      gross_salary: grossVal
+    };
+
+    if (b.basic) {
+      await drawRow(['Basic Salary', b.basic.toLocaleString(), (b.basic * 12).toLocaleString()]);
+    }
+    if (b.hra) {
+      await drawRow(['House Rent Allowance (HRA)', b.hra.toLocaleString(), (b.hra * 12).toLocaleString()]);
+    }
+    if (b.special_allowance) {
+      await drawRow(['Special Allowance', b.special_allowance.toLocaleString(), (b.special_allowance * 12).toLocaleString()]);
+    }
+    if (b.other_allowances) {
+      await drawRow(['Other Allowances', b.other_allowances.toLocaleString(), (b.other_allowances * 12).toLocaleString()]);
+    }
+
+    // Total Monthly Gross and Annual CTC Rows
+    await drawRow(['Total Gross Monthly Salary', grossVal.toLocaleString(), (grossVal * 12).toLocaleString()], false, true);
+    await drawRow(['Annual Cost to Company (CTC)', '—', ctcVal.toLocaleString()], false, true);
+
+    currentY += PARAGRAPH_GAP;
+
+    // Salary Payment Note
     const salaryNote = data.salary_payment_note || "Salary will be paid as per the company's payroll cycle and applicable statutory deductions.";
     await writeWrappedText(salaryNote);
     currentY += 3;
+
+    // Statutory & Entity Employee Benefits List
+    const rawBenefits = data.benefits;
+    const benefitsList = Array.isArray(rawBenefits)
+      ? rawBenefits
+      : (typeof rawBenefits === 'string' ? (rawBenefits as string).split('\n').filter(b => b.trim()) : []);
+
+    if (benefitsList.length > 0) {
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(FONT_SIZE.heading);
+      pdf.text('Statutory & Standard Employee Benefits:', dimensions.leftMargin, currentY);
+      currentY += PARAGRAPH_GAP;
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(FONT_SIZE.body);
+      for (const benefit of benefitsList) {
+        if (benefit.trim()) {
+          await writeBulletPoint(benefit.trim());
+        }
+      }
+    }
     
     const benefitsNote = data.benefits_note || 'You will be entitled to benefits and facilities as per company policy, which may be revised from time to time.';
     await writeWrappedText(benefitsNote);
@@ -819,8 +952,22 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
     await writeWrappedText(terminationNote);
     currentY += SECTION_GAP;
 
-    // 9. Acceptance of Offer
-    await writeSectionHeading('9. Acceptance of Offer');
+    // 9. Intellectual Property Assignment
+    if (data.ip_clause_text) {
+      await writeSectionHeading('9. Intellectual Property Assignment');
+      await writeWrappedText(data.ip_clause_text);
+      currentY += SECTION_GAP;
+    }
+
+    // 10. Company Property and Assets Return
+    if (data.asset_clause_text) {
+      await writeSectionHeading('10. Company Assets & Return');
+      await writeWrappedText(data.asset_clause_text);
+      currentY += SECTION_GAP;
+    }
+
+    // 11. Acceptance of Offer
+    await writeSectionHeading('11. Acceptance of Offer');
     
     const acceptanceNote = 'Please sign and return a copy of this letter as a token of your acceptance of the offer and the terms and conditions mentioned herein.';
     await writeWrappedText(acceptanceNote);
@@ -896,7 +1043,23 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
     const pdf = new jsPDF('p', 'mm', 'a4');
     const dimensions = PDFBrandingUtils.getStandardDimensions();
 
+    const FONT_SIZE = { title: 16, heading: 11, body: 10, small: 9 };
+    const pageHeight = pdf.internal.pageSize.getHeight();
+    const contentEndY = pageHeight - dimensions.bottomMargin;
+
     let currentY = dimensions.topMargin;
+
+    const checkPageBreak = async (requiredSpace: number) => {
+      if (currentY + requiredSpace > contentEndY) {
+        pdf.addPage();
+        if (companySettings) {
+          const br = await PDFBrandingUtils.applyBranding(pdf, companySettings, dimensions);
+          currentY = br.contentStartY;
+        } else {
+          currentY = dimensions.topMargin;
+        }
+      }
+    };
 
     // Ensure salary_breakdown is populated
     if (!data.salary_breakdown) {
@@ -920,90 +1083,149 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
       currentY = brandingResult.contentStartY;
     }
 
+    const contentWidth = dimensions.rightMargin - dimensions.leftMargin;
+    const companyName = companySettings?.company_name || 'our organization';
+
     // Document title
     pdf.setFontSize(16);
     pdf.setFont('helvetica', 'bold');
     pdf.text('SALARY CERTIFICATE', dimensions.leftMargin, currentY);
-    currentY += 15;
+    currentY += 12;
 
-    // Date
+    // Date (right-aligned)
     pdf.setFontSize(10);
     pdf.setFont('helvetica', 'normal');
-    pdf.text(`Date: ${new Date().toLocaleDateString('en-GB')}`, dimensions.leftMargin, currentY);
-    currentY += 15;
+    pdf.text(`Date: ${new Date().toLocaleDateString('en-GB')}`, dimensions.rightMargin, currentY, { align: 'right' });
+    currentY += 14;
 
-    // Certificate content
-    pdf.text('To Whom It May Concern,', dimensions.leftMargin, currentY);
+    // TO WHOM IT MAY CONCERN
+    await checkPageBreak(12);
+    pdf.setFontSize(11);
+    pdf.setFont('helvetica', 'bold');
+    pdf.text('TO WHOM IT MAY CONCERN', dimensions.leftMargin, currentY);
     currentY += 10;
 
-    pdf.text(`This is to certify that ${employee.full_name} is employed with our organization`, dimensions.leftMargin, currentY);
-    currentY += 6;
-    pdf.text(`in the capacity of ${employee.designation}.`, dimensions.leftMargin, currentY);
-    currentY += 15;
-
-    // Employee details
-    pdf.setFont('helvetica', 'bold');
-    pdf.text('Employee Details:', dimensions.leftMargin, currentY);
-    currentY += 7;
-
+    // Main Certificate Body Paragraph (Full printable width)
+    pdf.setFontSize(10);
     pdf.setFont('helvetica', 'normal');
-    pdf.text(`Employee Number: ${employee.employee_number}`, dimensions.leftMargin + 5, currentY);
-    currentY += 6;
-    pdf.text(`Designation: ${employee.designation}`, dimensions.leftMargin + 5, currentY);
-    currentY += 6;
-    if (employee.department) {
-      pdf.text(`Department: ${employee.department}`, dimensions.leftMargin + 5, currentY);
-      currentY += 6;
-    }
-    pdf.text(`Date of Joining: ${new Date(employee.date_of_joining).toLocaleDateString('en-GB')}`, dimensions.leftMargin + 5, currentY);
-    currentY += 15;
+    const certIntro = `This is to certify that ${employee.full_name} (Employee No: ${employee.employee_number}) is a full-time employee with ${companyName}, currently serving in the capacity of ${employee.designation}${employee.department ? ' in the ' + employee.department + ' department' : ''}. ${employee.first_name} joined the organization on ${new Date(employee.date_of_joining).toLocaleDateString('en-GB')} and is receiving regular monthly compensation as detailed below.`;
 
-    // Salary details
-    pdf.setFont('helvetica', 'bold');
-    pdf.text(`Salary Details (${data.period_from} to ${data.period_to}):`, dimensions.leftMargin, currentY);
-    currentY += 7;
+    const introLines = pdf.splitTextToSize(certIntro, contentWidth);
+    await checkPageBreak(introLines.length * 6 + 10);
+    pdf.text(introLines, dimensions.leftMargin, currentY);
+    currentY += introLines.length * 6 + 10;
 
-    pdf.setFont('helvetica', 'normal');
-    pdf.text('Monthly Breakdown:', dimensions.leftMargin + 5, currentY);
-    currentY += 6;
-    pdf.text(`  Basic Salary: ₹${data.salary_breakdown.basic.toLocaleString('en-IN')}`, dimensions.leftMargin + 10, currentY);
-    currentY += 5;
-    pdf.text(`  HRA: ₹${data.salary_breakdown.hra.toLocaleString('en-IN')}`, dimensions.leftMargin + 10, currentY);
-    currentY += 5;
-    pdf.text(`  Special Allowance: ₹${data.salary_breakdown.special_allowance.toLocaleString('en-IN')}`, dimensions.leftMargin + 10, currentY);
-    currentY += 5;
-    if (data.salary_breakdown.other_allowances > 0) {
-      pdf.text(`  Other Allowances: ₹${data.salary_breakdown.other_allowances.toLocaleString('en-IN')}`, dimensions.leftMargin + 10, currentY);
-      currentY += 5;
-    }
+    // Salary details in clean table format
+    await checkPageBreak(15);
     pdf.setFont('helvetica', 'bold');
-    pdf.text(`  Gross Monthly: ₹${data.salary_breakdown.gross_monthly.toLocaleString('en-IN')}`, dimensions.leftMargin + 10, currentY);
+    pdf.setFontSize(FONT_SIZE.heading);
+    pdf.text(`Salary Details (${data.period_from || 'Current'} to ${data.period_to || 'Present'}):`, dimensions.leftMargin, currentY);
+    currentY += 8;
+
+    const currSymbol = employee.currency_code || 'INR';
+
+    const tableLeft = dimensions.leftMargin;
+    const tableRight = dimensions.rightMargin;
+    const tableWidth = tableRight - tableLeft;
+    
+    const colWidths = [85, 40, 45]; // Component (85mm), Monthly (40mm), Annual (45mm)
+    const colX = [
+      tableLeft,
+      tableLeft + colWidths[0],
+      tableLeft + colWidths[0] + colWidths[1],
+    ];
+
+    const drawRow = async (cols: [string, string, string], isHeader = false, isHighlight = false) => {
+      const rowHeight = 7.5;
+      await checkPageBreak(rowHeight + 2);
+
+      if (isHeader) {
+        pdf.setFillColor(30, 41, 59); // Slate-800 header fill
+        pdf.rect(tableLeft, currentY, tableWidth, rowHeight, 'F');
+        pdf.setTextColor(255, 255, 255);
+        pdf.setFont('helvetica', 'bold');
+      } else if (isHighlight) {
+        pdf.setFillColor(241, 245, 249); // Slate-100 summary fill
+        pdf.rect(tableLeft, currentY, tableWidth, rowHeight, 'F');
+        pdf.setTextColor(15, 23, 42);
+        pdf.setFont('helvetica', 'bold');
+      } else {
+        pdf.setTextColor(30, 41, 59);
+        pdf.setFont('helvetica', 'normal');
+      }
+
+      pdf.setDrawColor(226, 232, 240); // Grid border line
+      pdf.setLineWidth(0.3);
+      pdf.rect(tableLeft, currentY, tableWidth, rowHeight, 'S');
+
+      const textY = currentY + 5;
+      pdf.setFontSize(FONT_SIZE.small);
+
+      // Col 0 (Component Label)
+      pdf.text(cols[0], colX[0] + 3, textY, { maxWidth: colWidths[0] - 6 });
+      // Col 1 (Monthly Amount)
+      pdf.text(cols[1], colX[1] + colWidths[1] - 3, textY, { align: 'right' });
+      // Col 2 (Annual Amount)
+      pdf.text(cols[2], colX[2] + colWidths[2] - 3, textY, { align: 'right' });
+
+      pdf.setTextColor(0, 0, 0);
+      currentY += rowHeight;
+    };
+
+    // Draw Table Header
+    await drawRow(['Salary Component', `Monthly (${currSymbol})`, `Annual (${currSymbol})`], true);
+
+    const b = data.salary_breakdown;
+    if (b.basic) {
+      await drawRow(['Basic Salary', b.basic.toLocaleString(), (b.basic * 12).toLocaleString()]);
+    }
+    if (b.hra) {
+      await drawRow(['House Rent Allowance (HRA)', b.hra.toLocaleString(), (b.hra * 12).toLocaleString()]);
+    }
+    if (b.special_allowance) {
+      await drawRow(['Special Allowance', b.special_allowance.toLocaleString(), (b.special_allowance * 12).toLocaleString()]);
+    }
+    if (b.other_allowances > 0) {
+      await drawRow(['Other Allowances', b.other_allowances.toLocaleString(), (b.other_allowances * 12).toLocaleString()]);
+    }
+
+    // Highlight row: Total Gross Monthly Salary & Annual Gross Salary
+    const grossVal = b.gross_monthly || employee.gross_salary;
+    const annualVal = data.annual_gross || (grossVal * 12);
+    await drawRow(['Gross Monthly Salary', grossVal.toLocaleString(), (grossVal * 12).toLocaleString()], false, true);
+    await drawRow(['Annual Gross Salary (CTC)', '—', annualVal.toLocaleString()], false, true);
+
     currentY += 10;
-
-    pdf.setFont('helvetica', 'normal');
-    pdf.text(`Annual Gross Salary: ₹${data.annual_gross.toLocaleString('en-IN')}`, dimensions.leftMargin + 5, currentY);
-    currentY += 15;
 
     // Purpose
     if (data.purpose) {
-      pdf.text(`Purpose: ${data.purpose}`, dimensions.leftMargin, currentY);
-      currentY += 15;
+      await checkPageBreak(12);
+      pdf.setFont('helvetica', 'normal');
+      const purposeLines = pdf.splitTextToSize(`Purpose of Issue: ${data.purpose}`, contentWidth);
+      pdf.text(purposeLines, dimensions.leftMargin, currentY);
+      currentY += purposeLines.length * 6 + 6;
     }
 
     // Closing
-    pdf.text('This certificate is issued upon request for official purposes.', dimensions.leftMargin, currentY);
-    currentY += 15;
+    await checkPageBreak(25);
+    pdf.setFont('helvetica', 'normal');
+    const closingLines = pdf.splitTextToSize('This salary certificate is issued upon official request of the employee for verification, banking, or official record purposes.', contentWidth);
+    pdf.text(closingLines, dimensions.leftMargin, currentY);
+    currentY += closingLines.length * 6 + 12;
 
     pdf.text('Sincerely,', dimensions.leftMargin, currentY);
     currentY += 15;
 
-    if (hrSettings?.signatory_name) {
+    const signatoryName = (data as any).signatory_name || hrSettings?.signatory_name;
+    const signatoryDesignation = (data as any).signatory_designation || hrSettings?.signatory_designation;
+
+    if (signatoryName) {
       pdf.setFont('helvetica', 'bold');
-      pdf.text(hrSettings.signatory_name, dimensions.leftMargin, currentY);
+      pdf.text(signatoryName, dimensions.leftMargin, currentY);
       currentY += 5;
-      if (hrSettings.signatory_designation) {
+      if (signatoryDesignation) {
         pdf.setFont('helvetica', 'normal');
-        pdf.text(hrSettings.signatory_designation, dimensions.leftMargin, currentY);
+        pdf.text(signatoryDesignation, dimensions.leftMargin, currentY);
       }
     }
 
@@ -1014,7 +1236,27 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
     const pdf = new jsPDF('p', 'mm', 'a4');
     const dimensions = PDFBrandingUtils.getStandardDimensions();
 
+    const pageHeight = pdf.internal.pageSize.getHeight();
+    const contentEndY = pageHeight - dimensions.bottomMargin;
+
     let currentY = dimensions.topMargin;
+
+    const checkPageBreak = async (requiredSpace: number) => {
+      if (currentY + requiredSpace > contentEndY) {
+        pdf.addPage();
+        if (companySettings) {
+          const br = await PDFBrandingUtils.applyBranding(pdf, companySettings, dimensions);
+          currentY = br.contentStartY;
+        } else {
+          currentY = dimensions.topMargin;
+        }
+      }
+    };
+
+    if (companySettings) {
+      const br = await PDFBrandingUtils.applyBranding(pdf, companySettings, dimensions);
+      currentY = br.contentStartY;
+    }
 
     // Form 16 Header
     pdf.setFontSize(14);
@@ -1023,104 +1265,123 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
     currentY += 7;
     pdf.setFontSize(10);
     pdf.text('[See rule 31(1)(a)]', pdf.internal.pageSize.getWidth() / 2, currentY, { align: 'center' });
-    currentY += 7;
+    currentY += 6;
     pdf.text('Certificate under section 203 of the Income-tax Act, 1961', pdf.internal.pageSize.getWidth() / 2, currentY, { align: 'center' });
-    currentY += 7;
+    currentY += 6;
     pdf.text('for tax deducted at source on salary', pdf.internal.pageSize.getWidth() / 2, currentY, { align: 'center' });
-    currentY += 15;
+    currentY += 12;
 
     // Financial Year
     pdf.setFont('helvetica', 'normal');
     pdf.text(`Financial Year: ${data.financial_year}`, dimensions.leftMargin, currentY);
-    currentY += 15;
+    currentY += 12;
 
     // Part A - Details of Employee and Employer
     pdf.setFont('helvetica', 'bold');
-    pdf.text('PART A', dimensions.leftMargin, currentY);
-    currentY += 10;
+    pdf.text('PART A - EMPLOYER & EMPLOYEE DETAILS', dimensions.leftMargin, currentY);
+    currentY += 8;
 
     pdf.setFont('helvetica', 'normal');
-    pdf.text('1. Name and address of the Employer:', dimensions.leftMargin, currentY);
-    currentY += 6;
-    pdf.text(`   ${data.employer.name}`, dimensions.leftMargin, currentY);
+    pdf.text(`1. Employer Name: ${data.employer.name}`, dimensions.leftMargin, currentY);
     currentY += 5;
-    pdf.text(`   ${data.employer.address}`, dimensions.leftMargin, currentY);
+    pdf.text(`   Address: ${data.employer.address}`, dimensions.leftMargin, currentY);
+    currentY += 5;
+    pdf.text(`   TAN: ${data.employer.tan}  |  PAN: ${data.employer.pan}`, dimensions.leftMargin, currentY);
     currentY += 8;
 
-    pdf.text(`2. TAN of the Employer: ${data.employer.tan}`, dimensions.leftMargin, currentY);
-    currentY += 6;
-    pdf.text(`3. PAN of the Employer: ${data.employer.pan}`, dimensions.leftMargin, currentY);
-    currentY += 10;
-
-    pdf.text('4. Name and address of the Employee:', dimensions.leftMargin, currentY);
-    currentY += 6;
-    pdf.text(`   ${data.employee.name}`, dimensions.leftMargin, currentY);
+    pdf.text(`2. Employee Name: ${data.employee.name}`, dimensions.leftMargin, currentY);
     currentY += 5;
-    pdf.text(`   ${data.employee.address}`, dimensions.leftMargin, currentY);
-    currentY += 8;
+    pdf.text(`   Address: ${data.employee.address}`, dimensions.leftMargin, currentY);
+    currentY += 5;
+    pdf.text(`   PAN: ${data.employee.pan}`, dimensions.leftMargin, currentY);
+    currentY += 12;
 
-    pdf.text(`5. PAN of the Employee: ${data.employee.pan}`, dimensions.leftMargin, currentY);
-    currentY += 15;
-
-    // Part B - Details of Salary Paid and Tax Deducted
+    // Part B - Details of Salary Paid and Tax Deducted (PDF Table Format)
     pdf.setFont('helvetica', 'bold');
-    pdf.text('PART B', dimensions.leftMargin, currentY);
-    currentY += 10;
+    pdf.text('PART B - DETAILS OF SALARY PAID & TAX DEDUCTED', dimensions.leftMargin, currentY);
+    currentY += 8;
 
-    pdf.setFont('helvetica', 'normal');
-    pdf.text('Details of Salary paid and any other income and tax deducted', dimensions.leftMargin, currentY);
-    currentY += 10;
+    const tableLeft = dimensions.leftMargin;
+    const tableRight = dimensions.rightMargin;
+    const tableWidth = tableRight - tableLeft;
+    const colWidths = [120, 50]; // Particulars (120mm), Amount (50mm)
 
-    // Salary details table
-    const tableData = [
-      ['Gross Salary', `₹${data.salary_details.gross_salary.toLocaleString('en-IN')}`],
-      ['Allowances', `₹${data.salary_details.allowances.toLocaleString('en-IN')}`],
-      ['Perquisites', `₹${data.salary_details.perquisites.toLocaleString('en-IN')}`],
-      ['Profits in lieu of salary', `₹${data.salary_details.profits_in_lieu.toLocaleString('en-IN')}`],
-      ['', ''],
-      ['Less: Deductions', ''],
-      ['Standard Deduction', `₹${data.deductions.standard_deduction.toLocaleString('en-IN')}`],
-      ['Entertainment Allowance', `₹${data.deductions.entertainment_allowance.toLocaleString('en-IN')}`],
-      ['Professional Tax', `₹${data.deductions.professional_tax.toLocaleString('en-IN')}`],
-      ['', ''],
-      ['Gross Total Income', `₹${data.income_chargeable.toLocaleString('en-IN')}`],
-      ['', ''],
-      ['Deductions under Chapter VI-A', ''],
-      ['80C', `₹${data.chapter_vi_deductions.section_80c.toLocaleString('en-IN')}`],
-      ['80D', `₹${data.chapter_vi_deductions.section_80d.toLocaleString('en-IN')}`],
-      ['Other', `₹${data.chapter_vi_deductions.other.toLocaleString('en-IN')}`],
-      ['', ''],
-      ['Total Income', `₹${data.income_chargeable.toLocaleString('en-IN')}`],
-      ['Tax on total income', `₹${data.tax_computed.toLocaleString('en-IN')}`],
-      ['Relief under section 89', `₹${data.relief_under_89.toLocaleString('en-IN')}`],
-      ['Tax payable', `₹${data.tax_payable.toLocaleString('en-IN')}`],
-      ['TDS deducted', `₹${data.tds_deducted.toLocaleString('en-IN')}`]
-    ];
+    const drawForm16Row = async (label: string, value: string, isHeader = false, isHighlight = false) => {
+      const rowHeight = 7;
+      await checkPageBreak(rowHeight + 2);
 
-    tableData.forEach(([label, value]) => {
-      if (!label) {
-        currentY += 3;
-        return;
+      if (isHeader) {
+        pdf.setFillColor(30, 41, 59); // Slate-800
+        pdf.rect(tableLeft, currentY, tableWidth, rowHeight, 'F');
+        pdf.setTextColor(255, 255, 255);
+        pdf.setFont('helvetica', 'bold');
+      } else if (isHighlight) {
+        pdf.setFillColor(241, 245, 249); // Slate-100
+        pdf.rect(tableLeft, currentY, tableWidth, rowHeight, 'F');
+        pdf.setTextColor(15, 23, 42);
+        pdf.setFont('helvetica', 'bold');
+      } else {
+        pdf.setTextColor(30, 41, 59);
+        pdf.setFont('helvetica', 'normal');
       }
-      pdf.text(label, dimensions.leftMargin + 5, currentY);
+
+      pdf.setDrawColor(226, 232, 240);
+      pdf.setLineWidth(0.3);
+      pdf.rect(tableLeft, currentY, tableWidth, rowHeight, 'S');
+
+      const textY = currentY + 4.8;
+      pdf.setFontSize(9);
+      pdf.text(label, tableLeft + 3, textY, { maxWidth: colWidths[0] - 6 });
       if (value) {
-        pdf.text(value, dimensions.rightMargin - 40, currentY, { align: 'right' });
+        pdf.text(value, tableLeft + colWidths[0] + colWidths[1] - 3, textY, { align: 'right' });
       }
-      currentY += 6;
-    });
+      pdf.setTextColor(0, 0, 0);
+      currentY += rowHeight;
+    };
+
+    const curr = employee.currency_code || 'INR';
+
+    await drawForm16Row('Particulars / Income Component', `Amount (${curr})`, true);
+
+    await drawForm16Row('1. Gross Salary u/s 17(1)', `₹${data.salary_details.gross_salary.toLocaleString('en-IN')}`);
+    await drawForm16Row('2. Allowances exempt u/s 10', `₹${data.salary_details.allowances.toLocaleString('en-IN')}`);
+    await drawForm16Row('3. Value of Perquisites u/s 17(2)', `₹${data.salary_details.perquisites.toLocaleString('en-IN')}`);
+    await drawForm16Row('4. Profits in lieu of salary u/s 17(3)', `₹${data.salary_details.profits_in_lieu.toLocaleString('en-IN')}`);
+
+    await drawForm16Row('Less: Deductions under Section 16', '', false, true);
+    await drawForm16Row('  (a) Standard Deduction u/s 16(ia)', `₹${data.deductions.standard_deduction.toLocaleString('en-IN')}`);
+    await drawForm16Row('  (b) Entertainment Allowance u/s 16(ii)', `₹${data.deductions.entertainment_allowance.toLocaleString('en-IN')}`);
+    await drawForm16Row('  (c) Professional Tax u/s 16(iii)', `₹${data.deductions.professional_tax.toLocaleString('en-IN')}`);
+
+    await drawForm16Row('5. Income Chargeable under "Salaries"', `₹${data.income_chargeable.toLocaleString('en-IN')}`, false, true);
+
+    await drawForm16Row('Deductions under Chapter VI-A', '', false, true);
+    await drawForm16Row('  (a) Section 80C (PF/ELSS/LIC)', `₹${data.chapter_vi_deductions.section_80c.toLocaleString('en-IN')}`);
+    await drawForm16Row('  (b) Section 80D (Health Insurance)', `₹${data.chapter_vi_deductions.section_80d.toLocaleString('en-IN')}`);
+    await drawForm16Row('  (c) Other Chapter VI-A Deductions', `₹${data.chapter_vi_deductions.other.toLocaleString('en-IN')}`);
+
+    await drawForm16Row('6. Total Taxable Income', `₹${data.income_chargeable.toLocaleString('en-IN')}`, false, true);
+    await drawForm16Row('7. Tax Computed on Total Income', `₹${data.tax_computed.toLocaleString('en-IN')}`);
+    await drawForm16Row('8. Less: Relief under Section 89', `₹${data.relief_under_89.toLocaleString('en-IN')}`);
+    await drawForm16Row('9. Net Tax Payable', `₹${data.tax_payable.toLocaleString('en-IN')}`, false, true);
+    await drawForm16Row('10. Total TDS Deducted & Deposited', `₹${data.tds_deducted.toLocaleString('en-IN')}`, false, true);
 
     // Signature
     currentY += 10;
+    pdf.setFont('helvetica', 'normal');
     pdf.text('Signature of the person responsible for deduction of tax', dimensions.leftMargin, currentY);
-    currentY += 15;
+    currentY += 12;
 
-    if (hrSettings?.signatory_name) {
+    const signatoryName = hrSettings?.signatory_name;
+    const signatoryDesignation = hrSettings?.signatory_designation;
+
+    if (signatoryName) {
       pdf.setFont('helvetica', 'bold');
-      pdf.text(hrSettings.signatory_name, dimensions.leftMargin, currentY);
+      pdf.text(signatoryName, dimensions.leftMargin, currentY);
       currentY += 5;
-      if (hrSettings.signatory_designation) {
+      if (signatoryDesignation) {
         pdf.setFont('helvetica', 'normal');
-        pdf.text(hrSettings.signatory_designation, dimensions.leftMargin, currentY);
+        pdf.text(signatoryDesignation, dimensions.leftMargin, currentY);
       }
     }
 
@@ -1133,6 +1394,11 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
 
     let currentY = dimensions.topMargin;
 
+    if (companySettings) {
+      const br = await PDFBrandingUtils.applyBranding(pdf, companySettings, dimensions);
+      currentY = br.contentStartY;
+    }
+
     // Form 24Q Header
     pdf.setFontSize(14);
     pdf.setFont('helvetica', 'bold');
@@ -1140,74 +1406,96 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
     currentY += 7;
     pdf.setFontSize(10);
     pdf.text('Quarterly Statement of TDS on Salaries', pdf.internal.pageSize.getWidth() / 2, currentY, { align: 'center' });
-    currentY += 15;
+    currentY += 12;
 
     // Quarter and FY details
     pdf.setFont('helvetica', 'normal');
-    pdf.text(`Financial Year: ${data.financial_year}`, dimensions.leftMargin, currentY);
-    currentY += 6;
-    pdf.text(`Quarter: Q${data.quarter}`, dimensions.leftMargin, currentY);
-    currentY += 15;
+    pdf.text(`Financial Year: ${data.financial_year}  |  Quarter: Q${data.quarter}`, dimensions.leftMargin, currentY);
+    currentY += 12;
 
     // Employer details
     pdf.setFont('helvetica', 'bold');
-    pdf.text('Employer Details:', dimensions.leftMargin, currentY);
+    pdf.text('EMPLOYER DETAILS', dimensions.leftMargin, currentY);
     currentY += 7;
 
     pdf.setFont('helvetica', 'normal');
-    pdf.text(`Name: ${data.employer.name}`, dimensions.leftMargin + 5, currentY);
-    currentY += 6;
-    pdf.text(`TAN: ${data.employer.tan}`, dimensions.leftMargin + 5, currentY);
-    currentY += 6;
-    pdf.text(`PAN: ${data.employer.pan}`, dimensions.leftMargin + 5, currentY);
-    currentY += 15;
+    pdf.text(`Name: ${data.employer.name}`, dimensions.leftMargin, currentY);
+    currentY += 5;
+    pdf.text(`TAN: ${data.employer.tan}  |  PAN: ${data.employer.pan}`, dimensions.leftMargin, currentY);
+    currentY += 12;
 
-    // Employee-wise TDS details
+    // Employee-wise TDS details (Tabular Format)
     pdf.setFont('helvetica', 'bold');
-    pdf.text('Employee-wise TDS Details:', dimensions.leftMargin, currentY);
-    currentY += 10;
+    pdf.text('EMPLOYEE-WISE TDS SCHEDULE', dimensions.leftMargin, currentY);
+    currentY += 8;
 
-    // Table header
-    pdf.setFontSize(9);
-    pdf.text('Employee Name', dimensions.leftMargin, currentY);
-    pdf.text('PAN', dimensions.leftMargin + 60, currentY);
-    pdf.text('TDS', dimensions.leftMargin + 100, currentY);
-    pdf.text('Challan', dimensions.leftMargin + 130, currentY);
-    currentY += 5;
+    const tableLeft = dimensions.leftMargin;
+    const tableRight = dimensions.rightMargin;
+    const tableWidth = tableRight - tableLeft;
+    const colWidths = [60, 35, 35, 40]; // Name (60mm), PAN (35mm), TDS (35mm), Challan (40mm)
 
-    pdf.setLineWidth(0.5);
-    pdf.line(dimensions.leftMargin, currentY, dimensions.rightMargin, currentY);
-    currentY += 5;
-
-    // Employee details
-    pdf.setFont('helvetica', 'normal');
-    data.employees.forEach(emp => {
-      pdf.text(emp.employee_name.substring(0, 25), dimensions.leftMargin, currentY);
-      pdf.text(emp.pan, dimensions.leftMargin + 60, currentY);
-      pdf.text(`₹${emp.tds_deducted.toLocaleString('en-IN')}`, dimensions.leftMargin + 100, currentY);
-      pdf.text(emp.challan_details.challan_number, dimensions.leftMargin + 130, currentY);
-      currentY += 6;
-
-      if (currentY > 270) {
+    const draw24QRow = async (cols: [string, string, string, string], isHeader = false, isHighlight = false) => {
+      const rowHeight = 7;
+      if (currentY + rowHeight + 2 > pdf.internal.pageSize.getHeight() - dimensions.bottomMargin) {
         pdf.addPage();
-        currentY = dimensions.topMargin;
+        if (companySettings) {
+          const br = await PDFBrandingUtils.applyBranding(pdf, companySettings, dimensions);
+          currentY = br.contentStartY;
+        } else {
+          currentY = dimensions.topMargin;
+        }
       }
-    });
 
-    currentY += 5;
-    pdf.line(dimensions.leftMargin, currentY, dimensions.rightMargin, currentY);
-    currentY += 7;
+      if (isHeader) {
+        pdf.setFillColor(30, 41, 59); // Slate-800
+        pdf.rect(tableLeft, currentY, tableWidth, rowHeight, 'F');
+        pdf.setTextColor(255, 255, 255);
+        pdf.setFont('helvetica', 'bold');
+      } else if (isHighlight) {
+        pdf.setFillColor(241, 245, 249); // Slate-100
+        pdf.rect(tableLeft, currentY, tableWidth, rowHeight, 'F');
+        pdf.setTextColor(15, 23, 42);
+        pdf.setFont('helvetica', 'bold');
+      } else {
+        pdf.setTextColor(30, 41, 59);
+        pdf.setFont('helvetica', 'normal');
+      }
 
-    // Total
-    pdf.setFont('helvetica', 'bold');
-    pdf.text('Total TDS:', dimensions.leftMargin, currentY);
-    pdf.text(`₹${data.total_tds.toLocaleString('en-IN')}`, dimensions.leftMargin + 100, currentY);
-    currentY += 20;
+      pdf.setDrawColor(226, 232, 240);
+      pdf.setLineWidth(0.3);
+      pdf.rect(tableLeft, currentY, tableWidth, rowHeight, 'S');
+
+      const textY = currentY + 4.8;
+      pdf.setFontSize(8.5);
+
+      pdf.text(cols[0], tableLeft + 3, textY, { maxWidth: colWidths[0] - 5 });
+      pdf.text(cols[1], tableLeft + colWidths[0] + 3, textY);
+      pdf.text(cols[2], tableLeft + colWidths[0] + colWidths[1] + colWidths[2] - 3, textY, { align: 'right' });
+      pdf.text(cols[3], tableLeft + colWidths[0] + colWidths[1] + colWidths[2] + 3, textY, { maxWidth: colWidths[3] - 5 });
+
+      pdf.setTextColor(0, 0, 0);
+      currentY += rowHeight;
+    };
+
+    await draw24QRow(['Employee Name', 'PAN', 'TDS Amount (₹)', 'Challan Ref No.'], true);
+
+    for (const emp of data.employees) {
+      await draw24QRow([
+        emp.employee_name,
+        emp.pan,
+        `₹${emp.tds_deducted.toLocaleString('en-IN')}`,
+        emp.challan_details?.challan_number || '—'
+      ]);
+    }
+
+    await draw24QRow(['Total Quarterly TDS Withheld', '—', `₹${data.total_tds.toLocaleString('en-IN')}`, '—'], false, true);
+
+    currentY += 15;
 
     // Signature
     pdf.setFont('helvetica', 'normal');
     pdf.text('Authorized Signatory', dimensions.leftMargin, currentY);
-    currentY += 15;
+    currentY += 12;
 
     if (hrSettings?.signatory_name) {
       pdf.setFont('helvetica', 'bold');
@@ -1225,39 +1513,44 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
   const generateExperienceCertificatePDF = async (employee: Employee, data: ExperienceCertificateData) => {
     const pdf = new jsPDF('p', 'mm', 'a4');
     const dimensions = PDFBrandingUtils.getStandardDimensions();
+    const pageHeight = pdf.internal.pageSize.getHeight();
 
-    let currentY = dimensions.topMargin;
+    let contentStartY = dimensions.topMargin;
+    let contentEndY = pageHeight - dimensions.bottomMargin;
 
-    // Add company header if settings exist
-    if (companySettings?.company_name) {
-      pdf.setFontSize(14);
-      pdf.setFont('helvetica', 'bold');
-      pdf.text(companySettings.company_name, pdf.internal.pageSize.getWidth() / 2, currentY, { align: 'center' });
-      currentY += 6;
-      if (companySettings.address_line1) {
-        pdf.setFontSize(9);
-        pdf.setFont('helvetica', 'normal');
-        const addressParts = [
-          companySettings.address_line1,
-          companySettings.address_line2,
-          companySettings.city,
-          companySettings.state,
-          companySettings.postal_code
-        ].filter(Boolean);
-        const fullAddress = addressParts.join(', ');
-        pdf.text(fullAddress, pdf.internal.pageSize.getWidth() / 2, currentY, { align: 'center' });
-        currentY += 5;
-      }
-      currentY += 10;
+    if (companySettings) {
+      const br = await PDFBrandingUtils.applyBranding(pdf, companySettings, dimensions);
+      contentStartY = br.contentStartY;
+      contentEndY = br.contentEndY;
     }
 
+    let currentY = contentStartY;
+
+    const addNewPage = async () => {
+      pdf.addPage();
+      if (companySettings) {
+        const br = await PDFBrandingUtils.applyBranding(pdf, companySettings, dimensions);
+        contentStartY = br.contentStartY;
+        contentEndY = br.contentEndY;
+      }
+      currentY = contentStartY;
+    };
+
+    const checkBreak = async (space: number) => {
+      if (currentY + space > contentEndY) {
+        await addNewPage();
+      }
+    };
+
     // Title
+    await checkBreak(15);
     pdf.setFontSize(16);
     pdf.setFont('helvetica', 'bold');
     pdf.text('EXPERIENCE CERTIFICATE', pdf.internal.pageSize.getWidth() / 2, currentY, { align: 'center' });
     currentY += 15;
 
     // Certificate body
+    await checkBreak(10);
     pdf.setFontSize(11);
     pdf.setFont('helvetica', 'normal');
 
@@ -1266,6 +1559,7 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
     currentY += 15;
 
     // To Whom It May Concern
+    await checkBreak(12);
     pdf.setFont('helvetica', 'bold');
     pdf.text('TO WHOM IT MAY CONCERN', dimensions.leftMargin, currentY);
     currentY += 12;
@@ -1281,33 +1575,41 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
       `During the tenure, ${employee.first_name} worked as ${data.designation} in the ${data.department || 'organization'}.`
     ];
 
-    lines.forEach(line => {
+    for (const line of lines) {
+      if (!line) {
+        currentY += 4;
+        continue;
+      }
       const splitLines = pdf.splitTextToSize(line, contentWidth);
+      await checkBreak(splitLines.length * 7 + 4);
       pdf.text(splitLines, dimensions.leftMargin, currentY);
       currentY += splitLines.length * 7;
-    });
+    }
 
     currentY += 5;
 
     // Roles and Responsibilities
     if (data.roles_responsibilities) {
+      await checkBreak(20);
       pdf.setFont('helvetica', 'bold');
       pdf.text('Roles and Responsibilities:', dimensions.leftMargin, currentY);
       currentY += 7;
 
       pdf.setFont('helvetica', 'normal');
       const roleLines = data.roles_responsibilities.split('\n').filter(line => line.trim());
-      roleLines.forEach(role => {
+      for (const role of roleLines) {
         const wrapped = pdf.splitTextToSize(`• ${role.trim()}`, contentWidth - 5);
+        await checkBreak(wrapped.length * 6 + 2);
         pdf.text(wrapped, dimensions.leftMargin + 5, currentY);
         currentY += wrapped.length * 6;
-      });
+      }
       currentY += 5;
     }
 
     // Performance note
     if (data.performance_note) {
       const perfLines = pdf.splitTextToSize(data.performance_note, contentWidth);
+      await checkBreak(perfLines.length * 7 + 5);
       pdf.text(perfLines, dimensions.leftMargin, currentY);
       currentY += perfLines.length * 7 + 5;
     }
@@ -1315,6 +1617,7 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
     // Conduct note
     if (data.conduct_note) {
       const conductLines = pdf.splitTextToSize(data.conduct_note, contentWidth);
+      await checkBreak(conductLines.length * 7 + 5);
       pdf.text(conductLines, dimensions.leftMargin, currentY);
       currentY += conductLines.length * 7 + 5;
     }
@@ -1322,10 +1625,12 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
     // Closing
     const closingText = `We wish ${employee.first_name} all the best in all future endeavors.`;
     const closingLines = pdf.splitTextToSize(closingText, contentWidth);
+    await checkBreak(closingLines.length * 7 + 10);
     pdf.text(closingLines, dimensions.leftMargin, currentY);
     currentY += closingLines.length * 7 + 15;
 
-    // Signature section
+    // Signature section (Check space for signature block)
+    await checkBreak(40);
     pdf.setFont('helvetica', 'normal');
     pdf.text('For ' + companyName, dimensions.leftMargin, currentY);
     currentY += 20;
@@ -1356,39 +1661,44 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
   const generateRelievingLetterPDF = async (employee: Employee, data: RelievingLetterData) => {
     const pdf = new jsPDF('p', 'mm', 'a4');
     const dimensions = PDFBrandingUtils.getStandardDimensions();
+    const pageHeight = pdf.internal.pageSize.getHeight();
 
-    let currentY = dimensions.topMargin;
+    let contentStartY = dimensions.topMargin;
+    let contentEndY = pageHeight - dimensions.bottomMargin;
 
-    // Add company header if settings exist
-    if (companySettings?.company_name) {
-      pdf.setFontSize(14);
-      pdf.setFont('helvetica', 'bold');
-      pdf.text(companySettings.company_name, pdf.internal.pageSize.getWidth() / 2, currentY, { align: 'center' });
-      currentY += 6;
-      if (companySettings.address_line1) {
-        pdf.setFontSize(9);
-        pdf.setFont('helvetica', 'normal');
-        const addressParts = [
-          companySettings.address_line1,
-          companySettings.address_line2,
-          companySettings.city,
-          companySettings.state,
-          companySettings.postal_code
-        ].filter(Boolean);
-        const fullAddress = addressParts.join(', ');
-        pdf.text(fullAddress, pdf.internal.pageSize.getWidth() / 2, currentY, { align: 'center' });
-        currentY += 5;
-      }
-      currentY += 10;
+    if (companySettings) {
+      const br = await PDFBrandingUtils.applyBranding(pdf, companySettings, dimensions);
+      contentStartY = br.contentStartY;
+      contentEndY = br.contentEndY;
     }
 
+    let currentY = contentStartY;
+
+    const addNewPage = async () => {
+      pdf.addPage();
+      if (companySettings) {
+        const br = await PDFBrandingUtils.applyBranding(pdf, companySettings, dimensions);
+        contentStartY = br.contentStartY;
+        contentEndY = br.contentEndY;
+      }
+      currentY = contentStartY;
+    };
+
+    const checkBreak = async (space: number) => {
+      if (currentY + space > contentEndY) {
+        await addNewPage();
+      }
+    };
+
     // Title
+    await checkBreak(15);
     pdf.setFontSize(16);
     pdf.setFont('helvetica', 'bold');
     pdf.text('RELIEVING LETTER', pdf.internal.pageSize.getWidth() / 2, currentY, { align: 'center' });
     currentY += 15;
 
     // Date and reference
+    await checkBreak(10);
     pdf.setFontSize(11);
     pdf.setFont('helvetica', 'normal');
 
@@ -1397,7 +1707,7 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
     currentY += 10;
 
     // Employee details
-    currentY += 5;
+    await checkBreak(30);
     pdf.text(`To,`, dimensions.leftMargin, currentY);
     currentY += 6;
     pdf.setFont('helvetica', 'bold');
@@ -1405,7 +1715,7 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
     currentY += 6;
     pdf.setFont('helvetica', 'normal');
     pdf.text(`Employee No: ${data.employee_number || employee.employee_number}`, dimensions.leftMargin, currentY);
-    currentY += 15;
+    currentY += 12;
 
     // Subject
     pdf.setFont('helvetica', 'bold');
@@ -1423,6 +1733,7 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
 
     const mainPara = data.notice_text || `This is to inform you that you are being relieved from the services of ${companyName} with effect from ${new Date(data.relieving_date).toLocaleDateString('en-GB')}.`;
     const mainLines = pdf.splitTextToSize(mainPara, contentWidth);
+    await checkBreak(mainLines.length * 7 + 10);
     pdf.text(mainLines, dimensions.leftMargin, currentY);
     currentY += mainLines.length * 7 + 5;
 
@@ -1433,28 +1744,39 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
       `During your tenure, you served as ${data.designation}${data.department ? ' in the ' + data.department + ' department' : ''}.`
     ];
 
-    empDetails.forEach(line => {
+    for (const line of empDetails) {
+      if (!line) {
+        currentY += 4;
+        continue;
+      }
       const splitLines = pdf.splitTextToSize(line, contentWidth);
+      await checkBreak(splitLines.length * 7 + 4);
       pdf.text(splitLines, dimensions.leftMargin, currentY);
       currentY += splitLines.length * 7;
-    });
+    }
 
     currentY += 5;
 
     // Clearance details
     if (data.handover_completion || data.assets_returned || data.dues_cleared) {
+      await checkBreak(30);
+      pdf.setFont('helvetica', 'bold');
       pdf.text('We confirm that:', dimensions.leftMargin, currentY);
       currentY += 7;
+      pdf.setFont('helvetica', 'normal');
 
       if (data.handover_completion) {
+        await checkBreak(8);
         pdf.text('• Handover of responsibilities has been completed satisfactorily', dimensions.leftMargin + 5, currentY);
         currentY += 6;
       }
       if (data.assets_returned) {
+        await checkBreak(8);
         pdf.text('• All company assets have been returned', dimensions.leftMargin + 5, currentY);
         currentY += 6;
       }
       if (data.dues_cleared) {
+        await checkBreak(8);
         pdf.text('• All financial dues have been cleared', dimensions.leftMargin + 5, currentY);
         currentY += 6;
       }
@@ -1465,17 +1787,34 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
     if (data.resignation_date && data.notice_period_served) {
       const noticePara = `Your resignation was received on ${new Date(data.resignation_date).toLocaleDateString('en-GB')} and you have ${data.notice_period_served}.`;
       const noticeLines = pdf.splitTextToSize(noticePara, contentWidth);
+      await checkBreak(noticeLines.length * 7 + 5);
       pdf.text(noticeLines, dimensions.leftMargin, currentY);
       currentY += noticeLines.length * 7 + 5;
+    }
+
+    // IP & Asset Clearance Notes
+    if (data.ip_clause_text) {
+      const ipLines = pdf.splitTextToSize(data.ip_clause_text, contentWidth);
+      await checkBreak(ipLines.length * 6 + 6);
+      pdf.text(ipLines, dimensions.leftMargin, currentY);
+      currentY += ipLines.length * 6 + 4;
+    }
+    if (data.asset_clause_text) {
+      const assetLines = pdf.splitTextToSize(data.asset_clause_text, contentWidth);
+      await checkBreak(assetLines.length * 6 + 6);
+      pdf.text(assetLines, dimensions.leftMargin, currentY);
+      currentY += assetLines.length * 6 + 4;
     }
 
     // Closing
     const closingText = `We thank you for your services and wish you all the best in your future endeavors.`;
     const closingLines = pdf.splitTextToSize(closingText, contentWidth);
+    await checkBreak(closingLines.length * 7 + 10);
     pdf.text(closingLines, dimensions.leftMargin, currentY);
-    currentY += closingLines.length * 7 + 15;
+    currentY += closingLines.length * 7 + 10;
 
-    // Signature section
+    // Signature section (Check space for signature block)
+    await checkBreak(40);
     pdf.setFont('helvetica', 'normal');
     pdf.text('For ' + companyName, dimensions.leftMargin, currentY);
     currentY += 20;
@@ -1504,6 +1843,7 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
   };
 
   const handlePreviewDocument = async () => {
+    startAction('Generating PDF preview…');
     try {
       if (!selectedEmployee) {
         showError('Please select an employee');
@@ -1549,6 +1889,8 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
     } catch (err) {
       console.error('Error generating preview:', err);
       showError('Failed to generate preview');
+    } finally {
+      endAction();
     }
   };
 
@@ -4238,15 +4580,37 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
             <h2 className="text-lg font-semibold mb-6">Generate Employment Document</h2>
 
             <div className="space-y-6">
+              {/* Helper to fetch compensation data from employee_compensation table */}
+              {(() => {
+                // Ensure handler is available in component scope
+                return null;
+              })()}
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Select Employee *
                 </label>
                 <select
                   value={selectedEmployee?.id || ''}
-                  onChange={(e) => {
-                    const emp = employees.find(emp => emp.id === e.target.value);
-                    setSelectedEmployee(emp || null);
+                  onChange={async (e) => {
+                    const emp = employees.find(empItem => empItem.id === e.target.value) || null;
+                    setSelectedEmployee(emp);
+                    if (emp) {
+                      let compData: any = null;
+                      let allComps: any[] = [];
+                      try {
+                        compData = await compensationService.getCurrentCompensation(emp.id);
+                        if (documentType === 'form_24q') {
+                          allComps = await compensationService.getCompensations(undefined, true);
+                        }
+                      } catch (err) {
+                        console.warn('Could not fetch compensation record:', err);
+                      }
+                      const prefilled = getPrefilledDocumentData(documentType, emp, companySettings, hrSettings, compData, allComps);
+                      setDocumentData(prefilled);
+                    } else {
+                      setDocumentData({});
+                    }
                   }}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
                 >
@@ -4265,9 +4629,23 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
                 </label>
                 <select
                   value={documentType}
-                  onChange={(e) => {
-                    setDocumentType(e.target.value as DocumentType);
-                    setDocumentData({});
+                  onChange={async (e) => {
+                    const newType = e.target.value as DocumentType;
+                    setDocumentType(newType);
+                    let compData: any = null;
+                    let allComps: any[] = [];
+                    try {
+                      if (selectedEmployee?.id) {
+                        compData = await compensationService.getCurrentCompensation(selectedEmployee.id);
+                      }
+                      if (newType === 'form_24q') {
+                        allComps = await compensationService.getCompensations(undefined, true);
+                      }
+                    } catch (err) {
+                      console.warn('Could not fetch compensation record:', err);
+                    }
+                    const prefilled = getPrefilledDocumentData(newType, selectedEmployee, companySettings, hrSettings, compData, allComps);
+                    setDocumentData(prefilled);
                   }}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
                 >
@@ -4285,6 +4663,44 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
                   </optgroup>
                 </select>
               </div>
+
+              {selectedEmployee && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
+                  <div>
+                    <div className="flex items-center gap-2 font-medium text-blue-900 text-sm">
+                      <Globe className="w-4 h-4 text-blue-600 shrink-0" />
+                      <span>Jurisdiction: {documentData.jurisdiction || getJurisdictionInfo(companySettings?.country_id || selectedEmployee.country).jurisdiction}</span>
+                    </div>
+                    <p className="text-xs text-blue-700 mt-1">
+                      Entity: <span className="font-semibold">{companySettings?.company_name || 'Kdadks'}</span> | Country: <span className="font-semibold">{companySettings?.country_id || selectedEmployee.country || 'IN'}</span>
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      let compData: any = null;
+                      let allComps: any[] = [];
+                      try {
+                        if (selectedEmployee?.id) {
+                          compData = await compensationService.getCurrentCompensation(selectedEmployee.id);
+                        }
+                        if (documentType === 'form_24q') {
+                          allComps = await compensationService.getCompensations(undefined, true);
+                        }
+                      } catch (err) {
+                        console.warn('Could not fetch compensation record:', err);
+                      }
+                      const prefilled = getPrefilledDocumentData(documentType, selectedEmployee, companySettings, hrSettings, compData, allComps);
+                      setDocumentData(prefilled);
+                      showSuccess(`Loaded standard prefilled template for ${documentType.replace(/_/g, ' ')}`);
+                    }}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-md shadow-sm transition-colors shrink-0"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" />
+                    Reset to Standard Template
+                  </button>
+                </div>
+              )}
 
               {/* Document-specific fields */}
               {selectedEmployee && documentType === 'offer_letter' && (
@@ -4361,13 +4777,37 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
                         />
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Work Location</label>
-                        <input
-                          type="text"
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Work Location Type</label>
+                        <select
+                          value={documentData.work_location_type || 'onsite'}
+                          onChange={(e) => {
+                            const type = e.target.value as 'onsite' | 'hybrid' | 'remote';
+                            const defaultAddr = companySettings
+                              ? [companySettings.address_line1, companySettings.address_line2, companySettings.city, companySettings.state, companySettings.postal_code].filter(Boolean).join(', ')
+                              : 'Corporate Office';
+                            setDocumentData({
+                              ...documentData,
+                              work_location_type: type,
+                              work_location: type === 'remote' ? '' : (documentData.work_location || defaultAddr)
+                            });
+                          }}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                        >
+                          <option value="onsite">Onsite</option>
+                          <option value="hybrid">Hybrid</option>
+                          <option value="remote">Remote</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Work Location Address Data {documentData.work_location_type === 'remote' ? '(Blank for Remote)' : ''}
+                        </label>
+                        <textarea
                           value={documentData.work_location || ''}
                           onChange={(e) => setDocumentData({ ...documentData, work_location: e.target.value })}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                          placeholder="e.g., Office Address"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md font-mono text-sm"
+                          rows={3}
+                          placeholder={documentData.work_location_type === 'remote' ? 'Remote (Leave blank)' : 'Enter full work location address data'}
                         />
                       </div>
                       <div>
@@ -4411,53 +4851,175 @@ Any other duties assigned by management from time to time`}
 
                   {/* Compensation */}
                   <div className="bg-yellow-50 p-4 rounded-lg space-y-4">
-                    <h4 className="font-medium text-yellow-700">3. Compensation and Benefits</h4>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Gross Salary (per month)</label>
-                        <input
-                          type="number"
-                          value={documentData.salary_breakdown?.gross_salary || selectedEmployee.gross_salary}
-                          onChange={(e) => setDocumentData({
-                            ...documentData,
-                            salary_breakdown: {
-                              ...documentData.salary_breakdown,
-                              gross_salary: parseFloat(e.target.value) || 0,
-                              basic: selectedEmployee.basic_salary,
-                              hra: selectedEmployee.hra || 0,
-                              special_allowance: selectedEmployee.special_allowance || 0,
-                              other_allowances: selectedEmployee.other_allowances || 0
-                            }
-                          })}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                        />
+                    <h4 className="font-medium text-yellow-800 text-base">3. Compensation & Statutory Benefits (Entity Law)</h4>
+
+                    {/* Monetary Component Breakdown Fields */}
+                    <div className="bg-white p-3 rounded-md border border-yellow-200 space-y-3">
+                      <h5 className="font-medium text-xs text-gray-700 uppercase tracking-wider">Monetary Component Breakdown ({selectedEmployee.currency_code || 'INR'})</h5>
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 text-sm">
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">Basic Salary</label>
+                          <input
+                            type="number"
+                            value={documentData.salary_breakdown?.basic ?? selectedEmployee.basic_salary}
+                            onChange={(e) => {
+                              const basicVal = parseFloat(e.target.value) || 0;
+                              const b = documentData.salary_breakdown || {};
+                              const gross = basicVal + (b.hra || 0) + (b.special_allowance || 0) + (b.other_allowances || 0);
+                              setDocumentData({
+                                ...documentData,
+                                salary_breakdown: { ...b, basic: basicVal, gross_salary: gross },
+                                annual_ctc: gross * 12
+                              });
+                            }}
+                            className="w-full px-3 py-1.5 border border-gray-300 rounded-md"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">HRA (House Rent Allowance)</label>
+                          <input
+                            type="number"
+                            value={documentData.salary_breakdown?.hra ?? selectedEmployee.hra ?? 0}
+                            onChange={(e) => {
+                              const hraVal = parseFloat(e.target.value) || 0;
+                              const b = documentData.salary_breakdown || {};
+                              const gross = (b.basic || 0) + hraVal + (b.special_allowance || 0) + (b.other_allowances || 0);
+                              setDocumentData({
+                                ...documentData,
+                                salary_breakdown: { ...b, hra: hraVal, gross_salary: gross },
+                                annual_ctc: gross * 12
+                              });
+                            }}
+                            className="w-full px-3 py-1.5 border border-gray-300 rounded-md"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">Special Allowance</label>
+                          <input
+                            type="number"
+                            value={documentData.salary_breakdown?.special_allowance ?? selectedEmployee.special_allowance ?? 0}
+                            onChange={(e) => {
+                              const specVal = parseFloat(e.target.value) || 0;
+                              const b = documentData.salary_breakdown || {};
+                              const gross = (b.basic || 0) + (b.hra || 0) + specVal + (b.other_allowances || 0);
+                              setDocumentData({
+                                ...documentData,
+                                salary_breakdown: { ...b, special_allowance: specVal, gross_salary: gross },
+                                annual_ctc: gross * 12
+                              });
+                            }}
+                            className="w-full px-3 py-1.5 border border-gray-300 rounded-md"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">Other Allowances</label>
+                          <input
+                            type="number"
+                            value={documentData.salary_breakdown?.other_allowances ?? selectedEmployee.other_allowances ?? 0}
+                            onChange={(e) => {
+                              const othVal = parseFloat(e.target.value) || 0;
+                              const b = documentData.salary_breakdown || {};
+                              const gross = (b.basic || 0) + (b.hra || 0) + (b.special_allowance || 0) + othVal;
+                              setDocumentData({
+                                ...documentData,
+                                salary_breakdown: { ...b, other_allowances: othVal, gross_salary: gross },
+                                annual_ctc: gross * 12
+                              });
+                            }}
+                            className="w-full px-3 py-1.5 border border-gray-300 rounded-md"
+                          />
+                        </div>
                       </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Annual CTC</label>
-                        <input
-                          type="number"
-                          value={documentData.annual_ctc || selectedEmployee.gross_salary * 12}
-                          onChange={(e) => setDocumentData({ ...documentData, annual_ctc: parseFloat(e.target.value) })}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                        />
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2 border-t text-sm">
+                        <div>
+                          <label className="block text-xs font-semibold text-gray-700 mb-1">Gross Monthly Salary ({selectedEmployee.currency_code || 'INR'})</label>
+                          <input
+                            type="number"
+                            value={documentData.salary_breakdown?.gross_salary ?? selectedEmployee.gross_salary}
+                            onChange={(e) => setDocumentData({
+                              ...documentData,
+                              salary_breakdown: { ...documentData.salary_breakdown, gross_salary: parseFloat(e.target.value) || 0 }
+                            })}
+                            className="w-full px-3 py-1.5 border border-gray-300 rounded-md font-semibold text-blue-900 bg-blue-50/50"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-semibold text-gray-700 mb-1">Annual CTC ({selectedEmployee.currency_code || 'INR'})</label>
+                          <input
+                            type="number"
+                            value={documentData.annual_ctc ?? (selectedEmployee.gross_salary * 12)}
+                            onChange={(e) => setDocumentData({ ...documentData, annual_ctc: parseFloat(e.target.value) || 0 })}
+                            className="w-full px-3 py-1.5 border border-gray-300 rounded-md font-semibold text-blue-900 bg-blue-50/50"
+                          />
+                        </div>
                       </div>
                     </div>
+
+                    {/* Itemized Statutory & Entity Benefits List */}
+                    <div className="bg-white p-3 rounded-md border border-yellow-200 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <h5 className="font-medium text-xs text-gray-700 uppercase tracking-wider">Statutory & Entity Benefits Fields</h5>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const currentList = Array.isArray(documentData.benefits) ? documentData.benefits : [];
+                            setDocumentData({ ...documentData, benefits: [...currentList, 'New Statutory Benefit'] });
+                          }}
+                          className="text-xs text-blue-600 hover:text-blue-800 font-medium flex items-center gap-1"
+                        >
+                          <Plus className="w-3.5 h-3.5" /> Add Benefit Item
+                        </button>
+                      </div>
+                      <div className="space-y-2">
+                        {(Array.isArray(documentData.benefits) ? documentData.benefits : []).map((bItem: string, idx: number) => (
+                          <div key={idx} className="flex items-center gap-2">
+                            <span className="text-xs text-gray-400 font-semibold w-5">{idx + 1}.</span>
+                            <input
+                              type="text"
+                              value={bItem}
+                              onChange={(e) => {
+                                const currentList = [...(documentData.benefits || [])];
+                                currentList[idx] = e.target.value;
+                                setDocumentData({ ...documentData, benefits: currentList });
+                              }}
+                              className="flex-1 px-3 py-1.5 border border-gray-300 rounded-md text-xs font-mono"
+                              placeholder="e.g. House Rent Allowance (HRA), EPF Pension Matching, Medical Insurance"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const currentList = (documentData.benefits || []).filter((_: any, i: number) => i !== idx);
+                                setDocumentData({ ...documentData, benefits: currentList });
+                              }}
+                              className="p-1 text-red-500 hover:text-red-700 hover:bg-red-50 rounded"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        ))}
+                        {(!documentData.benefits || documentData.benefits.length === 0) && (
+                          <p className="text-xs text-gray-500 italic">No specific benefit items added. Click "+ Add Benefit Item" above to add benefits.</p>
+                        )}
+                      </div>
+                    </div>
+
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">Salary Payment Note</label>
                       <textarea
                         value={documentData.salary_payment_note || ''}
                         onChange={(e) => setDocumentData({ ...documentData, salary_payment_note: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
                         rows={2}
                         placeholder="Salary will be paid as per the company's payroll cycle and applicable statutory deductions."
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Benefits Note</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Overall Benefits Clause Note</label>
                       <textarea
                         value={documentData.benefits_note || ''}
                         onChange={(e) => setDocumentData({ ...documentData, benefits_note: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
                         rows={2}
                         placeholder="You will be entitled to benefits and facilities as per company policy, which may be revised from time to time."
                       />
@@ -4567,6 +5129,44 @@ Any other duties assigned by management from time to time`}
                         className="w-full px-3 py-2 border border-gray-300 rounded-md"
                         rows={2}
                         placeholder="You are required to maintain strict confidentiality of all company information, data, and records during and after your employment with the company."
+                      />
+                    </div>
+                  </div>
+
+                  {/* Intellectual Property & Asset Management */}
+                  <div className="bg-purple-50 p-4 rounded-lg space-y-4">
+                    <div className="flex items-center gap-2">
+                      <Shield className="w-5 h-5 text-purple-600" />
+                      <h4 className="font-medium text-purple-900">Intellectual Property & Company Asset Clauses</h4>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Governing Law Jurisdiction</label>
+                      <input
+                        type="text"
+                        value={documentData.jurisdiction || ''}
+                        onChange={(e) => setDocumentData({ ...documentData, jurisdiction: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white text-sm"
+                        placeholder="e.g., Republic of India (High Court Jurisdiction)"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Intellectual Property (IP) Assignment Clause</label>
+                      <textarea
+                        value={documentData.ip_clause_text || ''}
+                        onChange={(e) => setDocumentData({ ...documentData, ip_clause_text: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white text-xs font-mono"
+                        rows={3}
+                        placeholder="All intellectual property created during employment belongs exclusively to the company..."
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Company Asset Management & Return Clause</label>
+                      <textarea
+                        value={documentData.asset_clause_text || ''}
+                        onChange={(e) => setDocumentData({ ...documentData, asset_clause_text: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white text-xs font-mono"
+                        rows={3}
+                        placeholder="Employee is responsible for company assets and must return all physical/digital property upon exit..."
                       />
                     </div>
                   </div>
@@ -4836,6 +5436,34 @@ Any other duties assigned by management from time to time`}
                     </div>
                   </div>
 
+                  {/* Intellectual Property & Asset Clearance */}
+                  <div className="bg-purple-50 p-4 rounded-lg space-y-4">
+                    <div className="flex items-center gap-2">
+                      <Shield className="w-5 h-5 text-purple-600" />
+                      <h4 className="font-medium text-purple-900">Post-Employment IP & Asset Clearance Clauses</h4>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Post-Employment IP Obligation Note</label>
+                      <textarea
+                        value={documentData.ip_clause_text || ''}
+                        onChange={(e) => setDocumentData({ ...documentData, ip_clause_text: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white text-xs font-mono"
+                        rows={2}
+                        placeholder="Reaffirmation of IP ownership..."
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Asset Exit Clearance Confirmation</label>
+                      <textarea
+                        value={documentData.asset_clause_text || ''}
+                        onChange={(e) => setDocumentData({ ...documentData, asset_clause_text: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white text-xs font-mono"
+                        rows={2}
+                        placeholder="Confirmation of full return of company assets and keys..."
+                      />
+                    </div>
+                  </div>
+
                   {/* Signatory Details */}
                   <div className="bg-green-50 p-4 rounded-lg space-y-4">
                     <h4 className="font-medium text-green-700">Signatory Details</h4>
@@ -5007,10 +5635,38 @@ Any other duties assigned by management from time to time`}
                           className="w-full px-3 py-2 border border-gray-300 rounded-md" placeholder="e.g. Senior Engineer / Team Lead" />
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Work Location</label>
-                        <input type="text" value={documentData.work_location || ''}
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Work Location Type</label>
+                        <select
+                          value={documentData.work_location_type || 'onsite'}
+                          onChange={(e) => {
+                            const type = e.target.value as 'onsite' | 'hybrid' | 'remote';
+                            const defaultAddr = companySettings
+                              ? [companySettings.address_line1, companySettings.address_line2, companySettings.city, companySettings.state, companySettings.postal_code].filter(Boolean).join(', ')
+                              : 'Corporate Office';
+                            setDocumentData({
+                              ...documentData,
+                              work_location_type: type,
+                              work_location: type === 'remote' ? '' : (documentData.work_location || defaultAddr)
+                            });
+                          }}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                        >
+                          <option value="onsite">Onsite</option>
+                          <option value="hybrid">Hybrid</option>
+                          <option value="remote">Remote</option>
+                        </select>
+                      </div>
+                      <div className="md:col-span-2">
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Work Location Address Data {documentData.work_location_type === 'remote' ? '(Blank for Remote)' : ''}
+                        </label>
+                        <textarea
+                          value={documentData.work_location || ''}
                           onChange={(e) => setDocumentData({ ...documentData, work_location: e.target.value })}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md" placeholder="Office address or Remote" />
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md font-mono text-sm"
+                          rows={3}
+                          placeholder={documentData.work_location_type === 'remote' ? 'Remote (Leave blank)' : 'Enter full work location address data'}
+                        />
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Working Days</label>
@@ -5088,19 +5744,51 @@ Any other duties assigned by management from time to time`}
 
                   {/* Legal & Compliance */}
                   <div className="bg-red-50 p-4 rounded-lg space-y-4">
-                    <h4 className="font-medium text-red-700">6. Legal & Compliance Clauses</h4>
-                    <div className="space-y-2">
+                    <h4 className="font-medium text-red-700">6. Legal & Compliance Clauses (Matching Offer Letter)</h4>
+                    <div className="space-y-4">
                       <div className="flex items-center gap-3">
                         <input type="checkbox" id="confClause" checked={documentData.confidentiality_clause !== false}
                           onChange={(e) => setDocumentData({ ...documentData, confidentiality_clause: e.target.checked })}
                           className="w-4 h-4 text-red-600 rounded" />
-                        <label htmlFor="confClause" className="text-sm text-gray-700">Include Confidentiality / NDA clause</label>
+                        <label htmlFor="confClause" className="text-sm font-medium text-gray-700">Include Confidentiality / NDA clause</label>
                       </div>
-                      <div className="flex items-center gap-3">
-                        <input type="checkbox" id="ipClause" checked={documentData.ip_assignment_clause !== false}
-                          onChange={(e) => setDocumentData({ ...documentData, ip_assignment_clause: e.target.checked })}
-                          className="w-4 h-4 text-red-600 rounded" />
-                        <label htmlFor="ipClause" className="text-sm text-gray-700">Include Intellectual Property Assignment clause</label>
+
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-3">
+                          <input type="checkbox" id="ipClause" checked={documentData.ip_assignment_clause !== false}
+                            onChange={(e) => setDocumentData({ ...documentData, ip_assignment_clause: e.target.checked })}
+                            className="w-4 h-4 text-red-600 rounded" />
+                          <label htmlFor="ipClause" className="text-sm font-medium text-gray-700">Include Intellectual Property Assignment clause</label>
+                        </div>
+                        <textarea
+                          value={documentData.ip_clause_text || ''}
+                          onChange={(e) => setDocumentData({ ...documentData, ip_clause_text: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-xs font-mono"
+                          rows={3}
+                          placeholder="All source code, designs, algorithms, intellectual property, and work products..."
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Company Asset Care & Return Clause</label>
+                        <textarea
+                          value={documentData.asset_clause_text || ''}
+                          onChange={(e) => setDocumentData({ ...documentData, asset_clause_text: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-xs font-mono"
+                          rows={3}
+                          placeholder="The intern is responsible for proper care of all company-issued equipment and software access..."
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Governing Law Jurisdiction</label>
+                        <input
+                          type="text"
+                          value={documentData.jurisdiction || ''}
+                          onChange={(e) => setDocumentData({ ...documentData, jurisdiction: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                          placeholder="e.g. Republic of India (High Court Jurisdiction)"
+                        />
                       </div>
                     </div>
                   </div>

@@ -8,6 +8,7 @@ import { customerHierarchyService } from '../../services/customerHierarchyServic
 import { invoiceService } from '../../services/invoiceService';
 import { useToast } from '../ui/ToastProvider';
 import { useConfirmDialog } from '../../hooks/useConfirmDialog';
+import { useActionProgress } from '../../contexts/ActionProgressContext';
 import ConfirmDialog from '../ui/ConfirmDialog';
 import { ROLE_LABELS, ROLE_BADGE_CLASSES } from '../../types/customerContact';
 import type { CustomerContact } from '../../types/customerContact';
@@ -34,6 +35,7 @@ export const ContactNetworkPanel: React.FC<ContactNetworkPanelProps> = ({
 }) => {
   const { showSuccess, showError } = useToast();
   const { confirm, dialogProps } = useConfirmDialog();
+  const { startAction, endAction } = useActionProgress();
 
   const [contactLinks, setContactLinks] = useState<ContactCustomerLink[]>(initialContactLinks || []);
   const [allCustomers, setAllCustomers] = useState<Customer[]>([]);
@@ -130,6 +132,7 @@ export const ContactNetworkPanel: React.FC<ContactNetworkPanelProps> = ({
     });
     if (!ok) return;
 
+    startAction('Removing cross-link…');
     try {
       await customerHierarchyService.removeContactCustomerLink(link.id);
       showSuccess('Cross-link removed.');
@@ -142,6 +145,8 @@ export const ContactNetworkPanel: React.FC<ContactNetworkPanelProps> = ({
       setContactLinks(updated);
     } catch {
       showError('Failed to remove cross-link.');
+    } finally {
+      endAction();
     }
   };
 

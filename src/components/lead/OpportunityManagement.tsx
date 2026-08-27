@@ -8,6 +8,7 @@ import { quoteService } from '../../services/quoteService';
 import { useCompanyContext } from '../../contexts/CompanyContext';
 import { useToast } from '../ui/ToastProvider';
 import { useConfirmDialog } from '../../hooks/useConfirmDialog';
+import { useActionProgress } from '../../contexts/ActionProgressContext';
 import ConfirmDialog from '../ui/ConfirmDialog';
 import type { Opportunity, OpportunityStage, CreateOpportunityData, OpportunityFilters, OpportunityStats, Lead, LeadActivity } from '../../types/lead';
 import type { Customer, CompanySettings, Country } from '../../types/invoice';
@@ -29,6 +30,7 @@ const OpportunityManagement: React.FC = () => {
   const { selectedCompany, companies } = useCompanyContext();
   const { showSuccess, showError, showInfo } = useToast();
   const { confirm, dialogProps } = useConfirmDialog();
+  const { startAction, endAction } = useActionProgress();
 
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
   const [leads, setLeads] = useState<Lead[]>([]);
@@ -332,12 +334,15 @@ const OpportunityManagement: React.FC = () => {
   const handleDelete = async (opportunity: Opportunity) => {
     const confirmed = await confirm({ title: 'Delete Opportunity', message: `Delete opportunity "${opportunity.opportunity_name}"? This action cannot be undone.`, confirmText: 'Delete', type: 'danger' });
     if (!confirmed) return;
+    startAction('Deleting opportunity…');
     try {
       await opportunityService.deleteOpportunity(opportunity.id);
       showSuccess('Opportunity deleted successfully!');
       loadData();
     } catch (err) {
       showError(`Failed to delete opportunity: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    } finally {
+      endAction();
     }
   };
 
@@ -349,6 +354,7 @@ const OpportunityManagement: React.FC = () => {
       type: 'info'
     });
     if (!confirmed) return;
+    startAction('Converting opportunity to quote…');
     try {
       showInfo('Converting opportunity to quote...');
       const result = await opportunityService.convertOpportunityToQuote(opportunity.id, {});
@@ -356,6 +362,8 @@ const OpportunityManagement: React.FC = () => {
       loadData();
     } catch (err) {
       showError(`Failed to convert opportunity: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    } finally {
+      endAction();
     }
   };
 

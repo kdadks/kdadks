@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { UserCheck, X, Loader2, AlertTriangle } from 'lucide-react';
+import { UserCheck, X, AlertTriangle, Loader2 } from 'lucide-react';
 import { employeeService } from '../../services/employeeService';
+import { useActionProgress } from '../../contexts/ActionProgressContext';
 import type { Employee } from '../../types/employee';
 import { DEPARTMENTS } from '../../types/employee';
 
@@ -17,6 +18,7 @@ const RehireWorkflow: React.FC<RehireWorkflowProps> = ({
   onRehired,
   currentAdminName,
 }) => {
+  const { startAction, endAction } = useActionProgress();
   const today = new Date().toISOString().split('T')[0];
 
   const [newJoiningDate, setNewJoiningDate] = useState(today);
@@ -53,6 +55,7 @@ const RehireWorkflow: React.FC<RehireWorkflowProps> = ({
       return;
     }
 
+    startAction('Processing employee rehire…');
     setLoading(true);
     try {
       const changeSummaryParts = [
@@ -77,6 +80,7 @@ const RehireWorkflow: React.FC<RehireWorkflowProps> = ({
       setError(err?.message || 'Failed to rehire employee. Please try again.');
     } finally {
       setLoading(false);
+      endAction();
     }
   };
 

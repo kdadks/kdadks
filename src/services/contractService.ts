@@ -6,6 +6,8 @@
 import { supabase, isSupabaseConfigured } from '../config/supabase';
 import { simpleAuth } from '../utils/simpleAuth';
 import { convertToINR } from '../utils/currencyConverter';
+import { IRISH_CONTRACT_TEMPLATES } from '../data/irishContractTemplates';
+import { INDIAN_CONTRACT_TEMPLATES } from '../data/indianContractTemplates';
 import type {
   Contract,
   ContractWithDetails,
@@ -17,6 +19,65 @@ import type {
   ContractFilters,
   ContractStatistics
 } from '../types/contract';
+
+const CUSTOM_TEMPLATES_KEY = 'kdadks_custom_contract_templates';
+
+// Convert static templates to standard ContractTemplateWithSections format
+const builtInIrishTemplates: ContractTemplateWithSections[] = IRISH_CONTRACT_TEMPLATES.map(t => ({
+  id: `builtin-irish-${t.contract_type.toLowerCase()}`,
+  template_name: t.label,
+  contract_type: t.contract_type,
+  contract_title: t.contract_title,
+  entity_law: 'IRL',
+  currency_code: t.currency_code,
+  preamble: t.preamble,
+  description: `Standard Irish Law ${t.contract_title} compliance template.`,
+  is_active: true,
+  is_custom: false,
+  created_at: new Date().toISOString(),
+  updated_at: new Date().toISOString(),
+  sections: t.sections.map((s, idx) => ({
+    id: `sec-irl-${t.contract_type}-${idx}`,
+    template_id: `builtin-irish-${t.contract_type.toLowerCase()}`,
+    section_number: s.section_number,
+    section_title: s.section_title,
+    section_content: s.section_content,
+    is_required: s.is_required,
+    is_locked: s.is_locked,
+    is_editable: !s.is_locked,
+    page_break_before: s.page_break_before,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  }))
+}));
+
+const builtInIndianTemplates: ContractTemplateWithSections[] = INDIAN_CONTRACT_TEMPLATES.map(t => ({
+  id: `builtin-indian-${t.contract_type.toLowerCase()}`,
+  template_name: t.label,
+  contract_type: t.contract_type,
+  contract_title: t.contract_title,
+  entity_law: 'IND',
+  currency_code: t.currency_code,
+  preamble: t.preamble,
+  description: `Standard Indian Law ${t.contract_title} compliance template.`,
+  is_active: true,
+  is_custom: false,
+  created_at: new Date().toISOString(),
+  updated_at: new Date().toISOString(),
+  sections: t.sections.map((s, idx) => ({
+    id: `sec-ind-${t.contract_type}-${idx}`,
+    template_id: `builtin-indian-${t.contract_type.toLowerCase()}`,
+    section_number: s.section_number,
+    section_title: s.section_title,
+    section_content: s.section_content,
+    is_required: s.is_required,
+    is_locked: s.is_locked,
+    is_editable: !s.is_locked,
+    page_break_before: s.page_break_before,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  }))
+}));
 
 class ContractService {
   
@@ -38,13 +99,8 @@ class ContractService {
     const month = (new Date().getMonth() + 1).toString().padStart(2, '0');
 
     let entity = 'IND';
-    if (entityPrefix) {
-      const upper = entityPrefix.toUpperCase();
-      if (upper === 'IRL' || upper === 'IE') {
-        entity = 'IRL';
-      } else {
-        entity = 'IND';
-      }
+    if (entityPrefix && entityPrefix.toUpperCase() === 'IRL') {
+      entity = 'IRL';
     }
 
     const prefix = `KDADKS/${entity}/${year}/${month}/`;
@@ -56,16 +112,19 @@ class ContractService {
       .order('contract_number', { ascending: false })
       .limit(1);
 
-    if (error) throw error;
-
-    let nextNumber = 1;
-    if (data && data.length > 0) {
-      const lastNumber = data[0].contract_number.split('/').pop();
-      const parsed = parseInt(lastNumber || '0', 10);
-      if (!isNaN(parsed) && parsed > 0) {
-        nextNumber = parsed + 1;
-      }
+    if (error) {
+      console.warn('Failed to fetch last contract number, falling back to 0001:', error);
+      return `${prefix}0001`;
     }
+
+    if (!data || data.length === 0) {
+      return `${prefix}0001`;
+    }
+
+    const lastContractNumber = data[0].contract_number;
+    const lastSequenceStr = lastContractNumber.split('/').pop();
+    const lastSequence = lastSequenceStr ? parseInt(lastSequenceStr, 10) : 0;
+    const nextNumber = isNaN(lastSequence) ? 1 : lastSequence + 1;
 
     return `${prefix}${nextNumber.toString().padStart(4, '0')}`;
   }
@@ -75,52 +134,182 @@ class ContractService {
   // =====================================================
 
   /**
-   * Get all contract templates
+   * Helper to fetch custom templates from local storage
    */
-  async getTemplates(): Promise<ContractTemplate[]> {
-    if (!isSupabaseConfigured) {
-      throw new Error('Database is not configured');
+  private getCustomTemplatesFromStorage(): ContractTemplateWithSections[] {
+    try {
+      const raw = localStorage.getItem(CUSTOM_TEMPLATES_KEY);
+      if (!raw) return [];
+      return JSON.parse(raw);
+    } catch (err) {
+      console.error('Failed to load custom contract templates:', err);
+      return [];
     }
-
-    const { data, error } = await supabase
-      .from('contract_templates')
-      .select('*')
-      .eq('is_active', true)
-      .order('template_name');
-
-    if (error) throw error;
-    return data || [];
   }
 
   /**
-   * Get template with sections
+   * Get all contract templates (combines built-in Irish/Indian with custom templates)
    */
-  async getTemplateWithSections(templateId: string): Promise<ContractTemplateWithSections | null> {
-    if (!isSupabaseConfigured) {
-      throw new Error('Database is not configured');
+  async getTemplates(): Promise<ContractTemplate[]> {
+    const all = await this.getAllTemplatesWithSections();
+    return all.map(({ sections, ...rest }) => rest);
+  }
+
+  /**
+   * Get all contract templates with their full section details, optionally filtered by entity Code (IN/IND vs IE/IRL)
+   */
+  async getAllTemplatesWithSections(entityCode?: string): Promise<ContractTemplateWithSections[]> {
+    const custom = this.getCustomTemplatesFromStorage();
+    const allBuiltIn = [...builtInIrishTemplates, ...builtInIndianTemplates];
+
+    let dbTemplates: ContractTemplateWithSections[] = [];
+    if (isSupabaseConfigured) {
+      try {
+        const { data: tpls } = await supabase.from('contract_templates').select('*').eq('is_active', true);
+        if (tpls && tpls.length > 0) {
+          for (const t of tpls) {
+            const { data: secs } = await supabase
+              .from('contract_template_sections')
+              .select('*')
+              .eq('template_id', t.id)
+              .order('section_number');
+            dbTemplates.push({
+              ...t,
+              contract_type: t.contract_type || t.template_type || 'MSA',
+              is_custom: true,
+              sections: (secs || []).map(s => ({
+                ...s,
+                is_locked: !s.is_editable,
+              }))
+            });
+          }
+        }
+      } catch (e) {
+        console.warn('Could not fetch DB contract templates:', e);
+      }
     }
 
-    const { data: template, error: templateError } = await supabase
-      .from('contract_templates')
-      .select('*')
-      .eq('id', templateId)
-      .single();
+    // Merge: custom templates take precedence over built-in if IDs match
+    const map = new Map<string, ContractTemplateWithSections>();
+    allBuiltIn.forEach(t => map.set(t.id, t));
+    custom.forEach(t => map.set(t.id, t));
+    dbTemplates.forEach(t => map.set(t.id, t));
 
-    if (templateError) throw templateError;
-    if (!template) return null;
+    const result = Array.from(map.values());
 
-    const { data: sections, error: sectionsError } = await supabase
-      .from('contract_template_sections')
-      .select('*')
-      .eq('template_id', templateId)
-      .order('section_number');
+    if (!entityCode) return result;
 
-    if (sectionsError) throw sectionsError;
+    const isIrish = entityCode === 'IE' || entityCode === 'IRL';
+    const isIndian = entityCode === 'IN' || entityCode === 'IND';
 
-    return {
-      ...template,
-      sections: sections || []
+    return result.filter(t => {
+      if (!t.entity_law || t.entity_law === 'ALL') return true;
+      if (isIrish && t.entity_law === 'IRL') return true;
+      if (isIndian && t.entity_law === 'IND') return true;
+      return false;
+    });
+  }
+
+  /**
+   * Get template with sections by ID
+   */
+  async getTemplateWithSections(templateId: string): Promise<ContractTemplateWithSections | null> {
+    const all = await this.getAllTemplatesWithSections();
+    return all.find(t => t.id === templateId) || null;
+  }
+
+  /**
+   * Save or update a contract template (with sections)
+   */
+  async saveTemplate(template: Partial<ContractTemplateWithSections> & { template_name: string; contract_type: any }): Promise<ContractTemplateWithSections> {
+    const now = new Date().toISOString();
+    const templateId = template.id || `custom-tpl-${Date.now()}`;
+    
+    const savedTemplate: ContractTemplateWithSections = {
+      id: templateId,
+      template_name: template.template_name,
+      contract_type: template.contract_type,
+      contract_title: template.contract_title || template.template_name,
+      description: template.description || '',
+      entity_law: template.entity_law || 'ALL',
+      currency_code: template.currency_code || 'INR',
+      preamble: template.preamble || '',
+      is_active: template.is_active !== undefined ? template.is_active : true,
+      is_custom: true,
+      created_at: template.created_at || now,
+      updated_at: now,
+      sections: (template.sections || []).map((s, idx) => ({
+        id: s.id || `sec-${templateId}-${idx}-${Date.now()}`,
+        template_id: templateId,
+        section_number: idx + 1,
+        section_title: s.section_title,
+        section_content: s.section_content,
+        is_required: !!s.is_required,
+        is_editable: s.is_editable !== undefined ? s.is_editable : !s.is_locked,
+        is_locked: !!s.is_locked,
+        page_break_before: !!s.page_break_before,
+        created_at: s.created_at || now,
+        updated_at: now,
+      }))
     };
+
+    // Save to local storage for persistence across reloads
+    const custom = this.getCustomTemplatesFromStorage();
+    const existingIdx = custom.findIndex(t => t.id === templateId);
+    if (existingIdx >= 0) {
+      custom[existingIdx] = savedTemplate;
+    } else {
+      custom.push(savedTemplate);
+    }
+    localStorage.setItem(CUSTOM_TEMPLATES_KEY, JSON.stringify(custom));
+
+    // Also persist to Supabase if available
+    if (isSupabaseConfigured) {
+      try {
+        await supabase.from('contract_templates').upsert({
+          id: savedTemplate.id,
+          template_name: savedTemplate.template_name,
+          template_type: savedTemplate.contract_type,
+          description: savedTemplate.description,
+          is_active: savedTemplate.is_active,
+          updated_at: savedTemplate.updated_at
+        });
+        
+        await supabase.from('contract_template_sections').delete().eq('template_id', savedTemplate.id);
+        if (savedTemplate.sections.length > 0) {
+          await supabase.from('contract_template_sections').insert(
+            savedTemplate.sections.map(s => ({
+              template_id: savedTemplate.id,
+              section_number: s.section_number,
+              section_title: s.section_title,
+              section_content: s.section_content,
+              is_required: s.is_required,
+              is_editable: s.is_editable,
+            }))
+          );
+        }
+      } catch (e) {
+        console.warn('Supabase template save error, using local storage fallback:', e);
+      }
+    }
+
+    return savedTemplate;
+  }
+
+  /**
+   * Delete a custom contract template
+   */
+  async deleteTemplate(templateId: string): Promise<void> {
+    const custom = this.getCustomTemplatesFromStorage().filter(t => t.id !== templateId);
+    localStorage.setItem(CUSTOM_TEMPLATES_KEY, JSON.stringify(custom));
+
+    if (isSupabaseConfigured) {
+      try {
+        await supabase.from('contract_templates').delete().eq('id', templateId);
+      } catch (e) {
+        console.warn('Supabase template delete error:', e);
+      }
+    }
   }
 
   // =====================================================

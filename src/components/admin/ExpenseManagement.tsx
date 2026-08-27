@@ -18,6 +18,7 @@ import { invoiceService } from '../../services/invoiceService';
 import type { Country, CompanySettings } from '../../types/invoice';
 import { useToast } from '../ui/ToastProvider';
 import { useConfirmDialog } from '../../hooks/useConfirmDialog';
+import { useActionProgress } from '../../contexts/ActionProgressContext';
 import ConfirmDialog from '../ui/ConfirmDialog';
 import { useCompanyContext } from '../../contexts/CompanyContext';
 
@@ -84,6 +85,7 @@ const formatDate = (date: string) => {
 const ExpenseManagement: React.FC = () => {
   const { showError, showSuccess } = useToast();
   const { confirm, dialogProps } = useConfirmDialog();
+  const { startAction, endAction } = useActionProgress();
   const { selectedCompany, companies } = useCompanyContext();
 
   // Reject dialog state
@@ -275,12 +277,15 @@ const ExpenseManagement: React.FC = () => {
       type: 'warning'
     });
     if (!confirmed) return;
+    startAction('Approving expense…');
     try {
       await expenseService.approveExpense(id);
       await loadExpenses();
       expenseService.getExpenseStats(undefined, undefined, selectedCompany?.id).then(setStats);
     } catch (error) {
       console.error('Error approving expense:', error);
+    } finally {
+      endAction();
     }
   };
 
@@ -333,6 +338,7 @@ const ExpenseManagement: React.FC = () => {
       type: 'danger'
     });
     if (!confirmed) return;
+    startAction(`Deleting ${type}…`);
     try {
       switch (type) {
         case 'expense':
@@ -351,6 +357,8 @@ const ExpenseManagement: React.FC = () => {
       }
     } catch (error) {
       console.error('Error deleting:', error);
+    } finally {
+      endAction();
     }
   };
 

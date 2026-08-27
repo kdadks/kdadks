@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { MessageSquare, Plus, Trash2, Loader2 } from 'lucide-react';
 import { employeeNotesService } from '../../services/employeeNotesService';
+import { useActionProgress } from '../../contexts/ActionProgressContext';
 import type { EmployeeNote } from '../../types/employee';
 
 interface EmployeeNotesProps {
@@ -16,6 +17,7 @@ function formatDateTime(iso: string): string {
 }
 
 export default function EmployeeNotes({ employeeId, currentAdminName }: EmployeeNotesProps) {
+  const { startAction, endAction } = useActionProgress();
   const [notes, setNotes] = useState<EmployeeNote[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -68,6 +70,7 @@ export default function EmployeeNotes({ employeeId, currentAdminName }: Employee
   async function handleDelete(noteId: string) {
     setDeletingId(noteId);
     setConfirmDeleteId(null);
+    startAction('Deleting note…');
     try {
       await employeeNotesService.deleteNote(noteId, employeeId, currentAdminName);
       setNotes(prev => prev.filter(n => n.id !== noteId));
@@ -75,6 +78,7 @@ export default function EmployeeNotes({ employeeId, currentAdminName }: Employee
       console.error('Failed to delete note:', err);
     } finally {
       setDeletingId(null);
+      endAction();
     }
   }
 

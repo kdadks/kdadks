@@ -33,6 +33,8 @@ import ConfirmDialog from '../ui/ConfirmDialog';
 import { supabase } from '../../config/supabase';
 import { simpleAuth } from '../../utils/simpleAuth';
 import { useToast } from '../ui/ToastProvider';
+import { useConfirmDialog } from '../../hooks/useConfirmDialog';
+import { useActionProgress } from '../../contexts/ActionProgressContext';
 import type { Invoice } from '../../types/invoice';
 import type { 
   PaymentRequest, 
@@ -1930,6 +1932,8 @@ const PaymentDetailsModal: React.FC<PaymentDetailsModalProps> = ({ request, onCl
   const [copied, setCopied] = useState(false);
   const [markingPaid, setMarkingPaid] = useState(false);
   const { showSuccess, showError } = useToast();
+  const { confirm, dialogProps } = useConfirmDialog();
+  const { startAction, endAction } = useActionProgress();
 
   useEffect(() => {
     loadDetails();
@@ -1966,7 +1970,14 @@ const PaymentDetailsModal: React.FC<PaymentDetailsModalProps> = ({ request, onCl
   };
 
   const handleMarkAsPaid = async () => {
-    if (!window.confirm('Mark this payment as received manually? This will update the payment request and linked invoice to paid status.')) return;
+    const confirmed = await confirm({
+      title: 'Mark Payment as Received',
+      message: 'Mark this payment as received manually? This will update the payment request and linked invoice to paid status.',
+      confirmText: 'Mark as Received',
+      type: 'warning',
+    });
+    if (!confirmed) return;
+    startAction('Marking payment as received…');
     setMarkingPaid(true);
     try {
       const manualRef = `manual_${Date.now()}`;
@@ -1993,6 +2004,7 @@ const PaymentDetailsModal: React.FC<PaymentDetailsModalProps> = ({ request, onCl
       showError(err instanceof Error ? err.message : 'Failed to mark as paid');
     } finally {
       setMarkingPaid(false);
+      endAction();
     }
   };
 
@@ -2245,6 +2257,7 @@ const PaymentDetailsModal: React.FC<PaymentDetailsModalProps> = ({ request, onCl
           </div>
         </div>
       </div>
+      <ConfirmDialog {...dialogProps} />
     </div>
   );
 };

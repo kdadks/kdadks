@@ -8,11 +8,12 @@ import { invoiceService } from '../../services/invoiceService';
 import { useCompanyContext } from '../../contexts/CompanyContext';
 import { useToast } from '../ui/ToastProvider';
 import { useConfirmDialog } from '../../hooks/useConfirmDialog';
+import { useActionProgress } from '../../contexts/ActionProgressContext';
 import ConfirmDialog from '../ui/ConfirmDialog';
 import type { Lead, LeadStatus, LeadSource, CreateLeadData, LeadFilters, LeadStats, LeadActivity, LeadFollowUpTask, LeadFollowUpTaskFilters, LeadFollowUpTaskStats, LeadTimelineEntry, FollowUpTaskStatus, FollowUpTaskPriority, CreateLeadFollowUpTaskData, LeadAlert } from '../../types/lead';
 import type { Customer, CompanySettings, Country } from '../../types/invoice';
 import { getTaxRegistrationLabel, getTaxLabel } from '../../utils/taxUtils';
-import { getCustomerDisplayIds } from '../../utils/customerCodeUtils';
+import { getCustomerDisplayIds, formatCustomerOption } from '../../utils/customerCodeUtils';
 import { formatCurrencyWithSymbol } from '../../utils/currencyConverter';
 
 const SHARED_VALUE = '__shared__';
@@ -39,6 +40,7 @@ const LeadManagement: React.FC = () => {
   const { selectedCompany, companies } = useCompanyContext();
   const { showSuccess, showError, showInfo } = useToast();
   const { confirm, dialogProps } = useConfirmDialog();
+  const { startAction, endAction } = useActionProgress();
 
   const [leads, setLeads] = useState<Lead[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -447,12 +449,15 @@ const LeadManagement: React.FC = () => {
   const handleDelete = async (lead: Lead) => {
     const confirmed = await confirm({ title: 'Delete Lead', message: `Delete lead "${lead.first_name} ${lead.last_name}"? This action cannot be undone.`, confirmText: 'Delete', type: 'danger' });
     if (!confirmed) return;
+    startAction('Deleting lead…');
     try {
       await leadService.deleteLead(lead.id);
       showSuccess('Lead deleted successfully!');
       loadData();
     } catch (err) {
       showError(`Failed to delete lead: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    } finally {
+      endAction();
     }
   };
 
@@ -526,12 +531,15 @@ const LeadManagement: React.FC = () => {
   const handleDeleteTask = async (task: LeadFollowUpTask) => {
     const confirmed = await confirm({ title: 'Delete Task', message: `Delete task "${task.title}"? This action cannot be undone.`, confirmText: 'Delete', type: 'danger' });
     if (!confirmed) return;
+    startAction('Deleting task…');
     try {
       await leadFollowUpTaskService.deleteFollowUpTask(task.id);
       showSuccess('Task deleted successfully!');
       loadFollowUpTasks();
     } catch (err) {
       showError(`Failed to delete task: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    } finally {
+      endAction();
     }
   };
 
@@ -756,7 +764,7 @@ const LeadManagement: React.FC = () => {
             <div><label className="block text-sm font-medium text-gray-700 mb-1">Job Title</label><input type="text" value={formData.job_title} onChange={e => handleChange('job_title', e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500" placeholder="Enter job title" /></div>
             <div><label className="block text-sm font-medium text-gray-700 mb-1">Company Name</label><input type="text" value={formData.company_name} onChange={e => handleChange('company_name', e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500" placeholder="Enter company name" /></div>
             <div><label className="block text-sm font-medium text-gray-700 mb-1">Source</label><select value={formData.source} onChange={e => handleChange('source', e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white focus:ring-blue-500 focus:border-blue-500">{LEAD_SOURCES.map(s => (<option key={s.value} value={s.value}>{s.label}</option>))}</select></div>
-            <div><label className="block text-sm font-medium text-gray-700 mb-1">Associate Customer</label><select value={formData.customer_id || ''} onChange={e => handleChange('customer_id', e.target.value || undefined)} className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white focus:ring-blue-500 focus:border-blue-500"><option value="">Select Customer (Optional)</option>{customers.map(c => (<option key={c.id} value={c.id}>{c.company_name || c.contact_person}</option>))}</select></div>
+            <div><label className="block text-sm font-medium text-gray-700 mb-1">Associate Customer</label><select value={formData.customer_id || ''} onChange={e => handleChange('customer_id', e.target.value || undefined)} className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white focus:ring-blue-500 focus:border-blue-500"><option value="">Select Customer (Optional)</option>{customers.map(c => (<option key={c.id} value={c.id}>{formatCustomerOption(c, companies, selectedCompany)}</option>))}</select></div>
           </div>
           <div className="mt-6 flex justify-end space-x-3">
             <button onClick={() => setActiveTab('leads')} className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md text-sm font-medium hover:bg-gray-300">Cancel</button>
@@ -956,9 +964,14 @@ const LeadManagement: React.FC = () => {
                                     <span className="ml-2 text-xs text-gray-400">{entryDate}</span>
                                   </div>
                                   {entry.description && <p className="mt-1 text-sm text-gray-600">{entry.description}</p>}
+                                  {entry.metadata?.completion_notes && (
+                                    <div className="mt-2 p-2.5 bg-blue-50 border-l-4 border-blue-600 rounded text-xs text-blue-900 shadow-sm">
+                                      <strong className="font-semibold text-blue-950">Follow-up Note:</strong> {String(entry.metadata.completion_notes)}
+                                    </div>
+                                  )}
                                   {entry.metadata && (
                                     <div className="mt-1 flex flex-wrap gap-1">
-                                      {Object.entries(entry.metadata).map(([k, v]) => (
+                                      {Object.entries(entry.metadata).filter(([k]) => k !== 'completion_notes').map(([k, v]) => (
                                         <span key={k} className="inline-flex px-2 py-0.5 text-xs rounded bg-gray-100 text-gray-700">{k}: {String(v)}</span>
                                       ))}
                                     </div>
@@ -1001,7 +1014,7 @@ const LeadManagement: React.FC = () => {
                 <div><label className="block text-sm font-medium text-gray-700 mb-1">Job Title</label><input type="text" value={formData.job_title} onChange={e => handleChange('job_title', e.target.value)} disabled={modalMode === 'view'} placeholder="Enter job title" className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50" /></div>
                 <div><label className="block text-sm font-medium text-gray-700 mb-1">Company Name</label><input type="text" value={formData.company_name} onChange={e => handleChange('company_name', e.target.value)} disabled={modalMode === 'view'} placeholder="Enter company name" className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50" /></div>
                 <div><label className="block text-sm font-medium text-gray-700 mb-1">Source</label><select value={formData.source} onChange={e => handleChange('source', e.target.value)} disabled={modalMode === 'view'} className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50">{LEAD_SOURCES.map(s => (<option key={s.value} value={s.value}>{s.label}</option>))}</select></div>
-                 <div><label className="block text-sm font-medium text-gray-700 mb-1">Associate Customer</label><select value={formData.customer_id || ''} onChange={e => handleChange('customer_id', e.target.value || undefined)} disabled={modalMode === 'view'} className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50"><option value="">Select Customer (Optional)</option>{customers.map(c => (<option key={c.id} value={c.id}>{c.company_name || c.contact_person}</option>))}</select></div>
+                 <div><label className="block text-sm font-medium text-gray-700 mb-1">Associate Customer</label><select value={formData.customer_id || ''} onChange={e => handleChange('customer_id', e.target.value || undefined)} disabled={modalMode === 'view'} className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50"><option value="">Select Customer (Optional)</option>{customers.map(c => (<option key={c.id} value={c.id}>{formatCustomerOption(c, companies, selectedCompany)}</option>))}</select></div>
                 </div>
                  <div className="grid grid-cols-2 gap-4">
                    <div><label className="block text-sm font-medium text-gray-700 mb-1">Budget Min</label><input type="number" value={formData.budget_min ?? ''} onChange={e => handleChange('budget_min', e.target.value ? parseFloat(e.target.value) : undefined)} disabled={modalMode === 'view'} placeholder="Min budget" className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50" /></div>
@@ -1356,7 +1369,7 @@ const LeadManagement: React.FC = () => {
                   <option value="">Auto-create Customer from Lead Details</option>
                   {customers.map(c => (
                     <option key={c.id} value={c.id}>
-                      {c.company_name || c.contact_person}
+                      {formatCustomerOption(c, companies, selectedCompany)}
                     </option>
                   ))}
                 </select>

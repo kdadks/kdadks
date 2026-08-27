@@ -5,6 +5,7 @@ import { invoiceService } from '../../services/invoiceService';
 import { useToast } from '../ui/ToastProvider';
 import ConfirmDialog from '../ui/ConfirmDialog';
 import { useConfirmDialog } from '../../hooks/useConfirmDialog';
+import { useActionProgress } from '../../contexts/ActionProgressContext';
 import { useCompanyContext } from '../../contexts/CompanyContext';
 import { getTaxRegistrationLabel, getTaxLabel } from '../../utils/taxUtils';
 import { getCustomerDisplayIds } from '../../utils/customerCodeUtils';
@@ -19,6 +20,7 @@ const CustomerManagement: React.FC = () => {
   const { selectedCompany, companies } = useCompanyContext();
   const { showSuccess, showError } = useToast();
   const { confirm, dialogProps } = useConfirmDialog();
+  const { startAction, endAction } = useActionProgress();
 
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [countries, setCountries] = useState<Country[]>([]);
@@ -221,12 +223,15 @@ const CustomerManagement: React.FC = () => {
       type: 'danger',
     });
     if (!confirmed) return;
+    startAction('Deleting customer…');
     try {
       await invoiceService.deleteCustomer(customer.id);
       showSuccess('Customer deleted successfully!');
       await loadCustomers();
     } catch (err) {
       showError(`Failed to delete customer: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    } finally {
+      endAction();
     }
   };
 

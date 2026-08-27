@@ -2,6 +2,7 @@ import { supabase, isSupabaseConfigured } from '../config/supabase';
 import { simpleAuth } from '../utils/simpleAuth';
 import { exchangeRateService } from './exchangeRateService';
 import { subscriptionService } from './subscriptionService';
+import { quoteService } from './quoteService';
 import type {
   Country,
   CompanySettings,
@@ -290,6 +291,35 @@ class InvoiceService {
     
     const customerList: Customer[] = data || [];
 
+    // Auto-repair/backfill any existing customers missing customer_code
+    for (const c of customerList) {
+      if (!c.customer_code) {
+        try {
+          const year = c.created_at ? new Date(c.created_at).getFullYear() : new Date().getFullYear();
+          const prefix = `${year}-`;
+          const { data: latest } = await supabase
+            .from('customers')
+            .select('customer_code')
+            .like('customer_code', `${prefix}%`)
+            .order('customer_code', { ascending: false })
+            .limit(1);
+          const lastSeq = latest?.[0]?.customer_code
+            ? parseInt(latest[0].customer_code.split('-')[1], 10)
+            : 0;
+          const newCode = `${prefix}${String(lastSeq + 1).padStart(4, '0')}`;
+          
+          await supabase
+            .from('customers')
+            .update({ customer_code: newCode })
+            .eq('id', c.id);
+          
+          c.customer_code = newCode;
+        } catch (repairErr) {
+          console.warn(`Could not backfill customer_code for customer ${c.id}:`, repairErr);
+        }
+      }
+    }
+
     // Safely load contacts if customer_contacts table exists in Supabase
     if (customerList.length > 0) {
       try {
@@ -337,6 +367,30 @@ class InvoiceService {
     
     if (error) throw error;
     if (!data) return null;
+
+    if (!data.customer_code) {
+      try {
+        const year = data.created_at ? new Date(data.created_at).getFullYear() : new Date().getFullYear();
+        const prefix = `${year}-`;
+        const { data: latest } = await supabase
+          .from('customers')
+          .select('customer_code')
+          .like('customer_code', `${prefix}%`)
+          .order('customer_code', { ascending: false })
+          .limit(1);
+        const lastSeq = latest?.[0]?.customer_code
+          ? parseInt(latest[0].customer_code.split('-')[1], 10)
+          : 0;
+        const newCode = `${prefix}${String(lastSeq + 1).padStart(4, '0')}`;
+        await supabase
+          .from('customers')
+          .update({ customer_code: newCode })
+          .eq('id', id);
+        data.customer_code = newCode;
+      } catch (repairErr) {
+        console.warn(`Could not backfill customer_code for customer ${id}:`, repairErr);
+      }
+    }
 
     // Safely load contacts if table exists
     try {
@@ -2227,9 +2281,6 @@ class InvoiceService {
     quoteId: string,
     splitOptions?: { itemIndices: number[]; dueDate?: string }[]
   ): Promise<{ invoiceId: string; invoiceNumber: string }[]> {
-    // Import quoteService to avoid circular dependency
-    const { quoteService } = await import('./quoteService');
-
     const quote = await quoteService.getQuoteById(quoteId);
     if (!quote) {
       throw new Error('Quote not found');

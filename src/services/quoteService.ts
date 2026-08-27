@@ -1,6 +1,7 @@
 import { supabase, isSupabaseConfigured } from '../config/supabase';
 import { simpleAuth } from '../utils/simpleAuth';
 import { exchangeRateService } from './exchangeRateService';
+import { invoiceService } from './invoiceService';
 import type {
   Quote,
   QuoteItem,
@@ -822,9 +823,6 @@ class QuoteService {
     if (quote.status === 'converted') {
       throw new Error('Quote has already been converted to an invoice');
     }
-
-    // Import invoiceService dynamically to avoid circular dependency
-    const { invoiceService } = await import('./invoiceService');
 
     // Create invoice from quote data
     const invoiceData = {

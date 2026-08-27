@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, lazy, Suspense } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import {
   LogOut,
@@ -35,7 +35,8 @@ import {
   Mail,
   UserCheck,
   Target,
-  Compass
+  Compass,
+  ShieldCheck
 } from 'lucide-react'
 import { simpleAuth, SimpleUser } from '../../utils/simpleAuth'
 import { isSupabaseConfigured, supabase } from '../../config/supabase'
@@ -44,41 +45,42 @@ import { quoteService } from '../../services/quoteService'
 import { employeeService } from '../../services/employeeService'
 import { useCompanyContext } from '../../contexts/CompanyContext'
 import CompanySelector from '../ui/CompanySelector'
-import InvoiceManagement from '../invoice/InvoiceManagement'
-import { PaymentManagement } from '../payment/PaymentManagement'
-import QuoteManagement from '../quote/QuoteManagement'
-import ContractManagement from '../contract/ContractManagement'
-import CustomerManagement from '../customer/CustomerManagement'
-import { Customer360Hub } from '../customer/Customer360Hub'
-import ProductManagement from '../product/ProductManagement'
-import LeadManagement from '../lead/LeadManagement'
-import OpportunityManagement from '../lead/OpportunityManagement'
-import EmploymentDocuments from '../hr/EmploymentDocuments'
-import LeaveManagement from '../hr/LeaveManagement'
-import AttendanceManagement from '../hr/AttendanceManagement'
-import FullFinalSettlement from '../hr/FullFinalSettlement'
-import TDSReport from '../hr/TDSReport'
-import RateCardManagement from './RateCardManagement'
-import { Announcements } from './Announcements'
-import PerformanceFeedback from './PerformanceFeedback'
-import CompensationManagement from './CompensationManagement'
-import ExpenseManagement from './ExpenseManagement'
-import FinanceManagement from './FinanceManagement'
-import IncomeManagement from './IncomeManagement'
-import SubscriptionManagement from './SubscriptionManagement'
-import BoardResolutionManagement from '../boardResolution/BoardResolutionManagement'
-import InvoiceSettings from './InvoiceSettings'
-import CustomerReporting from './reporting/CustomerReporting'
-import LeadReporting from './reporting/LeadReporting'
-import OpportunityReporting from './reporting/OpportunityReporting'
-import SubscriptionReporting from './reporting/SubscriptionReporting'
-import QuoteReporting from './reporting/QuoteReporting'
-import InvoiceReporting from './reporting/InvoiceReporting'
-import HRAttendanceReporting from './reporting/HRAttendanceReporting'
-import HRLeaveReporting from './reporting/HRLeaveReporting'
-import HRCompensationReporting from './reporting/HRCompensationReporting'
-import HRPerformanceReporting from './reporting/HRPerformanceReporting'
-import ReportingHub from './reporting/ReportingHub'
+const InvoiceManagement = lazy(() => import('../invoice/InvoiceManagement'))
+const PaymentManagement = lazy(() => import('../payment/PaymentManagement').then(m => ({ default: m.PaymentManagement })))
+const QuoteManagement = lazy(() => import('../quote/QuoteManagement'))
+const ContractManagement = lazy(() => import('../contract/ContractManagement'))
+const CustomerManagement = lazy(() => import('../customer/CustomerManagement'))
+const Customer360Hub = lazy(() => import('../customer/Customer360Hub').then(m => ({ default: m.Customer360Hub })))
+const ProductManagement = lazy(() => import('../product/ProductManagement'))
+const LeadManagement = lazy(() => import('../lead/LeadManagement'))
+const OpportunityManagement = lazy(() => import('../lead/OpportunityManagement'))
+const EmploymentDocuments = lazy(() => import('../hr/EmploymentDocuments'))
+const LeaveManagement = lazy(() => import('../hr/LeaveManagement'))
+const AttendanceManagement = lazy(() => import('../hr/AttendanceManagement'))
+const FullFinalSettlement = lazy(() => import('../hr/FullFinalSettlement'))
+const TDSReport = lazy(() => import('../hr/TDSReport'))
+const PolicyManagement = lazy(() => import('../hr/PolicyManagement').then(m => ({ default: m.PolicyManagement })))
+const RateCardManagement = lazy(() => import('./RateCardManagement'))
+const Announcements = lazy(() => import('./Announcements').then(m => ({ default: m.Announcements })))
+const PerformanceFeedback = lazy(() => import('./PerformanceFeedback'))
+const CompensationManagement = lazy(() => import('./CompensationManagement'))
+const ExpenseManagement = lazy(() => import('./ExpenseManagement'))
+const FinanceManagement = lazy(() => import('./FinanceManagement'))
+const IncomeManagement = lazy(() => import('./IncomeManagement'))
+const SubscriptionManagement = lazy(() => import('./SubscriptionManagement'))
+const BoardResolutionManagement = lazy(() => import('../boardResolution/BoardResolutionManagement'))
+const InvoiceSettings = lazy(() => import('./InvoiceSettings'))
+const CustomerReporting = lazy(() => import('./reporting/CustomerReporting'))
+const LeadReporting = lazy(() => import('./reporting/LeadReporting'))
+const OpportunityReporting = lazy(() => import('./reporting/OpportunityReporting'))
+const SubscriptionReporting = lazy(() => import('./reporting/SubscriptionReporting'))
+const QuoteReporting = lazy(() => import('./reporting/QuoteReporting'))
+const InvoiceReporting = lazy(() => import('./reporting/InvoiceReporting'))
+const HRAttendanceReporting = lazy(() => import('./reporting/HRAttendanceReporting'))
+const HRLeaveReporting = lazy(() => import('./reporting/HRLeaveReporting'))
+const HRCompensationReporting = lazy(() => import('./reporting/HRCompensationReporting'))
+const HRPerformanceReporting = lazy(() => import('./reporting/HRPerformanceReporting'))
+const ReportingHub = lazy(() => import('./reporting/ReportingHub'))
 import type { InvoiceStats } from '../../types/invoice'
 import type { QuoteStats } from '../../types/quote'
 
@@ -112,7 +114,7 @@ interface DashboardStats {
   settlements: number;
 }
 
-type ActiveView = 'dashboard' | 'invoices' | 'payments' | 'quotes' | 'contracts' | 'rate-cards' | 'announcements' | 'expenses' | 'income' | 'finance' | 'hr-employees' | 'hr-leave' | 'hr-attendance' | 'hr-settlement' | 'hr-tds-report' | 'hr-performance' | 'hr-compensation' | 'subscriptions' | 'board-resolutions' | 'settings' | 'customers' | 'customer-360' | 'leads' | 'opportunities' | 'products' | 'reporting-hub' | 'reporting-customers' | 'reporting-leads' | 'reporting-opportunities' | 'reporting-subscriptions' | 'reporting-quotes' | 'reporting-invoices' | 'reporting-hr' | 'reporting-hr-attendance' | 'reporting-hr-leave' | 'reporting-hr-compensation' | 'reporting-hr-performance';
+type ActiveView = 'dashboard' | 'invoices' | 'payments' | 'quotes' | 'contracts' | 'rate-cards' | 'announcements' | 'expenses' | 'income' | 'finance' | 'hr-employees' | 'hr-leave' | 'hr-attendance' | 'hr-settlement' | 'hr-tds-report' | 'hr-performance' | 'hr-compensation' | 'hr-policies' | 'subscriptions' | 'board-resolutions' | 'settings' | 'customers' | 'customer-360' | 'leads' | 'opportunities' | 'products' | 'reporting-hub' | 'reporting-customers' | 'reporting-leads' | 'reporting-opportunities' | 'reporting-subscriptions' | 'reporting-quotes' | 'reporting-invoices' | 'reporting-hr' | 'reporting-hr-attendance' | 'reporting-hr-leave' | 'reporting-hr-compensation' | 'reporting-hr-performance';
 
 // Menu section types
 type MenuSection = 'sales' | 'customers' | 'catalog' | 'billing' | 'finance' | 'hr' | 'communication' | 'governance' | 'reporting' | 'configuration';
@@ -176,6 +178,7 @@ const SimpleAdminDashboard: React.FC = () => {
     '/admin/hr/tds-report': 'hr-tds-report',
     '/admin/hr/performance': 'hr-performance',
     '/admin/hr/compensation': 'hr-compensation',
+    '/admin/hr/policies': 'hr-policies',
     '/admin/subscriptions': 'subscriptions',
     '/admin/board-resolutions': 'board-resolutions',
     '/admin/settings': 'settings',
@@ -501,6 +504,8 @@ const SimpleAdminDashboard: React.FC = () => {
         return <FullFinalSettlement />;
       case 'hr-tds-report':
         return <TDSReport />;
+      case 'hr-policies':
+        return <PolicyManagement />;
       case 'hr-attendance':
         return <AttendanceManagement />;
       case 'reporting-hr':
@@ -1030,6 +1035,22 @@ const SimpleAdminDashboard: React.FC = () => {
                   >
                     <FileText className="w-5 h-5 flex-shrink-0" />
                     {sidebarOpen && <span className="ml-3">TDS Report</span>}
+                  </button>
+                </li>
+
+                {/* Policies & SOPs */}
+                <li>
+                  <button
+                    onClick={() => navigate('/admin/hr/policies')}
+                    title={!sidebarOpen ? 'Policies & SOPs' : undefined}
+                    className={`w-full flex items-center ${!sidebarOpen ? 'justify-center' : ''} px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                      activeView === 'hr-policies'
+                        ? 'bg-blue-100 text-blue-700'
+                        : 'text-gray-700 hover:bg-gray-100'
+                    }`}
+                  >
+                    <ShieldCheck className="w-5 h-5 flex-shrink-0" />
+                    {sidebarOpen && <span className="ml-3">Policies & SOPs</span>}
                   </button>
                 </li>
               </>
@@ -1821,7 +1842,13 @@ const SimpleAdminDashboard: React.FC = () => {
             </div>
           ) : (
             <div>
-              {renderMainContent()}
+              <Suspense fallback={
+                <div className="flex items-center justify-center p-12">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
+                </div>
+              }>
+                {renderMainContent()}
+              </Suspense>
             </div>
           )}
         </main>

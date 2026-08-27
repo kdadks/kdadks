@@ -351,18 +351,44 @@ export async function generateInternOfferLetterPDF(
   await writeWrapped(opening);
   currentY += SECTION_GAP;
 
+  // ── Helper for writing key-value detail rows without text overlap ───────────
+  const writeDetailRow = async (label: string, value: string) => {
+    if (!value) return;
+    await checkBreak(LINE_HEIGHT + 2);
+    pdf.setFont('helvetica', 'bold');
+    pdf.text(`${label}: `, dimensions.leftMargin, currentY);
+    const labelWidth = pdf.getTextWidth(`${label}: `);
+    pdf.setFont('helvetica', 'normal');
+
+    const valLines = value.split('\n');
+    for (let i = 0; i < valLines.length; i++) {
+      const lineStr = valLines[i].trim();
+      if (!lineStr) continue;
+      const indentX = i === 0 ? labelWidth : 0;
+      const startX = dimensions.leftMargin + indentX;
+      const splitLines = pdf.splitTextToSize(lineStr, dimensions.rightMargin - startX);
+      for (let j = 0; j < splitLines.length; j++) {
+        await checkBreak(LINE_HEIGHT + 2);
+        const posX = (i === 0 && j === 0) ? (dimensions.leftMargin + labelWidth) : (dimensions.leftMargin + 20);
+        pdf.text(splitLines[j], posX, currentY);
+        currentY += LINE_HEIGHT;
+      }
+    }
+    currentY += 2;
+  };
+
   // ── 1. Internship Scope & Duration ────────────────────────────────────────
   await writeSectionHeading('1. Internship Scope & Duration');
   const duration = data.internship_duration || calcDurationMonths(data.joining_date, data.end_date);
-  await writeWrapped(`Start Date: ${formatDate(data.joining_date)}`);
-  await writeWrapped(`End Date: ${formatDate(data.end_date)}`);
-  await writeWrapped(`Duration: ${duration}`);
+  await writeDetailRow('Date of Joining', formatDate(data.joining_date));
+  await writeDetailRow('End Date', formatDate(data.end_date));
+  await writeDetailRow('Duration', duration);
   currentY += PARAGRAPH_GAP;
   if (data.internship_scope) {
     await writeWrapped(data.internship_scope);
   } else {
     await writeWrapped(
-      `The internship is designed to provide hands-on experience in ${data.department}. The scope may be revised by the supervisor based on project requirements and intern progress.`
+      `The internship is designed to provide hands-on practical experience in ${data.department}. The scope may be revised by the supervisor based on project requirements and intern progress.`
     );
   }
   currentY += SECTION_GAP;
@@ -376,13 +402,15 @@ export async function generateInternOfferLetterPDF(
 
   // ── 3. Position & Reporting ───────────────────────────────────────────────
   await writeSectionHeading('3. Position & Reporting');
-  const posDetails = [
-    `Intern Title: ${data.position}`,
-    `Department: ${data.department}`,
-    `Supervisor: ${data.supervisor_name || '[Supervisor Name]'}${data.supervisor_title ? ' (' + data.supervisor_title + ')' : ''}`,
-    `Work Location: ${data.work_location || '[Office / Remote]'}`,
-  ];
-  for (const d of posDetails) { await checkBreak(LINE_HEIGHT + 2); pdf.text(d, dimensions.leftMargin, currentY); currentY += PARAGRAPH_GAP; }
+  const locTypeStr = data.work_location_type ? (data.work_location_type.charAt(0).toUpperCase() + data.work_location_type.slice(1)) : 'Onsite';
+
+  await writeDetailRow('Intern Title', data.position);
+  await writeDetailRow('Department', data.department);
+  await writeDetailRow('Supervisor', `${data.supervisor_name || '[Supervisor Name]'}${data.supervisor_title ? ' (' + data.supervisor_title + ')' : ''}`);
+  await writeDetailRow('Work Location Type', locTypeStr);
+  if (data.work_location_type !== 'remote' && data.work_location) {
+    await writeDetailRow('Work Location Address', data.work_location);
+  }
   if (data.working_hours_start && data.working_hours_end) {
     await writeWrapped(`Working Hours: ${data.working_hours_start} – ${data.working_hours_end}, ${data.working_days || 'Monday to Friday'}`);
   }
@@ -433,48 +461,88 @@ export async function generateInternOfferLetterPDF(
   }
   currentY += SECTION_GAP;
 
-  // ── 6. Confidentiality ────────────────────────────────────────────────────
+  // ── 6. Code of Conduct & Ethics ────────────────────────────────────────────
+  await writeSectionHeading('6. Code of Conduct & Professional Ethics');
+  await writeWrapped(
+    `As an intern at ${companyName}, you are expected to maintain high standards of professional integrity, punctual attendance, respectful communication, and compliance with all company directives, IT security rules, and workplace policies.`
+  );
+  currentY += SECTION_GAP;
+
+  // ── 7. Confidentiality & Non-Disclosure ────────────────────────────────────
   if (data.confidentiality_clause !== false) {
-    await writeSectionHeading('6. Confidentiality');
+    await writeSectionHeading('7. Confidentiality & Non-Disclosure');
     await writeWrapped(INTERN_CONFIDENTIALITY_CLAUSE);
     currentY += SECTION_GAP;
   }
 
-  // ── 7. Intellectual Property ──────────────────────────────────────────────
+  // ── 8. Intellectual Property Assignment ───────────────────────────────────
   if (data.ip_assignment_clause !== false) {
-    await writeSectionHeading('7. Intellectual Property');
-    await writeWrapped(INTERN_IP_ASSIGNMENT_CLAUSE);
+    await writeSectionHeading('8. Intellectual Property Assignment');
+    await writeWrapped(
+      data.ip_clause_text ||
+      `All source code, designs, algorithms, intellectual property, and documentation produced by the intern during this program shall remain the exclusive property of ${companyName}.`
+    );
     currentY += SECTION_GAP;
   }
 
-  // ── 8. Legal Disclaimer & Compliance ─────────────────────────────────────
-  await writeSectionHeading('8. Legal Disclaimer & Compliance');
+  // ── 9. Company Assets & Care ─────────────────────────────────────────────
+  await writeSectionHeading('9. Company Assets Care & Return');
+  await writeWrapped(
+    data.asset_clause_text ||
+    `The intern is responsible for the care and proper ethical use of all ${companyName}-issued equipment, software access, and data. All physical and digital company assets must be returned immediately upon program exit.`
+  );
+  currentY += SECTION_GAP;
+
+  // ── 10. Probation & Termination / Notice Period ───────────────────────────
+  await writeSectionHeading('10. Termination & Notice Period');
+  await writeWrapped(
+    `Either party may terminate this internship engagement at any time by providing 7 days written notice. In cases of gross misconduct, breach of confidentiality, or policy violation, ${companyName} reserves the right to terminate the internship immediately without prior notice.`
+  );
+  currentY += SECTION_GAP;
+
+  // ── 11. Governing Law & Jurisdiction ──────────────────────────────────────
+  if (data.jurisdiction) {
+    await writeSectionHeading('11. Governing Law & Jurisdiction');
+    await writeWrapped(`This internship agreement shall be governed by and construed in accordance with the laws of ${data.jurisdiction}.`);
+    currentY += SECTION_GAP;
+  }
+
+  // ── 12. Legal Disclaimer & Compliance ─────────────────────────────────────
+  await writeSectionHeading('12. Legal Disclaimer & Compliance');
   await writeWrapped(data.legal_disclaimer || INTERN_LEGAL_DISCLAIMER);
   currentY += SECTION_GAP;
 
-  // ── 9. Acceptance ─────────────────────────────────────────────────────────
-  await writeSectionHeading('9. Acceptance of Offer');
+  // ── 13. Acceptance of Offer & Side-by-Side Signatures ──────────────────────
+  await writeSectionHeading('13. Acceptance of Offer');
   await writeWrapped('Please sign and return a copy of this letter within 3 working days to confirm your acceptance. Failure to do so may result in withdrawal of this offer.');
-  currentY += SECTION_GAP * 2;
+  currentY += SECTION_GAP;
 
-  pdf.text('Accepted by (Intern):', dimensions.leftMargin, currentY);
-  currentY += 8;
-  pdf.line(dimensions.leftMargin, currentY, dimensions.leftMargin + 70, currentY);
-  currentY += 5;
-  pdf.text(`Name: ${employee.full_name}`, dimensions.leftMargin, currentY);
-  currentY += 5;
-  pdf.text('Date: ___________________', dimensions.leftMargin, currentY);
-  currentY += 15;
+  await checkBreak(45);
+  const leftColX = dimensions.leftMargin;
+  const rightColX = dimensions.leftMargin + 95;
+  const sigStartY = currentY;
 
-  pdf.text(`Issued by ${companyName}:`, dimensions.leftMargin, currentY);
-  currentY += 8;
-  pdf.line(dimensions.leftMargin, currentY, dimensions.leftMargin + 70, currentY);
-  currentY += 5;
+  // Left Column: Accepted by (Intern)
+  pdf.setFont('helvetica', 'bold');
+  pdf.text('Accepted by (Intern):', leftColX, sigStartY);
+  pdf.line(leftColX, sigStartY + 8, leftColX + 70, sigStartY + 8);
+  pdf.setFont('helvetica', 'normal');
+  pdf.text(`Name: ${employee.full_name}`, leftColX, sigStartY + 14);
+  pdf.text('Date: ___________________', leftColX, sigStartY + 20);
+
+  // Right Column: Issued by Company
+  pdf.setFont('helvetica', 'bold');
+  pdf.text(`Issued by ${companyName}:`, rightColX, sigStartY);
+  pdf.line(rightColX, sigStartY + 8, rightColX + 70, sigStartY + 8);
+
+  let rightY = sigStartY + 14;
   const sigName = data.signatory_name || signatoryName || '';
   const sigDesig = data.signatory_designation || signatoryDesignation || '';
-  if (sigName) { pdf.setFont('helvetica', 'bold'); pdf.text(sigName, dimensions.leftMargin, currentY); currentY += 5; }
-  if (sigDesig) { pdf.setFont('helvetica', 'normal'); pdf.text(sigDesig, dimensions.leftMargin, currentY); currentY += 5; }
-  if (data.signatory_contact) { pdf.text(data.signatory_contact, dimensions.leftMargin, currentY); currentY += 5; }
+  if (sigName) { pdf.setFont('helvetica', 'bold'); pdf.text(sigName, rightColX, rightY); rightY += 5; }
+  if (sigDesig) { pdf.setFont('helvetica', 'normal'); pdf.text(sigDesig, rightColX, rightY); rightY += 5; }
+  if (data.signatory_contact) { pdf.setFont('helvetica', 'normal'); pdf.text(data.signatory_contact, rightColX, rightY); rightY += 5; }
+
+  currentY = Math.max(sigStartY + 25, rightY + 5);
 
   return pdf;
 }

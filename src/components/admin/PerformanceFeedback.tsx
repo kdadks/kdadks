@@ -25,6 +25,7 @@ import { employeeService } from '../../services/employeeService';
 import { useCompanyContext } from '../../contexts/CompanyContext';
 import { useToast } from '../ui/ToastProvider';
 import { useConfirmDialog } from '../../hooks/useConfirmDialog';
+import { useActionProgress } from '../../contexts/ActionProgressContext';
 import ConfirmDialog from '../ui/ConfirmDialog';
 
 interface Employee {
@@ -105,6 +106,7 @@ const RatingStars: React.FC<{ rating: number; onChange?: (rating: number) => voi
 const PerformanceFeedback: React.FC = () => {
   const { showError, showSuccess } = useToast();
   const { confirm, dialogProps } = useConfirmDialog();
+  const { startAction, endAction } = useActionProgress();
   const { selectedCompany } = useCompanyContext();
   const [feedbacks, setFeedbacks] = useState<FeedbackType[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -276,11 +278,14 @@ const PerformanceFeedback: React.FC = () => {
       type: 'danger'
     });
     if (!confirmed) return;
+    startAction('Deleting performance feedback…');
     try {
       await performanceFeedbackService.deleteFeedback(id);
       loadData();
     } catch (error) {
       console.error('Error deleting feedback:', error);
+    } finally {
+      endAction();
     }
   };
 

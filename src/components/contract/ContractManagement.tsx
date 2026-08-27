@@ -20,12 +20,14 @@ import { invoiceService } from '../../services/invoiceService';
 import { useCompanyContext } from '../../contexts/CompanyContext';
 import { useToast } from '../ui/ToastProvider';
 import { useConfirmDialog } from '../../hooks/useConfirmDialog';
+import { useActionProgress } from '../../contexts/ActionProgressContext';
 import ConfirmDialog from '../ui/ConfirmDialog';
 import { generateContractPDF } from '../../utils/contractPDFGenerator';
 import ViewContractModal from './ViewContractModal';
 import EditContractModal from './EditContractModal';
 import StatusUpdateModal from './StatusUpdateModal';
 import CreateContractModal from './CreateContractModal';
+import ContractTemplateManagement from './ContractTemplateManagement';
 import { getEntityPrefix } from '../../utils/customerCodeUtils';
 import type { CompanySettings } from '../../types/invoice';
 import type { 
@@ -74,6 +76,7 @@ const ContractManagement: React.FC = () => {
   
   const { showSuccess, showError, showInfo } = useToast();
   const { confirm, dialogProps } = useConfirmDialog();
+  const { startAction, endAction } = useActionProgress();
   const perPage = 10;
 
   // Load initial data
@@ -299,6 +302,7 @@ const ContractManagement: React.FC = () => {
     });
 
     if (confirmed) {
+      startAction('Deleting contract…');
       try {
         setLoading(true);
         await contractService.deleteContract(contractId);
@@ -309,6 +313,7 @@ const ContractManagement: React.FC = () => {
         showError('Failed to delete contract');
       } finally {
         setLoading(false);
+        endAction();
       }
     }
   };
@@ -722,11 +727,7 @@ const ContractManagement: React.FC = () => {
 
         {activeTab === 'dashboard' && renderDashboard()}
         {activeTab === 'contracts' && renderContractsList()}
-        {activeTab === 'templates' && (
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-            <p className="text-gray-600">Contract templates management coming soon...</p>
-          </div>
-        )}
+        {activeTab === 'templates' && <ContractTemplateManagement />}
       </div>
 
       {/* Create Contract Modal */}

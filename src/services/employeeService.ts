@@ -1,4 +1,5 @@
 import { supabase } from '../config/supabase'
+import { auditLogService } from './auditLogService'
 import type {
   Employee,
   EmploymentDocument,
@@ -920,7 +921,7 @@ export const employeeService = {
 
     const updated = await this.updateEmployee(employeeId, updatePayload);
 
-    await (await import('./auditLogService')).auditLogService.createLog({
+    await auditLogService.createLog({
       employee_id: employeeId,
       table_name: 'employees',
       record_id: employeeId,
@@ -953,7 +954,7 @@ export const employeeService = {
 
     const updated = await this.updateEmployee(employeeId, updatePayload);
 
-    await (await import('./auditLogService')).auditLogService.createLog({
+    await auditLogService.createLog({
       employee_id: employeeId,
       table_name: 'employees',
       record_id: employeeId,

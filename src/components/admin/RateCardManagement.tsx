@@ -24,10 +24,12 @@ import type {
 import { calculateTotalRate, analyzeSalaryToRate } from '../../types/rateCard';
 import SalaryRateAnalyzer from './SalaryRateAnalyzer';
 import { useConfirmDialog } from '../../hooks/useConfirmDialog';
+import { useActionProgress } from '../../contexts/ActionProgressContext';
 import ConfirmDialog from '../ui/ConfirmDialog';
 
 const RateCardManagement: React.FC = () => {
   const { confirm, dialogProps } = useConfirmDialog();
+  const { startAction, endAction } = useActionProgress();
   const [templates, setTemplates] = useState<RateCardTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -138,12 +140,15 @@ const RateCardManagement: React.FC = () => {
     });
     if (!confirmed) return;
 
+    startAction('Deleting rate card template…');
     try {
       setError(null);
       await rateCardService.deleteRateCardTemplate(id);
       loadTemplates();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete rate card template');
+    } finally {
+      endAction();
     }
   };
 

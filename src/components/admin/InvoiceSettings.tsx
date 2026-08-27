@@ -14,6 +14,7 @@ import {
 import { invoiceService } from '../../services/invoiceService';
 import { useToast } from '../ui/ToastProvider';
 import { useConfirmDialog } from '../../hooks/useConfirmDialog';
+import { useActionProgress } from '../../contexts/ActionProgressContext';
 import PDFBrandingManager from '../admin/PDFBrandingManager';
 import { getTaxRegistrationLabel, getTaxRegistrationLabelByCode, isGSTCountry } from '../../utils/taxUtils';
 import { useCompanyContext } from '../../contexts/CompanyContext';
@@ -37,6 +38,7 @@ const InvoiceSettings: React.FC = () => {
 
   const { showSuccess, showError, showWarning } = useToast();
   const { confirm, dialogProps } = useConfirmDialog();
+  const { startAction, endAction } = useActionProgress();
 
   const getCountryCode = (countryId?: string) => {
     const country = countries.find(c => c.id === countryId);
@@ -377,6 +379,7 @@ const InvoiceSettings: React.FC = () => {
     });
 
     if (confirmed) {
+      startAction('Deleting company settings…');
       try {
         await invoiceService.deleteCompanySettings(company.id);
         showSuccess('Company settings deleted successfully!');
@@ -384,6 +387,8 @@ const InvoiceSettings: React.FC = () => {
       } catch (error) {
         console.error('Failed to delete company settings:', error);
         showError(`Failed to delete company settings: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      } finally {
+        endAction();
       }
     }
   };
@@ -505,6 +510,7 @@ const InvoiceSettings: React.FC = () => {
     });
 
     if (confirmed) {
+      startAction('Deleting invoice settings…');
       try {
         await invoiceService.deleteInvoiceSettings(settings.id);
         showSuccess('Invoice settings deleted successfully!');
@@ -512,6 +518,8 @@ const InvoiceSettings: React.FC = () => {
       } catch (error) {
         console.error('Failed to delete invoice settings:', error);
         showError(`Failed to delete invoice settings: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      } finally {
+        endAction();
       }
     }
   };

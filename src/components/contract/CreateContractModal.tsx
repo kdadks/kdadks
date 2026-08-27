@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Save, Plus, Trash2, GripVertical, Lock, Unlock, FileText, AlertCircle } from 'lucide-react';
 import { invoiceService } from '../../services/invoiceService';
+import { contractService } from '../../services/contractService';
 import { convertToINR, formatCurrencyWithSymbol } from '../../utils/currencyConverter';
 import { useCompanyContext } from '../../contexts/CompanyContext';
 import { formatCustomerOption } from '../../utils/customerCodeUtils';
@@ -30,8 +31,9 @@ const CreateContractModal: React.FC<CreateContractModalProps> = ({ onSave, onClo
   const isIndianEntity = companies.find(c => c.id === selectedCompany?.id)?.country?.code === 'IN' ||
     companies.find(c => c.id === selectedCompany?.id)?.country?.code === 'IND';
   const hasEntityTemplates = isIrishEntity || isIndianEntity;
-  const availableTemplates = isIrishEntity ? IRISH_CONTRACT_TEMPLATES : isIndianEntity ? INDIAN_CONTRACT_TEMPLATES : [];
-  const getEntityTemplate = isIrishEntity ? getIrishTemplate : isIndianEntity ? getIndianTemplate : () => undefined;
+  const lawName = isIndianEntity ? 'Indian Law' : isIrishEntity ? 'Irish Law' : 'Contract';
+
+  const [availableTemplates, setAvailableTemplates] = useState<any[]>([]);
   
   // Form state
   const [formData, setFormData] = useState<CreateContractData>(initialData);
@@ -42,10 +44,21 @@ const CreateContractModal: React.FC<CreateContractModalProps> = ({ onSave, onClo
   const contractTypes: ContractType[] = ['MSA', 'SOW', 'NDA', 'SLA', 'WORK_ORDER', 'MAINTENANCE', 'CONSULTING', 'LICENSE', 'OTHER'];
   const currencies = ['INR', 'USD', 'EUR', 'GBP', 'AED', 'SGD', 'AUD', 'CAD', 'JPY', 'CNY'];
 
-  // Load customers on mount
+  // Load customers and dynamic templates on mount & company change
   useEffect(() => {
     loadCustomers();
-  }, []);
+    loadTemplates();
+  }, [selectedCompany]);
+
+  const loadTemplates = async () => {
+    try {
+      const countryCode = companies.find(c => c.id === selectedCompany?.id)?.country?.code;
+      const tpls = await contractService.getAllTemplatesWithSections(countryCode);
+      setAvailableTemplates(tpls);
+    } catch (err) {
+      console.error('Error loading contract templates:', err);
+    }
+  };
 
   const loadCustomers = async () => {
     try {
@@ -95,24 +108,25 @@ const CreateContractModal: React.FC<CreateContractModalProps> = ({ onSave, onClo
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
-  const applyIrishTemplate = (contractType: ContractType) => {
-    const tpl = getEntityTemplate(contractType);
+  const applyEntityTemplate = (templateId: string) => {
+    const tpl = availableTemplates.find(t => t.id === templateId);
     if (!tpl) return;
     setFormData(prev => ({
       ...prev,
-      contract_title: prev.contract_title || tpl.contract_title,
-      preamble: tpl.preamble,
-      currency_code: tpl.currency_code,
-      contract_type: contractType,
+      template_id: tpl.id,
+      contract_title: prev.contract_title || tpl.contract_title || tpl.template_name,
+      preamble: tpl.preamble || prev.preamble,
+      currency_code: tpl.currency_code || prev.currency_code,
+      contract_type: tpl.contract_type || prev.contract_type,
     }));
-    setSections(tpl.sections.map(s => ({
-      id: `tpl-${s.section_number}-${Date.now()}`,
+    setSections(tpl.sections.map((s: any) => ({
+      id: `tpl-${s.section_number}-${Date.now()}-${Math.random().toString(36).substring(2, 5)}`,
       section_number: s.section_number,
       section_title: s.section_title,
       section_content: s.section_content,
       is_required: s.is_required,
       is_locked: s.is_locked,
-      page_break_before: s.page_break_before,
+      page_break_before: !!s.page_break_before,
     })));
     setTemplateApplied(true);
     setActiveTab('basic');
@@ -284,23 +298,26 @@ const CreateContractModal: React.FC<CreateContractModalProps> = ({ onSave, onClo
                     <FileText className={`w-5 h-5 mt-0.5 flex-shrink-0 ${templateApplied ? 'text-green-600' : 'text-blue-600'}`} />
                     <div className="flex-1">
                       <p className={`text-sm font-semibold ${templateApplied ? 'text-green-800' : 'text-blue-800'}`}>
-                        {templateApplied ? '✓ Irish Law Template Applied' : 'Irish Law Templates Available'}
+                        {templateApplied ? `✓ ${lawName} Template Applied` : `${lawName} Templates Available`}
                       </p>
                       <p className={`text-xs mt-0.5 ${templateApplied ? 'text-green-700' : 'text-blue-700'}`}>
                         {templateApplied
                           ? 'Compliance clauses are locked and protected. Editable sections are marked with an unlock icon.'
-                          : 'Select a template to pre-populate this contract with Irish law-compliant sections and locked regulatory clauses.'}
+                          : `Select a template to pre-populate this contract with ${lawName}-compliant sections and locked regulatory clauses.`}
                       </p>
                       {!templateApplied && (
                         <div className="flex flex-wrap gap-2 mt-3">
                           {availableTemplates.map(t => (
                             <button
-                              key={t.contract_type}
+                              key={t.id}
                               type="button"
-                              onClick={() => applyIrishTemplate(t.contract_type)}
-                              className="px-3 py-1.5 text-xs font-medium bg-white border border-blue-300 text-blue-700 rounded-md hover:bg-blue-50 transition-colors"
+                              onClick={() => applyEntityTemplate(t.id)}
+                              className="px-3 py-1.5 text-xs font-medium bg-white border border-blue-300 text-blue-700 rounded-md hover:bg-blue-50 transition-colors shadow-sm flex items-center gap-1.5"
                             >
-                              {t.label}
+                              <span>{t.template_name || t.label}</span>
+                              {t.is_custom && (
+                                <span className="px-1.5 py-0.2 bg-indigo-100 text-indigo-700 font-semibold rounded text-[10px]">Custom</span>
+                              )}
                             </button>
                           ))}
                         </div>
@@ -626,7 +643,7 @@ const CreateContractModal: React.FC<CreateContractModalProps> = ({ onSave, onClo
 
               {sections.length === 0 ? (
                 <div className="text-center py-12 text-gray-500">
-                  No sections added yet. Click "Add Section" or apply an Irish law template above.
+                  No sections added yet. Click "Add Section" or apply a {lawName.toLowerCase()} template above.
                 </div>
               ) : (
                 <div className="space-y-4">
@@ -662,7 +679,7 @@ const CreateContractModal: React.FC<CreateContractModalProps> = ({ onSave, onClo
                       {locked && (
                         <div className="mb-2 flex items-start gap-2 text-xs text-red-700 bg-red-100 rounded p-2">
                           <AlertCircle className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
-                          This section contains a mandatory Irish law compliance clause and cannot be modified.
+                          This section contains a mandatory {lawName.toLowerCase()} compliance clause and cannot be modified.
                         </div>
                       )}
 

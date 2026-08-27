@@ -22,6 +22,7 @@ import { useCompanyContext } from '../../contexts/CompanyContext';
 import { generateBoardResolutionPDF } from '../../utils/boardResolutionPDFGenerator';
 import { useToast } from '../ui/ToastProvider';
 import { useConfirmDialog } from '../../hooks/useConfirmDialog';
+import { useActionProgress } from '../../contexts/ActionProgressContext';
 import ConfirmDialog from '../ui/ConfirmDialog';
 import { getCompanyTaxFields } from '../../utils/taxUtils';
 import type { CompanySettings } from '../../types/invoice';
@@ -93,6 +94,7 @@ const BoardResolutionManagement: React.FC = () => {
 
   const { showSuccess, showError } = useToast();
   const { confirm, dialogProps } = useConfirmDialog();
+  const { startAction, endAction } = useActionProgress();
 
   const PAGE_SIZE = 20;
 
@@ -227,12 +229,15 @@ const BoardResolutionManagement: React.FC = () => {
     });
     if (!ok) return;
 
+    startAction('Deleting board resolution…');
     try {
       await boardResolutionService.deleteResolution(resolution.id);
       showSuccess('Resolution deleted.');
       loadData();
     } catch (err) {
       showError(err instanceof Error ? err.message : 'Failed to delete resolution.');
+    } finally {
+      endAction();
     }
   };
 

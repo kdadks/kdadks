@@ -14,6 +14,7 @@ import { leaveAttendanceService } from '../../services/leaveAttendanceService';
 import { employeeService } from '../../services/employeeService';
 import { useCompanyContext } from '../../contexts/CompanyContext';
 import { useToast } from '../ui/ToastProvider';
+import { useActionProgress } from '../../contexts/ActionProgressContext';
 import type {
   LeaveApplication,
   LeaveType,
@@ -52,6 +53,7 @@ const LeaveManagement: React.FC<LeaveManagementProps> = ({ onBackToDashboard, cu
   const [updatingAllocation, setUpdatingAllocation] = useState(false);
   const [refreshingBalance, setRefreshingBalance] = useState(false);
   const { showSuccess, showError } = useToast();
+  const { startAction, endAction } = useActionProgress();
 
   useEffect(() => {
     loadData();
@@ -181,6 +183,7 @@ const LeaveManagement: React.FC<LeaveManagementProps> = ({ onBackToDashboard, cu
 
 
   const handleApproveLeave = async (id: string) => {
+    startAction('Approving leave request…');
     try {
       setApprovingLeaveId(id);
       await leaveAttendanceService.approveLeave(id, currentUserId || 'system');
@@ -191,10 +194,12 @@ const LeaveManagement: React.FC<LeaveManagementProps> = ({ onBackToDashboard, cu
       showError(error.message || 'Failed to approve leave');
     } finally {
       setApprovingLeaveId(null);
+      endAction();
     }
   };
 
   const handleRejectLeave = async (id: string) => {
+    startAction('Rejecting leave request…');
     try {
       setRejectingLeaveId(id);
       await leaveAttendanceService.rejectLeave(id, currentUserId || 'system', 'Rejected by admin');
@@ -205,6 +210,7 @@ const LeaveManagement: React.FC<LeaveManagementProps> = ({ onBackToDashboard, cu
       showError(error.message || 'Failed to reject leave');
     } finally {
       setRejectingLeaveId(null);
+      endAction();
     }
   };
 

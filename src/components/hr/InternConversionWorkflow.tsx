@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { ArrowUpCircle, X, Loader2, AlertTriangle } from 'lucide-react';
 import { employeeService } from '../../services/employeeService';
+import { useActionProgress } from '../../contexts/ActionProgressContext';
 import type { Employee, EmploymentType, EmploymentStatus } from '../../types/employee';
 import { DEPARTMENTS } from '../../types/employee';
 
@@ -35,6 +36,7 @@ const InternConversionWorkflow: React.FC<InternConversionWorkflowProps> = ({
   onConverted,
   currentAdminName,
 }) => {
+  const { startAction, endAction } = useActionProgress();
   const [formData, setFormData] = useState<ConversionFormData>({
     designation: employee.designation ?? '',
     department: employee.department ?? '',
@@ -69,6 +71,7 @@ const InternConversionWorkflow: React.FC<InternConversionWorkflowProps> = ({
     setError(null);
     setLoading(true);
 
+    startAction('Converting intern to full-time employee…');
     try {
       const updated = await employeeService.convertInternToEmployee(
         employee.id,
@@ -94,6 +97,7 @@ const InternConversionWorkflow: React.FC<InternConversionWorkflowProps> = ({
       setError(err?.message ?? 'Failed to convert intern. Please try again.');
     } finally {
       setLoading(false);
+      endAction();
     }
   };
 

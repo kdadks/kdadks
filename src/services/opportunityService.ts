@@ -1,6 +1,7 @@
 import { supabase, isSupabaseConfigured } from '../config/supabase';
 import { simpleAuth } from '../utils/simpleAuth';
 import { quoteService } from './quoteService';
+import { invoiceService } from './invoiceService';
 import type {
   Opportunity,
   OpportunityStage,
@@ -262,29 +263,22 @@ class OpportunityService {
         customerId = opportunityData.customer_id;
       } else {
         const companyName = leadRecord.company_name || `${leadRecord.first_name} ${leadRecord.last_name}`;
-        const { data: newCust, error: custErr } = await supabase
-          .from('customers')
-          .insert({
-            company_name: companyName,
-            contact_person: `${leadRecord.first_name} ${leadRecord.last_name}`.trim(),
-            email: leadRecord.email || '',
-            phone: leadRecord.phone || '',
-            address_line1: leadRecord.address_line1 || '',
-            address_line2: leadRecord.address_line2 || '',
-            city: leadRecord.city || '',
-            state: leadRecord.state || '',
-            postal_code: leadRecord.postal_code || '',
-            country_id: leadRecord.country_id || 'IN',
-            company_settings_id: leadRecord.company_settings_id || undefined,
-            gstin: leadRecord.gstin || undefined,
-            pan: leadRecord.pan || undefined,
-            vat_number: leadRecord.vat_number || undefined,
-            cro_number: leadRecord.cro_number || undefined
-          })
-          .select()
-          .single();
+        const newCust = await invoiceService.createCustomer({
+          company_name: companyName,
+          contact_person: `${leadRecord.first_name} ${leadRecord.last_name}`.trim(),
+          email: leadRecord.email || '',
+          phone: leadRecord.phone || '',
+          address_line1: leadRecord.address_line1 || '',
+          address_line2: leadRecord.address_line2 || '',
+          city: leadRecord.city || '',
+          state: leadRecord.state || '',
+          postal_code: leadRecord.postal_code || '',
+          country_id: leadRecord.country_id || 'IN',
+          company_settings_id: leadRecord.company_settings_id || undefined,
+          gstin: leadRecord.gstin || undefined,
+          pan: leadRecord.pan || undefined
+        });
 
-        if (custErr) throw custErr;
         customerId = newCust.id;
 
         await supabase

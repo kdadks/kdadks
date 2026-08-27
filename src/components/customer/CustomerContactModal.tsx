@@ -6,6 +6,7 @@ import {
 import { customerContactService } from '../../services/customerContactService';
 import { useToast } from '../ui/ToastProvider';
 import { useConfirmDialog } from '../../hooks/useConfirmDialog';
+import { useActionProgress } from '../../contexts/ActionProgressContext';
 import ConfirmDialog from '../ui/ConfirmDialog';
 import {
   CustomerContact,
@@ -31,6 +32,7 @@ export const CustomerContactModal: React.FC<CustomerContactModalProps> = ({
 }) => {
   const { showSuccess, showError } = useToast();
   const { confirm, dialogProps } = useConfirmDialog();
+  const { startAction, endAction } = useActionProgress();
 
   const [contacts, setContacts] = useState<CustomerContact[]>([]);
   const [loading, setLoading] = useState(false);
@@ -196,6 +198,7 @@ export const CustomerContactModal: React.FC<CustomerContactModalProps> = ({
 
     if (!confirmed) return;
 
+    startAction(`${softDelete ? 'Archiving' : 'Deleting'} contact…`);
     try {
       await customerContactService.deleteCustomerContact(contact.id, softDelete);
       showSuccess(`Contact ${contact.name} ${softDelete ? 'archived' : 'deleted'} successfully.`);
@@ -203,6 +206,8 @@ export const CustomerContactModal: React.FC<CustomerContactModalProps> = ({
       if (onContactsUpdated) onContactsUpdated();
     } catch (err) {
       showError(`Failed to ${softDelete ? 'archive' : 'delete'} contact: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    } finally {
+      endAction();
     }
   };
 

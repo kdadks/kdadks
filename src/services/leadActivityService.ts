@@ -204,6 +204,7 @@ class LeadActivityService {
           completed_at,
           cancelled_at,
           cancellation_reason,
+          completion_notes,
           created_by,
           completed_by,
           assigned_to,
@@ -242,33 +243,55 @@ class LeadActivityService {
     const tasks = tasksResult.data || [];
     for (const task of tasks) {
       if (task.status === 'completed' && task.completed_at) {
+        const desc = task.completion_notes 
+          ? (task.description ? `${task.completion_notes} (Task: ${task.description})` : task.completion_notes)
+          : task.description;
         timeline.push({
           id: task.id,
           entry_type: 'follow_up_task',
           occurred_at: task.completed_at,
           title: `Completed: ${task.title}`,
-          description: task.description,
-          metadata: { task_status: task.status, priority: task.priority, completed: true },
+          description: desc,
+          metadata: { 
+            task_status: task.status, 
+            priority: task.priority, 
+            completed: true,
+            completion_notes: task.completion_notes 
+          },
           actor_id: task.completed_by || task.created_by
         });
       } else if (task.status === 'cancelled' && task.cancelled_at) {
+        const desc = task.completion_notes || task.cancellation_reason || task.description;
         timeline.push({
           id: task.id,
           entry_type: 'follow_up_task',
           occurred_at: task.cancelled_at,
           title: `Cancelled: ${task.title}`,
-          description: task.cancellation_reason || task.description,
-          metadata: { task_status: task.status, priority: task.priority },
+          description: desc,
+          metadata: { 
+            task_status: task.status, 
+            priority: task.priority,
+            cancellation_reason: task.cancellation_reason,
+            completion_notes: task.completion_notes
+          },
           actor_id: task.created_by
         });
       } else {
+        const desc = task.completion_notes 
+          ? (task.description ? `${task.completion_notes} (Task: ${task.description})` : task.completion_notes)
+          : task.description;
         timeline.push({
           id: task.id,
           entry_type: 'follow_up_task',
           occurred_at: task.created_at,
           title: `Task created: ${task.title}`,
-          description: task.description,
-          metadata: { task_status: task.status, priority: task.priority, due_date: task.due_date },
+          description: desc,
+          metadata: { 
+            task_status: task.status, 
+            priority: task.priority, 
+            due_date: task.due_date,
+            completion_notes: task.completion_notes
+          },
           actor_id: task.created_by
         });
 
@@ -278,8 +301,12 @@ class LeadActivityService {
             entry_type: 'follow_up_task',
             occurred_at: task.updated_at,
             title: `Task updated: ${task.title}`,
-            description: `Status changed to ${task.status}`,
-            metadata: { task_status: task.status, priority: task.priority },
+            description: task.completion_notes ? `Notes: ${task.completion_notes}` : `Status changed to ${task.status}`,
+            metadata: { 
+              task_status: task.status, 
+              priority: task.priority,
+              completion_notes: task.completion_notes
+            },
             actor_id: task.assigned_to || task.created_by
           });
         }
@@ -343,6 +370,7 @@ class LeadActivityService {
           completed_at,
           cancelled_at,
           cancellation_reason,
+          completion_notes,
           created_by,
           completed_by,
           assigned_to,
@@ -374,23 +402,55 @@ class LeadActivityService {
     const tasks = tasksResult.data || [];
     for (const task of tasks) {
       if (task.status === 'completed' && task.completed_at) {
+        const desc = task.completion_notes 
+          ? (task.description ? `${task.completion_notes} (Task: ${task.description})` : task.completion_notes)
+          : task.description;
         timeline.push({
           id: task.id,
           entry_type: 'follow_up_task',
           occurred_at: task.completed_at,
           title: `Completed: ${task.title}`,
-          description: task.description,
-          metadata: { task_status: task.status, priority: task.priority, completed: true },
+          description: desc,
+          metadata: { 
+            task_status: task.status, 
+            priority: task.priority, 
+            completed: true,
+            completion_notes: task.completion_notes
+          },
           actor_id: task.completed_by || task.created_by
         });
+      } else if (task.status === 'cancelled' && task.cancelled_at) {
+        const desc = task.completion_notes || task.cancellation_reason || task.description;
+        timeline.push({
+          id: task.id,
+          entry_type: 'follow_up_task',
+          occurred_at: task.cancelled_at,
+          title: `Cancelled: ${task.title}`,
+          description: desc,
+          metadata: { 
+            task_status: task.status, 
+            priority: task.priority,
+            cancellation_reason: task.cancellation_reason,
+            completion_notes: task.completion_notes
+          },
+          actor_id: task.created_by
+        });
       } else {
+        const desc = task.completion_notes 
+          ? (task.description ? `${task.completion_notes} (Task: ${task.description})` : task.completion_notes)
+          : task.description;
         timeline.push({
           id: task.id,
           entry_type: 'follow_up_task',
           occurred_at: task.created_at,
           title: `Task created: ${task.title}`,
-          description: task.description,
-          metadata: { task_status: task.status, priority: task.priority, due_date: task.due_date },
+          description: desc,
+          metadata: { 
+            task_status: task.status, 
+            priority: task.priority, 
+            due_date: task.due_date,
+            completion_notes: task.completion_notes 
+          },
           actor_id: task.created_by
         });
       }

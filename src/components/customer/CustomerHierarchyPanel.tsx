@@ -8,6 +8,7 @@ import { customerHierarchyService } from '../../services/customerHierarchyServic
 import { invoiceService } from '../../services/invoiceService';
 import { useToast } from '../ui/ToastProvider';
 import { useConfirmDialog } from '../../hooks/useConfirmDialog';
+import { useActionProgress } from '../../contexts/ActionProgressContext';
 import ConfirmDialog from '../ui/ConfirmDialog';
 import { useCompanyContext } from '../../contexts/CompanyContext';
 import {
@@ -42,6 +43,7 @@ export const CustomerHierarchyPanel: React.FC<CustomerHierarchyPanelProps> = ({
   const { selectedCompany } = useCompanyContext();
   const { showSuccess, showError } = useToast();
   const { confirm, dialogProps } = useConfirmDialog();
+  const { startAction, endAction } = useActionProgress();
 
   const [relationships, setRelationships] = useState<CustomerRelationship[]>(initialRelationships || []);
   const [allCustomers, setAllCustomers] = useState<Customer[]>([]);
@@ -140,6 +142,7 @@ export const CustomerHierarchyPanel: React.FC<CustomerHierarchyPanelProps> = ({
     });
     if (!ok) return;
 
+    startAction('Removing relationship…');
     try {
       await customerHierarchyService.deleteRelationship(rel.id);
       showSuccess('Relationship removed.');
@@ -147,6 +150,8 @@ export const CustomerHierarchyPanel: React.FC<CustomerHierarchyPanelProps> = ({
       if (hierarchyTree) await loadHierarchyTree();
     } catch {
       showError('Failed to remove relationship.');
+    } finally {
+      endAction();
     }
   };
 

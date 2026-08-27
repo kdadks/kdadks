@@ -32,6 +32,7 @@ import { PDFBrandingUtils } from '../../utils/pdfBrandingUtils';
 import PDFBrandingManager from '../admin/PDFBrandingManager';
 import { CurrencyDisplay } from '../ui/CurrencyDisplay';
 import { useConfirmDialog } from '../../hooks/useConfirmDialog';
+import { useActionProgress } from '../../contexts/ActionProgressContext';
 import { useCompanyContext } from '../../contexts/CompanyContext';
 import { CreateInvoice } from './CreateInvoice';
 import { EditInvoice } from './EditInvoice';
@@ -199,6 +200,7 @@ const getBankingCodeField = (company: CompanySettings | undefined | null): keyof
   const navigate = useNavigate();
   const { showSuccess, showError, showWarning, showInfo } = useToast();
   const { confirm, dialogProps } = useConfirmDialog();
+  const { startAction, endAction } = useActionProgress();
 
   useEffect(() => {
     loadData();
@@ -287,6 +289,7 @@ const getBankingCodeField = (company: CompanySettings | undefined | null): keyof
     });
     
     if (confirmed) {
+      startAction('Deleting product…');
       try {
         await invoiceService.deleteProduct(product.id);
         showSuccess('Product deleted successfully!');
@@ -294,6 +297,8 @@ const getBankingCodeField = (company: CompanySettings | undefined | null): keyof
       } catch (error) {
         console.error('Failed to delete product:', error);
         showError(`Failed to delete product: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      } finally {
+        endAction();
       }
     }
   };
@@ -481,6 +486,7 @@ const getBankingCodeField = (company: CompanySettings | undefined | null): keyof
     });
     
     if (confirmed) {
+      startAction('Deleting customer…');
       try {
         console.log('🗑️ Deleting customer:', customer.id);
         await invoiceService.deleteCustomer(customer.id);
@@ -490,6 +496,8 @@ const getBankingCodeField = (company: CompanySettings | undefined | null): keyof
       } catch (error) {
         console.error('❌ Failed to delete customer:', error);
         showError(`Failed to delete customer: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      } finally {
+        endAction();
       }
     }
   };
@@ -934,12 +942,15 @@ const getBankingCodeField = (company: CompanySettings | undefined | null): keyof
        type: 'info',
      });
      if (!confirmed) return;
+     startAction('Generating draft invoices…');
      try {
        const invoices = await invoiceService.generateDraftInvoicesFromSubscriptions();
        showSuccess(`${invoices.length} draft invoice(s) generated successfully!`);
        loadData();
      } catch (err) {
        showError(`Failed to generate draft invoices: ${err instanceof Error ? err.message : 'Unknown error'}`);
+     } finally {
+       endAction();
      }
    };
 
@@ -1383,6 +1394,7 @@ const getBankingCodeField = (company: CompanySettings | undefined | null): keyof
     });
     
     if (confirmed) {
+      startAction('Deleting invoice…');
       try {
         await invoiceService.deleteInvoice(invoice.id);
         showSuccess('Invoice deleted successfully!');
@@ -1390,6 +1402,8 @@ const getBankingCodeField = (company: CompanySettings | undefined | null): keyof
       } catch (error) {
         console.error('Failed to delete invoice:', error);
         showError(`Failed to delete invoice: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      } finally {
+        endAction();
       }
     }
   };

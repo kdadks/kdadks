@@ -60,9 +60,14 @@ export interface ContractParty {
 export interface ContractTemplate {
   id: string;
   template_name: string;
-  template_type: TemplateType;
+  contract_type: ContractType;
+  contract_title?: string;
   description?: string;
+  entity_law?: 'IRL' | 'IND' | 'ALL';
+  currency_code?: string;
+  preamble?: string;
   is_active: boolean;
+  is_custom?: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -75,6 +80,8 @@ export interface ContractTemplateSection {
   section_content: string;
   is_required: boolean;
   is_editable: boolean;
+  is_locked?: boolean;
+  page_break_before?: boolean;
   created_at: string;
   updated_at: string;
 }

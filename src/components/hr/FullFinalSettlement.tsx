@@ -19,6 +19,7 @@ import { settlementService } from '../../services/settlementService';
 import { employeeService } from '../../services/employeeService';
 import { useCompanyContext } from '../../contexts/CompanyContext';
 import { useToast } from '../ui/ToastProvider';
+import { useActionProgress } from '../../contexts/ActionProgressContext';
 import type {
   FullFinalSettlement,
   CreateSettlementInput,
@@ -47,6 +48,7 @@ const FullFinalSettlementComponent: React.FC<FullFinalSettlementProps> = ({
   const [previewData, setPreviewData] = useState<Partial<FullFinalSettlement> | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const { showSuccess, showError } = useToast();
+  const { startAction, endAction } = useActionProgress();
 
   // Form state
   const [formData, setFormData] = useState<CreateSettlementInput>({
@@ -132,6 +134,7 @@ const FullFinalSettlementComponent: React.FC<FullFinalSettlementProps> = ({
   };
 
   const handleApproveSettlement = async (id: string) => {
+    startAction('Approving settlement…');
     try {
       const updated = await settlementService.approveSettlement(id);
       setSettlements(settlements.map(s => s.id === id ? updated : s));
@@ -139,6 +142,8 @@ const FullFinalSettlementComponent: React.FC<FullFinalSettlementProps> = ({
     } catch (error) {
       console.error('Error approving settlement:', error);
       showError('Failed to approve settlement');
+    } finally {
+      endAction();
     }
   };
 
@@ -148,6 +153,7 @@ const FullFinalSettlementComponent: React.FC<FullFinalSettlementProps> = ({
     paymentReference: string,
     paymentDate: string
   ) => {
+    startAction('Marking settlement as paid…');
     try {
       const updated = await settlementService.markAsPaid(id, paymentMode, paymentReference, paymentDate);
       setSettlements(settlements.map(s => s.id === id ? updated : s));
@@ -155,6 +161,8 @@ const FullFinalSettlementComponent: React.FC<FullFinalSettlementProps> = ({
     } catch (error) {
       console.error('Error marking as paid:', error);
       showError('Failed to mark as paid');
+    } finally {
+      endAction();
     }
   };
 
@@ -166,6 +174,7 @@ const FullFinalSettlementComponent: React.FC<FullFinalSettlementProps> = ({
   const confirmDeleteSettlement = async () => {
     if (!settlementToDelete) return;
     
+    startAction('Deleting settlement…');
     setDeleting(true);
     try {
       await settlementService.deleteSettlement(settlementToDelete);
@@ -178,6 +187,7 @@ const FullFinalSettlementComponent: React.FC<FullFinalSettlementProps> = ({
       showError('Failed to delete settlement');
     } finally {
       setDeleting(false);
+      endAction();
     }
   };
 

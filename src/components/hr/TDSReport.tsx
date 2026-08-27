@@ -15,6 +15,7 @@ import {
 import { tdsReportService, TDSReportSummary } from '../../services/tdsReportService';
 import { PDFBrandingUtils } from '../../utils/pdfBrandingUtils';
 import { useToast } from '../ui/ToastProvider';
+import { useActionProgress } from '../../contexts/ActionProgressContext';
 import { supabase } from '../../config/supabase';
 import { useCompanyContext } from '../../contexts/CompanyContext';
 import type { CompanySettings } from '../../types/invoice';
@@ -43,6 +44,7 @@ const TDSReport: React.FC<TDSReportProps> = ({ onBackToDashboard }) => {
   const [previewEmployee, setPreviewEmployee] = useState<TDSReportSummary | null>(null);
   const [diagnostics, setDiagnostics] = useState<any>(null);
   const { showSuccess, showError } = useToast();
+  const { startAction, endAction } = useActionProgress();
   const { selectedCompany } = useCompanyContext();
 
   const [startDate, setStartDate] = useState(() => {
@@ -360,6 +362,7 @@ const TDSReport: React.FC<TDSReportProps> = ({ onBackToDashboard }) => {
   };
 
   const handlePreviewPDF = async (summary: TDSReportSummary) => {
+    startAction('Generating TDS PDF preview…');
     try {
       setGeneratingPdf(summary.employee_id);
       const pdf = await buildEmployeeTDSPdf(summary);
@@ -372,10 +375,12 @@ const TDSReport: React.FC<TDSReportProps> = ({ onBackToDashboard }) => {
       showError('Failed to generate TDS PDF');
     } finally {
       setGeneratingPdf(null);
+      endAction();
     }
   };
 
   const handleDownloadPDF = async (summary: TDSReportSummary) => {
+    startAction('Downloading TDS PDF report…');
     try {
       setGeneratingPdf(summary.employee_id);
       const pdf = await buildEmployeeTDSPdf(summary);
@@ -387,6 +392,7 @@ const TDSReport: React.FC<TDSReportProps> = ({ onBackToDashboard }) => {
       showError('Failed to download TDS PDF');
     } finally {
       setGeneratingPdf(null);
+      endAction();
     }
   };
 

@@ -176,7 +176,7 @@ class LeadFollowUpTaskService {
             opportunity_id: data.opportunity_id || null,
             activity_type: data.task_type || 'task',
             subject: `Completed Task: ${data.title}`,
-            description: notes || data.description || 'Task completed.',
+            description: notes ? (data.description ? `Notes: ${notes} | Task: ${data.description}` : `Notes: ${notes}`) : (data.description || 'Task completed.'),
             completed_at: new Date().toISOString(),
             created_by: currentUser.id
           });
@@ -246,6 +246,24 @@ class LeadFollowUpTaskService {
         status: 'in_progress',
         completion_notes: notes
       } as any);
+
+      if (notes && updatedTask.lead_id) {
+        const currentUser = await simpleAuth.getCurrentUser();
+        try {
+          await supabase
+            .from('lead_activities')
+            .insert({
+              lead_id: updatedTask.lead_id,
+              opportunity_id: updatedTask.opportunity_id || null,
+              activity_type: 'note',
+              subject: `Updated Task: ${updatedTask.title}`,
+              description: `Follow-up Notes: ${notes}`,
+              created_by: currentUser?.id || null
+            });
+        } catch (actErr) {
+          console.warn('Failed to log lead activity for in-progress task notes:', actErr);
+        }
+      }
     }
 
     let createdNextTask: LeadFollowUpTask | undefined = undefined;

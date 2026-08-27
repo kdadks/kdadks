@@ -18,6 +18,7 @@ import { leaveAttendanceService } from '../../services/leaveAttendanceService';
 import { employeeService } from '../../services/employeeService';
 import { useCompanyContext } from '../../contexts/CompanyContext';
 import { useToast } from '../ui/ToastProvider';
+import { useActionProgress } from '../../contexts/ActionProgressContext';
 import type { AttendanceRecord, MonthlyAttendanceSummary } from '../../types/payroll';
 import type { Employee } from '../../types/employee';
 import { supabase } from '../../config/supabase';
@@ -55,6 +56,7 @@ const AttendanceManagement: React.FC<AttendanceManagementProps> = ({ onBackToDas
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const { showSuccess, showError } = useToast();
+  const { startAction, endAction } = useActionProgress();
 
   // Holiday form state
   const [showHolidayForm, setShowHolidayForm] = useState(false);
@@ -234,6 +236,7 @@ const AttendanceManagement: React.FC<AttendanceManagementProps> = ({ onBackToDas
   const confirmDeleteHoliday = async () => {
     if (!holidayToDelete) return;
     
+    startAction('Deleting holiday…');
     setDeleting(true);
     try {
       const { error } = await supabase
@@ -249,6 +252,9 @@ const AttendanceManagement: React.FC<AttendanceManagementProps> = ({ onBackToDas
     } catch (error) {
       console.error('Error deleting holiday:', error);
       showError('Failed to delete holiday');
+    } finally {
+      setDeleting(false);
+      endAction();
     }
   };
 

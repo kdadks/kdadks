@@ -168,6 +168,7 @@ export interface InternOfferLetterData {
   // ── Reporting & Location ─────────────────────────────────────────────────
   reporting_to?: string;
   work_location?: string;
+  work_location_type?: 'onsite' | 'hybrid' | 'remote';
 
   // ── Signatory ────────────────────────────────────────────────────────────
   signatory_name?: string;
@@ -178,6 +179,9 @@ export interface InternOfferLetterData {
   legal_disclaimer?: string;            // Auto-inserted if omitted
   confidentiality_clause?: boolean;     // Include NDA/confidentiality section
   ip_assignment_clause?: boolean;       // Include IP assignment clause
+  ip_clause_text?: string;
+  asset_clause_text?: string;
+  jurisdiction?: string;
 
   // ── Version Control ───────────────────────────────────────────────────────
   version_meta?: DocumentVersionMeta;
@@ -222,6 +226,9 @@ export interface InternExperienceCertificateData {
 
   // ── Legal ─────────────────────────────────────────────────────────────────
   legal_disclaimer?: string;
+  ip_clause_text?: string;
+  asset_clause_text?: string;
+  jurisdiction?: string;
 
   // ── Version Control ───────────────────────────────────────────────────────
   version_meta?: DocumentVersionMeta;
@@ -303,6 +310,7 @@ export interface OfferLetterData {
   // Position Details
   reporting_to?: string;
   work_location?: string;
+  work_location_type?: 'onsite' | 'hybrid' | 'remote';
   employment_type?: string;
   
   // Roles and Responsibilities (editable by admin)
@@ -352,6 +360,11 @@ export interface OfferLetterData {
   benefits?: string[];
   terms_and_conditions?: string;
   other_details?: string;
+
+  // IP & Asset Management and Jurisdiction
+  ip_clause_text?: string;
+  asset_clause_text?: string;
+  jurisdiction?: string;
 }
 
 export interface SalaryCertificateData {
@@ -448,6 +461,11 @@ export interface ExperienceCertificateData {
   signatory_name?: string;
   signatory_designation?: string;
   contact_details?: string;
+
+  // IP & Asset Management and Jurisdiction
+  ip_clause_text?: string;
+  asset_clause_text?: string;
+  jurisdiction?: string;
 }
 
 export interface RelievingLetterData {
@@ -468,6 +486,11 @@ export interface RelievingLetterData {
   signatory_name?: string;
   signatory_designation?: string;
   contact_details?: string;
+
+  // IP & Asset Management and Jurisdiction
+  ip_clause_text?: string;
+  asset_clause_text?: string;
+  jurisdiction?: string;
 }
 
 export interface EmployeeStats {

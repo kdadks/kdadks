@@ -12,6 +12,7 @@ import {
 } from '../../services/financeService';
 import { useToast } from '../ui/ToastProvider';
 import { useConfirmDialog } from '../../hooks/useConfirmDialog';
+import { useActionProgress } from '../../contexts/ActionProgressContext';
 import ConfirmDialog from '../ui/ConfirmDialog';
 import { useCompanyContext } from '../../contexts/CompanyContext';
 import type { CompanySettings } from '../../types/invoice';
@@ -78,6 +79,7 @@ interface IncomeStats {
 const IncomeManagement: React.FC = () => {
   const { showError, showSuccess } = useToast();
   const { confirm, dialogProps } = useConfirmDialog();
+  const { startAction, endAction } = useActionProgress();
   const { selectedCompany, companies } = useCompanyContext();
 
   // Tabs
@@ -219,6 +221,7 @@ const IncomeManagement: React.FC = () => {
       type: 'danger'
     });
     if (!confirmed) return;
+    startAction('Deleting income entry…');
     try {
       await financeService.deleteTransaction(id);
       showSuccess('Income entry deleted');
@@ -226,6 +229,8 @@ const IncomeManagement: React.FC = () => {
     } catch (error) {
       console.error('Error deleting:', error);
       showError('Failed to delete income entry');
+    } finally {
+      endAction();
     }
   };
 
@@ -266,6 +271,7 @@ const IncomeManagement: React.FC = () => {
       type: 'danger'
     });
     if (!confirmed) return;
+    startAction('Deleting category…');
     try {
       await financeService.deleteIncomeCategory(id);
       showSuccess('Category deleted');
@@ -273,6 +279,8 @@ const IncomeManagement: React.FC = () => {
     } catch (error) {
       console.error('Error deleting category:', error);
       showError('Failed to delete category');
+    } finally {
+      endAction();
     }
   };
 

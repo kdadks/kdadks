@@ -15,8 +15,16 @@ export const getEntityPrefix = (company: CompanySettings | null | undefined): st
   return 'CUS';
 };
 
+const getCleanCustomerCode = (customer: Customer): string => {
+  if (customer.customer_code) return customer.customer_code;
+  if (!customer.id) return '';
+  const year = customer.created_at ? new Date(customer.created_at).getFullYear() : new Date().getFullYear();
+  return `${year}-${customer.id.substring(0, 4).toUpperCase()}`;
+};
+
 /**
  * Returns one or two display IDs for a customer.
+ * Format: ENTITY-YYYY-XXXX (e.g. "IND-2026-0001" or "IRL-2026-0001")
  * - Entity-specific customer → ["IND-2026-0001"]
  * - Shared customer (null company_settings_id) → ["IND-2026-0001", "IRL-2026-0001"]
  *   (same sequence number, both entity prefixes, since the customer is global)
@@ -25,7 +33,7 @@ export const getCustomerDisplayIds = (
   customer: Customer,
   companies: CompanySettings[]
 ): string[] => {
-  const code = customer.customer_code;
+  const code = getCleanCustomerCode(customer);
   if (!code) return [];
 
   if (customer.company_settings_id) {
@@ -37,13 +45,13 @@ export const getCustomerDisplayIds = (
   return companies.map(c => `${getEntityPrefix(c)}-${code}`);
 };
 
-/** Returns a single primary display ID (first one) for compact contexts like dropdowns. */
+/** Returns a single primary display ID (first one) for compact contexts like dropdowns. Format: "IND-2026-0001" */
 export const getPrimaryCustomerId = (
   customer: Customer,
   companies: CompanySettings[],
   activeCompany?: CompanySettings | null
 ): string => {
-  const code = customer.customer_code;
+  const code = getCleanCustomerCode(customer);
   if (!code) return '';
 
   if (customer.company_settings_id) {

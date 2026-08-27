@@ -1,6 +1,6 @@
 # Project Memory — KDADKS Website
 
-> Auto-updated by Kilo agent after every implementation. Last updated: 2026-08-24 14:00 IST
+> Auto-updated by Kilo agent after every implementation. Last updated: 2026-08-27 11:42 BST
 
 A comprehensive knowledge base for the KDADKS website codebase. This file serves as a single source of truth for project architecture, conventions, patterns, and key implementation details.
 
@@ -117,6 +117,7 @@ Routes are defined in `src/components/Router.tsx`. Admin routes all go to `Simpl
 | `/admin/hr/tds-report`        | TDSReport                |
 | `/admin/hr/performance`       | PerformanceFeedback      |
 | `/admin/hr/compensation`      | CompensationManagement   |
+| `/admin/hr/policies`          | PolicyManagement         |
 | `/admin/reporting/*`          | Various reporting components |
 
 ### State Management Pattern
@@ -128,6 +129,7 @@ The app uses React Context + hooks (no Redux):
   - Entity filter: `{ company_settings_id: selectedCompany?.id }`
   - Shared value sentinel: `'__shared__'` (used in `LeadManagement.tsx` and `OpportunityManagement.tsx` to represent "All Entities")
 - **ToastProvider** (`src/components/ui/ToastProvider.tsx`) — provides `showSuccess`, `showError`, `showWarning`, `showInfo` via `useToast()`
+- **ActionProgressContext** (`src/contexts/ActionProgressContext.tsx`) — provides `startAction(label)` and `endAction()` via `useActionProgress()` to display global progress pill overlays during long-running confirmed async operations across Admin, CRM, and HR components.
 - **useConfirmDialog** (`src/hooks/useConfirmDialog.ts`) — provides `confirm()` function and `dialogProps` for `ConfirmDialog` component
 - **AuthContext** (`src/contexts/AuthContext.tsx`)
 
@@ -192,8 +194,10 @@ src/
 │   │   └── BoardResolutionManagement.tsx
 │   ├── contract/
 │   │   ├── ContractManagement.tsx
+│   │   ├── ContractTemplateManagement.tsx
 │   │   ├── CreateContractModal.tsx
 │   │   ├── EditContractModal.tsx
+│   │   ├── EditTemplateModal.tsx
 │   │   ├── StatusUpdateModal.tsx
 │   │   └── ViewContractModal.tsx
 │   ├── customer/
@@ -221,6 +225,7 @@ src/
 │   │   ├── InternConversionWorkflow.tsx
 │   │   ├── RehireWorkflow.tsx
 │   │   ├── LeaveManagement.tsx
+│   │   ├── PolicyManagement.tsx
 │   │   └── TDSReport.tsx
 │   ├── invoice/
 │   │   ├── InvoiceManagement.tsx   # Core invoicing (6071 lines)
@@ -305,6 +310,7 @@ src/
 │   ├── salaryService.ts         # — salary
 │   ├── salaryStructureService.ts
 │   ├── tdsReportService.ts      # — TDS reports
+│   ├── policyService.ts         # — Policy & SOP management
 │   └── exchangeRateService.ts   # — currency exchange rates
 ├── types/                        # TypeScript type definitions
 │   ├── invoice.ts               # (574 lines) — core domain types
@@ -316,6 +322,7 @@ src/
 │   ├── payment.ts               # — payment types
 │   ├── admin.ts                 # — admin types
 │   ├── announcement.ts          # — announcement types
+│   ├── policy.ts                # — Policy & SOP domain types
 │   └── auth.ts                  # — auth types
 ├── utils/                        # Utility functions
 │   ├── taxUtils.ts              # (542 lines) — multi-country tax/banking fields
@@ -330,6 +337,7 @@ src/
 │   ├── customerCodeUtils.ts     # — customer code utilities
 │   ├── boardResolutionPDFGenerator.ts
 │   ├── contractPDFGenerator.ts
+│   ├── employmentDocumentTemplates.ts # — jurisdiction-aware prefilled document templates & IP/Asset clauses
 │   ├── internDocumentTemplates.ts
 │   ├── pdfBrandingUtils.ts
 │   └── salarySlipPDFGenerator.ts
@@ -341,7 +349,8 @@ src/
 │   └── countries.ts             # — country constants
 ├── data/
 │   ├── indianContractTemplates.ts
-│   └── irishContractTemplates.ts
+│   ├── irishContractTemplates.ts
+│   └── jurisdictionPolicyTemplates.ts # — Prefilled HR policies & SOPs for IN, IE, US, GB, AE, GLOBAL
 ├── database/
 │   └── initializer.ts           # — database initialization
 ├── examples/
@@ -501,7 +510,7 @@ The complete sales pipeline with status/stage transitions:
 - PAN validation regex: `^[A-Z]{5}[0-9]{4}[A-Z]{1}$`
 - GSTIN/VAT/CRO fields shown conditionally based on country
 - Lead number generated via `get_next_lead_opportunity_number({ p_record_type: 'lead' })`
-- **Lead to Draft Opportunity Conversion:** Admin users can generate a draft Opportunity entity directly from any existing Lead via dedicated action button or modal. Maps standard fields (Account/Customer, Expected Revenue, Currency, Stage, Target Close Date, Description) and auto-creates/links Customer records if missing while maintaining strict multi-entity data isolation (`company_settings_id`).
+- **Lead to Draft Opportunity Conversion:** Admin users can generate a draft Opportunity entity directly from any existing Lead via dedicated action button or modal. Maps standard fields (Account/Customer, Expected Revenue, Currency, Stage, Target Close Date, Description) and auto-creates/links Customer records via `invoiceService.createCustomer` (ensuring sequential `customer_code` generation like `2026-0001` and display IDs formatted as `IND-2026-0001` / `IRL-2026-0001`) while maintaining strict multi-entity data isolation (`company_settings_id`).
 - **Follow-up Tasks tab** for managing task priorities (low/medium/high/urgent), due dates, recurring follow-ups (daily/weekly/monthly/quarterly), and task assignments
 - **Timeline & Alerts tab** for unified chronological activity log combining all touchpoints (calls, emails, meetings, notes, tasks, status changes)
 - Automated alerts for overdue tasks, stale leads (14+ days no activity), and upcoming due dates
@@ -633,6 +642,7 @@ The database uses **9+ interconnected tables** with foreign key relationships (S
 
 Migrations are in `database/migrations/` (40+ SQL files). Key recent migrations:
 - `034_subscription_unique_ids_and_drafts.sql` — Unique Subscription ID generation (`SUB-YYYY-XXXX`), `draft` status constraint, `source_subscription_id` lineage tracking, atomic sequence generator RPC `get_next_subscription_number(p_year)`.
+- `035_policy_sop_management.sql` — Table `policies` for entity-filtered HR policies and SOPs across law jurisdictions with RLS and JSONB sections.
 - `033_customer_b2b_hierarchy.sql` — B2B hierarchy tables: `customer_relationships` (company↔company many-to-many) and `contact_customer_links` (contact↔company many-to-many cross-links)
 - `032_add_company_settings_id_to_subscription_plans.sql`
 - `031_add_completion_notes_to_lead_follow_up_tasks.sql`
@@ -789,6 +799,9 @@ Recent commits indicate active development on:
 6. **Payment gateway** — webhook security, RLS fixes
 7. **Company rebranding** — from "Kdadks Service Private Limited" to "Kdadks"
 8. **External API/MCP server plan** — architecture for external CRM integration
+9. **Vite Build Optimization & Code Splitting** — resolved dynamic import warnings (`invoiceService`, `quoteService`, `employeeService`), added `manualChunks` in `vite.config.ts` for vendor libraries (`vendor-react`, `vendor-supabase`, `vendor-icons`, `vendor-pdf-canvas`, `vendor-tinymce`, `vendor-motion`), and lazy-loaded admin sub-components (`React.lazy` + `Suspense`) in `SimpleAdminDashboard.tsx`, reducing initial bundle entry size from ~4.7 MB to ~517 kB.
+10. **HR Employment Documents & PDF Branding** — extended Experience Certificate, Relieving Letter, Form 16, Form 24Q, Internship Offer Letter, and Internship Experience Certificate PDFs with selected company header/footer branding (`PDFBrandingUtils.applyBranding`), converted Form 16 Part B and Form 24Q TDS schedule into structured PDF tables, resolved text overlapping for Internship position details and Work Location, added additional terms & conditions matching Offer Letter (IP Assignment, Asset Care & Return, Confidentiality, Notice Period, Governing Law Jurisdiction), and introduced multi-page automatic page breaks (`checkBreak`) to prevent bottom text overlap with footer images.
+11. **Compensation Table Data Integration & Signature/Width Layout Fixes** — updated Salary Certificate, Form 16, and Form 24Q document generators and UI to fetch real salary structure components from `employee_compensation` database table via `compensationService.getCurrentCompensation`, formatted Salary Certificate "TO WHOM IT MAY CONCERN" and text body across full document printable width (`contentWidth`), and reformatted Internship Offer Letter signature blocks to place Candidate Acceptance and Company Signatures side-by-side in two columns with `checkBreak` protection against footer image collisions.
 
 ---
 

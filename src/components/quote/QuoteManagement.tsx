@@ -26,6 +26,7 @@ import { invoiceService } from '../../services/invoiceService';
 import { useCompanyContext } from '../../contexts/CompanyContext';
 import { useToast } from '../ui/ToastProvider';
 import { useConfirmDialog } from '../../hooks/useConfirmDialog';
+import { useActionProgress } from '../../contexts/ActionProgressContext';
 import ConfirmDialog from '../ui/ConfirmDialog';
 import { PDFBrandingUtils } from '../../utils/pdfBrandingUtils';
 import { CurrencyDisplay } from '../ui/CurrencyDisplay';
@@ -109,6 +110,7 @@ const QuoteManagement: React.FC<QuoteManagementProps> = ({ onBackToDashboard }) 
 
   const { showSuccess, showError, showWarning, showInfo } = useToast();
   const { confirm, dialogProps } = useConfirmDialog();
+  const { startAction, endAction } = useActionProgress();
 
   useEffect(() => {
     loadData();
@@ -788,6 +790,7 @@ const QuoteManagement: React.FC<QuoteManagementProps> = ({ onBackToDashboard }) 
     });
     
     if (confirmed) {
+      startAction('Deleting quotation…');
       try {
         setLoading(true);
         await quoteService.deleteQuote(quote.id);
@@ -798,6 +801,7 @@ const QuoteManagement: React.FC<QuoteManagementProps> = ({ onBackToDashboard }) 
         showError(`Failed to delete quote: ${error instanceof Error ? error.message : 'Unknown error'}`);
       } finally {
         setLoading(false);
+        endAction();
       }
     }
   };
@@ -822,6 +826,7 @@ const QuoteManagement: React.FC<QuoteManagementProps> = ({ onBackToDashboard }) 
     });
     
     if (confirmed) {
+      startAction('Converting quotation to invoice…');
       try {
         showInfo('Converting quotation to invoice...');
         const result = await quoteService.convertToInvoice(quote.id);
@@ -830,6 +835,8 @@ const QuoteManagement: React.FC<QuoteManagementProps> = ({ onBackToDashboard }) 
       } catch (error) {
         console.error('Failed to convert quote to invoice:', error);
         showError(`Failed to convert quote: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      } finally {
+        endAction();
       }
     }
   };

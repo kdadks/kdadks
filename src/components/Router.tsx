@@ -13,6 +13,7 @@ import SEOContent from './SEOContent'
 import ScrollToTop from './ScrollToTop'
 import { ToastProvider } from './ui/ToastProvider'
 import { CompanyProvider } from '../contexts/CompanyContext'
+import { ActionProgressProvider } from '../contexts/ActionProgressContext'
 
 // Loading component
 const LoadingFallback = () => (
@@ -188,91 +189,94 @@ const Router = () => {
     <BrowserRouter>
       <ScrollToTop />
       <ToastProvider>
-        <CompanyProvider>
-          <Suspense fallback={<LoadingFallback />}>
-            <Routes>
-            {/* Main site routes */}
-            <Route path="/" element={<HomePage />} />
-            <Route path="/privacy" element={<PrivacyPage />} />
-            <Route path="/terms" element={<TermsPage />} />
-            <Route path="/shipping" element={<ShippingPage />} />
-            <Route path="/refund" element={<RefundPage />} />
-            <Route path="/team" element={<TeamPage />} />
-            
-            {/* Support routes */}
-            <Route path="/support" element={<CustomerSupportPage />} />
-            <Route path="/service-inquiry" element={<ServiceInquiryPage />} />
-            <Route path="/consultation" element={<BookConsultationPage />} />
-            <Route path="/partnership" element={<PartnershipPage />} />
-            
-            {/* Admin routes */}
-            <Route path="/admin/login" element={<AdminLogin />} />
-            <Route path="/admin" element={<SimpleAdminDashboard />} />
-            <Route path="/admin/invoices" element={<SimpleAdminDashboard />} />
-            <Route path="/admin/payments" element={<SimpleAdminDashboard />} />
-            <Route path="/admin/quotes" element={<SimpleAdminDashboard />} />
-            <Route path="/admin/contracts" element={<SimpleAdminDashboard />} />
-            <Route path="/admin/rate-cards" element={<SimpleAdminDashboard />} />
-            <Route path="/admin/announcements" element={<SimpleAdminDashboard />} />
-            <Route path="/admin/expenses" element={<SimpleAdminDashboard />} />
-            <Route path="/admin/income" element={<SimpleAdminDashboard />} />
-            <Route path="/admin/finance" element={<SimpleAdminDashboard />} />
-            <Route path="/admin/hr/employees" element={<SimpleAdminDashboard />} />
-            <Route path="/admin/hr/leave" element={<SimpleAdminDashboard />} />
-            <Route path="/admin/hr/attendance" element={<SimpleAdminDashboard />} />
-            <Route path="/admin/hr/settlement" element={<SimpleAdminDashboard />} />
-            <Route path="/admin/hr/tds-report" element={<SimpleAdminDashboard />} />
-            <Route path="/admin/hr/performance" element={<SimpleAdminDashboard />} />
-            <Route path="/admin/hr/compensation" element={<SimpleAdminDashboard />} />
-            <Route path="/admin/subscriptions" element={<SimpleAdminDashboard />} />
-            <Route path="/admin/board-resolutions" element={<SimpleAdminDashboard />} />
-            <Route path="/admin/settings" element={<SimpleAdminDashboard />} />
-            <Route path="/admin/customers" element={<SimpleAdminDashboard />} />
-            <Route path="/admin/customer-360" element={<SimpleAdminDashboard />} />
-            <Route path="/admin/leads" element={<SimpleAdminDashboard />} />
-            <Route path="/admin/opportunities" element={<SimpleAdminDashboard />} />
-            <Route path="/admin/products" element={<SimpleAdminDashboard />} />
-            
-            {/* Reporting & Analytics routes */}
-            <Route path="/admin/reporting" element={<SimpleAdminDashboard />} />
-            <Route path="/admin/reporting/hub" element={<SimpleAdminDashboard />} />
-            <Route path="/admin/reporting/customers" element={<SimpleAdminDashboard />} />
-            <Route path="/admin/reporting/leads" element={<SimpleAdminDashboard />} />
-            <Route path="/admin/reporting/opportunities" element={<SimpleAdminDashboard />} />
-            <Route path="/admin/reporting/subscriptions" element={<SimpleAdminDashboard />} />
-            <Route path="/admin/reporting/quotes" element={<SimpleAdminDashboard />} />
-            <Route path="/admin/reporting/invoices" element={<SimpleAdminDashboard />} />
-            <Route path="/admin/reporting/hr" element={<SimpleAdminDashboard />} />
-            <Route path="/admin/reporting/hr/attendance" element={<SimpleAdminDashboard />} />
-            <Route path="/admin/reporting/hr/leave" element={<SimpleAdminDashboard />} />
-            <Route path="/admin/reporting/hr/compensation" element={<SimpleAdminDashboard />} />
-            <Route path="/admin/reporting/hr/performance" element={<SimpleAdminDashboard />} />
-            
-            {/* Employee Portal routes */}
-            <Route path="/employee/login" element={<EmployeeLogin />} />
-            <Route path="/employee/change-password" element={<ChangePassword />} />
-            <Route path="/employee" element={<ProtectedEmployeeRoute><EmployeeLayout><EmployeeDashboard /></EmployeeLayout></ProtectedEmployeeRoute>} />
-            <Route path="/employee/leaves" element={<ProtectedEmployeeRoute><EmployeeLayout><LeaveManagement /></EmployeeLayout></ProtectedEmployeeRoute>} />
-            <Route path="/employee/attendance" element={<ProtectedEmployeeRoute><EmployeeLayout><AttendanceMarking /></EmployeeLayout></ProtectedEmployeeRoute>} />
-            <Route path="/employee/profile" element={<ProtectedEmployeeRoute><EmployeeLayout><EmployeeProfile /></EmployeeLayout></ProtectedEmployeeRoute>} />
-            <Route path="/employee/salary" element={<ProtectedEmployeeRoute><EmployeeLayout><EmployeeSalarySlips /></EmployeeLayout></ProtectedEmployeeRoute>} />
-            <Route path="/employee/documents" element={<ProtectedEmployeeRoute><EmployeeLayout><EmployeeDocuments /></EmployeeLayout></ProtectedEmployeeRoute>} />
-            <Route path="/employee/performance" element={<ProtectedEmployeeRoute><EmployeeLayout><EmployeePerformanceFeedback /></EmployeeLayout></ProtectedEmployeeRoute>} />
-            <Route path="/employee/compensation" element={<ProtectedEmployeeRoute><EmployeeLayout><EmployeeCompensation /></EmployeeLayout></ProtectedEmployeeRoute>} />
-            
-            {/* Payment routes */}
-            <Route path="/payment/:token" element={<CheckoutPage />} />
-            <Route path="/payment/checkout/:requestId" element={<CheckoutPage />} />
-            <Route path="/payment/success/:requestId" element={<PaymentSuccessPage />} />
-            <Route path="/payment/status/:requestId" element={<PaymentPage />} />
-            <Route path="/payment/success/:requestId" element={<PaymentPage />} />
-            <Route path="/payment/failure/:requestId" element={<PaymentPage />} />
-            
-            {/* Catch all route - redirect to home */}
-            <Route path="*" element={<HomePage />} />
-          </Routes>
-        </Suspense>
-        </CompanyProvider>
+        <ActionProgressProvider>
+          <CompanyProvider>
+            <Suspense fallback={<LoadingFallback />}>
+              <Routes>
+              {/* Main site routes */}
+              <Route path="/" element={<HomePage />} />
+              <Route path="/privacy" element={<PrivacyPage />} />
+              <Route path="/terms" element={<TermsPage />} />
+              <Route path="/shipping" element={<ShippingPage />} />
+              <Route path="/refund" element={<RefundPage />} />
+              <Route path="/team" element={<TeamPage />} />
+              
+              {/* Support routes */}
+              <Route path="/support" element={<CustomerSupportPage />} />
+              <Route path="/service-inquiry" element={<ServiceInquiryPage />} />
+              <Route path="/consultation" element={<BookConsultationPage />} />
+              <Route path="/partnership" element={<PartnershipPage />} />
+              
+              {/* Admin routes */}
+              <Route path="/admin/login" element={<AdminLogin />} />
+              <Route path="/admin" element={<SimpleAdminDashboard />} />
+              <Route path="/admin/invoices" element={<SimpleAdminDashboard />} />
+              <Route path="/admin/payments" element={<SimpleAdminDashboard />} />
+              <Route path="/admin/quotes" element={<SimpleAdminDashboard />} />
+              <Route path="/admin/contracts" element={<SimpleAdminDashboard />} />
+              <Route path="/admin/rate-cards" element={<SimpleAdminDashboard />} />
+              <Route path="/admin/announcements" element={<SimpleAdminDashboard />} />
+              <Route path="/admin/expenses" element={<SimpleAdminDashboard />} />
+              <Route path="/admin/income" element={<SimpleAdminDashboard />} />
+              <Route path="/admin/finance" element={<SimpleAdminDashboard />} />
+              <Route path="/admin/hr/employees" element={<SimpleAdminDashboard />} />
+              <Route path="/admin/hr/leave" element={<SimpleAdminDashboard />} />
+              <Route path="/admin/hr/attendance" element={<SimpleAdminDashboard />} />
+              <Route path="/admin/hr/settlement" element={<SimpleAdminDashboard />} />
+              <Route path="/admin/hr/tds-report" element={<SimpleAdminDashboard />} />
+              <Route path="/admin/hr/performance" element={<SimpleAdminDashboard />} />
+              <Route path="/admin/hr/compensation" element={<SimpleAdminDashboard />} />
+              <Route path="/admin/hr/policies" element={<SimpleAdminDashboard />} />
+              <Route path="/admin/subscriptions" element={<SimpleAdminDashboard />} />
+              <Route path="/admin/board-resolutions" element={<SimpleAdminDashboard />} />
+              <Route path="/admin/settings" element={<SimpleAdminDashboard />} />
+              <Route path="/admin/customers" element={<SimpleAdminDashboard />} />
+              <Route path="/admin/customer-360" element={<SimpleAdminDashboard />} />
+              <Route path="/admin/leads" element={<SimpleAdminDashboard />} />
+              <Route path="/admin/opportunities" element={<SimpleAdminDashboard />} />
+              <Route path="/admin/products" element={<SimpleAdminDashboard />} />
+              
+              {/* Reporting & Analytics routes */}
+              <Route path="/admin/reporting" element={<SimpleAdminDashboard />} />
+              <Route path="/admin/reporting/hub" element={<SimpleAdminDashboard />} />
+              <Route path="/admin/reporting/customers" element={<SimpleAdminDashboard />} />
+              <Route path="/admin/reporting/leads" element={<SimpleAdminDashboard />} />
+              <Route path="/admin/reporting/opportunities" element={<SimpleAdminDashboard />} />
+              <Route path="/admin/reporting/subscriptions" element={<SimpleAdminDashboard />} />
+              <Route path="/admin/reporting/quotes" element={<SimpleAdminDashboard />} />
+              <Route path="/admin/reporting/invoices" element={<SimpleAdminDashboard />} />
+              <Route path="/admin/reporting/hr" element={<SimpleAdminDashboard />} />
+              <Route path="/admin/reporting/hr/attendance" element={<SimpleAdminDashboard />} />
+              <Route path="/admin/reporting/hr/leave" element={<SimpleAdminDashboard />} />
+              <Route path="/admin/reporting/hr/compensation" element={<SimpleAdminDashboard />} />
+              <Route path="/admin/reporting/hr/performance" element={<SimpleAdminDashboard />} />
+              
+              {/* Employee Portal routes */}
+              <Route path="/employee/login" element={<EmployeeLogin />} />
+              <Route path="/employee/change-password" element={<ChangePassword />} />
+              <Route path="/employee" element={<ProtectedEmployeeRoute><EmployeeLayout><EmployeeDashboard /></EmployeeLayout></ProtectedEmployeeRoute>} />
+              <Route path="/employee/leaves" element={<ProtectedEmployeeRoute><EmployeeLayout><LeaveManagement /></EmployeeLayout></ProtectedEmployeeRoute>} />
+              <Route path="/employee/attendance" element={<ProtectedEmployeeRoute><EmployeeLayout><AttendanceMarking /></EmployeeLayout></ProtectedEmployeeRoute>} />
+              <Route path="/employee/profile" element={<ProtectedEmployeeRoute><EmployeeLayout><EmployeeProfile /></EmployeeLayout></ProtectedEmployeeRoute>} />
+              <Route path="/employee/salary" element={<ProtectedEmployeeRoute><EmployeeLayout><EmployeeSalarySlips /></EmployeeLayout></ProtectedEmployeeRoute>} />
+              <Route path="/employee/documents" element={<ProtectedEmployeeRoute><EmployeeLayout><EmployeeDocuments /></EmployeeLayout></ProtectedEmployeeRoute>} />
+              <Route path="/employee/performance" element={<ProtectedEmployeeRoute><EmployeeLayout><EmployeePerformanceFeedback /></EmployeeLayout></ProtectedEmployeeRoute>} />
+              <Route path="/employee/compensation" element={<ProtectedEmployeeRoute><EmployeeLayout><EmployeeCompensation /></EmployeeLayout></ProtectedEmployeeRoute>} />
+              
+              {/* Payment routes */}
+              <Route path="/payment/:token" element={<CheckoutPage />} />
+              <Route path="/payment/checkout/:requestId" element={<CheckoutPage />} />
+              <Route path="/payment/success/:requestId" element={<PaymentSuccessPage />} />
+              <Route path="/payment/status/:requestId" element={<PaymentPage />} />
+              <Route path="/payment/success/:requestId" element={<PaymentPage />} />
+              <Route path="/payment/failure/:requestId" element={<PaymentPage />} />
+              
+              {/* Catch all route - redirect to home */}
+              <Route path="*" element={<HomePage />} />
+            </Routes>
+          </Suspense>
+          </CompanyProvider>
+        </ActionProgressProvider>
       </ToastProvider>
     </BrowserRouter>
   )

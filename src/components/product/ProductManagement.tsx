@@ -4,11 +4,13 @@ import { invoiceService } from '../../services/invoiceService';
 import { useToast } from '../ui/ToastProvider';
 import ConfirmDialog from '../ui/ConfirmDialog';
 import { useConfirmDialog } from '../../hooks/useConfirmDialog';
+import { useActionProgress } from '../../contexts/ActionProgressContext';
 import type { Product, CreateProductData } from '../../types/invoice';
 
 const ProductManagement: React.FC = () => {
   const { showSuccess, showError } = useToast();
   const { confirm, dialogProps } = useConfirmDialog();
+  const { startAction, endAction } = useActionProgress();
 
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
@@ -130,12 +132,15 @@ const ProductManagement: React.FC = () => {
       type: 'danger',
     });
     if (!confirmed) return;
+    startAction('Deleting product…');
     try {
       await invoiceService.deleteProduct(product.id);
       showSuccess('Product deleted successfully!');
       await loadProducts();
     } catch (err) {
       showError(`Failed to delete product: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    } finally {
+      endAction();
     }
   };
 

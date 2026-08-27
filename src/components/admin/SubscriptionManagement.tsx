@@ -23,6 +23,9 @@ import { subscriptionService } from '../../services/subscriptionService';
 import { invoiceService } from '../../services/invoiceService';
 import { useToast } from '../ui/ToastProvider';
 import { useCompanyContext } from '../../contexts/CompanyContext';
+import { useConfirmDialog } from '../../hooks/useConfirmDialog';
+import { useActionProgress } from '../../contexts/ActionProgressContext';
+import ConfirmDialog from '../ui/ConfirmDialog';
 import { formatCustomerOption, getPrimaryCustomerId } from '../../utils/customerCodeUtils';
 import { formatCurrencyWithSymbol } from '../../utils/currencyConverter';
 import type {
@@ -262,6 +265,8 @@ const SubscriptionManagement: React.FC<SubscriptionManagementProps> = () => {
   const [expiryDismissed, setExpiryDismissed] = useState(false);
 
   const { showSuccess, showError } = useToast();
+  const { confirm, dialogProps } = useConfirmDialog();
+  const { startAction, endAction } = useActionProgress();
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -340,15 +345,25 @@ const SubscriptionManagement: React.FC<SubscriptionManagementProps> = () => {
   };
 
   const deactivatePlan = async (plan: SubscriptionPlan) => {
-    if (!confirm(`Deactivate "${plan.name}"? Existing subscriptions are not affected.`)) return;
+    const confirmed = await confirm({
+      title: 'Deactivate Plan',
+      message: `Deactivate "${plan.name}"? Existing subscriptions are not affected.`,
+      confirmText: 'Deactivate',
+      cancelText: 'Cancel',
+      type: 'warning',
+    });
+    if (!confirmed) return;
+    startAction('Deactivating plan…');
     try {
       await subscriptionService.deactivatePlan(plan.id);
       showSuccess('Plan deactivated');
       loadData();
     } catch { showError('Failed to deactivate plan'); }
+    finally { endAction(); }
   };
 
   const reactivatePlan = async (plan: SubscriptionPlan) => {
+    startAction('Reactivating plan…');
     try {
       await supabase
         .from('subscription_plans')
@@ -357,6 +372,7 @@ const SubscriptionManagement: React.FC<SubscriptionManagementProps> = () => {
       showSuccess('Plan reactivated');
       loadData();
     } catch { showError('Failed to reactivate plan'); }
+    finally { endAction(); }
   };
 
   // ── Create subscription handler ────────────────────────────────────────────
@@ -428,58 +444,103 @@ const SubscriptionManagement: React.FC<SubscriptionManagementProps> = () => {
        active: 'activate', draft: 'save as draft', paused: 'pause', cancelled: 'cancel', expired: 'expire',
      };
      const label = labels[status];
-     if (!confirm(
-       `${label.charAt(0).toUpperCase() + label.slice(1)} subscription for "${sub.customer?.company_name || sub.customer?.contact_person}"?`,
-     )) return;
+     const typeMap: Record<string, 'danger' | 'warning' | 'info'> = {
+       active: 'info', draft: 'info', paused: 'warning', cancelled: 'danger', expired: 'warning',
+     };
+     const confirmed = await confirm({
+       title: `${label.charAt(0).toUpperCase() + label.slice(1)} Subscription`,
+       message: `${label.charAt(0).toUpperCase() + label.slice(1)} subscription for "${sub.customer?.company_name || sub.customer?.contact_person}"?`,
+       confirmText: label.charAt(0).toUpperCase() + label.slice(1),
+       cancelText: 'Cancel',
+       type: typeMap[status] ?? 'warning',
+     });
+     if (!confirmed) return;
+     const actionLabel = `${label.charAt(0).toUpperCase() + label.slice(1)}ing subscription…`;
+     startAction(actionLabel);
      try {
        await subscriptionService.updateSubscriptionStatus(sub.id, status);
        showSuccess(`Subscription status updated to ${status}`);
        loadData();
      } catch (err) {
        showError(err instanceof Error ? err.message : 'Failed to update status');
+     } finally {
+       endAction();
      }
    };
 
    const handleCloneSubscription = async (sub: CustomerSubscription) => {
+     startAction('Cloning subscription as draft…');
      try {
        const cloned = await subscriptionService.cloneSubscription(sub.id);
        showSuccess(`Subscription cloned as Draft (${cloned.subscription_number || cloned.id.slice(0, 8)})`);
        loadData();
      } catch (err) {
        showError(err instanceof Error ? err.message : 'Failed to clone subscription');
+     } finally {
+       endAction();
      }
    };
 
    const handleDeleteSubscription = async (sub: CustomerSubscription) => {
-     if (!confirm(`Delete draft subscription ${sub.subscription_number || ''}?`)) return;
+     const confirmed = await confirm({
+       title: 'Delete Draft Subscription',
+       message: `Are you sure you want to delete draft subscription ${sub.subscription_number || ''}? This action cannot be undone.`,
+       confirmText: 'Delete',
+       cancelText: 'Cancel',
+       type: 'danger',
+     });
+     if (!confirmed) return;
+     startAction('Deleting draft subscription…');
      try {
        await subscriptionService.deleteSubscription(sub.id);
        showSuccess('Draft subscription deleted');
        loadData();
      } catch (err) {
        showError(err instanceof Error ? err.message : 'Failed to delete draft subscription');
+     } finally {
+       endAction();
      }
    };
 
    const handleGenerateDraftInvoice = async (sub: CustomerSubscription) => {
-     if (!confirm(`Generate a draft invoice for subscription "${sub.plan?.name}" — ${sub.customer?.company_name || sub.customer?.contact_person}?`)) return;
+     const confirmed = await confirm({
+       title: 'Generate Draft Invoice',
+       message: `Generate a draft invoice for subscription "${sub.plan?.name}" — ${sub.customer?.company_name || sub.customer?.contact_person}?`,
+       confirmText: 'Generate',
+       cancelText: 'Cancel',
+       type: 'info',
+     });
+     if (!confirmed) return;
+     startAction('Generating draft invoice — this may take a few seconds…');
      try {
        const invoice = await subscriptionService.generateDraftInvoice(sub.id);
        showSuccess(`Draft invoice ${invoice.invoice_number} created successfully!`);
        loadData();
      } catch (err) {
        showError(`Failed to generate draft invoice: ${err instanceof Error ? err.message : 'Unknown error'}`);
+     } finally {
+       endAction();
      }
    };
 
    const handleGenerateAllDraftInvoices = async () => {
-     if (!confirm('Generate draft invoices for all due subscriptions?')) return;
+     const confirmed = await confirm({
+       title: 'Generate All Draft Invoices',
+       message: 'Generate draft invoices for all due subscriptions? This will create draft invoices for all active subscriptions whose next billing date is today or in the past.',
+       confirmText: 'Generate All',
+       cancelText: 'Cancel',
+       type: 'info',
+     });
+     if (!confirmed) return;
+     startAction('Generating draft invoices for all due subscriptions…');
      try {
        const invoices = await invoiceService.generateDraftInvoicesFromSubscriptions();
        showSuccess(`${invoices.length} draft invoice(s) generated successfully!`);
        loadData();
      } catch (err) {
        showError(`Failed to generate draft invoices: ${err instanceof Error ? err.message : 'Unknown error'}`);
+     } finally {
+       endAction();
      }
    };
 
@@ -845,6 +906,9 @@ const SubscriptionManagement: React.FC<SubscriptionManagementProps> = () => {
           </div>
         </div>
       )}
+
+      {/* ── Confirm Dialog ──────────────────────────────────────────────── */}
+      <ConfirmDialog {...dialogProps} />
     </div>
   );
 
