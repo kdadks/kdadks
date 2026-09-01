@@ -1,4 +1,4 @@
-# AGENTS.md — Kilo Agent Instructions
+# AGENTS.md — Agent Instructions
 
 > This file provides core instructions to the Kilo coding agent for the KDADKS Website project.
 

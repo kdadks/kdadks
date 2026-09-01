@@ -1,7 +1,8 @@
 // Admin Permissions & Override Controls Utility
 // Enforces role-based permissions and entity boundary validation within selected company context
 
-import { simpleAuth, SimpleUser } from './simpleAuth';
+import { simpleAuth } from './simpleAuth';
+import { RoleService } from '../services/roleService';
 
 export type UserRole = 'admin' | 'manager' | 'sales_rep';
 
@@ -16,14 +17,25 @@ export interface UserPermissions {
 }
 
 /**
- * Get current user role from session or default to 'admin' for authenticated admin users
+ * Get current user role from session or RBAC service
  */
 export async function getCurrentUserRole(): Promise<UserRole> {
   const user = await simpleAuth.getCurrentUser();
   if (!user) return 'sales_rep';
+
+  try {
+    const { role } = await RoleService.getCurrentUserEffectivePermissions();
+    if (role) {
+      if (role.slug === 'super_admin' || role.slug.includes('admin')) return 'admin';
+      if (role.slug.includes('manager') || role.slug.includes('lead')) return 'manager';
+      if (role.slug.includes('sales')) return 'sales_rep';
+    }
+  } catch (e) {
+    console.warn('Error fetching dynamic role in getCurrentUserRole:', e);
+  }
   
-  // Default authenticated users in admin dashboard have 'admin' privileges
-  return 'admin';
+  // Fallback if role is not resolved
+  return user.email.toLowerCase() === 'admin@kdadks.com' ? 'admin' : 'sales_rep';
 }
 
 /**
@@ -62,3 +74,4 @@ export function validateCompanyBoundary(
   if (!activeCompanyId || !entityCompanyId) return true;
   return entityCompanyId === activeCompanyId;
 }
+

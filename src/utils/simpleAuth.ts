@@ -126,6 +126,25 @@ export const simpleAuth = {
         }
       }
 
+      if (data?.user?.email) {
+        try {
+          const knownRaw = localStorage.getItem('kdadks_known_auth_users');
+          const known: any[] = knownRaw ? JSON.parse(knownRaw) : [];
+          const userEmail = data.user.email.toLowerCase().trim();
+          if (!known.some(u => (u.email || '').toLowerCase().trim() === userEmail)) {
+            known.unshift({
+              id: data.user.id,
+              email: data.user.email,
+              full_name: data.user.user_metadata?.full_name || data.user.email.split('@')[0],
+              created_at: data.user.created_at,
+            });
+            localStorage.setItem('kdadks_known_auth_users', JSON.stringify(known));
+          }
+        } catch (e) {
+          // ignore
+        }
+      }
+
       const result = {
         success: true as const,
         user: data.user,

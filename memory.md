@@ -1,6 +1,6 @@
 # Project Memory — KDADKS Website
 
-> Auto-updated by Kilo agent after every implementation. Last updated: 2026-08-27 11:42 BST
+> Auto-updated by Kilo agent after every implementation. Last updated: 2026-09-01 13:56 BST
 
 A comprehensive knowledge base for the KDADKS website codebase. This file serves as a single source of truth for project architecture, conventions, patterns, and key implementation details.
 
@@ -110,6 +110,8 @@ Routes are defined in `src/components/Router.tsx`. Admin routes all go to `Simpl
 | `/admin/income`               | IncomeManagement         |
 | `/admin/finance`              | FinanceManagement        |
 | `/admin/settings`             | InvoiceSettings          |
+| `/admin/roles`                | RoleManagement (RBAC)    |
+| `/admin/users`                | RoleManagement (Users)   |
 | `/admin/hr/employees`         | EmploymentDocuments      |
 | `/admin/hr/leave`             | LeaveManagement          |
 | `/admin/hr/attendance`        | AttendanceManagement     |
@@ -591,6 +593,29 @@ A centralized 360-degree operational dashboard connecting all records for a cust
   - `ContactNetworkPanel.tsx` — per-contact cross-company links, expandable view, add/remove cross-link modal
 - **Types:** `src/types/customerHierarchy.ts` — `CustomerRelationship`, `ContactCustomerLink`, `CustomerHierarchyNode`, `RELATIONSHIP_TYPE_LABELS`, `RELATIONSHIP_TYPE_BADGE_CLASSES`, `INVERSE_RELATIONSHIP`
 
+### Role-Based Access Control (RBAC) System (`src/components/admin/roles/RoleManagement.tsx`)
+
+A unified enterprise-grade access control and permissions management subsystem:
+- **Core Service (`src/services/roleService.ts`):** Role CRUD with full editability across all fields by Super Admin, granular permission updates, Supabase Auth user registration/invitation (`supabase.auth.signUp`), user role mapping, audit logging, and `getSelectableUsers()` querying both `auth.users` (via `get_auth_users` RPC / `system_auth_users` view) and the `employees` directory.
+- **Granular Permission Matrix:** 6 capability actions (`view`, `create`, `edit`, `delete`, `approve`, `export`) across 26 modules categorized into 7 core functional areas:
+  - *CRM & Sales*: Leads, Opportunities, Customers, Customer 360 & Hierarchy, Quotes.
+  - *Billing & Invoicing*: Invoices, Payments, Subscriptions, Rate Cards.
+  - *Finance & Treasury*: Income, Operational Expenses, Financial Health & P&L.
+  - *HR & People*: Employees, Attendance, Leave, Compensation & Payslips, Full & Final Settlement, Policies & SOPs, Performance Reviews.
+  - *Governance & Legal*: Board Resolutions, Contracts & Templates, Announcements.
+  - *Analytics & Reporting*: Reporting Hub across all business verticals.
+  - *System & Security Admin*: Organization Settings, PDF Branding, Payment Gateways, Roles & Access Control.
+- **Default System Roles & Presets:** Super Admin (unrestricted executive privileges, auto-assigned to `admin@kdadks.com`), Sales Manager, Finance & Billing Officer, HR Operations Manager, Legal & Compliance Officer, Auditor (Read-Only), and Employee / Staff Member (preserves `/employee` self-service portal workflows).
+- **UI Components (`src/components/admin/roles/`):**
+  - `RoleManagement.tsx` — Main shell with executive KPI cards and tab navigation (Roles, User Assignments, Access Matrix, Audit Activity).
+  - `RoleListTab.tsx` — Role cards with status indicators, permission coverage progress bars, user count chips, and action triggers.
+  - `RoleModal.tsx` — Role creation, editing, cloning, quick preset buttons, and category-grouped interactive permission matrix.
+  - `UserAssignmentsTab.tsx` — User role assignment table with search, role/entity/status filters, and inline role switchers.
+  - `UserAssignmentModal.tsx` — Modal supporting assignment of Supabase Auth accounts (`auth.users`) and employees (cleanly displayed with names and emails, hiding raw UUIDs), as well as direct invitation of new users.
+  - `RoleAccessMatrixTab.tsx` — Side-by-side comparative grid matrix across all roles with CSV export.
+  - `RoleAuditLogTab.tsx` — Chronological timeline of RBAC modifications with actor info.
+- **Permissions Enforcer Hook (`src/hooks/useRolePermissions.ts`):** Provides `can(module, action)`, `hasAny(module)`, `currentRole`, `isAdmin`, and `isSuperAdmin` for any React component.
+
 ---
 
 ## 6. Database Schema
@@ -634,6 +659,10 @@ The database uses **9+ interconnected tables** with foreign key relationships (S
 | employment_documents | → employees                          |
 | full_final_settlements | → employees                        |
 | salary_increments  | → employees                            |
+| policies           | → company_settings — HR policies & SOP documents per company entity and jurisdiction |
+| roles              | → company_settings — System and custom RBAC roles with JSONB permission mapping |
+| user_role_assignments | → roles, company_settings — User-to-role mappings with entity scoping and Supabase auth |
+| role_audit_logs    | Chronological audit log of RBAC modifications |
 
 ### Key Functions
 - `get_next_lead_opportunity_number(p_record_type)` — generates LEAD/OPP numbers with sequence per year
@@ -641,8 +670,9 @@ The database uses **9+ interconnected tables** with foreign key relationships (S
 ### Database Migrations
 
 Migrations are in `database/migrations/` (40+ SQL files). Key recent migrations:
-- `034_subscription_unique_ids_and_drafts.sql` — Unique Subscription ID generation (`SUB-YYYY-XXXX`), `draft` status constraint, `source_subscription_id` lineage tracking, atomic sequence generator RPC `get_next_subscription_number(p_year)`.
+- `036_role_based_access_control.sql` — Tables `roles`, `user_role_assignments`, and `role_audit_logs` for RBAC with granular action permissions across 26 modules, default role seeds (Super Admin, Sales Manager, Finance Officer, HR Manager, Compliance Officer, Auditor, Employee Portal), auto-assignment of `admin@kdadks.com`, secure RPC function `get_auth_users()`, and view `system_auth_users` exposing `auth.users` safely for admin assignment.
 - `035_policy_sop_management.sql` — Table `policies` for entity-filtered HR policies and SOPs across law jurisdictions with RLS and JSONB sections.
+- `034_subscription_unique_ids_and_drafts.sql` — Unique Subscription ID generation (`SUB-YYYY-XXXX`), `draft` status constraint, `source_subscription_id` lineage tracking, atomic sequence generator RPC `get_next_subscription_number(p_year)`.
 - `033_customer_b2b_hierarchy.sql` — B2B hierarchy tables: `customer_relationships` (company↔company many-to-many) and `contact_customer_links` (contact↔company many-to-many cross-links)
 - `032_add_company_settings_id_to_subscription_plans.sql`
 - `031_add_completion_notes_to_lead_follow_up_tasks.sql`
@@ -721,7 +751,17 @@ npm validate         # Validate deployment configuration
 | `src/services/leadActivityService.ts` | Activity service with unified timeline generation for leads/opportunities |
 | `src/utils/taxUtils.ts` | 542-line multi-country tax & banking field utilities |
 | `src/utils/leadEntityUtils.ts` | Entity prefix, tax label, validation for leads/opportunities |
-| `src/types/invoice.ts` | 574 lines — core domain type definitions |
+| `src/components/hr/PolicyManagement.tsx` | Comprehensive HR Policy & SOP lifecycle management UI with jurisdiction templates |
+| `src/services/policyService.ts` | CRUD service for entity-filtered HR policies, version control, and employee acknowledgments |
+| `src/services/roleService.ts` | CRUD service for RBAC roles, granular permissions, user assignments, Supabase Auth invites, and audit logs |
+| `src/components/admin/roles/RoleManagement.tsx` | Comprehensive RBAC management UI with roles catalog, user assignments, access matrix, and audit logs |
+| `src/hooks/useRolePermissions.ts` | Dynamic permission check hook for React components (`can`, `hasAny`, `isAdmin`) |
+| `src/types/role.ts` | Domain types for RBAC roles, permissions, modules, categories, user assignments, and presets |
+| `src/data/jurisdictionPolicyTemplates.ts` | Country-specific default policy templates across law jurisdictions (IN, IE, US, GB, AE, SG) |
+| `src/utils/policyPDFGenerator.ts` | Branded PDF exporter for official HR policies and SOP documents |
+| `src/contexts/ActionProgressContext.tsx` | Global context provider for action progress notifications and loading indicators |
+| `src/utils/customerCodeUtils.ts` | Customer code auto-generation utility with country entity prefixing |
+| `src/types/policy.ts` | Type definitions for HR policies, SOP sections, approval statuses, and employee acknowledgments |
 | `netlify.toml` | Build config, redirects (SPA fallback), security headers, scheduled functions |
 
 ---
@@ -788,17 +828,50 @@ All reporting components follow a consistent enterprise-grade pattern:
 
 ---
 
-## 11. Recent Changes (Git Log)
+## 11. HR Policy & SOP Management System Workflow
+
+The **HR Policy & SOP Management System** provides enterprise-grade policy lifecycle management, jurisdiction-aware standard templates, digital employee acknowledgments, version tracking, and automated PDF exports.
+
+### Architecture & Key Modules
+
+1. **Policy Management Component (`src/components/hr/PolicyManagement.tsx`)**:
+   - Tabbed UI for Policy List, Policy Details/Preview, Policy Form (Create/Edit), and Employee Acknowledgments Matrix.
+   - Filtering by Company Entity (`useCompanyContext`), Category (Code of Conduct, Leave & Attendance, IT & Security, Health & Safety, Compensation, General), Jurisdiction (India, Ireland, USA, UK, UAE, Singapore), and Approval Status.
+   - Interactive Rich Text Editor integration (`RichTextEditor.tsx` / TinyMCE) with structural JSONB section builders.
+
+2. **Policy Service (`src/services/policyService.ts`)**:
+   - `getPolicies(companyId, filters)` — fetches entity-filtered policies from Supabase PostgreSQL table `policies`.
+   - `createPolicy`, `updatePolicy`, `deletePolicy` — full CRUD with version incrementing (`version`, `template_version`).
+   - `acknowledgePolicy(policyId, employeeId)` & `getPolicyAcknowledgements(policyId)` — tracks digital signatures, employee IP addresses, timestamps, and version compliance.
+
+3. **Jurisdiction Policy Templates (`src/data/jurisdictionPolicyTemplates.ts`)**:
+   - Pre-configured policy templates tailored for specific legal jurisdictions:
+     - **India (IN)**: POSH policy, Standing Orders, Shops & Establishments compliance, Provident Fund & Gratuity clauses.
+     - **Ireland (IE)**: Organisation of Working Time Act compliance, Sick Leave Act 2022, GDPR data protection.
+     - **United States (US)**: At-will employment disclaimers, FLSA overtime classification, FMLA leave provisions.
+     - **UK (GB)**: Employment Rights Act 1996 compliance, Working Time Regulations 1998, Statutory Sick Pay (SSP).
+     - **UAE (AE)**: UAE Labour Law (Federal Decree-Law No. 33 of 2021) compliance, End of Service Gratuity rules.
+     - **Singapore (SG)**: Employment Act (Cap. 91) compliance, Central Provident Fund (CPF) regulations.
+
+4. **Policy PDF Generator (`src/utils/policyPDFGenerator.ts`)**:
+   - Generates multi-page, publication-ready policy PDFs applying company branding header (`PDFBrandingUtils.applyBranding`), table of contents, structured section numbering, disclaimer boxes, and signatory metadata blocks.
+
+5. **Database Migration (`database/migrations/035_policy_sop_management.sql`)**:
+   - Defines `policies` and `policy_acknowledgements` tables with Row Level Security (RLS) policies, JSONB section arrays, versioning timestamps, and audit logging support.
+
+---
+
+## 12. Recent Changes (Git Log)
 
 Recent commits indicate active development on:
-1. **Lead & Opportunity Management** — full CRUD with note functionality, currency support, entity filtering
-2. **Follow-up Task Management** — task priorities, recurring follow-ups, due dates, reminders, automated alerts for overdue and stale leads
-3. **Lead Timeline & Activity Tracking** — unified chronological timeline consolidating all touchpoints (calls, emails, meetings, notes, tasks, status changes)
-4. **Multi-country tax/banking refactor** — `resolveCountryCode` function, VAT/CRO field display, IBAN/SWIFT fields
-5. **Subscription management** — draft invoice generation from subscription data
-6. **Payment gateway** — webhook security, RLS fixes
-7. **Company rebranding** — from "Kdadks Service Private Limited" to "Kdadks"
-8. **External API/MCP server plan** — architecture for external CRM integration
+1. **HR Policy & SOP Management System** — implemented end-to-end policy management workflow (`PolicyManagement.tsx`, `policyService.ts`, `035_policy_sop_management.sql`, `jurisdictionPolicyTemplates.ts`, `policyPDFGenerator.ts`), global progress tracking context (`ActionProgressContext.tsx`), customer code auto-generation utility (`customerCodeUtils.ts`), and Contract Template Management (`ContractTemplateManagement.tsx`, `EditTemplateModal.tsx`) [Commit `6e60189`].
+2. **Lead & Opportunity Management** — full CRUD with note functionality, currency support, entity filtering.
+3. **Follow-up Task Management** — task priorities, recurring follow-ups, due dates, reminders, automated alerts for overdue and stale leads.
+4. **Lead Timeline & Activity Tracking** — unified chronological timeline consolidating all touchpoints (calls, emails, meetings, notes, tasks, status changes).
+5. **Multi-country tax/banking refactor** — `resolveCountryCode` function, VAT/CRO field display, IBAN/SWIFT fields.
+6. **Subscription management** — draft invoice generation from subscription data.
+7. **Payment gateway** — webhook security, RLS fixes.
+8. **Company rebranding** — from "Kdadks Service Private Limited" to "Kdadks".
 9. **Vite Build Optimization & Code Splitting** — resolved dynamic import warnings (`invoiceService`, `quoteService`, `employeeService`), added `manualChunks` in `vite.config.ts` for vendor libraries (`vendor-react`, `vendor-supabase`, `vendor-icons`, `vendor-pdf-canvas`, `vendor-tinymce`, `vendor-motion`), and lazy-loaded admin sub-components (`React.lazy` + `Suspense`) in `SimpleAdminDashboard.tsx`, reducing initial bundle entry size from ~4.7 MB to ~517 kB.
 10. **HR Employment Documents & PDF Branding** — extended Experience Certificate, Relieving Letter, Form 16, Form 24Q, Internship Offer Letter, and Internship Experience Certificate PDFs with selected company header/footer branding (`PDFBrandingUtils.applyBranding`), converted Form 16 Part B and Form 24Q TDS schedule into structured PDF tables, resolved text overlapping for Internship position details and Work Location, added additional terms & conditions matching Offer Letter (IP Assignment, Asset Care & Return, Confidentiality, Notice Period, Governing Law Jurisdiction), and introduced multi-page automatic page breaks (`checkBreak`) to prevent bottom text overlap with footer images.
 11. **Compensation Table Data Integration & Signature/Width Layout Fixes** — updated Salary Certificate, Form 16, and Form 24Q document generators and UI to fetch real salary structure components from `employee_compensation` database table via `compensationService.getCurrentCompensation`, formatted Salary Certificate "TO WHOM IT MAY CONCERN" and text body across full document printable width (`contentWidth`), and reformatted Internship Offer Letter signature blocks to place Candidate Acceptance and Company Signatures side-by-side in two columns with `checkBreak` protection against footer image collisions.
