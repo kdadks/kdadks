@@ -25,21 +25,31 @@ const CreateContractModal: React.FC<CreateContractModalProps> = ({ onSave, onClo
   const [activeTab, setActiveTab] = useState<'basic' | 'parties' | 'sections' | 'milestones'>('basic');
   const [templateApplied, setTemplateApplied] = useState(false);
 
-  // True when the selected company is the Irish entity
-  const isIrishEntity = companies.find(c => c.id === selectedCompany?.id)?.country?.code === 'IE' ||
-    companies.find(c => c.id === selectedCompany?.id)?.country?.code === 'IRL';
-  const isIndianEntity = companies.find(c => c.id === selectedCompany?.id)?.country?.code === 'IN' ||
-    companies.find(c => c.id === selectedCompany?.id)?.country?.code === 'IND';
-  const hasEntityTemplates = isIrishEntity || isIndianEntity;
-  const lawName = isIndianEntity ? 'Indian Law' : isIrishEntity ? 'Irish Law' : 'Contract';
-
-  const [availableTemplates, setAvailableTemplates] = useState<any[]>([]);
-  
   // Form state
   const [formData, setFormData] = useState<CreateContractData>(initialData);
   const [sections, setSections] = useState<CreateContractSectionData[]>(initialData.sections || []);
   const [milestones, setMilestones] = useState<CreateContractMilestoneData[]>(initialData.milestones || []);
   const [selectedCustomerId, setSelectedCustomerId] = useState<string>(initialData?.customer_id || '');
+
+  // Entity jurisdiction resolution
+  const targetCompany = companies.find(c => c.id === (formData.company_settings_id || initialData?.company_settings_id || selectedCompany?.id)) || selectedCompany || companies[0];
+
+  const targetCountryCode = (
+    targetCompany?.country?.code ||
+    targetCompany?.country_id ||
+    selectedCompany?.country?.code ||
+    selectedCompany?.country_id ||
+    formData?.entity_prefix ||
+    initialData?.entity_prefix ||
+    ''
+  ).toUpperCase();
+
+  const isIrishEntity = targetCountryCode === 'IE' || targetCountryCode === 'IRL' || formData?.entity_prefix === 'IRL' || initialData?.entity_prefix === 'IRL' || formData?.currency_code === 'EUR';
+  const isIndianEntity = !isIrishEntity && (targetCountryCode === 'IN' || targetCountryCode === 'IND' || formData?.entity_prefix === 'IND' || initialData?.entity_prefix === 'IND');
+  const hasEntityTemplates = isIrishEntity || isIndianEntity;
+  const lawName = isIndianEntity ? 'Indian Law' : isIrishEntity ? 'Irish Law' : 'Contract';
+
+  const [availableTemplates, setAvailableTemplates] = useState<any[]>([]);
 
   const contractTypes: ContractType[] = ['MSA', 'SOW', 'NDA', 'SLA', 'WORK_ORDER', 'MAINTENANCE', 'CONSULTING', 'LICENSE', 'OTHER'];
   const currencies = ['INR', 'USD', 'EUR', 'GBP', 'AED', 'SGD', 'AUD', 'CAD', 'JPY', 'CNY'];
@@ -248,6 +258,7 @@ const CreateContractModal: React.FC<CreateContractModalProps> = ({ onSave, onClo
       // Clean up date fields - convert empty strings to undefined
       const contractData: CreateContractData = {
         ...formData,
+        company_settings_id: formData.company_settings_id || initialData?.company_settings_id || selectedCompany?.id,
         expiry_date: formData.expiry_date || undefined,
         preamble: formData.preamble || undefined,
         contract_value: formData.contract_value, // Save in original currency

@@ -3,6 +3,7 @@ import { X, Save, Plus, Trash2, GripVertical } from 'lucide-react';
 import { convertToINR, convertFromINR, formatCurrencyWithSymbol } from '../../utils/currencyConverter';
 import type { ContractWithDetails, CreateContractSectionData, CreateContractMilestoneData, ContractType, UpdateContractData } from '../../types/contract';
 import RichTextEditor from '../ui/RichTextEditor';
+import { useCompanyContext } from '../../contexts/CompanyContext';
 
 interface EditContractModalProps {
   contract: ContractWithDetails;
@@ -11,11 +12,13 @@ interface EditContractModalProps {
 }
 
 const EditContractModal: React.FC<EditContractModalProps> = ({ contract, onSave, onClose }) => {
+  const { companies, selectedCompany } = useCompanyContext();
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<'basic' | 'parties' | 'sections' | 'milestones'>('basic');
   
   // Form state - use contract values directly (no conversion needed)
   const [formData, setFormData] = useState({
+    company_settings_id: contract.company_settings_id || selectedCompany?.id,
     contract_title: contract.contract_title,
     contract_type: contract.contract_type,
     contract_date: contract.contract_date,
@@ -33,14 +36,31 @@ const EditContractModal: React.FC<EditContractModalProps> = ({ contract, onSave,
     party_a_contact: contract.party_a_contact || '',
     party_a_gstin: contract.party_a_gstin || '',
     party_a_pan: contract.party_a_pan || '',
+    party_a_vat_number: (contract as any).party_a_vat_number || contract.party_a_gstin || '',
+    party_a_cro_number: (contract as any).party_a_cro_number || contract.party_a_pan || '',
     
     // Party B
     party_b_name: contract.party_b_name,
     party_b_address: contract.party_b_address || '',
     party_b_contact: contract.party_b_contact || '',
     party_b_gstin: contract.party_b_gstin || '',
-    party_b_pan: contract.party_b_pan || ''
+    party_b_pan: contract.party_b_pan || '',
+    party_b_vat_number: (contract as any).party_b_vat_number || contract.party_b_gstin || '',
+    party_b_cro_number: (contract as any).party_b_cro_number || contract.party_b_pan || ''
   });
+
+  // Entity jurisdiction resolution
+  const targetCompany = companies.find(c => c.id === (formData.company_settings_id || contract.company_settings_id || selectedCompany?.id)) || selectedCompany || companies[0];
+
+  const targetCountryCode = (
+    targetCompany?.country?.code ||
+    targetCompany?.country_id ||
+    selectedCompany?.country?.code ||
+    selectedCompany?.country_id ||
+    ''
+  ).toUpperCase();
+
+  const isIrishEntity = targetCountryCode === 'IE' || targetCountryCode === 'IRL' || contract.contract_number?.includes('/IRL/') || formData.currency_code === 'EUR';
 
   const [sections, setSections] = useState<CreateContractSectionData[]>(
     contract.sections.map((s) => ({
@@ -153,6 +173,7 @@ const EditContractModal: React.FC<EditContractModalProps> = ({ contract, onSave,
       const updateData = {
         id: contract.id,
         ...formData,
+        company_settings_id: formData.company_settings_id || contract.company_settings_id || selectedCompany?.id,
         expiry_date: formData.expiry_date || undefined, // Convert empty string to undefined
         preamble: formData.preamble || undefined,
         contract_value: formData.contract_value, // Save in original currency
@@ -414,19 +435,23 @@ const EditContractModal: React.FC<EditContractModalProps> = ({ contract, onSave,
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">GSTIN</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      {isIrishEntity ? 'VAT Number' : 'GSTIN'}
+                    </label>
                     <input
                       type="text"
-                      value={formData.party_a_gstin}
+                      value={isIrishEntity ? (formData.party_a_vat_number || formData.party_a_gstin || '') : (formData.party_a_gstin || '')}
                       readOnly
                       className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 text-gray-600 cursor-not-allowed"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">PAN</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      {isIrishEntity ? 'CRO Number' : 'PAN'}
+                    </label>
                     <input
                       type="text"
-                      value={formData.party_a_pan}
+                      value={isIrishEntity ? (formData.party_a_cro_number || formData.party_a_pan || '') : (formData.party_a_pan || '')}
                       readOnly
                       className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 text-gray-600 cursor-not-allowed"
                     />
@@ -443,8 +468,8 @@ const EditContractModal: React.FC<EditContractModalProps> = ({ contract, onSave,
                     <input
                       type="text"
                       value={formData.party_b_name}
-                      readOnly
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 text-gray-600 cursor-not-allowed"
+                      onChange={(e) => handleInputChange('party_b_name', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-transparent"
                       required
                     />
                   </div>
@@ -452,8 +477,8 @@ const EditContractModal: React.FC<EditContractModalProps> = ({ contract, onSave,
                     <label className="block text-sm font-medium text-gray-700 mb-1">Address</label>
                     <textarea
                       value={formData.party_b_address}
-                      readOnly
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 text-gray-600 cursor-not-allowed"
+                      onChange={(e) => handleInputChange('party_b_address', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-transparent"
                       rows={2}
                     />
                   </div>
@@ -462,26 +487,30 @@ const EditContractModal: React.FC<EditContractModalProps> = ({ contract, onSave,
                     <input
                       type="text"
                       value={formData.party_b_contact}
-                      readOnly
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 text-gray-600 cursor-not-allowed"
+                      onChange={(e) => handleInputChange('party_b_contact', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-transparent"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">GSTIN</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      {isIrishEntity ? 'VAT Number' : 'GSTIN'}
+                    </label>
                     <input
                       type="text"
-                      value={formData.party_b_gstin}
-                      readOnly
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 text-gray-600 cursor-not-allowed"
+                      value={isIrishEntity ? (formData.party_b_vat_number || formData.party_b_gstin || '') : (formData.party_b_gstin || '')}
+                      onChange={(e) => handleInputChange(isIrishEntity ? 'party_b_vat_number' : 'party_b_gstin', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-transparent"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">PAN</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      {isIrishEntity ? 'CRO Number' : 'PAN'}
+                    </label>
                     <input
                       type="text"
-                      value={formData.party_b_pan}
-                      readOnly
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 text-gray-600 cursor-not-allowed"
+                      value={isIrishEntity ? (formData.party_b_cro_number || formData.party_b_pan || '') : (formData.party_b_pan || '')}
+                      onChange={(e) => handleInputChange(isIrishEntity ? 'party_b_cro_number' : 'party_b_pan', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-transparent"
                     />
                   </div>
                 </div>

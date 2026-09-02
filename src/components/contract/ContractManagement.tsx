@@ -148,6 +148,7 @@ const ContractManagement: React.FC = () => {
     }
 
     setFormData({
+      company_settings_id: company.id || selectedCompany?.id,
       party_a_name: company.company_name || '',
       party_a_address: fullAddress,
       party_a_contact: company.phone || '',
@@ -160,7 +161,7 @@ const ContractManagement: React.FC = () => {
       contract_title: '',
       contract_date: new Date().toISOString().split('T')[0],
       effective_date: new Date().toISOString().split('T')[0],
-      currency_code: selectedCompany?.country?.code === 'IE' || selectedCompany?.country?.code === 'IRL' ? 'EUR' : 'INR',
+      currency_code: selectedCompany?.country?.code === 'IE' || selectedCompany?.country?.code === 'IRL' || selectedCompany?.country_id === 'IE' || selectedCompany?.country_id === 'IRL' ? 'EUR' : 'INR',
       entity_prefix: getEntityPrefix(selectedCompany),
       sections: [
         {
@@ -178,7 +179,11 @@ const ContractManagement: React.FC = () => {
   // Handle save new contract
   const handleSaveNewContract = async (contractData: CreateContractData) => {
     try {
-      const created = await contractService.createContract(contractData);
+      const dataToSave = {
+        ...contractData,
+        company_settings_id: contractData.company_settings_id || selectedCompany?.id
+      };
+      const created = await contractService.createContract(dataToSave);
       await contractAuditService.log(created.id, 'create', 'contract', undefined, created.contract_number);
       showSuccess('Contract created successfully');
       setShowCreateModal(false);

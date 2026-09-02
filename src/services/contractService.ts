@@ -359,13 +359,18 @@ class ContractService {
 
     const contractToInsert: any = {
       ...contractInfo,
+      company_settings_id: isUuid(contractData.company_settings_id) ? contractData.company_settings_id : undefined,
+      customer_id: isUuid(contractData.customer_id) ? contractData.customer_id : undefined,
       template_id: isUuid(contractInfo.template_id) ? contractInfo.template_id : undefined,
-      company_settings_id: contractData.company_settings_id || undefined,
       contract_type: contractData.contract_type ? String(contractData.contract_type).substring(0, 10) : 'OTHER',
-      party_a_gstin: (contractInfo.party_a_gstin || party_a_vat_number) ? String(contractInfo.party_a_gstin || party_a_vat_number).substring(0, 15) : undefined,
-      party_a_pan: (contractInfo.party_a_pan || party_a_cro_number) ? String(contractInfo.party_a_pan || party_a_cro_number).substring(0, 10) : undefined,
-      party_b_gstin: (contractInfo.party_b_gstin || party_b_vat_number) ? String(contractInfo.party_b_gstin || party_b_vat_number).substring(0, 15) : undefined,
-      party_b_pan: (contractInfo.party_b_pan || party_b_cro_number) ? String(contractInfo.party_b_pan || party_b_cro_number).substring(0, 10) : undefined,
+      party_a_vat_number: contractData.party_a_vat_number ? String(contractData.party_a_vat_number).substring(0, 50) : undefined,
+      party_a_cro_number: contractData.party_a_cro_number ? String(contractData.party_a_cro_number).substring(0, 50) : undefined,
+      party_b_vat_number: contractData.party_b_vat_number ? String(contractData.party_b_vat_number).substring(0, 50) : undefined,
+      party_b_cro_number: contractData.party_b_cro_number ? String(contractData.party_b_cro_number).substring(0, 50) : undefined,
+      party_a_gstin: contractData.party_a_gstin ? String(contractData.party_a_gstin).substring(0, 15) : undefined,
+      party_a_pan: contractData.party_a_pan ? String(contractData.party_a_pan).substring(0, 10) : undefined,
+      party_b_gstin: contractData.party_b_gstin ? String(contractData.party_b_gstin).substring(0, 15) : undefined,
+      party_b_pan: contractData.party_b_pan ? String(contractData.party_b_pan).substring(0, 10) : undefined,
       contract_number: contractNumber,
       currency_code: contractData.currency_code ? String(contractData.currency_code).substring(0, 5) : 'INR',
       status: 'draft',
@@ -385,17 +390,8 @@ class ContractService {
       }
     });
 
-    // Insert contract
-    const { data: contract, error: contractError } = await supabase
-      .from('contracts')
-      .insert(contractToInsert)
-      .select()
-      .single();
-
-    if (contractError) {
-      console.error('Supabase contract insert error:', contractError);
-      throw new Error(contractError.message || contractError.details || 'Database error creating contract');
-    }
+    // Insert contract safely with missing column fallback
+    const contract = await this.safeInsertContract(contractToInsert);
 
     // Insert sections
     if (sections && sections.length > 0) {
@@ -597,22 +593,38 @@ class ContractService {
     }
 
     const isUuid = (str?: string) => str ? /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str) : false;
-    const { id, sections, milestones, template_id, ...updateData } = contractData;
+    const { 
+      id, 
+      sections, 
+      milestones, 
+      template_id, 
+      ...updateData 
+    } = contractData as any;
 
     const payload: any = {
       ...updateData,
-      ...(template_id !== undefined ? { template_id: isUuid(template_id) ? template_id : null } : {})
+      company_settings_id: isUuid(contractData.company_settings_id) ? contractData.company_settings_id : undefined,
+      customer_id: isUuid(contractData.customer_id) ? contractData.customer_id : undefined,
+      ...(template_id !== undefined ? { template_id: isUuid(template_id) ? template_id : null } : {}),
+      party_a_vat_number: contractData.party_a_vat_number ? String(contractData.party_a_vat_number).substring(0, 50) : undefined,
+      party_a_cro_number: contractData.party_a_cro_number ? String(contractData.party_a_cro_number).substring(0, 50) : undefined,
+      party_b_vat_number: contractData.party_b_vat_number ? String(contractData.party_b_vat_number).substring(0, 50) : undefined,
+      party_b_cro_number: contractData.party_b_cro_number ? String(contractData.party_b_cro_number).substring(0, 50) : undefined,
+      party_a_gstin: contractData.party_a_gstin ? String(contractData.party_a_gstin).substring(0, 15) : undefined,
+      party_a_pan: contractData.party_a_pan ? String(contractData.party_a_pan).substring(0, 10) : undefined,
+      party_b_gstin: contractData.party_b_gstin ? String(contractData.party_b_gstin).substring(0, 15) : undefined,
+      party_b_pan: contractData.party_b_pan ? String(contractData.party_b_pan).substring(0, 10) : undefined,
     };
 
-    // Update contract
-    const { data: contract, error: contractError } = await supabase
-      .from('contracts')
-      .update(payload)
-      .eq('id', id)
-      .select()
-      .single();
+    // Clean payload of undefined properties
+    Object.keys(payload).forEach(key => {
+      if (payload[key] === undefined) {
+        delete payload[key];
+      }
+    });
 
-    if (contractError) throw contractError;
+    // Update contract safely with missing column fallback
+    const contract = await this.safeUpdateContract(id, payload);
 
     // Update sections if provided
     if (sections) {
@@ -624,7 +636,7 @@ class ContractService {
 
       // Insert new sections
       if (sections.length > 0) {
-        const sectionsToInsert = sections.map(section => ({
+        const sectionsToInsert = sections.map((section: any) => ({
           contract_id: id,
           section_number: section.section_number,
           section_title: section.section_title,
@@ -651,7 +663,7 @@ class ContractService {
 
       // Insert new milestones
       if (milestones.length > 0) {
-        const milestonesToInsert = milestones.map(milestone => ({
+        const milestonesToInsert = milestones.map((milestone: any) => ({
           contract_id: id,
           milestone_number: milestone.milestone_number,
           milestone_title: milestone.milestone_title,
@@ -861,6 +873,41 @@ class ContractService {
     });
 
     return stats;
+  }
+  // Helper to execute insert safely if columns might be missing in schema
+  private async safeInsertContract(payload: any) {
+    let currentPayload = { ...payload };
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const { data, error } = await supabase.from('contracts').insert(currentPayload).select().single();
+      if (!error) return data;
+      if (error.code === 'PGRST204' && error.message) {
+        const match = error.message.match(/'([^']+)'/);
+        if (match && match[1] && Object.prototype.hasOwnProperty.call(currentPayload, match[1])) {
+          delete currentPayload[match[1]];
+          continue;
+        }
+      }
+      throw error;
+    }
+    throw new Error('Failed to insert contract');
+  }
+
+  // Helper to execute update safely if columns might be missing in schema
+  private async safeUpdateContract(id: string, payload: any) {
+    let currentPayload = { ...payload };
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const { data, error } = await supabase.from('contracts').update(currentPayload).eq('id', id).select().single();
+      if (!error) return data;
+      if (error.code === 'PGRST204' && error.message) {
+        const match = error.message.match(/'([^']+)'/);
+        if (match && match[1] && Object.prototype.hasOwnProperty.call(currentPayload, match[1])) {
+          delete currentPayload[match[1]];
+          continue;
+        }
+      }
+      throw error;
+    }
+    throw new Error('Failed to update contract');
   }
 }
 

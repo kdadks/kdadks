@@ -161,6 +161,7 @@ export interface ContractAmendment {
 export interface Contract {
   id: string;
   contract_number: string;
+  company_settings_id?: string;
   template_id?: string;
   
   // Parties
