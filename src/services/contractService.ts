@@ -355,8 +355,11 @@ class ContractService {
       ...contractInfo 
     } = contractData;
 
+    const isUuid = (str?: string) => str ? /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str) : false;
+
     const contractToInsert: any = {
       ...contractInfo,
+      template_id: isUuid(contractInfo.template_id) ? contractInfo.template_id : undefined,
       company_settings_id: contractData.company_settings_id || undefined,
       contract_type: contractData.contract_type ? String(contractData.contract_type).substring(0, 10) : 'OTHER',
       party_a_gstin: (contractInfo.party_a_gstin || party_a_vat_number) ? String(contractInfo.party_a_gstin || party_a_vat_number).substring(0, 15) : undefined,
@@ -593,12 +596,18 @@ class ContractService {
       throw new Error('Database is not configured');
     }
 
-    const { id, sections, milestones, ...updateData } = contractData;
+    const isUuid = (str?: string) => str ? /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str) : false;
+    const { id, sections, milestones, template_id, ...updateData } = contractData;
+
+    const payload: any = {
+      ...updateData,
+      ...(template_id !== undefined ? { template_id: isUuid(template_id) ? template_id : null } : {})
+    };
 
     // Update contract
     const { data: contract, error: contractError } = await supabase
       .from('contracts')
-      .update(updateData)
+      .update(payload)
       .eq('id', id)
       .select()
       .single();

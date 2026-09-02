@@ -549,6 +549,7 @@ The complete sales pipeline with status/stage transitions:
 - Status badges with color coding
 - Can convert accepted quote to invoice via `quoteService.convertToInvoice()`
 - Automated draft contract creation workflow for accepted quotes: when a quote status is updated to `accepted` or when clicking "Create Draft Contract" on accepted quotes, reuses the exact feature-rich `CreateContractModal` component (`src/components/contract/CreateContractModal.tsx`). Pre-populates company legal details, customer data, quote total, items/deliverables scope of work, dates, and terms while enabling full tabbed editing (Basic Info, Parties, Sections, Milestones) and dynamic jurisdiction template switching (`IRL` Irish Law vs `IND` Indian Law).
+- Fixed `contractService.createContract` and `updateContract` payload validation to sanitize `template_id` UUID strings (`isUuid`). Prevents PostgreSQL `22P02` syntax errors when passing built-in jurisdiction template IDs (e.g. `builtin-irish-sow`).
 - Fixed `contractService.generateContractNumber` entity prefix resolution to properly map `'IE'` / `'IRL'` to `'IRL'` (preventing Irish contracts from defaulting to `'IND'`).
 - Enforced strict entity boundary isolation on `/admin/contracts` via `.eq('company_settings_id', company_settings_id)` in `contractService.getContracts` & `getStatistics`, ensuring Irish entity views strictly show contracts linked to the Ireland entity.
 
