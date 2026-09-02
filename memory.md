@@ -1,6 +1,6 @@
 # Project Memory — KDADKS Website
 
-> Auto-updated by Kilo agent after every implementation. Last updated: 2026-09-01 13:56 BST
+> Auto-updated by Kilo agent after every implementation. Last updated: 2026-09-02 16:45 BST
 
 A comprehensive knowledge base for the KDADKS website codebase. This file serves as a single source of truth for project architecture, conventions, patterns, and key implementation details.
 
@@ -542,9 +542,18 @@ The complete sales pipeline with status/stage transitions:
 - Discount support (percentage or fixed)
 - Tax calculated on discounted subtotal (proportional allocation)
 - Number to words conversion for Indian numbering system
-- PDF generation with branding (header image / blue bar fallback)
+- PDF generation with branding (header image / green bar fallback)
+- Status badge positioned to the right of the Customer ("To:") block (right-aligned to right margin) to eliminate overlap with the Company contact details
+- Company contact person lines constrained to 85mm column width with dedicated email/phone labels to prevent horizontal spillover
+- Entity-aware dashboard stats tile formatting: queries stats with active entity context (`selectedCompany?.id`) and formats totals/icons dynamically in the entity's native currency (e.g. € for Ireland/IRL, ₹ for India/IN, $ for USA)
 - Status badges with color coding
 - Can convert accepted quote to invoice via `quoteService.convertToInvoice()`
+- Automated draft contract creation workflow for accepted quotes: when a quote status is updated to `accepted` or when clicking "Create Draft Contract" on accepted quotes, opens a configuration modal allowing users to select Contract Type (`SOW`, `MSA`, `NDA`, `SLA`, `WORK_ORDER`, etc.), title, dates, contract value, and terms. Automatically loads jurisdiction-specific template sections (`IRL` Irish Law vs `IND` Indian Law) bound to the company legal entity.
+
+### Contract Management (`src/components/contract/ContractManagement.tsx`)
+
+- Entity-aware dashboard statistics calculation in `contractService.getStatistics(companySettingsId)` natively aggregating contract values for the selected entity
+- Dynamic currency formatting in dashboard tiles (`Total Value`) adhering to `selectedCompany` currency (e.g. € for Ireland/IRL, ₹ for India/IN, $ for USA)
 
 ### Invoice Management (`src/components/invoice/InvoiceManagement.tsx`)
 
@@ -554,6 +563,10 @@ The complete sales pipeline with status/stage transitions:
 - Multi-currency support (EUR, USD, INR) with live/cached exchange rate conversion via `exchangeRateService`.
 - Multi-currency grid view displaying both primary currency and calculated INR value (`(~₹...)`) in both **Dashboard** and **Invoices** tabs.
 - Exact paid amount tracking displaying the user-entered payment value under Amount and Payment status columns once an invoice is marked as paid.
+
+### Lead Management (`src/components/lead/LeadManagement.tsx`)
+
+- Add/Edit lead modal includes explicit **Status** dropdown selector (`new` | `contacted` | `qualified` | `disqualified` | `converted`), permitting direct status updates when creating or editing leads.
 
 ### Lead/Opportunity Activity Tracking
 

@@ -889,8 +889,8 @@ class QuoteService {
       expired_quotes: quotes?.filter(q => q.status === 'expired').length || 0,
       converted_quotes: quotes?.filter(q => q.status === 'converted').length || 0,
       
-      total_quoted_amount: quotes?.filter(q => q.status !== 'expired' && q.status !== 'rejected').reduce((sum, q) => sum + (q.inr_total_amount || q.total_amount || 0), 0) || 0,
-      pending_amount: quotes?.filter(q => q.status === 'draft' || q.status === 'sent').reduce((sum, q) => sum + (q.inr_total_amount || q.total_amount || 0), 0) || 0,
+      total_quoted_amount: quotes?.filter(q => q.status !== 'expired' && q.status !== 'rejected').reduce((sum, q) => sum + (q.total_amount || 0), 0) || 0,
+      pending_amount: quotes?.filter(q => q.status === 'draft' || q.status === 'sent').reduce((sum, q) => sum + (q.total_amount || 0), 0) || 0,
       
       this_month_quotes: quotes?.filter(q => {
         const quoteDate = new Date(q.quote_date);

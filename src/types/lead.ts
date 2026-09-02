@@ -109,6 +109,7 @@ export interface CreateLeadData {
   
   // Lead details
   source: LeadSource;
+  status?: LeadStatus;
   
   // Qualification criteria
   budget_min?: number;

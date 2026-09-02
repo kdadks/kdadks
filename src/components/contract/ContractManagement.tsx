@@ -380,10 +380,17 @@ const ContractManagement: React.FC = () => {
     return badges[type] || 'bg-gray-100 text-gray-800';
   };
 
+  const entityCurrencyCode = selectedCompany?.country?.currency_code || (
+    selectedCompany?.country_id === 'IE' || selectedCompany?.country?.code === 'IE' || selectedCompany?.country?.code === 'IRL' ? 'EUR' :
+    selectedCompany?.country_id === 'US' || selectedCompany?.country?.code === 'US' || selectedCompany?.country?.code === 'USA' ? 'USD' :
+    selectedCompany?.country_id === 'GB' || selectedCompany?.country_id === 'UK' || selectedCompany?.country?.code === 'GB' ? 'GBP' : 'INR'
+  );
+
   // Format currency
-  const formatCurrency = (amount: number | undefined, currencyCode: string = 'INR') => {
+  const formatCurrency = (amount: number | undefined, currencyCode: string = entityCurrencyCode) => {
     if (amount === undefined || amount === null) return '-';
-    return new Intl.NumberFormat('en-IN', {
+    const locale = currencyCode === 'EUR' ? 'en-IE' : currencyCode === 'USD' ? 'en-US' : currencyCode === 'GBP' ? 'en-GB' : 'en-IN';
+    return new Intl.NumberFormat(locale, {
       style: 'currency',
       currency: currencyCode
     }).format(amount);
@@ -449,7 +456,7 @@ const ContractManagement: React.FC = () => {
               <div>
                 <p className="text-sm text-gray-600">Total Value</p>
                 <p className="text-2xl font-semibold text-blue-600 mt-1">
-                  {formatCurrency(stats.total_contract_value, 'INR')}
+                  {formatCurrency(stats.total_contract_value, entityCurrencyCode)}
                 </p>
               </div>
               <DollarSign className="w-12 h-12 text-blue-600 opacity-20" />

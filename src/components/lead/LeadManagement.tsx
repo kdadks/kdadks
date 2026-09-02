@@ -171,6 +171,7 @@ const LeadManagement: React.FC = () => {
     job_title: '',
     company_name: '',
     source: 'website',
+    status: 'new',
     description: '',
     address_line1: '',
     address_line2: '',
@@ -336,7 +337,7 @@ const LeadManagement: React.FC = () => {
     if (mode === 'add') {
       setFormData({
         first_name: '', last_name: '', email: '', phone: '', job_title: '', company_name: '',
-        source: 'website', description: '', address_line1: '', address_line2: '', city: '', state: '', postal_code: '',
+        source: 'website', status: 'new', description: '', address_line1: '', address_line2: '', city: '', state: '', postal_code: '',
         country_id: selectedCompany?.country_id || 'IN',
         company_settings_id: entityId ?? undefined, customer_id: undefined,
         budget_min: undefined, budget_max: undefined, currency_code: selectedCompany?.country?.currency_code || 'INR', expected_close_date: undefined,
@@ -345,7 +346,7 @@ const LeadManagement: React.FC = () => {
     } else if (lead) {
       setFormData({
         first_name: lead.first_name, last_name: lead.last_name, email: lead.email || '', phone: lead.phone || '',
-        job_title: lead.job_title || '', company_name: lead.company_name || '', source: lead.source,
+        job_title: lead.job_title || '', company_name: lead.company_name || '', source: lead.source, status: lead.status || 'new',
         description: lead.description || '', address_line1: lead.address_line1 || '', address_line2: lead.address_line2 || '',
         city: lead.city || '', state: lead.state || '', postal_code: lead.postal_code || '',
         country_id: lead.country_id || selectedCompany?.country_id || 'IN',
@@ -1013,9 +1014,10 @@ const LeadManagement: React.FC = () => {
                 <div><label className="block text-sm font-medium text-gray-700 mb-1">Phone</label><input type="tel" value={formData.phone} onChange={e => handleChange('phone', e.target.value)} disabled={modalMode === 'view'} placeholder="Enter phone" className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50" /></div>
                 <div><label className="block text-sm font-medium text-gray-700 mb-1">Job Title</label><input type="text" value={formData.job_title} onChange={e => handleChange('job_title', e.target.value)} disabled={modalMode === 'view'} placeholder="Enter job title" className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50" /></div>
                 <div><label className="block text-sm font-medium text-gray-700 mb-1">Company Name</label><input type="text" value={formData.company_name} onChange={e => handleChange('company_name', e.target.value)} disabled={modalMode === 'view'} placeholder="Enter company name" className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50" /></div>
+                <div><label className="block text-sm font-medium text-gray-700 mb-1">Status</label><select value={formData.status || 'new'} onChange={e => handleChange('status', e.target.value as LeadStatus)} disabled={modalMode === 'view'} className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50">{LEAD_STATUSES.map(s => (<option key={s.value} value={s.value}>{s.label}</option>))}</select></div>
                 <div><label className="block text-sm font-medium text-gray-700 mb-1">Source</label><select value={formData.source} onChange={e => handleChange('source', e.target.value)} disabled={modalMode === 'view'} className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50">{LEAD_SOURCES.map(s => (<option key={s.value} value={s.value}>{s.label}</option>))}</select></div>
-                 <div><label className="block text-sm font-medium text-gray-700 mb-1">Associate Customer</label><select value={formData.customer_id || ''} onChange={e => handleChange('customer_id', e.target.value || undefined)} disabled={modalMode === 'view'} className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50"><option value="">Select Customer (Optional)</option>{customers.map(c => (<option key={c.id} value={c.id}>{formatCustomerOption(c, companies, selectedCompany)}</option>))}</select></div>
-                </div>
+                <div className="col-span-2"><label className="block text-sm font-medium text-gray-700 mb-1">Associate Customer</label><select value={formData.customer_id || ''} onChange={e => handleChange('customer_id', e.target.value || undefined)} disabled={modalMode === 'view'} className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50"><option value="">Select Customer (Optional)</option>{customers.map(c => (<option key={c.id} value={c.id}>{formatCustomerOption(c, companies, selectedCompany)}</option>))}</select></div>
+              </div>
                  <div className="grid grid-cols-2 gap-4">
                    <div><label className="block text-sm font-medium text-gray-700 mb-1">Budget Min</label><input type="number" value={formData.budget_min ?? ''} onChange={e => handleChange('budget_min', e.target.value ? parseFloat(e.target.value) : undefined)} disabled={modalMode === 'view'} placeholder="Min budget" className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50" /></div>
                    <div><label className="block text-sm font-medium text-gray-700 mb-1">Budget Max</label><input type="number" value={formData.budget_max ?? ''} onChange={e => handleChange('budget_max', e.target.value ? parseFloat(e.target.value) : undefined)} disabled={modalMode === 'view'} placeholder="Max budget" className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50" /></div>

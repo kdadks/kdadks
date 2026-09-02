@@ -19,10 +19,13 @@ import {
   Clock,
   CheckCircle,
   XCircle,
-  Settings
+  Settings,
+  FileSignature
 } from 'lucide-react';
 import { quoteService } from '../../services/quoteService';
 import { invoiceService } from '../../services/invoiceService';
+import { contractService } from '../../services/contractService';
+import type { ContractType } from '../../types/contract';
 import { useCompanyContext } from '../../contexts/CompanyContext';
 import { useToast } from '../ui/ToastProvider';
 import { useConfirmDialog } from '../../hooks/useConfirmDialog';
@@ -32,7 +35,7 @@ import { PDFBrandingUtils } from '../../utils/pdfBrandingUtils';
 import { CurrencyDisplay } from '../ui/CurrencyDisplay';
 import { CreateQuote } from './CreateQuote';
 import { getTaxLabel, getTaxRegistrationLabel, getDefaultTaxRate, getClassificationCodeLabel, getCompanyTaxFields } from '../../utils/taxUtils';
-import { getPrimaryCustomerId } from '../../utils/customerCodeUtils';
+import { getPrimaryCustomerId, getEntityPrefix } from '../../utils/customerCodeUtils';
 import type { 
   Quote, 
   QuoteFilters, 
@@ -75,6 +78,31 @@ const QuoteManagement: React.FC<QuoteManagementProps> = ({ onBackToDashboard }) 
   const [showQuotePreview, setShowQuotePreview] = useState(false);
   const [generatedQuoteNumber, setGeneratedQuoteNumber] = useState<string>('');
   const [statusDropdownOpen, setStatusDropdownOpen] = useState<string | null>(null);
+
+  // Draft contract creation modal state
+  const [showDraftContractModal, setShowDraftContractModal] = useState(false);
+  const [contractTargetQuote, setContractTargetQuote] = useState<Quote | null>(null);
+  const [draftContractForm, setDraftContractForm] = useState<{
+    contract_type: ContractType;
+    contract_title: string;
+    contract_date: string;
+    effective_date: string;
+    expiry_date: string;
+    contract_value: number;
+    currency_code: string;
+    notes: string;
+    payment_terms: string;
+  }>({
+    contract_type: 'SOW',
+    contract_title: '',
+    contract_date: new Date().toISOString().split('T')[0],
+    effective_date: new Date().toISOString().split('T')[0],
+    expiry_date: '',
+    contract_value: 0,
+    currency_code: 'INR',
+    notes: '',
+    payment_terms: ''
+  });
   const [quoteFormData, setQuoteFormData] = useState<CreateQuoteData>({
     customer_id: '',
     quote_date: new Date().toISOString().split('T')[0],
@@ -141,7 +169,7 @@ const QuoteManagement: React.FC<QuoteManagementProps> = ({ onBackToDashboard }) 
       if (activeTab === 'dashboard') {
         const [quotesData, statsData, customersData] = await Promise.all([
           quoteService.getQuotes({ ...filters, ...entityFilter }, currentPage, 10),
-          quoteService.getQuoteStats(),
+          quoteService.getQuoteStats(selectedCompany?.id),
           invoiceService.getCustomers(entityFilter, 1, 1000)
         ]);
         setQuotes(quotesData.data);
@@ -841,6 +869,134 @@ const QuoteManagement: React.FC<QuoteManagementProps> = ({ onBackToDashboard }) 
     }
   };
 
+  const openDraftContractModal = (quote: Quote) => {
+    const today = new Date().toISOString().split('T')[0];
+    const expiry = quote.valid_until || new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    const typeLabelMap: Record<string, string> = {
+      MSA: 'Master Services Agreement',
+      SOW: 'Statement of Work',
+      NDA: 'Non-Disclosure Agreement',
+      SLA: 'Service Level Agreement',
+      WORK_ORDER: 'Work Order',
+      MAINTENANCE: 'Maintenance Contract',
+      CONSULTING: 'Consulting Agreement',
+      LICENSE: 'Software License Agreement',
+      OTHER: 'Agreement'
+    };
+    const defaultTitle = quote.project_title 
+      ? `Statement of Work - ${quote.project_title}`
+      : `Statement of Work (${quote.quote_number})`;
+
+    setContractTargetQuote(quote);
+    setDraftContractForm({
+      contract_type: 'SOW',
+      contract_title: defaultTitle,
+      contract_date: today,
+      effective_date: today,
+      expiry_date: expiry,
+      contract_value: quote.total_amount || 0,
+      currency_code: quote.currency_code || selectedCompany?.country?.currency_code || 'INR',
+      notes: quote.notes || '',
+      payment_terms: quote.terms_conditions || ''
+    });
+    setShowDraftContractModal(true);
+  };
+
+  const handleCreateDraftContract = async () => {
+    if (!contractTargetQuote) return;
+    try {
+      startAction('Creating draft contract...');
+      const company = contractTargetQuote.company_settings || selectedCompany || companySettings.find(c => c.is_default) || companySettings[0];
+      const entityPrefix = getEntityPrefix(company);
+
+      const itemsListText = contractTargetQuote.quote_items && contractTargetQuote.quote_items.length > 0
+        ? contractTargetQuote.quote_items.map((it, idx) => `${idx + 1}. ${it.item_name}${it.description ? ' - ' + it.description : ''} (Qty: ${it.quantity}, Amount: ${it.line_total})`).join('\n')
+        : (contractTargetQuote.project_title || 'Services as agreed');
+
+      // Fetch jurisdiction-aware contract templates (Irish Law for IE/IRL vs Indian Law for IN/IND)
+      const entityCountryCode = company.country?.code || selectedCompany?.country?.code || 'IN';
+      const templates = await contractService.getAllTemplatesWithSections(entityCountryCode);
+      const matchingTemplate = templates.find(t => t.contract_type === draftContractForm.contract_type);
+
+      let sectionsToUse: any[] = [];
+      if (matchingTemplate && matchingTemplate.sections && matchingTemplate.sections.length > 0) {
+        sectionsToUse = matchingTemplate.sections.map(sec => {
+          let content = sec.section_content;
+          if (sec.section_title.toLowerCase().includes('scope') || sec.section_title.toLowerCase().includes('deliverables') || sec.section_title.toLowerCase().includes('services')) {
+            content += `\n\nProject Title: ${contractTargetQuote.project_title || 'Services'}\nEstimated Timeframe: ${contractTargetQuote.estimated_time || 'N/A'}\n\nDeliverables & Line Items:\n${itemsListText}`;
+          } else if (sec.section_title.toLowerCase().includes('fee') || sec.section_title.toLowerCase().includes('payment') || sec.section_title.toLowerCase().includes('compensation')) {
+            content += `\n\nContract Total Value: ${draftContractForm.currency_code} ${draftContractForm.contract_value}\n\nTerms & Conditions:\n${draftContractForm.payment_terms || 'As per quotation ' + contractTargetQuote.quote_number}`;
+          }
+          return {
+            section_number: sec.section_number,
+            section_title: sec.section_title,
+            section_content: content,
+            is_required: sec.is_required,
+            is_locked: sec.is_locked,
+            page_break_before: sec.page_break_before
+          };
+        });
+      } else {
+        sectionsToUse = [
+          {
+            section_number: 1,
+            section_title: 'Scope of Work & Deliverables',
+            section_content: `Project Title: ${contractTargetQuote.project_title || 'Services'}\nEstimated Timeframe: ${contractTargetQuote.estimated_time || 'N/A'}\n\nDeliverables:\n${itemsListText}`,
+            is_required: true,
+            page_break_before: false
+          },
+          {
+            section_number: 2,
+            section_title: 'Fees & Payment Terms',
+            section_content: `Total Contract Value: ${draftContractForm.currency_code} ${draftContractForm.contract_value}\n\nTerms & Conditions:\n${draftContractForm.payment_terms || 'As per quotation ' + contractTargetQuote.quote_number}`,
+            is_required: true,
+            page_break_before: false
+          }
+        ];
+      }
+
+      const newContract = await contractService.createContract({
+        company_settings_id: company.id,
+        customer_id: contractTargetQuote.customer_id,
+        party_a_name: company.company_name,
+        party_a_address: [company.address_line1, company.address_line2, company.city, company.state, company.postal_code].filter(Boolean).join(', '),
+        party_a_contact: company.phone || company.email || '',
+        party_a_gstin: company.gstin,
+        party_a_pan: company.pan,
+        party_a_vat_number: company.vat_number,
+        party_a_cro_number: company.cro_number,
+        party_b_name: contractTargetQuote.customer?.company_name || contractTargetQuote.customer?.contact_person || 'N/A',
+        party_b_address: [contractTargetQuote.customer?.address_line1, contractTargetQuote.customer?.address_line2, contractTargetQuote.customer?.city, contractTargetQuote.customer?.state, contractTargetQuote.customer?.postal_code].filter(Boolean).join(', '),
+        party_b_contact: contractTargetQuote.customer?.phone || contractTargetQuote.customer?.email || '',
+        party_b_gstin: contractTargetQuote.customer?.gstin,
+        party_b_pan: contractTargetQuote.customer?.pan,
+        party_b_vat_number: (contractTargetQuote.customer as any)?.vat_number,
+        party_b_cro_number: (contractTargetQuote.customer as any)?.cro_number,
+        contract_type: draftContractForm.contract_type,
+        contract_title: draftContractForm.contract_title,
+        contract_date: draftContractForm.contract_date,
+        effective_date: draftContractForm.effective_date,
+        expiry_date: draftContractForm.expiry_date || undefined,
+        contract_value: draftContractForm.contract_value,
+        currency_code: draftContractForm.currency_code,
+        payment_terms: draftContractForm.payment_terms,
+        notes: draftContractForm.notes,
+        sections: sectionsToUse,
+        entity_prefix: entityPrefix
+      });
+
+      showSuccess(`Draft contract created successfully! Contract #: ${newContract.contract_number}`);
+      setShowDraftContractModal(false);
+      setContractTargetQuote(null);
+      await loadData();
+    } catch (error) {
+      console.error('Failed to create draft contract:', error);
+      showError(`Failed to create draft contract: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      endAction();
+    }
+  };
+
   const handleDownloadQuote = async (quote: Quote) => {
     try {
       // Load full quote details and customer data if needed
@@ -980,7 +1136,7 @@ const QuoteManagement: React.FC<QuoteManagementProps> = ({ onBackToDashboard }) 
         pdf.text(`Date: ${quoteDate}`, rightMargin, 20, { align: 'right' });
         pdf.text(`Valid Until: ${validUntil}`, rightMargin, 26, { align: 'right' });
       } else {
-        // Blue header bar (same as invoice fallback)
+        // Green header bar (same as invoice fallback)
         pdf.setFillColor(5, 150, 105);
         pdf.rect(0, contentStartY, 210, 25, 'F');
         pdf.setFontSize(16);
@@ -995,7 +1151,7 @@ const QuoteManagement: React.FC<QuoteManagementProps> = ({ onBackToDashboard }) 
         pdf.text(`Valid Until: ${validUntil}`, rightMargin, contentStartY + 22, { align: 'right' });
       }
 
-      let yPos = contentStartY + 5;
+      let yPos = contentStartY + (company.header_image_data ? 5 : 30);
 
       // ========== FROM / TO SECTION ==========
       const billToX = 110;
@@ -1055,19 +1211,30 @@ const QuoteManagement: React.FC<QuoteManagementProps> = ({ onBackToDashboard }) 
         fromYPos += 4;
       }
 
-      // Contact person
+      // Contact person (kept cleanly within 85mm column width to prevent overflow)
       if (fullQuote.company_contact_name || fullQuote.company_contact_email || fullQuote.company_contact_phone) {
         fromYPos += 2;
-        pdf.setFont('helvetica', 'bold');
-        pdf.setTextColor(0, 0, 0);
-        let contactLine = fullQuote.company_contact_name || '';
-        if (fullQuote.company_contact_email) contactLine += (contactLine ? ' | ' : '') + fullQuote.company_contact_email;
-        if (fullQuote.company_contact_phone) contactLine += (contactLine ? ' | ' : '') + fullQuote.company_contact_phone;
-        pdf.text('Contact: ', leftMargin, fromYPos);
+        if (fullQuote.company_contact_name) {
+          pdf.setFont('helvetica', 'bold');
+          pdf.setTextColor(0, 0, 0);
+          const cLines = pdf.splitTextToSize('Contact: ' + fullQuote.company_contact_name, 85);
+          pdf.text(cLines, leftMargin, fromYPos);
+          fromYPos += cLines.length * 4;
+        }
         pdf.setFont('helvetica', 'normal');
         pdf.setTextColor(60, 60, 60);
-        pdf.text(contactLine, leftMargin + 17, fromYPos);
-        fromYPos += 4;
+        if (fullQuote.company_contact_email) {
+          const ePrefix = fullQuote.company_contact_name ? 'Email: ' : 'Contact Email: ';
+          const eLines = pdf.splitTextToSize(ePrefix + fullQuote.company_contact_email, 85);
+          pdf.text(eLines, leftMargin, fromYPos);
+          fromYPos += eLines.length * 4;
+        }
+        if (fullQuote.company_contact_phone) {
+          const pPrefix = fullQuote.company_contact_name ? 'Phone: ' : 'Contact Phone: ';
+          const pLines = pdf.splitTextToSize(pPrefix + fullQuote.company_contact_phone, 85);
+          pdf.text(pLines, leftMargin, fromYPos);
+          fromYPos += pLines.length * 4;
+        }
       }
 
       // TO (right column)
@@ -1119,7 +1286,7 @@ const QuoteManagement: React.FC<QuoteManagementProps> = ({ onBackToDashboard }) 
         billToYPos += 4;
       }
 
-      // Status badge
+      // Status badge - shifted to the right of its original place to prevent overlapping contact info
       billToYPos += 5;
       const statusColors: Record<string, number[]> = {
         draft: [107, 114, 128],
@@ -1130,12 +1297,15 @@ const QuoteManagement: React.FC<QuoteManagementProps> = ({ onBackToDashboard }) 
         converted: [139, 92, 246]
       };
       const sc = statusColors[fullQuote.status] || [107, 114, 128];
-      pdf.setFillColor(sc[0], sc[1], sc[2]);
-      pdf.roundedRect(billToX, billToYPos - 3, 25, 6, 1, 1, 'F');
-      pdf.setTextColor(255, 255, 255);
+      const statusText = (fullQuote.status || 'draft').toUpperCase();
       pdf.setFontSize(7);
       pdf.setFont('helvetica', 'bold');
-      pdf.text(fullQuote.status.toUpperCase(), billToX + 12.5, billToYPos + 1, { align: 'center' });
+      const badgeWidth = Math.max(25, pdf.getTextWidth(statusText) + 8);
+      const statusBadgeX = rightMargin - badgeWidth;
+      pdf.setFillColor(sc[0], sc[1], sc[2]);
+      pdf.roundedRect(statusBadgeX, billToYPos - 3, badgeWidth, 6, 1, 1, 'F');
+      pdf.setTextColor(255, 255, 255);
+      pdf.text(statusText, statusBadgeX + badgeWidth / 2, billToYPos + 1, { align: 'center' });
 
       yPos = Math.max(fromYPos, billToYPos) + 10;
 
@@ -1406,6 +1576,9 @@ const QuoteManagement: React.FC<QuoteManagementProps> = ({ onBackToDashboard }) 
       await quoteService.updateQuoteStatus(quote.id, newStatus);
       showSuccess(`Quote status updated to ${newStatus}`);
       await loadData();
+      if (newStatus === 'accepted') {
+        openDraftContractModal({ ...quote, status: 'accepted' });
+      }
     } catch (error) {
       console.error('Failed to update quote status:', error);
       showError(`Failed to update quote status: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -1418,10 +1591,24 @@ const QuoteManagement: React.FC<QuoteManagementProps> = ({ onBackToDashboard }) 
     setCurrentPage(1);
   };
 
+  const entityCurrencySymbol = selectedCompany?.country?.currency_symbol || (
+    selectedCompany?.country_id === 'IE' || selectedCompany?.country?.code === 'IE' || selectedCompany?.country?.code === 'IRL' ? '€' :
+    selectedCompany?.country_id === 'US' || selectedCompany?.country?.code === 'US' || selectedCompany?.country?.code === 'USA' ? '$' :
+    selectedCompany?.country_id === 'GB' || selectedCompany?.country_id === 'UK' || selectedCompany?.country?.code === 'GB' ? '£' : '₹'
+  );
+
+  const entityCurrencyCode = selectedCompany?.country?.currency_code || (
+    selectedCompany?.country_id === 'IE' || selectedCompany?.country?.code === 'IE' || selectedCompany?.country?.code === 'IRL' ? 'EUR' :
+    selectedCompany?.country_id === 'US' || selectedCompany?.country?.code === 'US' || selectedCompany?.country?.code === 'USA' ? 'USD' :
+    selectedCompany?.country_id === 'GB' || selectedCompany?.country_id === 'UK' || selectedCompany?.country?.code === 'GB' ? 'GBP' : 'INR'
+  );
+
   const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-IN', {
+    const locale = entityCurrencyCode === 'EUR' ? 'en-IE' : entityCurrencyCode === 'USD' ? 'en-US' : entityCurrencyCode === 'GBP' ? 'en-GB' : 'en-IN';
+    return new Intl.NumberFormat(locale, {
       style: 'currency',
-      currency: 'INR'
+      currency: entityCurrencyCode,
+      maximumFractionDigits: 2
     }).format(amount);
   };
 
@@ -1469,7 +1656,7 @@ const QuoteManagement: React.FC<QuoteManagementProps> = ({ onBackToDashboard }) 
           <div className="flex items-center">
             <div className="flex-shrink-0">
               <div className="h-8 w-8 bg-emerald-600 rounded-full flex items-center justify-center">
-                <span className="text-white text-sm font-bold">₹</span>
+                <span className="text-white text-sm font-bold">{entityCurrencySymbol}</span>
               </div>
             </div>
             <div className="ml-4">
@@ -1485,7 +1672,7 @@ const QuoteManagement: React.FC<QuoteManagementProps> = ({ onBackToDashboard }) 
           <div className="flex items-center">
             <div className="flex-shrink-0">
               <div className="h-8 w-8 bg-yellow-600 rounded-full flex items-center justify-center">
-                <span className="text-white text-sm font-bold">₹</span>
+                <span className="text-white text-sm font-bold">{entityCurrencySymbol}</span>
               </div>
             </div>
             <div className="ml-4">
@@ -1732,13 +1919,22 @@ const QuoteManagement: React.FC<QuoteManagementProps> = ({ onBackToDashboard }) 
                   <Copy className="w-4 h-4" />
                 </button>
                 {quote.status === 'accepted' && (
-                  <button 
-                    onClick={() => handleConvertToInvoice(quote)}
-                    className="text-purple-600 hover:text-purple-900"
-                    title="Convert to Invoice"
-                  >
-                    <ArrowRightCircle className="w-4 h-4" />
-                  </button>
+                  <>
+                    <button 
+                      onClick={() => openDraftContractModal(quote)}
+                      className="text-emerald-600 hover:text-emerald-900"
+                      title="Create Draft Contract"
+                    >
+                      <FileSignature className="w-4 h-4" />
+                    </button>
+                    <button 
+                      onClick={() => handleConvertToInvoice(quote)}
+                      className="text-purple-600 hover:text-purple-900"
+                      title="Convert to Invoice"
+                    >
+                      <ArrowRightCircle className="w-4 h-4" />
+                    </button>
+                  </>
                 )}
                 {quote.status !== 'expired' && quote.status !== 'converted' && quote.status !== 'accepted' && (
                   <button 
@@ -2463,6 +2659,30 @@ const QuoteManagement: React.FC<QuoteManagementProps> = ({ onBackToDashboard }) 
                 </span>
               </div>
               <div className="flex space-x-3">
+                {selectedQuote.status === 'accepted' && (
+                  <>
+                    <button
+                      onClick={() => {
+                        setShowQuotePreview(false);
+                        openDraftContractModal(selectedQuote);
+                      }}
+                      className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 font-medium text-sm inline-flex items-center"
+                    >
+                      <FileSignature className="w-4 h-4 mr-2" />
+                      Create Draft Contract
+                    </button>
+                    <button
+                      onClick={() => {
+                        setShowQuotePreview(false);
+                        handleConvertToInvoice(selectedQuote);
+                      }}
+                      className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 font-medium text-sm inline-flex items-center"
+                    >
+                      <ArrowRightCircle className="w-4 h-4 mr-2" />
+                      Convert to Invoice
+                    </button>
+                  </>
+                )}
                 {(selectedQuote.status === 'draft' || selectedQuote.status === 'sent') && (
                   <button
                     onClick={() => {
@@ -2818,6 +3038,175 @@ const QuoteManagement: React.FC<QuoteManagementProps> = ({ onBackToDashboard }) 
 
       {/* Confirm Dialog */}
       <ConfirmDialog {...dialogProps} loading={loading} />
+
+      {/* Create Draft Contract Modal */}
+      {showDraftContractModal && contractTargetQuote && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 overflow-y-auto h-full w-full z-50 flex items-center justify-center p-4">
+          <div className="relative mx-auto p-6 border w-full max-w-xl shadow-xl rounded-xl bg-white text-left">
+            <div className="flex items-center justify-between pb-4 border-b">
+              <div className="flex items-center space-x-2">
+                <FileSignature className="w-6 h-6 text-emerald-600" />
+                <h3 className="text-lg font-bold text-gray-900">Create Draft Contract</h3>
+              </div>
+              <button
+                onClick={() => {
+                  setShowDraftContractModal(false);
+                  setContractTargetQuote(null);
+                }}
+                className="text-gray-400 hover:text-gray-600 p-1"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="mt-4 space-y-4">
+              <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 text-xs text-emerald-800">
+                Drafting contract for quote <strong>{contractTargetQuote.quote_number}</strong> ({contractTargetQuote.customer?.company_name || contractTargetQuote.customer?.contact_person || 'Customer'}).
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Contract Type *
+                </label>
+                <select
+                  value={draftContractForm.contract_type}
+                  onChange={(e) => {
+                    const newType = e.target.value as ContractType;
+                    const typeLabelMap: Record<string, string> = {
+                      MSA: 'Master Services Agreement',
+                      SOW: 'Statement of Work',
+                      NDA: 'Non-Disclosure Agreement',
+                      SLA: 'Service Level Agreement',
+                      WORK_ORDER: 'Work Order',
+                      MAINTENANCE: 'Maintenance Agreement',
+                      CONSULTING: 'Consulting Agreement',
+                      LICENSE: 'Software License Agreement',
+                      OTHER: 'Agreement'
+                    };
+                    const typeLabel = typeLabelMap[newType] || newType;
+                    const defaultTitle = contractTargetQuote.project_title 
+                      ? `${typeLabel} - ${contractTargetQuote.project_title}`
+                      : `${typeLabel} (${contractTargetQuote.quote_number})`;
+
+                    setDraftContractForm({
+                      ...draftContractForm,
+                      contract_type: newType,
+                      contract_title: defaultTitle
+                    });
+                  }}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-emerald-500 focus:border-emerald-500 text-sm bg-white"
+                >
+                  <option value="SOW">SOW - Statement of Work</option>
+                  <option value="MSA">MSA - Master Services Agreement</option>
+                  <option value="NDA">NDA - Non-Disclosure Agreement</option>
+                  <option value="SLA">SLA - Service Level Agreement</option>
+                  <option value="WORK_ORDER">Work Order</option>
+                  <option value="MAINTENANCE">Maintenance Contract</option>
+                  <option value="CONSULTING">Consulting Agreement</option>
+                  <option value="LICENSE">Software License Agreement</option>
+                  <option value="OTHER">Other Agreement</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Contract Title *
+                </label>
+                <input
+                  type="text"
+                  value={draftContractForm.contract_title}
+                  onChange={(e) => setDraftContractForm({ ...draftContractForm, contract_title: e.target.value })}
+                  placeholder="Enter contract title"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-emerald-500 focus:border-emerald-500 text-sm"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Contract Date *
+                  </label>
+                  <input
+                    type="date"
+                    value={draftContractForm.contract_date}
+                    onChange={(e) => setDraftContractForm({ ...draftContractForm, contract_date: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-emerald-500 focus:border-emerald-500 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Effective Date *
+                  </label>
+                  <input
+                    type="date"
+                    value={draftContractForm.effective_date}
+                    onChange={(e) => setDraftContractForm({ ...draftContractForm, effective_date: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-emerald-500 focus:border-emerald-500 text-sm"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Expiry Date (Optional)
+                  </label>
+                  <input
+                    type="date"
+                    value={draftContractForm.expiry_date}
+                    onChange={(e) => setDraftContractForm({ ...draftContractForm, expiry_date: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-emerald-500 focus:border-emerald-500 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Contract Value ({draftContractForm.currency_code})
+                  </label>
+                  <input
+                    type="number"
+                    value={draftContractForm.contract_value}
+                    onChange={(e) => setDraftContractForm({ ...draftContractForm, contract_value: parseFloat(e.target.value) || 0 })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-emerald-500 focus:border-emerald-500 text-sm"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Payment & Special Terms
+                </label>
+                <textarea
+                  value={draftContractForm.payment_terms}
+                  onChange={(e) => setDraftContractForm({ ...draftContractForm, payment_terms: e.target.value })}
+                  rows={2}
+                  placeholder="Terms & conditions..."
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-emerald-500 focus:border-emerald-500 text-sm"
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end space-x-3 mt-6 pt-4 border-t">
+              <button
+                onClick={() => {
+                  setShowDraftContractModal(false);
+                  setContractTargetQuote(null);
+                }}
+                className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleCreateDraftContract}
+                disabled={!draftContractForm.contract_title.trim()}
+                className="px-4 py-2 bg-emerald-600 text-white rounded-md text-sm font-medium hover:bg-emerald-700 disabled:opacity-50 inline-flex items-center"
+              >
+                <FileSignature className="w-4 h-4 mr-2" />
+                Create Draft Contract
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

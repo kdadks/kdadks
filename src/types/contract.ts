@@ -224,6 +224,8 @@ export interface ContractWithDetails extends Contract {
 
 export interface CreateContractData {
   template_id?: string;
+  company_settings_id?: string;
+  customer_id?: string;
   
   // Parties
   party_a_name: string;

@@ -791,14 +791,11 @@ class ContractService {
         }
       }
 
-      // Contract values (convert to INR for consistent totals)
-      const contractValueInINR = contract.contract_value 
-        ? convertToINR(contract.contract_value, contract.currency_code || 'INR')
-        : 0;
-      
-      stats.total_contract_value += contractValueInINR;
+      // Contract values
+      const val = contract.contract_value || 0;
+      stats.total_contract_value += val;
       if (contract.status === 'active') {
-        stats.active_contract_value += contractValueInINR;
+        stats.active_contract_value += val;
       }
 
       // By type
