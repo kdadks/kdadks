@@ -25,7 +25,8 @@ import {
 import { quoteService } from '../../services/quoteService';
 import { invoiceService } from '../../services/invoiceService';
 import { contractService } from '../../services/contractService';
-import type { ContractType } from '../../types/contract';
+import type { ContractType, CreateContractData } from '../../types/contract';
+import CreateContractModal from '../contract/CreateContractModal';
 import { useCompanyContext } from '../../contexts/CompanyContext';
 import { useToast } from '../ui/ToastProvider';
 import { useConfirmDialog } from '../../hooks/useConfirmDialog';
@@ -80,29 +81,8 @@ const QuoteManagement: React.FC<QuoteManagementProps> = ({ onBackToDashboard }) 
   const [statusDropdownOpen, setStatusDropdownOpen] = useState<string | null>(null);
 
   // Draft contract creation modal state
-  const [showDraftContractModal, setShowDraftContractModal] = useState(false);
-  const [contractTargetQuote, setContractTargetQuote] = useState<Quote | null>(null);
-  const [draftContractForm, setDraftContractForm] = useState<{
-    contract_type: ContractType;
-    contract_title: string;
-    contract_date: string;
-    effective_date: string;
-    expiry_date: string;
-    contract_value: number;
-    currency_code: string;
-    notes: string;
-    payment_terms: string;
-  }>({
-    contract_type: 'SOW',
-    contract_title: '',
-    contract_date: new Date().toISOString().split('T')[0],
-    effective_date: new Date().toISOString().split('T')[0],
-    expiry_date: '',
-    contract_value: 0,
-    currency_code: 'INR',
-    notes: '',
-    payment_terms: ''
-  });
+  const [showCreateContractModal, setShowCreateContractModal] = useState(false);
+  const [createContractInitialData, setCreateContractInitialData] = useState<CreateContractData | null>(null);
   const [quoteFormData, setQuoteFormData] = useState<CreateQuoteData>({
     customer_id: '',
     quote_date: new Date().toISOString().split('T')[0],
@@ -870,128 +850,80 @@ const QuoteManagement: React.FC<QuoteManagementProps> = ({ onBackToDashboard }) 
   };
 
   const openDraftContractModal = (quote: Quote) => {
+    const company = selectedCompany || (quote.company_settings_id ? companySettings.find(c => c.id === quote.company_settings_id) : null) || quote.company_settings || companySettings.find(c => c.is_default) || companySettings[0];
+
+    const companyAddress = [company?.address_line1, company?.address_line2, company?.city, company?.state, company?.postal_code].filter(Boolean).join(', ');
+    const customerAddress = [quote.customer?.address_line1, quote.customer?.address_line2, quote.customer?.city, quote.customer?.state, quote.customer?.postal_code].filter(Boolean).join(', ');
+
+    const itemsListText = quote.quote_items && quote.quote_items.length > 0
+      ? quote.quote_items.map((it, idx) => `${idx + 1}. ${it.item_name}${it.description ? ' - ' + it.description : ''} (Qty: ${it.quantity}, Amount: ${it.line_total})`).join('\n')
+      : (quote.project_title || 'Services as agreed');
+
+    const isIrish = company?.country?.code === 'IE' || company?.country?.code === 'IRL' || selectedCompany?.country?.code === 'IE' || selectedCompany?.country?.code === 'IRL';
+
     const today = new Date().toISOString().split('T')[0];
     const expiry = quote.valid_until || new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-    const typeLabelMap: Record<string, string> = {
-      MSA: 'Master Services Agreement',
-      SOW: 'Statement of Work',
-      NDA: 'Non-Disclosure Agreement',
-      SLA: 'Service Level Agreement',
-      WORK_ORDER: 'Work Order',
-      MAINTENANCE: 'Maintenance Contract',
-      CONSULTING: 'Consulting Agreement',
-      LICENSE: 'Software License Agreement',
-      OTHER: 'Agreement'
-    };
-    const defaultTitle = quote.project_title 
-      ? `Statement of Work - ${quote.project_title}`
-      : `Statement of Work (${quote.quote_number})`;
 
-    setContractTargetQuote(quote);
-    setDraftContractForm({
+    const initialData: CreateContractData = {
+      company_settings_id: company?.id,
+      customer_id: quote.customer_id,
+      party_a_name: company?.company_name || '',
+      party_a_address: companyAddress,
+      party_a_contact: company?.phone || company?.email || '',
+      party_a_gstin: company?.gstin || '',
+      party_a_pan: company?.pan || '',
+      party_a_vat_number: company?.vat_number || '',
+      party_a_cro_number: company?.cro_number || '',
+      party_b_name: quote.customer?.company_name || quote.customer?.contact_person || '',
+      party_b_address: customerAddress,
+      party_b_contact: quote.customer?.phone || quote.customer?.email || '',
+      party_b_gstin: quote.customer?.gstin || '',
+      party_b_pan: quote.customer?.pan || '',
+      party_b_vat_number: (quote.customer as any)?.vat_number || '',
+      party_b_cro_number: (quote.customer as any)?.cro_number || '',
       contract_type: 'SOW',
-      contract_title: defaultTitle,
+      contract_title: quote.project_title ? `Statement of Work - ${quote.project_title}` : `Statement of Work (${quote.quote_number})`,
       contract_date: today,
       effective_date: today,
       expiry_date: expiry,
       contract_value: quote.total_amount || 0,
-      currency_code: quote.currency_code || selectedCompany?.country?.currency_code || 'INR',
+      currency_code: quote.currency_code || company?.country?.currency_code || (isIrish ? 'EUR' : 'INR'),
+      payment_terms: quote.terms_conditions || '',
       notes: quote.notes || '',
-      payment_terms: quote.terms_conditions || ''
-    });
-    setShowDraftContractModal(true);
+      entity_prefix: getEntityPrefix(company || selectedCompany),
+      sections: [
+        {
+          section_number: 1,
+          section_title: 'Scope of Work & Deliverables',
+          section_content: `Project Title: ${quote.project_title || 'Services'}\nEstimated Timeframe: ${quote.estimated_time || 'N/A'}\n\nDeliverables & Line Items:\n${itemsListText}`,
+          is_required: true,
+          page_break_before: false
+        },
+        {
+          section_number: 2,
+          section_title: 'Fees & Payment Terms',
+          section_content: `Total Contract Value: ${quote.currency_code || (isIrish ? 'EUR' : 'INR')} ${quote.total_amount || 0}\n\nTerms & Conditions:\n${quote.terms_conditions || 'As per quotation ' + quote.quote_number}`,
+          is_required: true,
+          page_break_before: false
+        }
+      ]
+    };
+
+    setCreateContractInitialData(initialData);
+    setShowCreateContractModal(true);
   };
 
-  const handleCreateDraftContract = async () => {
-    if (!contractTargetQuote) return;
+  const handleSaveContractFromQuote = async (contractData: CreateContractData) => {
     try {
       startAction('Creating draft contract...');
-      const company = contractTargetQuote.company_settings || selectedCompany || companySettings.find(c => c.is_default) || companySettings[0];
-      const entityPrefix = getEntityPrefix(company);
-
-      const itemsListText = contractTargetQuote.quote_items && contractTargetQuote.quote_items.length > 0
-        ? contractTargetQuote.quote_items.map((it, idx) => `${idx + 1}. ${it.item_name}${it.description ? ' - ' + it.description : ''} (Qty: ${it.quantity}, Amount: ${it.line_total})`).join('\n')
-        : (contractTargetQuote.project_title || 'Services as agreed');
-
-      // Fetch jurisdiction-aware contract templates (Irish Law for IE/IRL vs Indian Law for IN/IND)
-      const entityCountryCode = company.country?.code || selectedCompany?.country?.code || 'IN';
-      const templates = await contractService.getAllTemplatesWithSections(entityCountryCode);
-      const matchingTemplate = templates.find(t => t.contract_type === draftContractForm.contract_type);
-
-      let sectionsToUse: any[] = [];
-      if (matchingTemplate && matchingTemplate.sections && matchingTemplate.sections.length > 0) {
-        sectionsToUse = matchingTemplate.sections.map(sec => {
-          let content = sec.section_content;
-          if (sec.section_title.toLowerCase().includes('scope') || sec.section_title.toLowerCase().includes('deliverables') || sec.section_title.toLowerCase().includes('services')) {
-            content += `\n\nProject Title: ${contractTargetQuote.project_title || 'Services'}\nEstimated Timeframe: ${contractTargetQuote.estimated_time || 'N/A'}\n\nDeliverables & Line Items:\n${itemsListText}`;
-          } else if (sec.section_title.toLowerCase().includes('fee') || sec.section_title.toLowerCase().includes('payment') || sec.section_title.toLowerCase().includes('compensation')) {
-            content += `\n\nContract Total Value: ${draftContractForm.currency_code} ${draftContractForm.contract_value}\n\nTerms & Conditions:\n${draftContractForm.payment_terms || 'As per quotation ' + contractTargetQuote.quote_number}`;
-          }
-          return {
-            section_number: sec.section_number,
-            section_title: sec.section_title,
-            section_content: content,
-            is_required: sec.is_required,
-            is_locked: sec.is_locked,
-            page_break_before: sec.page_break_before
-          };
-        });
-      } else {
-        sectionsToUse = [
-          {
-            section_number: 1,
-            section_title: 'Scope of Work & Deliverables',
-            section_content: `Project Title: ${contractTargetQuote.project_title || 'Services'}\nEstimated Timeframe: ${contractTargetQuote.estimated_time || 'N/A'}\n\nDeliverables:\n${itemsListText}`,
-            is_required: true,
-            page_break_before: false
-          },
-          {
-            section_number: 2,
-            section_title: 'Fees & Payment Terms',
-            section_content: `Total Contract Value: ${draftContractForm.currency_code} ${draftContractForm.contract_value}\n\nTerms & Conditions:\n${draftContractForm.payment_terms || 'As per quotation ' + contractTargetQuote.quote_number}`,
-            is_required: true,
-            page_break_before: false
-          }
-        ];
-      }
-
-      const newContract = await contractService.createContract({
-        company_settings_id: company.id,
-        customer_id: contractTargetQuote.customer_id,
-        party_a_name: company.company_name,
-        party_a_address: [company.address_line1, company.address_line2, company.city, company.state, company.postal_code].filter(Boolean).join(', '),
-        party_a_contact: company.phone || company.email || '',
-        party_a_gstin: company.gstin,
-        party_a_pan: company.pan,
-        party_a_vat_number: company.vat_number,
-        party_a_cro_number: company.cro_number,
-        party_b_name: contractTargetQuote.customer?.company_name || contractTargetQuote.customer?.contact_person || 'N/A',
-        party_b_address: [contractTargetQuote.customer?.address_line1, contractTargetQuote.customer?.address_line2, contractTargetQuote.customer?.city, contractTargetQuote.customer?.state, contractTargetQuote.customer?.postal_code].filter(Boolean).join(', '),
-        party_b_contact: contractTargetQuote.customer?.phone || contractTargetQuote.customer?.email || '',
-        party_b_gstin: contractTargetQuote.customer?.gstin,
-        party_b_pan: contractTargetQuote.customer?.pan,
-        party_b_vat_number: (contractTargetQuote.customer as any)?.vat_number,
-        party_b_cro_number: (contractTargetQuote.customer as any)?.cro_number,
-        contract_type: draftContractForm.contract_type,
-        contract_title: draftContractForm.contract_title,
-        contract_date: draftContractForm.contract_date,
-        effective_date: draftContractForm.effective_date,
-        expiry_date: draftContractForm.expiry_date || undefined,
-        contract_value: draftContractForm.contract_value,
-        currency_code: draftContractForm.currency_code,
-        payment_terms: draftContractForm.payment_terms,
-        notes: draftContractForm.notes,
-        sections: sectionsToUse,
-        entity_prefix: entityPrefix
-      });
-
-      showSuccess(`Draft contract created successfully! Contract #: ${newContract.contract_number}`);
-      setShowDraftContractModal(false);
-      setContractTargetQuote(null);
+      const created = await contractService.createContract(contractData);
+      showSuccess(`Draft contract created successfully! Contract #: ${created.contract_number}`);
+      setShowCreateContractModal(false);
+      setCreateContractInitialData(null);
       await loadData();
-    } catch (error) {
-      console.error('Failed to create draft contract:', error);
-      showError(`Failed to create draft contract: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } catch (error: any) {
+      console.error('Error creating contract:', error);
+      showError(`Failed to create contract: ${error?.message || 'Unknown error'}`);
     } finally {
       endAction();
     }
@@ -3039,173 +2971,16 @@ const QuoteManagement: React.FC<QuoteManagementProps> = ({ onBackToDashboard }) 
       {/* Confirm Dialog */}
       <ConfirmDialog {...dialogProps} loading={loading} />
 
-      {/* Create Draft Contract Modal */}
-      {showDraftContractModal && contractTargetQuote && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 overflow-y-auto h-full w-full z-50 flex items-center justify-center p-4">
-          <div className="relative mx-auto p-6 border w-full max-w-xl shadow-xl rounded-xl bg-white text-left">
-            <div className="flex items-center justify-between pb-4 border-b">
-              <div className="flex items-center space-x-2">
-                <FileSignature className="w-6 h-6 text-emerald-600" />
-                <h3 className="text-lg font-bold text-gray-900">Create Draft Contract</h3>
-              </div>
-              <button
-                onClick={() => {
-                  setShowDraftContractModal(false);
-                  setContractTargetQuote(null);
-                }}
-                className="text-gray-400 hover:text-gray-600 p-1"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="mt-4 space-y-4">
-              <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 text-xs text-emerald-800">
-                Drafting contract for quote <strong>{contractTargetQuote.quote_number}</strong> ({contractTargetQuote.customer?.company_name || contractTargetQuote.customer?.contact_person || 'Customer'}).
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Contract Type *
-                </label>
-                <select
-                  value={draftContractForm.contract_type}
-                  onChange={(e) => {
-                    const newType = e.target.value as ContractType;
-                    const typeLabelMap: Record<string, string> = {
-                      MSA: 'Master Services Agreement',
-                      SOW: 'Statement of Work',
-                      NDA: 'Non-Disclosure Agreement',
-                      SLA: 'Service Level Agreement',
-                      WORK_ORDER: 'Work Order',
-                      MAINTENANCE: 'Maintenance Agreement',
-                      CONSULTING: 'Consulting Agreement',
-                      LICENSE: 'Software License Agreement',
-                      OTHER: 'Agreement'
-                    };
-                    const typeLabel = typeLabelMap[newType] || newType;
-                    const defaultTitle = contractTargetQuote.project_title 
-                      ? `${typeLabel} - ${contractTargetQuote.project_title}`
-                      : `${typeLabel} (${contractTargetQuote.quote_number})`;
-
-                    setDraftContractForm({
-                      ...draftContractForm,
-                      contract_type: newType,
-                      contract_title: defaultTitle
-                    });
-                  }}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-emerald-500 focus:border-emerald-500 text-sm bg-white"
-                >
-                  <option value="SOW">SOW - Statement of Work</option>
-                  <option value="MSA">MSA - Master Services Agreement</option>
-                  <option value="NDA">NDA - Non-Disclosure Agreement</option>
-                  <option value="SLA">SLA - Service Level Agreement</option>
-                  <option value="WORK_ORDER">Work Order</option>
-                  <option value="MAINTENANCE">Maintenance Contract</option>
-                  <option value="CONSULTING">Consulting Agreement</option>
-                  <option value="LICENSE">Software License Agreement</option>
-                  <option value="OTHER">Other Agreement</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Contract Title *
-                </label>
-                <input
-                  type="text"
-                  value={draftContractForm.contract_title}
-                  onChange={(e) => setDraftContractForm({ ...draftContractForm, contract_title: e.target.value })}
-                  placeholder="Enter contract title"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-emerald-500 focus:border-emerald-500 text-sm"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Contract Date *
-                  </label>
-                  <input
-                    type="date"
-                    value={draftContractForm.contract_date}
-                    onChange={(e) => setDraftContractForm({ ...draftContractForm, contract_date: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-emerald-500 focus:border-emerald-500 text-sm"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Effective Date *
-                  </label>
-                  <input
-                    type="date"
-                    value={draftContractForm.effective_date}
-                    onChange={(e) => setDraftContractForm({ ...draftContractForm, effective_date: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-emerald-500 focus:border-emerald-500 text-sm"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Expiry Date (Optional)
-                  </label>
-                  <input
-                    type="date"
-                    value={draftContractForm.expiry_date}
-                    onChange={(e) => setDraftContractForm({ ...draftContractForm, expiry_date: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-emerald-500 focus:border-emerald-500 text-sm"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Contract Value ({draftContractForm.currency_code})
-                  </label>
-                  <input
-                    type="number"
-                    value={draftContractForm.contract_value}
-                    onChange={(e) => setDraftContractForm({ ...draftContractForm, contract_value: parseFloat(e.target.value) || 0 })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-emerald-500 focus:border-emerald-500 text-sm"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Payment & Special Terms
-                </label>
-                <textarea
-                  value={draftContractForm.payment_terms}
-                  onChange={(e) => setDraftContractForm({ ...draftContractForm, payment_terms: e.target.value })}
-                  rows={2}
-                  placeholder="Terms & conditions..."
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-emerald-500 focus:border-emerald-500 text-sm"
-                />
-              </div>
-            </div>
-
-            <div className="flex justify-end space-x-3 mt-6 pt-4 border-t">
-              <button
-                onClick={() => {
-                  setShowDraftContractModal(false);
-                  setContractTargetQuote(null);
-                }}
-                className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleCreateDraftContract}
-                disabled={!draftContractForm.contract_title.trim()}
-                className="px-4 py-2 bg-emerald-600 text-white rounded-md text-sm font-medium hover:bg-emerald-700 disabled:opacity-50 inline-flex items-center"
-              >
-                <FileSignature className="w-4 h-4 mr-2" />
-                Create Draft Contract
-              </button>
-            </div>
-          </div>
-        </div>
+      {/* Create Contract Modal */}
+      {showCreateContractModal && createContractInitialData && (
+        <CreateContractModal
+          initialData={createContractInitialData}
+          onSave={handleSaveContractFromQuote}
+          onClose={() => {
+            setShowCreateContractModal(false);
+            setCreateContractInitialData(null);
+          }}
+        />
       )}
     </div>
   );

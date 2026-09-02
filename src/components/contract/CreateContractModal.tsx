@@ -39,7 +39,7 @@ const CreateContractModal: React.FC<CreateContractModalProps> = ({ onSave, onClo
   const [formData, setFormData] = useState<CreateContractData>(initialData);
   const [sections, setSections] = useState<CreateContractSectionData[]>(initialData.sections || []);
   const [milestones, setMilestones] = useState<CreateContractMilestoneData[]>(initialData.milestones || []);
-  const [selectedCustomerId, setSelectedCustomerId] = useState<string>('');
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string>(initialData?.customer_id || '');
 
   const contractTypes: ContractType[] = ['MSA', 'SOW', 'NDA', 'SLA', 'WORK_ORDER', 'MAINTENANCE', 'CONSULTING', 'LICENSE', 'OTHER'];
   const currencies = ['INR', 'USD', 'EUR', 'GBP', 'AED', 'SGD', 'AUD', 'CAD', 'JPY', 'CNY'];
@@ -55,6 +55,28 @@ const CreateContractModal: React.FC<CreateContractModalProps> = ({ onSave, onClo
       const countryCode = companies.find(c => c.id === selectedCompany?.id)?.country?.code;
       const tpls = await contractService.getAllTemplatesWithSections(countryCode);
       setAvailableTemplates(tpls);
+
+      // Auto-apply matching template if contract_type is present and sections are default/empty
+      if (initialData?.contract_type && tpls && tpls.length > 0 && (!sections || sections.length <= 2)) {
+        const matching = tpls.find((t: any) => t.contract_type === initialData.contract_type);
+        if (matching && matching.sections && matching.sections.length > 0) {
+          setFormData(prev => ({
+            ...prev,
+            template_id: matching.id,
+            contract_title: prev.contract_title || matching.contract_title || matching.template_name,
+            preamble: matching.preamble || prev.preamble,
+          }));
+          setSections(matching.sections.map((s: any) => ({
+            id: `tpl-${s.section_number}-${Date.now()}-${Math.random().toString(36).substring(2, 5)}`,
+            section_number: s.section_number,
+            section_title: s.section_title,
+            section_content: s.section_content,
+            is_required: s.is_required,
+            page_break_before: !!s.page_break_before,
+          })));
+          setTemplateApplied(true);
+        }
+      }
     } catch (err) {
       console.error('Error loading contract templates:', err);
     }
@@ -106,6 +128,26 @@ const CreateContractModal: React.FC<CreateContractModalProps> = ({ onSave, onClo
 
   const handleInputChange = (field: string, value: string | number) => {
     setFormData(prev => ({ ...prev, [field]: value }));
+    if (field === 'contract_type' && availableTemplates.length > 0) {
+      const matchingTpl = availableTemplates.find(t => t.contract_type === value);
+      if (matchingTpl && matchingTpl.sections && matchingTpl.sections.length > 0) {
+        setFormData(prev => ({
+          ...prev,
+          template_id: matchingTpl.id,
+          contract_title: matchingTpl.contract_title || matchingTpl.template_name || prev.contract_title,
+          preamble: matchingTpl.preamble || prev.preamble,
+        }));
+        setSections(matchingTpl.sections.map((s: any) => ({
+          id: `tpl-${s.section_number}-${Date.now()}-${Math.random().toString(36).substring(2, 5)}`,
+          section_number: s.section_number,
+          section_title: s.section_title,
+          section_content: s.section_content,
+          is_required: s.is_required,
+          page_break_before: !!s.page_break_before,
+        })));
+        setTemplateApplied(true);
+      }
+    }
   };
 
   const applyEntityTemplate = (templateId: string) => {

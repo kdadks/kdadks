@@ -4,8 +4,8 @@ import type { Customer, CompanySettings } from '../types/invoice';
 export const getEntityPrefix = (company: CompanySettings | null | undefined): string => {
   if (!company) return 'CUS';
   // country?.code is the ISO alpha-2/3 code from the joined countries relation.
-  // country_id is a FK (UUID or code) — unreliable as a display prefix.
-  const code = (company.country?.code ?? '').toUpperCase();
+  // country_id is a FK (code/UUID) used as fallback.
+  const code = (company.country?.code || company.country_id || '').toUpperCase();
   if (code === 'IN' || code === 'IND') return 'IND';
   if (code === 'IE' || code === 'IRL') return 'IRL';
   if (code === 'GB' || code === 'GBR' || code === 'UK') return 'GBR';

@@ -548,12 +548,14 @@ The complete sales pipeline with status/stage transitions:
 - Entity-aware dashboard stats tile formatting: queries stats with active entity context (`selectedCompany?.id`) and formats totals/icons dynamically in the entity's native currency (e.g. € for Ireland/IRL, ₹ for India/IN, $ for USA)
 - Status badges with color coding
 - Can convert accepted quote to invoice via `quoteService.convertToInvoice()`
-- Automated draft contract creation workflow for accepted quotes: when a quote status is updated to `accepted` or when clicking "Create Draft Contract" on accepted quotes, opens a configuration modal allowing users to select Contract Type (`SOW`, `MSA`, `NDA`, `SLA`, `WORK_ORDER`, etc.), title, dates, contract value, and terms. Automatically loads jurisdiction-specific template sections (`IRL` Irish Law vs `IND` Indian Law) bound to the company legal entity.
+- Automated draft contract creation workflow for accepted quotes: when a quote status is updated to `accepted` or when clicking "Create Draft Contract" on accepted quotes, reuses the exact feature-rich `CreateContractModal` component (`src/components/contract/CreateContractModal.tsx`). Pre-populates company legal details, customer data, quote total, items/deliverables scope of work, dates, and terms while enabling full tabbed editing (Basic Info, Parties, Sections, Milestones) and dynamic jurisdiction template switching (`IRL` Irish Law vs `IND` Indian Law).
+- Fixed `contractService.generateContractNumber` entity prefix resolution to properly map `'IE'` / `'IRL'` to `'IRL'` (preventing Irish contracts from defaulting to `'IND'`).
+- Enforced strict entity boundary isolation on `/admin/contracts` via `.eq('company_settings_id', company_settings_id)` in `contractService.getContracts` & `getStatistics`, ensuring Irish entity views strictly show contracts linked to the Ireland entity.
 
 ### Contract Management (`src/components/contract/ContractManagement.tsx`)
 
 - Entity-aware dashboard statistics calculation in `contractService.getStatistics(companySettingsId)` natively aggregating contract values for the selected entity
-- Dynamic currency formatting in dashboard tiles (`Total Value`) adhering to `selectedCompany` currency (e.g. € for Ireland/IRL, ₹ for India/IN, $ for USA)
+- Strict company entity isolation via `company_settings_id` filter across contracts table view and dashboard tiles
 
 ### Invoice Management (`src/components/invoice/InvoiceManagement.tsx`)
 

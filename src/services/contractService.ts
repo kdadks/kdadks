@@ -6,6 +6,7 @@
 import { supabase, isSupabaseConfigured } from '../config/supabase';
 import { simpleAuth } from '../utils/simpleAuth';
 import { convertToINR } from '../utils/currencyConverter';
+import { getEntityPrefix } from '../utils/customerCodeUtils';
 import { IRISH_CONTRACT_TEMPLATES } from '../data/irishContractTemplates';
 import { INDIAN_CONTRACT_TEMPLATES } from '../data/indianContractTemplates';
 import type {
@@ -99,8 +100,19 @@ class ContractService {
     const month = (new Date().getMonth() + 1).toString().padStart(2, '0');
 
     let entity = 'IND';
-    if (entityPrefix && entityPrefix.toUpperCase() === 'IRL') {
-      entity = 'IRL';
+    if (entityPrefix) {
+      const up = entityPrefix.toUpperCase();
+      if (up === 'IRL' || up === 'IE') {
+        entity = 'IRL';
+      } else if (up === 'GBR' || up === 'GB' || up === 'UK') {
+        entity = 'GBR';
+      } else if (up === 'USA' || up === 'US') {
+        entity = 'USA';
+      } else if (up === 'IND' || up === 'IN') {
+        entity = 'IND';
+      } else if (up && /^[A-Z]{2,4}$/.test(up)) {
+        entity = up.substring(0, 3);
+      }
     }
 
     const prefix = `KDADKS/${entity}/${year}/${month}/`;
@@ -330,18 +342,45 @@ class ContractService {
       contractData.contract_type
     );
 
-    // Prepare contract data (exclude sections, milestones, and internal fields for main insert)
-    const { sections, milestones, entity_prefix, ...contractInfo } = contractData;
+    // Prepare contract data (exclude non-schema UI fields from main contracts table insert)
+    const { 
+      sections, 
+      milestones, 
+      entity_prefix, 
+      customer_id, 
+      party_a_vat_number,
+      party_a_cro_number,
+      party_b_vat_number,
+      party_b_cro_number,
+      ...contractInfo 
+    } = contractData;
 
-    const contractToInsert = {
+    const contractToInsert: any = {
       ...contractInfo,
+      company_settings_id: contractData.company_settings_id || undefined,
+      contract_type: contractData.contract_type ? String(contractData.contract_type).substring(0, 10) : 'OTHER',
+      party_a_gstin: (contractInfo.party_a_gstin || party_a_vat_number) ? String(contractInfo.party_a_gstin || party_a_vat_number).substring(0, 15) : undefined,
+      party_a_pan: (contractInfo.party_a_pan || party_a_cro_number) ? String(contractInfo.party_a_pan || party_a_cro_number).substring(0, 10) : undefined,
+      party_b_gstin: (contractInfo.party_b_gstin || party_b_vat_number) ? String(contractInfo.party_b_gstin || party_b_vat_number).substring(0, 15) : undefined,
+      party_b_pan: (contractInfo.party_b_pan || party_b_cro_number) ? String(contractInfo.party_b_pan || party_b_cro_number).substring(0, 10) : undefined,
       contract_number: contractNumber,
-      currency_code: contractData.currency_code || 'INR',
+      currency_code: contractData.currency_code ? String(contractData.currency_code).substring(0, 5) : 'INR',
       status: 'draft',
       signed_by_party_a: false,
       signed_by_party_b: false,
-      created_by: currentUser?.id
     };
+
+    if (currentUser?.id) {
+      contractToInsert.created_by = currentUser.id;
+    }
+
+    // Clean payload of undefined properties and empty strings for UUID/Date/Foreign key fields
+    Object.keys(contractToInsert).forEach(key => {
+      const val = contractToInsert[key];
+      if (val === undefined || val === '') {
+        delete contractToInsert[key];
+      }
+    });
 
     // Insert contract
     const { data: contract, error: contractError } = await supabase
@@ -350,7 +389,10 @@ class ContractService {
       .select()
       .single();
 
-    if (contractError) throw contractError;
+    if (contractError) {
+      console.error('Supabase contract insert error:', contractError);
+      throw new Error(contractError.message || contractError.details || 'Database error creating contract');
+    }
 
     // Insert sections
     if (sections && sections.length > 0) {
@@ -360,7 +402,6 @@ class ContractService {
         section_title: section.section_title,
         section_content: section.section_content,
         is_required: section.is_required || false,
-        is_locked: section.is_locked || false,
         page_break_before: section.page_break_before || false
       }));
 
@@ -368,7 +409,10 @@ class ContractService {
         .from('contract_sections')
         .insert(sectionsToInsert);
 
-      if (sectionsError) throw sectionsError;
+      if (sectionsError) {
+        console.error('Supabase contract sections insert error:', sectionsError);
+        throw new Error(sectionsError.message || sectionsError.details || 'Database error creating contract sections');
+      }
     }
 
     // Insert milestones (if applicable for SOW/Work Orders)
@@ -388,7 +432,10 @@ class ContractService {
         .from('contract_milestones')
         .insert(milestonesToInsert);
 
-      if (milestonesError) throw milestonesError;
+      if (milestonesError) {
+        console.error('Supabase contract milestones insert error:', milestonesError);
+        throw new Error(milestonesError.message || milestonesError.details || 'Database error creating contract milestones');
+      }
     }
 
     return contract;
@@ -743,7 +790,7 @@ class ContractService {
 
     let query = supabase
       .from('contracts')
-      .select('status, contract_type, contract_value, currency_code, expiry_date, company_settings_id');
+      .select('status, contract_type, contract_value, currency_code, expiry_date, company_settings_id, contract_number');
 
     if (companySettingsId) {
       query = query.eq('company_settings_id', companySettingsId);
