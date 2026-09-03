@@ -366,31 +366,38 @@ export class ContractPDFGenerator {
   private async addSection(section: typeof this.contract.sections[0]): Promise<void> {
     const { leftMargin, rightMargin } = this.dimensions;
     const contentWidth = rightMargin - leftMargin;
-    const contentIndent = 5; // 5mm indentation for content
+    const contentIndent = 3; // 3mm indentation for section content
 
     // Force page break if specified
     if (section.page_break_before) {
       await this.checkPageBreak(0, true);
     } else {
-      await this.checkPageBreak(15);
+      await this.checkPageBreak(18);
     }
 
-    // Section number and title - more compact
-    this.pdf.setFontSize(10);
-    this.pdf.setFont('helvetica', 'bold');
-    this.pdf.setTextColor(0, 0, 0);
-    this.pdf.text(`${section.section_number}. ${section.section_title}`, leftMargin, this.currentY);
-    this.currentY += 5;
+    // Section title - Enterprise accent bar and corporate blue font
+    const sectionTitleText = `${section.section_number}. ${section.section_title}`;
+    
+    // Draw accent bar on left of section title
+    this.pdf.setFillColor(30, 58, 138); // Corporate Blue (#1e3a8a)
+    this.pdf.rect(leftMargin, this.currentY - 3.8, 2.5, 5.5, 'F');
 
-    // Section content (indented)
+    // Section title text
+    this.pdf.setFontSize(10.5);
+    this.pdf.setFont('helvetica', 'bold');
+    this.pdf.setTextColor(30, 58, 138);
+    this.pdf.text(sectionTitleText, leftMargin + 5, this.currentY);
+    this.currentY += 6.5;
+
+    // Reset font for section content
     this.pdf.setFontSize(8.5);
     this.pdf.setFont('helvetica', 'normal');
-    this.pdf.setTextColor(0, 0, 0);
+    this.pdf.setTextColor(30, 41, 59); // Slate dark text (#1e293b)
 
-    // Render content with indentation (5mm from section title)
+    // Render section content
     await this.renderSectionContent(section.section_content, contentWidth - contentIndent, leftMargin + contentIndent);
 
-    this.currentY += 2; // Reduced from 3
+    this.currentY += 4; // Space between sections
   }
 
   /**
@@ -467,7 +474,7 @@ export class ContractPDFGenerator {
   }
 
   /**
-   * Render HTML table
+   * Render HTML table with smart column width allocation and per-row page break checking
    */
   private async renderHTMLTable(tableHTML: string, maxWidth: number, leftMargin: number): Promise<void> {
     // Parse table rows
@@ -487,7 +494,7 @@ export class ContractPDFGenerator {
       
       while ((cellMatch = cellRegex.exec(rowContent)) !== null) {
         const cellText = cellMatch[2]
-          .replace(/<br\s*\/?>/gi, ' ')
+          .replace(/<br\s*\/?>/gi, '\n')
           .replace(/<[^>]+>/g, '')
           .replace(/&nbsp;/g, ' ')
           .replace(/&amp;/g, '&')
@@ -509,69 +516,127 @@ export class ContractPDFGenerator {
 
     if (rows.length === 0) return;
 
-    const numCols = rows[0].length;
-    const colWidth = maxWidth / numCols;
+    const numCols = Math.max(...rows.map(r => r.length));
+    if (numCols === 0) return;
 
-    // Calculate row heights based on content
-    const rowHeights: number[] = [];
+    // Pad rows so all rows have exactly numCols
+    rows.forEach(r => {
+      while (r.length < numCols) r.push('');
+    });
+
+    // Calculate smart proportional column widths
+    const colWeights: number[] = new Array(numCols).fill(1);
+    for (let c = 0; c < numCols; c++) {
+      let maxLen = 0;
+      let totalLen = 0;
+      rows.forEach(r => {
+        const len = (r[c] || '').length;
+        maxLen = Math.max(maxLen, len);
+        totalLen += len;
+      });
+      const avgLen = totalLen / rows.length;
+      colWeights[c] = Math.max(avgLen, maxLen * 0.4, 2);
+    }
+
+    // Special sizing for index/number columns (#, S.No, Phase, ID)
+    for (let c = 0; c < numCols; c++) {
+      const headerText = (rows[0][c] || '').trim().toLowerCase();
+      if (['#', 's.no', 'no.', 'sl.no', 'id', 'phase'].includes(headerText)) {
+        colWeights[c] = 0.5; // Minimal weight for index columns
+      }
+    }
+
+    const totalWeight = colWeights.reduce((sum, w) => sum + w, 0);
+    const colWidths: number[] = colWeights.map(w => Math.max(10, (w / totalWeight) * maxWidth));
+
+    // Normalize colWidths to sum exactly to maxWidth
+    const sumWidths = colWidths.reduce((sum, w) => sum + w, 0);
+    const scale = maxWidth / sumWidths;
+    for (let c = 0; c < numCols; c++) {
+      colWidths[c] = colWidths[c] * scale;
+    }
+
+    // Calculate row heights based on font size 7.5pt
     this.pdf.setFontSize(7.5);
-    
+    const rowHeights: number[] = [];
     rows.forEach((row) => {
       let maxLines = 1;
-      row.forEach((cell) => {
-        const cellLines = this.pdf.splitTextToSize(cell, colWidth - 2);
-        maxLines = Math.max(maxLines, cellLines.length);
+      row.forEach((cell, cIdx) => {
+        const lines = cell.split('\n').flatMap(line => this.pdf.splitTextToSize(line, colWidths[cIdx] - 3));
+        maxLines = Math.max(maxLines, lines.length);
       });
-      rowHeights.push(Math.max(5, maxLines * 3.5 + 1.5)); // Dynamic height
+      rowHeights.push(Math.max(6, maxLines * 3.5 + 3));
     });
 
-    const totalHeight = rowHeights.reduce((sum, h) => sum + h, 0);
-    await this.checkPageBreak(totalHeight + 2);
-
-    // Draw table
-    this.pdf.setFontSize(7.5);
-    
-    rows.forEach((row, rowIndex) => {
+    // Helper to draw a single row
+    const drawRow = (row: string[], rowIndex: number, yPos: number, rHeight: number) => {
       const isHeader = rowIndex === 0;
-      const rowHeight = rowHeights[rowIndex];
-      
-      // Draw row background for header
+      let currentX = leftMargin;
+
+      // Header or alternating row background
       if (isHeader) {
-        this.pdf.setFillColor(220, 220, 220); // Slightly darker header background
-        this.pdf.rect(leftMargin, this.currentY - 3.5, maxWidth, rowHeight, 'F');
+        this.pdf.setFillColor(235, 240, 248);
+        this.pdf.rect(leftMargin, yPos, maxWidth, rHeight, 'F');
+      } else if (rowIndex % 2 === 1) {
+        this.pdf.setFillColor(250, 251, 253);
+        this.pdf.rect(leftMargin, yPos, maxWidth, rHeight, 'F');
       }
-      
-      // Draw cell borders and content
+
+      this.pdf.setFontSize(7.5);
+
       row.forEach((cell, colIndex) => {
-        const cellX = leftMargin + (colIndex * colWidth);
-        
-        // Draw cell borders
-        this.pdf.setDrawColor(0, 0, 0);
-        this.pdf.setLineWidth(0.1);
-        this.pdf.rect(cellX, this.currentY - 3.5, colWidth, rowHeight);
-        
-        // Draw cell text with word wrap
+        const cWidth = colWidths[colIndex];
+
+        // Draw cell border
+        this.pdf.setDrawColor(200, 205, 215);
+        this.pdf.setLineWidth(0.15);
+        this.pdf.rect(currentX, yPos, cWidth, rHeight);
+
+        // Text formatting
         if (isHeader) {
           this.pdf.setFont('helvetica', 'bold');
+          this.pdf.setTextColor(20, 35, 60);
         } else {
           this.pdf.setFont('helvetica', 'normal');
+          this.pdf.setTextColor(30, 30, 30);
         }
-        
-        const cellLines = this.pdf.splitTextToSize(cell, colWidth - 2);
-        cellLines.forEach((line: string, lineIndex: number) => {
-          this.pdf.text(line, cellX + 1, this.currentY + (lineIndex * 3.5));
+
+        const lines = cell.split('\n').flatMap(line => this.pdf.splitTextToSize(line, cWidth - 3));
+        lines.forEach((line: string, lineIndex: number) => {
+          this.pdf.text(line, currentX + 1.5, yPos + 3.8 + (lineIndex * 3.5));
         });
+
+        currentX += cWidth;
       });
-      
-      this.currentY += rowHeight;
-    });
-    
-    this.currentY += 1.5; // Reduced spacing after table
+    };
+
+    const headerHeight = rowHeights[0];
+    await this.checkPageBreak(headerHeight + (rowHeights[1] || 6) + 2);
+
+    for (let r = 0; r < rows.length; r++) {
+      const rHeight = rowHeights[r];
+
+      // Per-row page break check against contentEndY
+      if (this.currentY + rHeight > this.contentEndY - 2) {
+        await this.checkPageBreak(0, true); // Force page break
+        
+        // Re-print header row at top of new page if breaking in data rows
+        if (r > 0) {
+          drawRow(rows[0], 0, this.currentY, headerHeight);
+          this.currentY += headerHeight;
+        }
+      }
+
+      drawRow(rows[r], r, this.currentY, rHeight);
+      this.currentY += rHeight;
+    }
+
+    this.currentY += 3; // Space after table
     this.pdf.setFontSize(8.5); // Reset font size
   }
 
   /**
-   * Render plain text (HTML stripped)
+   * Render plain text (HTML stripped) with enterprise-grade typography and hanging bullet indents
    */
   private async renderPlainText(htmlOrText: string, maxWidth: number, leftMargin: number): Promise<void> {
     // Strip HTML tags and convert to plain text
@@ -610,22 +675,50 @@ export class ContractPDFGenerator {
       const paragraph = paragraphs[pIdx];
       const lines = paragraph.split('\n').filter(l => l.trim());
       
-      // Check if this paragraph contains only bullet points
-      const isBulletParagraph = lines.every(l => l.trim().startsWith('•'));
-      
       for (const line of lines) {
-        const wrappedLines = this.pdf.splitTextToSize(line.trim(), maxWidth);
-        for (const wrappedLine of wrappedLines) {
-          await this.checkPageBreak(4);
-          this.pdf.text(wrappedLine, leftMargin, this.currentY);
-          // Uniform spacing: 4.2mm for all lines
-          this.currentY += 4.2;
+        const trimmedLine = line.trim();
+        
+        // Bullet point handling
+        if (trimmedLine.startsWith('•') || trimmedLine.startsWith('*') || trimmedLine.startsWith('-')) {
+          const bulletText = trimmedLine.replace(/^[•\*\-]\s*/, '');
+          const wrappedBulletLines = this.pdf.splitTextToSize(bulletText, maxWidth - 6);
+
+          await this.checkPageBreak(4.5);
+          
+          // Draw corporate blue bullet dot
+          this.pdf.setFont('helvetica', 'bold');
+          this.pdf.setTextColor(30, 58, 138);
+          this.pdf.text('•', leftMargin + 2, this.currentY);
+
+          // Draw bullet text with clean hanging indent
+          this.pdf.setFont('helvetica', 'normal');
+          this.pdf.setTextColor(30, 41, 59);
+
+          for (let bIdx = 0; bIdx < wrappedBulletLines.length; bIdx++) {
+            if (bIdx > 0) {
+              await this.checkPageBreak(4.2);
+            }
+            this.pdf.text(wrappedBulletLines[bIdx], leftMargin + 7, this.currentY);
+            this.currentY += 4.2;
+          }
+          this.currentY += 0.8; // Gap after bullet item
+        } else {
+          // Regular paragraph line
+          this.pdf.setFont('helvetica', 'normal');
+          this.pdf.setTextColor(30, 41, 59);
+          const wrappedLines = this.pdf.splitTextToSize(trimmedLine, maxWidth);
+
+          for (const wrappedLine of wrappedLines) {
+            await this.checkPageBreak(4.2);
+            this.pdf.text(wrappedLine, leftMargin, this.currentY);
+            this.currentY += 4.2;
+          }
         }
       }
       
-      // Only add extra spacing between paragraphs if not a bullet list, and not the last paragraph
-      if (!isBulletParagraph && pIdx < paragraphs.length - 1) {
-        this.currentY += 0.8;
+      // Add paragraph gap
+      if (pIdx < paragraphs.length - 1) {
+        this.currentY += 1.5;
       }
     }
   }
@@ -670,7 +763,7 @@ export class ContractPDFGenerator {
   }
 
   /**
-   * Render a table from pipe-formatted rows
+   * Render a table from pipe-formatted rows with smart column width allocation and per-row page break checking
    */
   private async renderTable(rows: string[], maxWidth: number, leftMargin: number): Promise<void> {
     if (rows.length === 0) return;
@@ -678,7 +771,7 @@ export class ContractPDFGenerator {
     // Parse table structure
     const parsedRows = rows.map(row => 
       row.split('|')
-        .filter(cell => cell.trim())
+        .filter((cell, idx, arr) => (idx > 0 && idx < arr.length - 1) || cell.trim())
         .map(cell => cell.trim())
     );
 
@@ -689,62 +782,113 @@ export class ContractPDFGenerator {
 
     if (dataRows.length === 0) return;
 
-    const numCols = dataRows[0].length;
-    const colWidth = maxWidth / numCols;
+    const numCols = Math.max(...dataRows.map(r => r.length));
+    if (numCols === 0) return;
 
-    // Calculate row heights based on content
-    const rowHeights: number[] = [];
+    dataRows.forEach(r => {
+      while (r.length < numCols) r.push('');
+    });
+
+    // Calculate smart proportional column widths
+    const colWeights: number[] = new Array(numCols).fill(1);
+    for (let c = 0; c < numCols; c++) {
+      let maxLen = 0;
+      let totalLen = 0;
+      dataRows.forEach(r => {
+        const len = (r[c] || '').length;
+        maxLen = Math.max(maxLen, len);
+        totalLen += len;
+      });
+      const avgLen = totalLen / dataRows.length;
+      colWeights[c] = Math.max(avgLen, maxLen * 0.4, 2);
+    }
+
+    for (let c = 0; c < numCols; c++) {
+      const headerText = (dataRows[0][c] || '').trim().toLowerCase();
+      if (['#', 's.no', 'no.', 'sl.no', 'id', 'phase'].includes(headerText)) {
+        colWeights[c] = 0.5;
+      }
+    }
+
+    const totalWeight = colWeights.reduce((sum, w) => sum + w, 0);
+    const colWidths: number[] = colWeights.map(w => Math.max(10, (w / totalWeight) * maxWidth));
+
+    const sumWidths = colWidths.reduce((sum, w) => sum + w, 0);
+    const scale = maxWidth / sumWidths;
+    for (let c = 0; c < numCols; c++) {
+      colWidths[c] = colWidths[c] * scale;
+    }
+
     this.pdf.setFontSize(7.5);
-    
+    const rowHeights: number[] = [];
     dataRows.forEach((row) => {
       let maxLines = 1;
-      row.forEach((cell) => {
-        const cellLines = this.pdf.splitTextToSize(cell, colWidth - 2);
-        maxLines = Math.max(maxLines, cellLines.length);
+      row.forEach((cell, cIdx) => {
+        const lines = cell.split('\n').flatMap(line => this.pdf.splitTextToSize(line, colWidths[cIdx] - 3));
+        maxLines = Math.max(maxLines, lines.length);
       });
-      rowHeights.push(Math.max(5, maxLines * 3.5 + 1.5));
+      rowHeights.push(Math.max(6, maxLines * 3.5 + 3));
     });
 
-    const totalHeight = rowHeights.reduce((sum, h) => sum + h, 0);
-    await this.checkPageBreak(totalHeight + 2);
-
-    // Draw table
-    this.pdf.setFontSize(7.5);
-    
-    dataRows.forEach((row, rowIndex) => {
+    const drawRow = (row: string[], rowIndex: number, yPos: number, rHeight: number) => {
       const isHeader = rowIndex === 0;
-      const rowHeight = rowHeights[rowIndex];
-      
-      // Draw row background for header
+      let currentX = leftMargin;
+
       if (isHeader) {
-        this.pdf.setFillColor(240, 240, 240);
-        this.pdf.rect(leftMargin, this.currentY - 3.5, maxWidth, rowHeight, 'F');
+        this.pdf.setFillColor(235, 240, 248);
+        this.pdf.rect(leftMargin, yPos, maxWidth, rHeight, 'F');
+      } else if (rowIndex % 2 === 1) {
+        this.pdf.setFillColor(250, 251, 253);
+        this.pdf.rect(leftMargin, yPos, maxWidth, rHeight, 'F');
       }
-      
-      // Draw cell borders and content
+
+      this.pdf.setFontSize(7.5);
+
       row.forEach((cell, colIndex) => {
-        const cellX = leftMargin + (colIndex * colWidth);
-        
-        // No cell borders - removed for cleaner look
-        
-        // Draw cell text with word wrap
+        const cWidth = colWidths[colIndex];
+
+        this.pdf.setDrawColor(200, 205, 215);
+        this.pdf.setLineWidth(0.15);
+        this.pdf.rect(currentX, yPos, cWidth, rHeight);
+
         if (isHeader) {
           this.pdf.setFont('helvetica', 'bold');
+          this.pdf.setTextColor(20, 35, 60);
         } else {
           this.pdf.setFont('helvetica', 'normal');
+          this.pdf.setTextColor(30, 30, 30);
         }
-        
-        const cellLines = this.pdf.splitTextToSize(cell, colWidth - 2);
-        cellLines.forEach((line: string, lineIndex: number) => {
-          this.pdf.text(line, cellX + 1, this.currentY + (lineIndex * 3.5));
+
+        const lines = cell.split('\n').flatMap(line => this.pdf.splitTextToSize(line, cWidth - 3));
+        lines.forEach((line: string, lineIndex: number) => {
+          this.pdf.text(line, currentX + 1.5, yPos + 3.8 + (lineIndex * 3.5));
         });
+
+        currentX += cWidth;
       });
-      
-      this.currentY += rowHeight;
-    });
-    
-    this.currentY += 2;
-    this.pdf.setFontSize(8.5); // Reset font size
+    };
+
+    const headerHeight = rowHeights[0];
+    await this.checkPageBreak(headerHeight + (rowHeights[1] || 6) + 2);
+
+    for (let r = 0; r < dataRows.length; r++) {
+      const rHeight = rowHeights[r];
+
+      if (this.currentY + rHeight > this.contentEndY - 2) {
+        await this.checkPageBreak(0, true);
+        
+        if (r > 0) {
+          drawRow(dataRows[0], 0, this.currentY, headerHeight);
+          this.currentY += headerHeight;
+        }
+      }
+
+      drawRow(dataRows[r], r, this.currentY, rHeight);
+      this.currentY += rHeight;
+    }
+
+    this.currentY += 3;
+    this.pdf.setFontSize(8.5);
   }
 
   /**

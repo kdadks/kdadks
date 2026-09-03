@@ -1,6 +1,6 @@
 # Project Memory — KDADKS Website
 
-> Auto-updated by Kilo agent after every implementation. Last updated: 2026-09-02 16:45 BST
+> Auto-updated by Kilo agent after every implementation. Last updated: 2026-09-03 11:14 BST
 
 A comprehensive knowledge base for the KDADKS website codebase. This file serves as a single source of truth for project architecture, conventions, patterns, and key implementation details.
 
@@ -549,6 +549,11 @@ The complete sales pipeline with status/stage transitions:
 - Status badges with color coding
 - Can convert accepted quote to invoice via `quoteService.convertToInvoice()`
 - Automated draft contract creation workflow for accepted quotes: when a quote status is updated to `accepted` or when clicking "Create Draft Contract" on accepted quotes, reuses the exact feature-rich `CreateContractModal` component (`src/components/contract/CreateContractModal.tsx`). Pre-populates company legal details, customer data, quote total, items/deliverables scope of work, dates, and terms while enabling full tabbed editing (Basic Info, Parties, Sections, Milestones) and dynamic jurisdiction template switching (`IRL` Irish Law vs `IND` Indian Law).
+- Overhauled contract PDF generator ([`contractPDFGenerator.ts`](file:///Users/prashant/Documents/Application%20directory/Kdadks/src/utils/contractPDFGenerator.ts)) with enterprise-grade typography and table formatting:
+  - Smart proportional column width allocation (`colWeights` prioritizing description columns while narrowing `#` / `Phase` / `S.No` index columns).
+  - Per-row footer boundary checking (`this.currentY + rHeight > this.contentEndY - 2`), preventing tables from overlapping page footers, branding banners, or page numbers.
+  - Repeated table header rendering on multi-page table breaks.
+  - Corporate Deep Blue accent bars (`#1e3a8a`), slate dark body text (`#1e293b`), and clean hanging bullet indents for section rendering.
 - Added database migration [`037_add_contracts_cro_vat_and_company_settings_id.sql`](file:///Users/prashant/Documents/Application%20directory/Kdadks/database/migrations/037_add_contracts_cro_vat_and_company_settings_id.sql) introducing `company_settings_id`, `customer_id`, `party_a_vat_number`, `party_a_cro_number`, `party_b_vat_number`, `party_b_cro_number` to `contracts` table.
 - Implemented `safeInsertContract` and `safeUpdateContract` resilience handlers in [`contractService.ts`](file:///Users/prashant/Documents/Application%20directory/Kdadks/src/services/contractService.ts) to handle DB schema column updates seamlessly without throwing `PGRST204` errors.
 - Separated Irish Entity tax fields (`party_a_vat_number`, `party_a_cro_number`, `party_b_vat_number`, `party_b_cro_number`) from Indian GSTIN/PAN fields across [`CreateContractModal.tsx`](file:///Users/prashant/Documents/Application%20directory/Kdadks/src/components/contract/CreateContractModal.tsx), [`EditContractModal.tsx`](file:///Users/prashant/Documents/Application%20directory/Kdadks/src/components/contract/EditContractModal.tsx), and [`contractService.ts`](file:///Users/prashant/Documents/Application%20directory/Kdadks/src/services/contractService.ts).
