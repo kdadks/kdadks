@@ -38,6 +38,7 @@ import {
   Compass,
   ShieldCheck,
   ShieldAlert,
+  LifeBuoy,
 } from 'lucide-react'
 import { simpleAuth, SimpleUser } from '../../utils/simpleAuth'
 import { isSupabaseConfigured, supabase } from '../../config/supabase'
@@ -63,6 +64,7 @@ const AttendanceManagement = lazy(() => import('../hr/AttendanceManagement'))
 const FullFinalSettlement = lazy(() => import('../hr/FullFinalSettlement'))
 const TDSReport = lazy(() => import('../hr/TDSReport'))
 const PolicyManagement = lazy(() => import('../hr/PolicyManagement').then(m => ({ default: m.PolicyManagement })))
+const AgentTriageDesk = lazy(() => import('../itsm/AgentTriageDesk'))
 const RateCardManagement = lazy(() => import('./RateCardManagement'))
 const Announcements = lazy(() => import('./Announcements').then(m => ({ default: m.Announcements })))
 const PerformanceFeedback = lazy(() => import('./PerformanceFeedback'))
@@ -118,10 +120,10 @@ interface DashboardStats {
   settlements: number;
 }
 
-type ActiveView = 'dashboard' | 'invoices' | 'payments' | 'quotes' | 'contracts' | 'rate-cards' | 'announcements' | 'expenses' | 'income' | 'finance' | 'hr-employees' | 'hr-leave' | 'hr-attendance' | 'hr-settlement' | 'hr-tds-report' | 'hr-performance' | 'hr-compensation' | 'hr-policies' | 'subscriptions' | 'board-resolutions' | 'settings' | 'roles' | 'users' | 'customers' | 'customer-360' | 'leads' | 'opportunities' | 'products' | 'reporting-hub' | 'reporting-customers' | 'reporting-leads' | 'reporting-opportunities' | 'reporting-subscriptions' | 'reporting-quotes' | 'reporting-invoices' | 'reporting-hr' | 'reporting-hr-attendance' | 'reporting-hr-leave' | 'reporting-hr-compensation' | 'reporting-hr-performance';
+type ActiveView = 'dashboard' | 'invoices' | 'payments' | 'quotes' | 'contracts' | 'rate-cards' | 'announcements' | 'expenses' | 'income' | 'finance' | 'hr-employees' | 'hr-leave' | 'hr-attendance' | 'hr-settlement' | 'hr-tds-report' | 'hr-performance' | 'hr-compensation' | 'hr-policies' | 'itsm-tickets' | 'subscriptions' | 'board-resolutions' | 'settings' | 'roles' | 'users' | 'customers' | 'customer-360' | 'leads' | 'opportunities' | 'products' | 'reporting-hub' | 'reporting-customers' | 'reporting-leads' | 'reporting-opportunities' | 'reporting-subscriptions' | 'reporting-quotes' | 'reporting-invoices' | 'reporting-hr' | 'reporting-hr-attendance' | 'reporting-hr-leave' | 'reporting-hr-compensation' | 'reporting-hr-performance';
 
 // Menu section types
-type MenuSection = 'sales' | 'customers' | 'catalog' | 'billing' | 'finance' | 'hr' | 'communication' | 'governance' | 'reporting' | 'configuration';
+type MenuSection = 'sales' | 'customers' | 'catalog' | 'billing' | 'finance' | 'hr' | 'communication' | 'governance' | 'reporting' | 'configuration' | 'servicedesk';
 
 const SimpleAdminDashboard: React.FC = () => {
   const [user, setUser] = useState<SimpleUser | null>(null)
@@ -139,7 +141,8 @@ const SimpleAdminDashboard: React.FC = () => {
     communication: true,
     governance: true,
     reporting: true,
-    configuration: true
+    configuration: true,
+    servicedesk: true,
   })
   const [dashboardStats, setDashboardStats] = useState<DashboardStats>({
     invoices: null,
@@ -183,6 +186,7 @@ const SimpleAdminDashboard: React.FC = () => {
     '/admin/hr/performance': 'hr-performance',
     '/admin/hr/compensation': 'hr-compensation',
     '/admin/hr/policies': 'hr-policies',
+    '/admin/itsm/tickets': 'itsm-tickets',
     '/admin/subscriptions': 'subscriptions',
     '/admin/board-resolutions': 'board-resolutions',
     '/admin/settings': 'settings',
@@ -229,6 +233,7 @@ const SimpleAdminDashboard: React.FC = () => {
     'hr-settlement': 'settlement',
     'hr-tds-report': 'compensation',
     'hr-policies': 'policies',
+    'itsm-tickets': 'itsm_tickets',
     'hr-attendance': 'attendance',
     'reporting-hr': 'reporting',
     'reporting-hr-attendance': 'reporting',
@@ -581,6 +586,8 @@ const SimpleAdminDashboard: React.FC = () => {
         return <TDSReport />;
       case 'hr-policies':
         return <PolicyManagement />;
+      case 'itsm-tickets':
+        return <AgentTriageDesk />;
       case 'hr-attendance':
         return <AttendanceManagement />;
       case 'reporting-hr':
@@ -1198,6 +1205,45 @@ const SimpleAdminDashboard: React.FC = () => {
                       </li>
                     )}
                   </>
+                )}
+              </>
+            )}
+
+            {/* Section: Service Desk */}
+            {(can('itsm_tickets', 'view') || isSuperAdmin) && (
+              <>
+                <li className="pt-3">
+                  {sidebarOpen ? (
+                    <button
+                      onClick={() => toggleSection('servicedesk')}
+                      className="w-full flex items-center justify-between px-3 py-2 text-xs font-bold text-indigo-700 dark:text-indigo-400 uppercase tracking-wider hover:bg-indigo-50 dark:hover:bg-gray-800 rounded-md transition-colors"
+                    >
+                      <span className="flex items-center gap-1.5">
+                        <LifeBuoy className="w-4 h-4 text-indigo-600" />
+                        <span>Service Desk</span>
+                      </span>
+                      {openSections.servicedesk ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                    </button>
+                  ) : (
+                    <div className="my-1 border-t border-gray-200" />
+                  )}
+                </li>
+
+                {(openSections.servicedesk || !sidebarOpen) && (
+                  <li>
+                    <button
+                      onClick={() => navigate('/admin/itsm/tickets')}
+                      title={!sidebarOpen ? 'Support Triage Desk' : undefined}
+                      className={`w-full flex items-center ${!sidebarOpen ? 'justify-center' : ''} px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                        activeView === 'itsm-tickets'
+                          ? 'bg-indigo-100 text-indigo-800 font-bold'
+                          : 'text-gray-700 hover:bg-gray-100'
+                      }`}
+                    >
+                      <LifeBuoy className="w-5 h-5 flex-shrink-0 text-indigo-600" />
+                      {sidebarOpen && <span className="ml-3 font-semibold">Support Triage Desk</span>}
+                    </button>
+                  </li>
                 )}
               </>
             )}

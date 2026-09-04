@@ -84,17 +84,25 @@ class InvoiceService {
 
   // Company Settings
   async getCompanySettings(): Promise<CompanySettings[]> {
-    const { data, error } = await supabase
-      .from('company_settings')
-      .select(`
-        *,
-        country:countries(*)
-      `)
-      .eq('is_active', true)
-      .order('is_default', { ascending: false });
-    
-    if (error) throw error;
-    return data || [];
+    try {
+      const { data, error } = await supabase
+        .from('company_settings')
+        .select(`
+          *,
+          country:countries(*)
+        `)
+        .eq('is_active', true)
+        .order('is_default', { ascending: false });
+      
+      if (error) {
+        console.warn('getCompanySettings DB error (falling back):', error.message);
+        return [];
+      }
+      return data || [];
+    } catch (err) {
+      console.warn('getCompanySettings exception:', err);
+      return [];
+    }
   }
 
   async getDefaultCompanySettings(): Promise<CompanySettings | null> {

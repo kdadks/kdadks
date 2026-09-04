@@ -32,6 +32,9 @@ const CustomerSupport = lazy(() => import('./CustomerSupport'))
 const ServiceInquiry = lazy(() => import('./ServiceInquiry'))
 const BookConsultation = lazy(() => import('./BookConsultation'))
 const Partnership = lazy(() => import('./Partnership'))
+const CustomerPortal = lazy(() => import('./itsm/CustomerPortal'))
+const AgentTriageDesk = lazy(() => import('./itsm/AgentTriageDesk'))
+const ProtectedITSMRoute = lazy(() => import('./itsm/ProtectedITSMRoute'))
 
 // Admin Components (directly imported - manual chunking handles code splitting)
 import AdminLogin from './admin/AdminLogin'
@@ -227,6 +230,7 @@ const Router = () => {
               <Route path="/admin/hr/performance" element={<SimpleAdminDashboard />} />
               <Route path="/admin/hr/compensation" element={<SimpleAdminDashboard />} />
               <Route path="/admin/hr/policies" element={<SimpleAdminDashboard />} />
+              <Route path="/admin/itsm/tickets" element={<SimpleAdminDashboard />} />
               <Route path="/admin/subscriptions" element={<SimpleAdminDashboard />} />
               <Route path="/admin/board-resolutions" element={<SimpleAdminDashboard />} />
               <Route path="/admin/settings" element={<SimpleAdminDashboard />} />
@@ -237,6 +241,15 @@ const Router = () => {
               <Route path="/admin/leads" element={<SimpleAdminDashboard />} />
               <Route path="/admin/opportunities" element={<SimpleAdminDashboard />} />
               <Route path="/admin/products" element={<SimpleAdminDashboard />} />
+              
+              {/* Customer Self-Service Support & Invoices Portal routes */}
+              <Route path="/portal" element={<CustomerPortal initialTab="tickets" />} />
+              <Route path="/portal/tickets" element={<CustomerPortal initialTab="tickets" />} />
+              <Route path="/portal/invoices" element={<CustomerPortal initialTab="invoices" />} />
+
+              {/* Direct Phase 2 Unified Internal ITSM Triage Portal routes (Protected by Auth & RBAC) */}
+              <Route path="/itsm" element={<ProtectedITSMRoute><AgentTriageDesk /></ProtectedITSMRoute>} />
+              <Route path="/itsm/tickets" element={<ProtectedITSMRoute><AgentTriageDesk /></ProtectedITSMRoute>} />
               
               {/* Reporting & Analytics routes */}
               <Route path="/admin/reporting" element={<SimpleAdminDashboard />} />

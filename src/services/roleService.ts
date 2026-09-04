@@ -1,5 +1,6 @@
 import { supabase, isSupabaseConfigured } from '../config/supabase';
 import { simpleAuth } from '../utils/simpleAuth';
+import { EmailService } from './emailService';
 import {
   Role,
   RoleFormData,
@@ -671,10 +672,28 @@ export class RoleService {
       user_id: authUserId || formData.user_id,
     });
 
+    // Optionally dispatch welcome onboarding credentials email via Resend API
+    if (formData.send_welcome_email || formData.is_new_user) {
+      try {
+        const roles = await this.getRoles();
+        const matchedRole = roles.find((r) => r.id === formData.role_id);
+        const roleName = matchedRole?.name || 'Staff User';
+
+        await EmailService.sendStaffWelcomeCredentialsEmail(
+          formData.email.trim(),
+          formData.full_name.trim(),
+          roleName,
+          formData.password
+        );
+      } catch (emailErr) {
+        console.warn('RoleService.inviteOrRegisterUser welcome email dispatch notice:', emailErr);
+      }
+    }
+
     return {
       success: true,
       assignment,
-      message: `User ${formData.email} successfully assigned to role.`,
+      message: `Staff user ${formData.email} successfully created and assigned to role.`,
     };
   }
 
@@ -1075,5 +1094,8 @@ export class RoleService {
     }
   }
 }
+
+export const roleService = RoleService;
+export default RoleService;
 
 

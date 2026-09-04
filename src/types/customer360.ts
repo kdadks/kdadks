@@ -5,6 +5,7 @@ import type { Quote } from './quote';
 import type { Contract } from './contract';
 import type { CustomerSubscription } from './subscription';
 import type { CustomerRelationship, ContactCustomerLink } from './customerHierarchy';
+import type { ITSMTicket } from './itsm';
 
 export interface CustomerFinancialMetrics {
   totalInvoiced: number;      // Lifetime value / total invoiced amount
@@ -28,7 +29,8 @@ export type TimelineSourceType =
   | 'contract'
   | 'subscription'
   | 'invoice'
-  | 'payment';
+  | 'payment'
+  | 'itsm_ticket';
 
 export interface CustomerActivityTimelineItem {
   id: string;
@@ -53,6 +55,7 @@ export interface Customer360Data {
   subscriptions: CustomerSubscription[];
   invoices: Invoice[];
   payments: Payment[];
+  itsmTickets?: ITSMTicket[];
   metrics: CustomerFinancialMetrics;
   timeline: CustomerActivityTimelineItem[];
   /** All B2B hierarchy relationships this customer is involved in */

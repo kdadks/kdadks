@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Search, Eye, Edit, Trash2, X, Users, RefreshCw, Globe, Building2, UserCheck, Contact, Compass, GitBranch } from 'lucide-react';
+import { Plus, Search, Eye, Edit, Trash2, X, Users, RefreshCw, Globe, Building2, UserCheck, Contact, Compass, GitBranch, KeyRound } from 'lucide-react';
 import { invoiceService } from '../../services/invoiceService';
+import { CustomerAuthService } from '../../services/customerAuthService';
 import { useToast } from '../ui/ToastProvider';
 import ConfirmDialog from '../ui/ConfirmDialog';
 import { useConfirmDialog } from '../../hooks/useConfirmDialog';
@@ -152,8 +153,8 @@ const CustomerManagement: React.FC = () => {
         company_settings_id: customer.company_settings_id ?? entityId ?? undefined,
         gstin: customer.gstin ?? '',
         pan: customer.pan ?? '',
-        credit_limit: customer.credit_limit ?? 0,
-        payment_terms: customer.payment_terms ?? 30,
+        credit_limit: Number(customer.credit_limit) || 0,
+        payment_terms: Number(customer.payment_terms) || 30,
       });
     }
     setShowModal(true);
@@ -239,6 +240,20 @@ const CustomerManagement: React.FC = () => {
     e.preventDefault();
     setCurrentPage(1);
     loadCustomers();
+  };
+
+  const handleSendCredentials = async (customer: Customer) => {
+    try {
+      const tempPass = `Pass-${Math.floor(1000 + Math.random() * 9000)}`;
+      const res = await CustomerAuthService.setCustomerInitialPassword(customer.id, tempPass);
+      if (res.success) {
+        showSuccess(res.message);
+      } else {
+        showError(res.message);
+      }
+    } catch (err) {
+      showError(`Failed to send credentials: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    }
   };
 
   // Dynamic tax registration label based on form country
@@ -423,6 +438,14 @@ const CustomerManagement: React.FC = () => {
                           >
                             <GitBranch className="w-3.5 h-3.5" />
                             Hierarchy
+                          </button>
+                          <button
+                            onClick={() => handleSendCredentials(customer)}
+                            className="text-indigo-600 hover:text-indigo-900 flex items-center gap-1 font-semibold text-xs bg-indigo-50 hover:bg-indigo-100 px-2.5 py-1 rounded border border-indigo-200 shadow-2xs transition"
+                            title="Send Onboarding Passcode & Welcome Email via Resend"
+                          >
+                            <KeyRound className="w-3.5 h-3.5" />
+                            Passcode
                           </button>
                           <button onClick={() => openContactModal(customer)} className="text-purple-600 hover:text-purple-900" title="Manage Contacts">
                             <UserCheck className="w-4 h-4" />

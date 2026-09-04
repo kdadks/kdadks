@@ -1836,4 +1836,631 @@ This is an automated security notification. Please do not reply to this email.
 </html>
     `.trim();
   }
+
+  // ====================================================================
+  // ITSM Transactional Email Methods (Resend API Infrastructure)
+  // ====================================================================
+
+  /**
+   * Send acknowledgment email when a new ITSM ticket is created
+   */
+  static async sendTicketCreatedEmail(
+    ticketNumber: string,
+    ticketTitle: string,
+    ticketPriority: string,
+    recipientEmail: string,
+    recipientName: string,
+    isCustomer: boolean = true
+  ): Promise<void> {
+    try {
+      const subject = isCustomer
+        ? `[Ticket #${ticketNumber}] Support Request Received: ${ticketTitle}`
+        : `[TRIAGE ALERT] New ${ticketPriority} Ticket #${ticketNumber}: ${ticketTitle}`;
+
+      const text = `
+Dear ${recipientName},
+
+${isCustomer ? 'Thank you for reaching out to Kdadks Support. We have received your support request.' : 'A new support ticket requires triage assignment.'}
+
+Ticket Details:
+- Ticket Number: #${ticketNumber}
+- Subject: ${ticketTitle}
+- Priority: ${ticketPriority}
+- Status: New / Unassigned
+
+You can track status and post replies directly in the Support Portal.
+
+Best regards,
+Kdadks Support Team
+      `.trim();
+
+      const html = `
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Support Ticket #${ticketNumber}</title>
+    <style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; color: #1f2937; margin: 0; padding: 0; background-color: #f3f4f6; }
+        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+        .header { background: linear-gradient(135deg, #4f46e5 0%, #3730a3 100%); padding: 25px; border-radius: 12px 12px 0 0; color: #ffffff; text-align: center; }
+        .content { background: #ffffff; padding: 25px; border: 1px solid #e5e7eb; border-radius: 0 0 12px 12px; }
+        .badge { background: #e0e7ff; color: #3730a3; padding: 4px 12px; border-radius: 20px; font-weight: bold; font-size: 14px; display: inline-block; margin-bottom: 15px; }
+        .detail-card { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 15px; margin: 15px 0; }
+        .footer { margin-top: 20px; text-align: center; color: #6b7280; font-size: 12px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1 style="margin:0; font-size: 22px;">🎫 ${isCustomer ? 'Support Request Received' : 'New Triage Ticket Alert'}</h1>
+            <p style="margin: 5px 0 0 0; opacity: 0.9;">Ticket #${ticketNumber}</p>
+        </div>
+        <div class="content">
+            <p>Dear <strong>${recipientName}</strong>,</p>
+            <p>${isCustomer ? 'We have received your support request and assigned it to our triage queue. Our support team will review it shortly.' : 'A new support ticket has been submitted and requires agent triage.'}</p>
+            <div class="detail-card">
+                <span class="badge">Priority: ${ticketPriority}</span>
+                <h3 style="margin: 5px 0 10px 0; color: #111827;">${ticketTitle}</h3>
+                <p style="margin: 0; font-size: 14px; color: #4b5563;"><strong>Ticket ID:</strong> #${ticketNumber}</p>
+            </div>
+            <p>You can view updates or add further comments in the portal.</p>
+        </div>
+        <div class="footer">
+            <p>&copy; ${new Date().getFullYear()} Kdadks Support Management Platform</p>
+        </div>
+    </div>
+</body>
+</html>
+      `.trim();
+
+      const response = await EmailService.makeApiCall(EmailService.getApiEndpoint(), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: recipientEmail,
+          from: '"Kdadks Support" <contact@kdadks.com>',
+          subject,
+          text,
+          html
+        })
+      });
+
+      if (!response.ok) {
+        console.error('Failed to send ITSM ticket created email:', response.status);
+      }
+    } catch (error) {
+      console.error('EmailService.sendTicketCreatedEmail error:', error);
+    }
+  }
+
+  /**
+   * Send notification when an agent posts a reply or changes ticket status
+   */
+  static async sendTicketStatusUpdateEmail(
+    ticketNumber: string,
+    ticketTitle: string,
+    newStatus: string,
+    recipientEmail: string,
+    recipientName: string,
+    commentContent?: string
+  ): Promise<void> {
+    try {
+      const subject = `[Ticket #${ticketNumber}] Update: ${ticketTitle} (${newStatus})`;
+
+      const text = `
+Dear ${recipientName},
+
+Ticket #${ticketNumber} has been updated.
+
+Status: ${newStatus}
+${commentContent ? `Recent Message: "${commentContent}"` : ''}
+
+Log in to the portal to view full details or reply.
+
+Best regards,
+Kdadks Support Team
+      `.trim();
+
+      const html = `
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Ticket Update #${ticketNumber}</title>
+    <style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; color: #1f2937; margin: 0; padding: 0; background-color: #f3f4f6; }
+        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+        .header { background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%); padding: 20px; border-radius: 12px 12px 0 0; color: #ffffff; text-align: center; }
+        .content { background: #ffffff; padding: 25px; border: 1px solid #e5e7eb; border-radius: 0 0 12px 12px; }
+        .status-box { background: #eff6ff; border-left: 4px solid #2563eb; padding: 12px 15px; margin: 15px 0; border-radius: 4px; }
+        .comment-box { background: #f9fafb; border: 1px solid #e5e7eb; padding: 15px; border-radius: 8px; font-style: italic; color: #374151; margin: 15px 0; }
+        .footer { margin-top: 20px; text-align: center; color: #6b7280; font-size: 12px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h2 style="margin:0;">🔔 Ticket Update: #${ticketNumber}</h2>
+        </div>
+        <div class="content">
+            <p>Dear <strong>${recipientName}</strong>,</p>
+            <p>Your support ticket <strong>${ticketTitle}</strong> has been updated.</p>
+            <div class="status-box">
+                <strong>Current Status:</strong> ${newStatus}
+            </div>
+            ${commentContent ? `<div class="comment-box">"${commentContent}"</div>` : ''}
+            <p>Please log in to the Customer Portal to respond if required.</p>
+        </div>
+        <div class="footer">
+            <p>&copy; ${new Date().getFullYear()} Kdadks Support Management Platform</p>
+        </div>
+    </div>
+</body>
+</html>
+      `.trim();
+
+      await EmailService.makeApiCall(EmailService.getApiEndpoint(), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: recipientEmail,
+          from: '"Kdadks Support" <contact@kdadks.com>',
+          subject,
+          text,
+          html
+        })
+      });
+    } catch (error) {
+      console.error('EmailService.sendTicketStatusUpdateEmail error:', error);
+    }
+  }
+
+  /**
+   * Send notification when ticket is resolved with CSAT survey prompt
+   */
+  static async sendTicketResolvedEmail(
+    ticketNumber: string,
+    ticketTitle: string,
+    recipientEmail: string,
+    recipientName: string,
+    resolutionNotes: string
+  ): Promise<void> {
+    try {
+      const subject = `[Resolved] Ticket #${ticketNumber}: ${ticketTitle}`;
+
+      const text = `
+Dear ${recipientName},
+
+Your support ticket #${ticketNumber} (${ticketTitle}) has been marked as RESOLVED.
+
+Resolution Details:
+${resolutionNotes}
+
+Please log in to the Customer Portal within 72 hours to accept this resolution and rate our service (1 to 5 stars), or reject if further assistance is needed.
+
+Best regards,
+Kdadks Support Team
+      `.trim();
+
+      const html = `
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Ticket Resolved #${ticketNumber}</title>
+    <style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; color: #1f2937; margin: 0; padding: 0; background-color: #f3f4f6; }
+        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+        .header { background: linear-gradient(135deg, #10b981 0%, #059669 100%); padding: 25px; border-radius: 12px 12px 0 0; color: #ffffff; text-align: center; }
+        .content { background: #ffffff; padding: 25px; border: 1px solid #e5e7eb; border-radius: 0 0 12px 12px; }
+        .resolution-box { background: #ecfdf5; border: 1px solid #a7f3d0; padding: 15px; border-radius: 8px; margin: 15px 0; color: #065f46; }
+        .csat-prompt { background: #fef3c7; border: 1px solid #fde68a; padding: 15px; border-radius: 8px; text-align: center; margin: 20px 0; color: #92400e; }
+        .footer { margin-top: 20px; text-align: center; color: #6b7280; font-size: 12px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1 style="margin:0; font-size: 22px;">✅ Ticket Resolved!</h1>
+            <p style="margin: 5px 0 0 0; opacity: 0.9;">Ticket #${ticketNumber}</p>
+        </div>
+        <div class="content">
+            <p>Dear <strong>${recipientName}</strong>,</p>
+            <p>We are pleased to inform you that your issue <strong>"${ticketTitle}"</strong> has been resolved by our team.</p>
+            <div class="resolution-box">
+                <h4 style="margin: 0 0 5px 0;">Resolution Notes:</h4>
+                <p style="margin:0;">${resolutionNotes}</p>
+            </div>
+            <div class="csat-prompt">
+                <h4 style="margin: 0 0 5px 0;">⭐ Rate Your Support Experience</h4>
+                <p style="margin: 0; font-size: 14px;">Please log in to your portal within 72 hours to accept resolution and submit a 5-star satisfaction rating.</p>
+            </div>
+        </div>
+        <div class="footer">
+            <p>&copy; ${new Date().getFullYear()} Kdadks Support Management Platform</p>
+        </div>
+    </div>
+</body>
+</html>
+      `.trim();
+
+      await EmailService.makeApiCall(EmailService.getApiEndpoint(), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: recipientEmail,
+          from: '"Kdadks Support" <contact@kdadks.com>',
+          subject,
+          text,
+          html
+        })
+      });
+    } catch (error) {
+      console.error('EmailService.sendTicketResolvedEmail error:', error);
+    }
+  }
+
+  /**
+   * Send notification to support managers when a ticket breaches SLA or escalates
+   */
+  static async sendTicketEscalatedEmail(
+    ticketNumber: string,
+    ticketTitle: string,
+    priority: string,
+    managerEmail: string,
+    escalationReason: string
+  ): Promise<void> {
+    try {
+      const subject = `🚨 [ESCALATION ALERT] Ticket #${ticketNumber} Breached SLA / Escalated`;
+
+      const text = `
+URGENT: Ticket #${ticketNumber} has escalated.
+
+Priority: ${priority}
+Title: ${ticketTitle}
+Reason: ${escalationReason}
+
+Please review immediately on the Triage Desk.
+      `.trim();
+
+      const html = `
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Escalation Alert #${ticketNumber}</title>
+    <style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; color: #1f2937; margin: 0; padding: 0; background-color: #f3f4f6; }
+        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+        .header { background: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%); padding: 20px; border-radius: 12px 12px 0 0; color: #ffffff; text-align: center; }
+        .content { background: #ffffff; padding: 25px; border: 1px solid #e5e7eb; border-radius: 0 0 12px 12px; }
+        .alert-box { background: #fef2f2; border: 2px solid #ef4444; border-radius: 8px; padding: 15px; margin: 15px 0; color: #991b1b; }
+        .footer { margin-top: 20px; text-align: center; color: #6b7280; font-size: 12px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h2 style="margin:0;">🚨 SLA Escalation Alert</h2>
+        </div>
+        <div class="content">
+            <div class="alert-box">
+                <h3 style="margin:0 0 5px 0;">Ticket #${ticketNumber} (${priority})</h3>
+                <p style="margin:0;"><strong>Reason:</strong> ${escalationReason}</p>
+            </div>
+            <p><strong>Title:</strong> ${ticketTitle}</p>
+            <p>This ticket requires immediate manager triage on the Administrative Support Desk.</p>
+        </div>
+        <div class="footer">
+            <p>&copy; ${new Date().getFullYear()} Kdadks Operations Desk</p>
+        </div>
+    </div>
+</body>
+</html>
+      `.trim();
+
+      await EmailService.makeApiCall(EmailService.getApiEndpoint(), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: managerEmail,
+          from: '"Kdadks Support Operations" <contact@kdadks.com>',
+          subject,
+          text,
+          html
+        })
+      });
+    } catch (error) {
+      console.error('EmailService.sendTicketEscalatedEmail error:', error);
+    }
+  }
+
+  /**
+   * Send Customer Portal Password Reset Email via Resend API
+   */
+  static async sendCustomerPasswordResetEmail(customer: any, token: string, resetUrl: string): Promise<boolean> {
+    const toEmail = customer.email;
+    if (!toEmail) return false;
+
+    const companyName = customer.company_name || customer.contact_person || 'Valued Customer';
+    const customerCode = customer.customer_code || customer.id.slice(0, 8);
+    const subject = `Password Reset Request — Customer Portal (${customerCode})`;
+
+    const text = `Hello ${companyName},\n\nYou requested a password reset for your Customer Portal account (${customerCode}).\n\nPlease reset your password using the following link (valid for 24 hours):\n${resetUrl}\n\nIf you did not request this, please ignore this email.`;
+
+    const html = `
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <style>
+        body { font-family: Arial, sans-serif; background-color: #f4f6f9; margin: 0; padding: 20px; }
+        .container { max-width: 600px; background: #ffffff; margin: 0 auto; border-radius: 12px; overflow: hidden; border: 1px solid #e2e8f0; }
+        .header { background: linear-gradient(135deg, #4f46e5 0%, #3730a3 100%); color: white; padding: 24px; text-align: center; }
+        .content { padding: 24px; color: #1e293b; font-size: 14px; line-height: 1.6; }
+        .button { display: inline-block; background-color: #4f46e5; color: white !important; padding: 12px 24px; border-radius: 8px; font-weight: bold; text-decoration: none; margin: 16px 0; }
+        .footer { background: #f8fafc; padding: 16px; text-align: center; font-size: 12px; color: #64748b; border-top: 1px solid #e2e8f0; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h2 style="margin:0;">Customer Portal Password Reset</h2>
+            <p style="margin:5px 0 0 0; font-size:12px; opacity:0.9;">Account ID: ${customerCode}</p>
+        </div>
+        <div class="content">
+            <p>Hello <strong>${companyName}</strong>,</p>
+            <p>We received a request to reset your password for the Kdadks Customer Support & Billing Portal.</p>
+            <div style="text-align: center;">
+                <a href="${resetUrl}" class="button" target="_blank">Reset Account Password</a>
+            </div>
+            <p style="font-size: 12px; color: #64748b;">Or copy and paste this link into your browser:<br/><a href="${resetUrl}" style="color: #4f46e5;">${resetUrl}</a></p>
+            <p style="font-size: 12px; color: #94a3b8;">This security link is valid for 24 hours. If you did not request a password reset, you can safely ignore this message.</p>
+        </div>
+        <div class="footer">
+            <p>&copy; ${new Date().getFullYear()} Kdadks Customer Success Operations</p>
+        </div>
+    </div>
+</body>
+</html>
+    `.trim();
+
+    try {
+      await EmailService.makeApiCall(EmailService.getApiEndpoint(), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: toEmail,
+          from: '"Kdadks Customer Success" <contact@kdadks.com>',
+          subject,
+          text,
+          html,
+        }),
+      });
+      return true;
+    } catch (error) {
+      console.error('EmailService.sendCustomerPasswordResetEmail error:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Send Welcome Onboarding Credentials Email via Resend API
+   */
+  static async sendCustomerWelcomeCredentialsEmail(customer: any, tempPassword: string): Promise<boolean> {
+    const toEmail = customer.email;
+    if (!toEmail) return false;
+
+    const companyName = customer.company_name || customer.contact_person || 'Valued Customer';
+    const customerCode = customer.customer_code || customer.id.slice(0, 8);
+    const portalUrl = `${window.location.origin}/portal`;
+    const subject = `Welcome to Kdadks Customer Portal — Your Account Credentials (${customerCode})`;
+
+    const text = `Welcome ${companyName}!\n\nYour Customer Portal account has been activated.\n\nCustomer ID / Email: ${customerCode} or ${toEmail}\nTemporary Security Passcode: ${tempPassword}\n\nSign in at: ${portalUrl}\n\nYou will be prompted to set a new password upon first sign-in.`;
+
+    const html = `
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <style>
+        body { font-family: Arial, sans-serif; background-color: #f4f6f9; margin: 0; padding: 20px; }
+        .container { max-width: 600px; background: #ffffff; margin: 0 auto; border-radius: 12px; overflow: hidden; border: 1px solid #e2e8f0; }
+        .header { background: linear-gradient(135deg, #4f46e5 0%, #3730a3 100%); color: white; padding: 24px; text-align: center; }
+        .content { padding: 24px; color: #1e293b; font-size: 14px; line-height: 1.6; }
+        .cred-box { background: #f1f5f9; padding: 16px; border-radius: 8px; font-family: monospace; margin: 16px 0; border: 1px border-slate-300; }
+        .button { display: inline-block; background-color: #4f46e5; color: white !important; padding: 12px 24px; border-radius: 8px; font-weight: bold; text-decoration: none; margin: 16px 0; }
+        .footer { background: #f8fafc; padding: 16px; text-align: center; font-size: 12px; color: #64748b; border-top: 1px solid #e2e8f0; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h2 style="margin:0;">Welcome to Kdadks Portal</h2>
+            <p style="margin:5px 0 0 0; font-size:12px; opacity:0.9;">Customer ID: ${customerCode}</p>
+        </div>
+        <div class="content">
+            <p>Hello <strong>${companyName}</strong>,</p>
+            <p>Your official Customer Support & Invoices Portal account has been activated. You can now track support tickets, access invoices, and manage company contact persons online.</p>
+            
+            <div class="cred-box">
+                <p style="margin:4px 0;"><strong>Customer ID / Email:</strong> ${customerCode} (${toEmail})</p>
+                <p style="margin:4px 0;"><strong>Temporary Security Passcode:</strong> <span style="color:#4f46e5; font-weight:bold;">${tempPassword}</span></p>
+            </div>
+
+            <div style="text-align: center;">
+                <a href="${portalUrl}" class="button" target="_blank">Sign In to Customer Portal</a>
+            </div>
+        </div>
+        <div class="footer">
+            <p>&copy; ${new Date().getFullYear()} Kdadks Customer Success Operations</p>
+        </div>
+    </div>
+</body>
+</html>
+    `.trim();
+
+    try {
+      await EmailService.makeApiCall(EmailService.getApiEndpoint(), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: toEmail,
+          from: '"Kdadks Customer Success" <contact@kdadks.com>',
+          subject,
+          text,
+          html,
+        }),
+      });
+      return true;
+    } catch (error) {
+      console.error('EmailService.sendCustomerWelcomeCredentialsEmail error:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Send ITSM Staff / Agent Password Reset Email via Resend API
+   */
+  static async sendAgentPasswordResetEmail(email: string, resetUrl: string): Promise<boolean> {
+    if (!email) return false;
+
+    const subject = `Service Desk Staff Password Reset Request — Kdadks ITSM`;
+    const text = `Hello,\n\nA password reset request was submitted for your Kdadks Service Desk Staff Account (${email}).\n\nPlease reset your password using the link below (valid for 24 hours):\n${resetUrl}\n\nIf you did not request this, please contact system administration.`;
+
+    const html = `
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <style>
+        body { font-family: Arial, sans-serif; background-color: #f4f6f9; margin: 0; padding: 20px; }
+        .container { max-width: 600px; background: #ffffff; margin: 0 auto; border-radius: 12px; overflow: hidden; border: 1px solid #e2e8f0; }
+        .header { background: linear-gradient(135deg, #4f46e5 0%, #3730a3 100%); color: white; padding: 24px; text-align: center; }
+        .content { padding: 24px; color: #1e293b; font-size: 14px; line-height: 1.6; }
+        .button { display: inline-block; background-color: #4f46e5; color: white !important; padding: 12px 24px; border-radius: 8px; font-weight: bold; text-decoration: none; margin: 16px 0; }
+        .footer { background: #f8fafc; padding: 16px; text-align: center; font-size: 12px; color: #64748b; border-top: 1px solid #e2e8f0; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h2 style="margin:0;">ITSM Service Desk Staff Reset</h2>
+            <p style="margin:5px 0 0 0; font-size:12px; opacity:0.9;">Staff Email: ${email}</p>
+        </div>
+        <div class="content">
+            <p>Hello,</p>
+            <p>A password reset request was initiated for your Kdadks Service Desk & Operations staff account.</p>
+            <div style="text-align: center;">
+                <a href="${resetUrl}" class="button" target="_blank">Reset Staff Password</a>
+            </div>
+            <p style="font-size: 12px; color: #64748b;">Or paste this link into your browser:<br/><a href="${resetUrl}" style="color: #4f46e5;">${resetUrl}</a></p>
+        </div>
+        <div class="footer">
+            <p>&copy; ${new Date().getFullYear()} Kdadks System Administration</p>
+        </div>
+    </div>
+</body>
+</html>
+    `.trim();
+
+    try {
+      await EmailService.makeApiCall(EmailService.getApiEndpoint(), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: email,
+          from: '"Kdadks Staff Administration" <contact@kdadks.com>',
+          subject,
+          text,
+          html,
+        }),
+      });
+      return true;
+    } catch (error) {
+      console.error('EmailService.sendAgentPasswordResetEmail error:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Send Staff Welcome Credentials Email via Resend API (Admin User Creation)
+   */
+  static async sendStaffWelcomeCredentialsEmail(
+    email: string,
+    fullName: string,
+    roleName: string,
+    tempPassword?: string
+  ): Promise<boolean> {
+    if (!email) return false;
+
+    const adminUrl = `${window.location.origin}/admin`;
+    const itsmUrl = `${window.location.origin}/itsm`;
+    const subject = `Welcome to Kdadks Team — Your Staff Account Details (${roleName})`;
+
+    const text = `Welcome ${fullName}!\n\nYour Kdadks staff account has been created.\n\nEmail: ${email}\nRole: ${roleName}\n${tempPassword ? `Initial Password: ${tempPassword}\n` : ''}\nSign in at:\nAdmin Portal: ${adminUrl}\nService Desk: ${itsmUrl}`;
+
+    const html = `
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <style>
+        body { font-family: Arial, sans-serif; background-color: #f4f6f9; margin: 0; padding: 20px; }
+        .container { max-width: 600px; background: #ffffff; margin: 0 auto; border-radius: 12px; overflow: hidden; border: 1px solid #e2e8f0; }
+        .header { background: linear-gradient(135deg, #4f46e5 0%, #3730a3 100%); color: white; padding: 24px; text-align: center; }
+        .content { padding: 24px; color: #1e293b; font-size: 14px; line-height: 1.6; }
+        .cred-box { background: #f1f5f9; padding: 16px; border-radius: 8px; font-family: monospace; margin: 16px 0; border: 1px solid #cbd5e1; }
+        .button { display: inline-block; background-color: #4f46e5; color: white !important; padding: 10px 20px; border-radius: 8px; font-weight: bold; text-decoration: none; margin: 8px 4px; }
+        .footer { background: #f8fafc; padding: 16px; text-align: center; font-size: 12px; color: #64748b; border-top: 1px solid #e2e8f0; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h2 style="margin:0;">Welcome to Kdadks Team</h2>
+            <p style="margin:5px 0 0 0; font-size:12px; opacity:0.9;">Role: ${roleName}</p>
+        </div>
+        <div class="content">
+            <p>Hello <strong>${fullName}</strong>,</p>
+            <p>Your staff user account has been provisioned on the Kdadks platform.</p>
+            
+            <div class="cred-box">
+                <p style="margin:4px 0;"><strong>Work Email:</strong> ${email}</p>
+                <p style="margin:4px 0;"><strong>Assigned Role:</strong> <span style="color:#4f46e5; font-weight:bold;">${roleName}</span></p>
+                ${tempPassword ? `<p style="margin:4px 0;"><strong>Initial Password:</strong> <span style="color:#059669; font-weight:bold;">${tempPassword}</span></p>` : ''}
+            </div>
+
+            <div style="text-align: center; margin-top: 20px;">
+                <a href="${adminUrl}" class="button" target="_blank">Sign In to Admin Portal</a>
+                <a href="${itsmUrl}" class="button" style="background-color:#0284c7;" target="_blank">Sign In to Service Desk</a>
+            </div>
+        </div>
+        <div class="footer">
+            <p>&copy; ${new Date().getFullYear()} Kdadks System Administration</p>
+        </div>
+    </div>
+</body>
+</html>
+    `.trim();
+
+    try {
+      await EmailService.makeApiCall(EmailService.getApiEndpoint(), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: email,
+          from: '"Kdadks System Admin" <contact@kdadks.com>',
+          subject,
+          text,
+          html,
+        }),
+      });
+      return true;
+    } catch (error) {
+      console.error('EmailService.sendStaffWelcomeCredentialsEmail error:', error);
+      return false;
+    }
+  }
 }

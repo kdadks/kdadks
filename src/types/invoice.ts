@@ -140,10 +140,18 @@ export interface Customer {
   gstin?: string;
   pan?: string;
   
-  // Customer Settings
-  credit_limit: number;
-  payment_terms: number;
-  
+  // Authentication & Credentials (Web Crypto PBKDF2)
+  password_hash?: string | null;
+  must_change_password?: boolean;
+  password_reset_token?: string | null;
+  password_reset_expires_at?: string | null;
+  failed_login_attempts?: number;
+  locked_until?: string | null;
+
+  // Financial & Commercial Terms
+  payment_terms?: string | number;
+  credit_limit?: number;
+
   is_active: boolean;
   created_at: string;
   updated_at: string;

@@ -340,8 +340,8 @@ const getBankingCodeField = (company: CompanySettings | undefined | null): keyof
         country_id: customer.country_id || 'IN',
         gstin: customer.gstin || '',
         pan: customer.pan || '',
-        credit_limit: customer.credit_limit || 0,
-        payment_terms: customer.payment_terms || 30
+        credit_limit: Number(customer.credit_limit) || 0,
+        payment_terms: Number(customer.payment_terms) || 30
       });
     }
     
@@ -4622,7 +4622,7 @@ const getBankingCodeField = (company: CompanySettings | undefined | null): keyof
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="text-sm text-gray-900">
-                      {formatCurrency(customer.credit_limit)}
+                      {formatCurrency(customer.credit_limit || 0)}
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">

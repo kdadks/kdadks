@@ -50,6 +50,7 @@ export const RoleModal: React.FC<RoleModalProps> = ({
     billing_revenue: true,
     finance_accounting: true,
     hr_operations: true,
+    service_desk: true,
     governance_legal: true,
     analytics_reporting: true,
     administration: true,

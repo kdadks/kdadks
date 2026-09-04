@@ -4,7 +4,7 @@ import {
   Users, Building2, Search, ArrowRight, DollarSign, FileText,
   Briefcase, RefreshCw, Plus, CheckCircle, AlertTriangle,
   Phone, Mail, MapPin, Globe, CreditCard, Clock, Award,
-  TrendingUp, Compass, UserPlus, FilePlus, ShieldCheck, Network, GitBranch
+  TrendingUp, Compass, UserPlus, FilePlus, ShieldCheck, Network, GitBranch, LifeBuoy
 } from 'lucide-react';
 import { customer360Service } from '../../services/customer360Service';
 import { invoiceService } from '../../services/invoiceService';
@@ -18,7 +18,7 @@ import { ContactNetworkPanel } from './ContactNetworkPanel';
 import type { Customer } from '../../types/invoice';
 import type { Customer360Data } from '../../types/customer360';
 
-type TabType = 'overview' | 'contacts' | 'leads' | 'opportunities' | 'quotes' | 'contracts' | 'subscriptions' | 'invoices' | 'timeline' | 'hierarchy' | 'network';
+type TabType = 'overview' | 'contacts' | 'leads' | 'opportunities' | 'quotes' | 'contracts' | 'subscriptions' | 'invoices' | 'tickets' | 'timeline' | 'hierarchy' | 'network';
 
 export const Customer360Hub: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -371,6 +371,7 @@ export const Customer360Hub: React.FC = () => {
                 { id: 'contracts', label: `Contracts (${data360.contracts.length})`, icon: ShieldCheck },
                 { id: 'subscriptions', label: `Subscriptions (${data360.subscriptions.length})`, icon: CreditCard },
                 { id: 'invoices', label: `Invoices & Payments (${data360.invoices.length})`, icon: DollarSign },
+                { id: 'tickets', label: `Support Tickets (${data360.itsmTickets?.length || 0})`, icon: LifeBuoy },
                 { id: 'timeline', label: `Activity Timeline (${data360.timeline.length})`, icon: Clock },
                 { id: 'hierarchy', label: `Hierarchy (${data360.relationships.length})`, icon: GitBranch },
                 { id: 'network', label: 'Contact Network', icon: Network },
@@ -1048,6 +1049,56 @@ export const Customer360Hub: React.FC = () => {
                       </div>
                     )}
                   </div>
+                </div>
+              )}
+
+              {/* 9. SUPPORT TICKETS TAB */}
+              {activeTab === 'tickets' && (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-bold text-gray-900">ITSM Support Tickets ({data360.itsmTickets?.length || 0})</h3>
+                    <button
+                      onClick={() => navigate('/admin/itsm/tickets')}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 text-white text-xs font-semibold rounded-lg hover:bg-indigo-700 transition"
+                    >
+                      <LifeBuoy className="w-4 h-4" /> Open Triage Desk
+                    </button>
+                  </div>
+
+                  {!data360.itsmTickets || data360.itsmTickets.length === 0 ? (
+                    <div className="text-center py-10 bg-gray-50 rounded-lg border border-dashed border-gray-300 text-gray-500 text-xs">
+                      No support tickets logged for this customer.
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto rounded-lg border border-gray-200">
+                      <table className="w-full text-xs text-left">
+                        <thead className="bg-gray-50 text-gray-700 uppercase font-semibold border-b border-gray-200">
+                          <tr>
+                            <th className="px-4 py-3">Ticket #</th>
+                            <th className="px-4 py-3">Subject</th>
+                            <th className="px-4 py-3">Priority</th>
+                            <th className="px-4 py-3">Status</th>
+                            <th className="px-4 py-3">Created Date</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-200 bg-white">
+                          {data360.itsmTickets.map((t) => (
+                            <tr key={t.id} className="hover:bg-gray-50 transition">
+                              <td className="px-4 py-3 font-mono font-bold text-indigo-700">{t.ticket_number}</td>
+                              <td className="px-4 py-3 font-semibold text-gray-900">{t.title}</td>
+                              <td className="px-4 py-3 uppercase font-bold text-[10px] text-gray-700">{t.priority}</td>
+                              <td className="px-4 py-3">
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-indigo-100 text-indigo-800">
+                                  {t.status}
+                                </span>
+                              </td>
+                              <td className="px-4 py-3 text-gray-600">{new Date(t.created_at).toLocaleDateString()}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
                 </div>
               )}
 

@@ -31,13 +31,15 @@ export type SystemModule =
   | 'announcements'
   | 'reporting'
   | 'settings'
-  | 'roles';
+  | 'roles'
+  | 'itsm_tickets';
 
 export type ModuleCategory =
   | 'crm_sales'
   | 'billing_revenue'
   | 'finance_accounting'
   | 'hr_operations'
+  | 'service_desk'
   | 'governance_legal'
   | 'analytics_reporting'
   | 'administration';
@@ -111,6 +113,7 @@ export interface UserAssignmentFormData {
   status: 'active' | 'suspended' | 'pending';
   password?: string;
   is_new_user?: boolean;
+  send_welcome_email?: boolean;
 }
 
 export interface SelectableUser {
@@ -181,6 +184,11 @@ export const MODULE_CATEGORIES: Record<
     label: 'HR & People Operations',
     description: 'Employee Directory, Leave Requests, Attendance, Compensation, Settlements & Policies',
     icon: 'Users',
+  },
+  service_desk: {
+    label: 'Service Desk & Support Operations',
+    description: 'ITSM Support Ticket Queue, Incident Triage, Dual SLA Stopwatches, and Customer CSAT',
+    icon: 'LifeBuoy',
   },
   governance_legal: {
     label: 'Governance & Legal',
@@ -331,6 +339,13 @@ export const MODULE_DEFINITIONS: ModuleDefinition[] = [
     name: 'HR Policies & SOPs',
     description: 'Company standard operating procedures, compliance handbooks across jurisdictions',
     category: 'hr_operations',
+    availableActions: ['view', 'create', 'edit', 'delete', 'approve', 'export'],
+  },
+  {
+    key: 'itsm_tickets',
+    name: 'ITSM Support & Triage Desk',
+    description: 'Support ticket queue, triage state machine, dual SLA stopwatches, private notes, and CSAT',
+    category: 'service_desk',
     availableActions: ['view', 'create', 'edit', 'delete', 'approve', 'export'],
   },
   {

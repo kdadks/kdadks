@@ -49,6 +49,7 @@ class Customer360Service {
         contractsResult,
         subscriptionsResult,
         invoicesResult,
+        itsmTicketsResult,
         relationships,
         contactLinks,
       ] = await Promise.all([
@@ -95,10 +96,17 @@ class Customer360Service {
           .eq('customer_id', customerId)
           .order('created_at', { ascending: false }),
 
-        // 9. B2B Hierarchy Relationships
+        // 9. ITSM Support Tickets
+        supabase
+          .from('itsm_tickets')
+          .select('*, category:itsm_ticket_categories(*)')
+          .eq('customer_id', customerId)
+          .order('created_at', { ascending: false }),
+
+        // 10. B2B Hierarchy Relationships
         customerHierarchyService.getRelationships(customerId).catch(() => [] as CustomerRelationship[]),
 
-        // 10. Contact cross-company links
+        // 11. Contact cross-company links
         customerHierarchyService.getLinksForCustomer(customerId).catch(() => [] as ContactCustomerLink[]),
       ]);
 
@@ -109,6 +117,7 @@ class Customer360Service {
       const contracts: Contract[] = contractsResult.data || [];
       const subscriptions: CustomerSubscription[] = subscriptionsResult.data || [];
       const invoices: Invoice[] = invoicesResult.data || [];
+      const itsmTickets: any[] = itsmTicketsResult.data || [];
 
       // 4. Opportunities (Fetch by customer_id OR lead_id / source_lead_id of customer leads)
       const leadIds = leads.map(l => l.id).filter(Boolean);
@@ -170,7 +179,7 @@ class Customer360Service {
       const metrics = this.calculateMetrics(invoices, payments, subscriptions, opportunities, contracts, targetCurrency);
 
       // Build Chronological Timeline
-      const timeline = this.buildTimeline(customer, contacts, leads, opportunities, quotes, contracts, subscriptions, invoices, payments, followUpTasks, leadActivities, targetCurrency);
+      const timeline = this.buildTimeline(customer, contacts, leads, opportunities, quotes, contracts, subscriptions, invoices, payments, followUpTasks, leadActivities, itsmTickets, targetCurrency);
 
       return {
         customer,
@@ -183,6 +192,7 @@ class Customer360Service {
         subscriptions,
         invoices,
         payments,
+        itsmTickets,
         metrics,
         timeline,
         relationships: Array.isArray(relationships) ? relationships : [],
@@ -307,9 +317,23 @@ class Customer360Service {
     payments: Payment[],
     followUpTasks: any[],
     leadActivities: any[],
+    itsmTickets: any[],
     targetCurrency: string
   ): CustomerActivityTimelineItem[] {
     const items: CustomerActivityTimelineItem[] = [];
+
+    // ITSM Support Tickets
+    itsmTickets.forEach(t => {
+      items.push({
+        id: `ticket-${t.id}`,
+        sourceType: 'itsm_ticket',
+        title: `Support Ticket #${t.ticket_number}: ${t.title}`,
+        description: `Priority: ${t.priority} | Status: ${t.status.toUpperCase()}`,
+        timestamp: t.created_at,
+        badgeText: `Ticket #${t.ticket_number}`,
+        badgeVariant: t.status === 'resolved' || t.status === 'closed' ? 'green' : t.priority === 'P1_critical' ? 'red' : 'purple',
+      });
+    });
 
     // Customer created
     if (customer.created_at) {

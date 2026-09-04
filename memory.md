@@ -1,6 +1,6 @@
 # Project Memory — KDADKS Website
 
-> Auto-updated by Kilo agent after every implementation. Last updated: 2026-09-03 11:14 BST
+> Auto-updated by Kilo agent after every implementation. Last updated: 2026-09-04 08:32 BST
 
 A comprehensive knowledge base for the KDADKS website codebase. This file serves as a single source of truth for project architecture, conventions, patterns, and key implementation details.
 
@@ -313,6 +313,10 @@ src/
 │   ├── salaryStructureService.ts
 │   ├── tdsReportService.ts      # — TDS reports
 │   ├── policyService.ts         # — Policy & SOP management
+│   ├── itsmTicketService.ts     # — ITSM ticket CRUD, state machine & Resend email integration
+│   ├── itsmSlaService.ts        # — Mon-Fri 09:00-18:00 SLA calculator & stopwatch engine
+│   ├── itsmAttachmentService.ts # — file attachment uploads & metadata
+│   ├── itsmCsatService.ts       # — CSAT survey feedback collection
 │   └── exchangeRateService.ts   # — currency exchange rates
 ├── types/                        # TypeScript type definitions
 │   ├── invoice.ts               # (574 lines) — core domain types
@@ -325,6 +329,7 @@ src/
 │   ├── admin.ts                 # — admin types
 │   ├── announcement.ts          # — announcement types
 │   ├── policy.ts                # — Policy & SOP domain types
+│   ├── itsm.ts                  # — ITSM tickets, comments, SLA stopwatches & CSAT types
 │   └── auth.ts                  # — auth types
 ├── utils/                        # Utility functions
 │   ├── taxUtils.ts              # (542 lines) — multi-country tax/banking fields
@@ -640,6 +645,34 @@ A unified enterprise-grade access control and permissions management subsystem:
   - `RoleAccessMatrixTab.tsx` — Side-by-side comparative grid matrix across all roles with CSV export.
   - `RoleAuditLogTab.tsx` — Chronological timeline of RBAC modifications with actor info.
 - **Permissions Enforcer Hook (`src/hooks/useRolePermissions.ts`):** Provides `can(module, action)`, `hasAny(module)`, `currentRole`, `isAdmin`, and `isSuperAdmin` for any React component.
+
+### Customer Service & IT Support Management (ITSM) Subsystem
+
+A comprehensive enterprise-grade customer self-service and agent triage desk module (Phase 1 & Phase 2):
+- **Core Services (`src/services/`):**
+  - `customerAuthService.ts` — Web Crypto PBKDF2 SHA-256 customer password hashing, login verification, failed attempt lockouts (5 attempts -> 30 min lock), 24-hour token-based password reset, portal password changes, and admin onboarding passcode dispatch.
+  - `itsmTicketService.ts` — Data access layer for tickets, comments, sequence numbering (`INC-YYYYMMDD-XXXX`, `REQ-YYYYMMDD-XXXX`, `PRB-YYYYMMDD-XXXX`), queue filters, bulk operations, state machine transitions, and real DB KPI triage metrics calculation.
+  - `itsmSlaService.ts` — Mon-Fri 09:00 - 18:00 business hours SLA calculator, TTO/TTR stopwatch countdown logic, pause/resume engine, and badge color solver (`green`, `yellow`, `red`, `paused`, `completed`).
+  - `itsmAttachmentService.ts` — Multi-file attachment metadata and storage bucket management (`itsm-attachments`).
+  - `itsmCsatService.ts` — CSAT survey feedback submission supporting 5 structured questions (overall experience, response speed, agent support, technical quality, portal experience) with star ratings and comments per question.
+- **Transactional Email Engine Integration (`src/services/emailService.ts`):**
+  - Integrated Resend API infrastructure sending HTML/plain-text transactional emails for `sendAgentPasswordResetEmail` (staff 24h reset), `sendStaffWelcomeCredentialsEmail` (admin staff user provisioning credentials), `sendCustomerPasswordResetEmail` (customer 24h reset), `sendCustomerWelcomeCredentialsEmail` (onboarding temp passcode), `sendTicketCreatedEmail`, `sendTicketStatusUpdateEmail`, `sendTicketResolvedEmail`, and `sendTicketEscalatedEmail`.
+- **UI Components & Security Gates (`src/components/itsm/`):**
+  - `CustomerPortal.tsx` — Customer self-service portal (`/portal/tickets`, `/portal/invoices`, `/portal/profile`) protected by an explicit Customer Portal Sign-In gate (`customer_portal_session`), assigned Customer ID display (e.g. `IND-2026-0001`), integrated contact management, priority matrix, multi-file attachments, real-time status feed, self-cancellation, 72-hour resolution sign-off & CSAT trigger, account invoices viewer, and dedicated **Account Profile & Security** tab with PBKDF2 password change forms.
+  - `CustomerResetPasswordModal.tsx` — Password reset request modal (email/Customer ID submission) and 24h reset token verification form.
+  - `ITSMAgentLogin.tsx` & `ITSMAgentResetPasswordModal.tsx` — Dedicated Service Desk Agent & Staff Sign-In screen with integrated **"Forgot Password?"** reset request modal and token password updater.
+  - `AgentTriageDesk.tsx` — High-density internal triage desk (`/admin/itsm/tickets` and direct Phase 2 route `/itsm`), header integrated with `CompanySelector` for strict single-entity selection when staff is assigned to multiple entities, executive KPI summary cards powered purely by real DB queries, 7 Queue View tabs, dual SLA stopwatch countdown chips, multi-parameter search/filters, and bulk operations toolbar.
+  - `ProtectedITSMRoute.tsx` — Route protection wrapper enforcing user authentication and `'itsm_tickets'` module RBAC permission checks for `/itsm` direct access.
+  - `TicketDetailModal.tsx` — Workspace viewer with timeline, public/private agent notes (`is_internal = true` with yellow background & padlock icon), team @mentions, attachment preview/download, resolution notes, SOP/KB policy linking, and complete **Customer CSAT Survey Breakdown** displaying all 5 question star ratings and text comments inside `/itsm` and `/admin/itsm/tickets`.
+  - `CSATModal.tsx` — Interactive 5-question customer feedback survey modal with star rating and comments for each category.
+- **Admin RBAC & User Creation (`src/components/admin/roles/` & `UserAssignmentModal.tsx`):**
+  - Enhanced User Assignment Modal allowing Super Admins to provision new Supabase Auth staff user accounts directly from `/admin/roles` with full name, work email, password, company entity scope, role assignment, and optional welcome credentials email dispatch via Resend API.
+- **Admin Customer Management (`src/components/customer/CustomerManagement.tsx`):**
+  - Added **Passcode / Send Credentials** row action button to set temporary onboarding passcodes and dispatch welcome emails via Resend API.
+- **Database Migrations:**
+  - `database/migrations/038_itsm_support_portal.sql` — PostgreSQL tables `itsm_ticket_categories`, `itsm_tickets`, `itsm_comments`, `itsm_attachments`, `itsm_audit_logs`, `itsm_csat_surveys`, `itsm_ticket_number_sequences`, PL/pgSQL function `calculate_business_deadline`, sequence RPC `get_next_itsm_ticket_number`, and multi-tenant RLS policies.
+  - `database/migrations/039_customer_auth_credentials.sql` — Added `password_hash`, `must_change_password`, `password_reset_token`, `password_reset_expires_at`, `failed_login_attempts`, and `locked_until` columns to `customers` table with token indices.
+  - `database/migrations/040_itsm_csat_multi_question.sql` — Added `responses` JSONB column to `itsm_csat_surveys` table for storing 5-question rating & comment breakdowns.
 
 ---
 
