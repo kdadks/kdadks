@@ -14,6 +14,47 @@ export const DEPARTMENT_CODES: Record<Department, string> = {
   'Ayuh Clinic': 'AYU',
 };
 
+export const INDIAN_STATES = [
+  'Andaman and Nicobar Islands',
+  'Andhra Pradesh',
+  'Arunachal Pradesh',
+  'Assam',
+  'Bihar',
+  'Chandigarh',
+  'Chhattisgarh',
+  'Dadra and Nagar Haveli and Daman and Diu',
+  'Delhi',
+  'Goa',
+  'Gujarat',
+  'Haryana',
+  'Himachal Pradesh',
+  'Jammu and Kashmir',
+  'Jharkhand',
+  'Karnataka',
+  'Kerala',
+  'Ladakh',
+  'Lakshadweep',
+  'Madhya Pradesh',
+  'Maharashtra',
+  'Manipur',
+  'Meghalaya',
+  'Mizoram',
+  'Nagaland',
+  'Odisha',
+  'Puducherry',
+  'Punjab',
+  'Rajasthan',
+  'Sikkim',
+  'Tamil Nadu',
+  'Telangana',
+  'Tripura',
+  'Uttar Pradesh',
+  'Uttarakhand',
+  'West Bengal'
+] as const;
+
+export type IndianState = typeof INDIAN_STATES[number];
+
 export interface Employee {
   id: string;
   employee_number: string;
@@ -869,6 +910,16 @@ export interface DocumentUploadFormData {
   document_name: string;
   file: File;
   expiry_date?: string;
+}
+
+export interface QueuedDocument {
+  id: string;
+  document_type: string;
+  document_name: string;
+  document_description?: string;
+  expiry_date?: string;
+  file: File;
+  previewUrl: string;
 }
 
 // Salary Structure and Slip for Employee Management

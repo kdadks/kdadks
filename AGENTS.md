@@ -60,8 +60,10 @@ This command will scan the project for changes and update `memory.md` accordingl
 - Prettier formatting (no trailing commas in some configs, check existing files)
 - JSDoc comments on service methods
 
-## Testing
+## Testing & Functional Verification Protocol
 
-- Run `npm run lint` before completing any task
-- Run `npm run build` to verify TypeScript compilation
-- No formal test suite — validation via build and lint
+- Run `npx tsc --noEmit` and `npm run build` after making any code changes to verify TypeScript compilation and build output.
+- Execute the high-level functional test suite defined in `test.md` covering all affected modules and dependent workflows.
+- **Production Database Safety & Cleanup:** Any test records created during verification MUST use `TEST_AGENT_` prefixes and MUST be 100% deleted immediately after test completion. Never edit or delete production user data.
+- **Test Suite Maintenance:** Review and update `test.md` whenever code changes introduce new critical paths, modify existing functionality, or render prior tests obsolete.
+

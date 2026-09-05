@@ -1,8 +1,29 @@
 # Project Memory — KDADKS Website
 
-> Auto-updated by Kilo agent after every implementation. Last updated: 2026-09-04 08:32 BST
+> Auto-updated by Kilo agent after every implementation. Last updated: 2026-09-05 11:51 BST
 
 A comprehensive knowledge base for the KDADKS website codebase. This file serves as a single source of truth for project architecture, conventions, patterns, and key implementation details.
+
+---
+
+## Mandatory Agent Workflow: Post-Implementation Testing & Test Suite Maintenance
+
+Every AI agent working on the KDADKS codebase **MUST** adhere strictly to the following rules after completing any implementation task:
+
+### 1. Mandatory Post-Implementation Verification Rule
+After making any code changes, the agent **MUST**:
+- Run TypeScript type checking (`npx tsc --noEmit`) and/or production build verification (`npm run build`) to ensure zero compilation or type errors exist.
+- Refer to [`test.md`](file:///Users/prashant/Documents/Application%20directory/Kdadks/test.md) and execute high-level functional test steps covering all affected modules and dependent workflows.
+
+### 2. Single Production Database — Strict Test Data Teardown Rule
+Because the system connects to a single live production database:
+- Any temporary test records created during automated or manual verification **MUST** use unambiguous test prefixes (e.g., `TEST_AGENT_Lead_<TIMESTAMP>`, `TEST_AGENT_CUST_<TIMESTAMP>`).
+- **All test data MUST be 100% deleted/cleaned up immediately after test verification.**
+- **NEVER** edit, update, or delete pre-existing production records created by actual users or system seeds.
+
+### 3. Test Suite Maintenance Rule (`test.md` Update Mandate)
+Whenever a code modification introduces new critical paths, adds new routes/components, alters existing business logic, or renders prior test cases obsolete:
+- The agent **MUST review and update [`test.md`](file:///Users/prashant/Documents/Application%20directory/Kdadks/test.md)** to maintain comprehensive, up-to-date functional test coverage across the entire system.
 
 ---
 
@@ -222,6 +243,7 @@ src/
 │   ├── hr/                      # HR management components
 │   │   ├── AttendanceManagement.tsx
 │   │   ├── EmployeeNotes.tsx
+│   │   ├── EmployeeDocumentManager.tsx # HR full document CRUD management
 │   │   ├── EmploymentDocuments.tsx
 │   │   ├── FullFinalSettlement.tsx
 │   │   ├── InternConversionWorkflow.tsx

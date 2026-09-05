@@ -60,11 +60,15 @@ import type {
   InternOfferLetterData,
   InternExperienceCertificateData,
 } from '../../types/employee';
+import { INDIAN_STATES } from '../../types/employee';
 import type { CompanySettings } from '../../types/invoice';
 import { supabase } from '../../config/supabase';
 import EmployeeNotes from './EmployeeNotes';
 import RehireWorkflow from './RehireWorkflow';
 import InternConversionWorkflow from './InternConversionWorkflow';
+import EmployeeDocumentManager from './EmployeeDocumentManager';
+import DocumentPreviewModal from '../shared/DocumentPreviewModal';
+import type { QueuedDocument } from '../../types/employee';
 
 interface EmploymentDocumentsProps {
   onBackToDashboard?: () => void;
@@ -145,6 +149,61 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
   const [showVerifyDocModal, setShowVerifyDocModal] = useState(false);
   const [verifyingDocument, setVerifyingDocument] = useState<any | null>(null);
   const [verificationStatus, setVerificationStatus] = useState<string>('pending');
+
+  // Queued document uploads state for Add Employee view
+  const [queuedDocuments, setQueuedDocuments] = useState<QueuedDocument[]>([]);
+  const [newDocForm, setNewDocForm] = useState({
+    document_type: 'aadhar_card',
+    document_name: '',
+    document_description: '',
+    expiry_date: '',
+    file: null as File | null
+  });
+  const queuedFileInputRef = React.useRef<HTMLInputElement>(null);
+  const [previewQueuedDoc, setPreviewQueuedDoc] = useState<QueuedDocument | null>(null);
+  const [showQueuedPreviewModal, setShowQueuedPreviewModal] = useState<boolean>(false);
+
+  const handleAddQueuedDocument = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newDocForm.file || !newDocForm.document_type || !newDocForm.document_name) {
+      showError('Please select a file and enter document name');
+      return;
+    }
+    if (newDocForm.file.size > 5 * 1024 * 1024) {
+      showError('File size exceeds 5MB limit');
+      return;
+    }
+
+    const previewUrl = URL.createObjectURL(newDocForm.file);
+    const newQueuedDoc: QueuedDocument = {
+      id: 'qd_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+      document_type: newDocForm.document_type,
+      document_name: newDocForm.document_name,
+      document_description: newDocForm.document_description,
+      expiry_date: newDocForm.expiry_date,
+      file: newDocForm.file,
+      previewUrl
+    };
+
+    setQueuedDocuments(prev => [...prev, newQueuedDoc]);
+    setNewDocForm({
+      document_type: 'aadhar_card',
+      document_name: '',
+      document_description: '',
+      expiry_date: '',
+      file: null
+    });
+    if (queuedFileInputRef.current) queuedFileInputRef.current.value = '';
+    showSuccess('Document added to upload queue');
+  };
+
+  const handleRemoveQueuedDocument = (id: string) => {
+    setQueuedDocuments(prev => {
+      const target = prev.find(d => d.id === id);
+      if (target) URL.revokeObjectURL(target.previewUrl);
+      return prev.filter(d => d.id !== id);
+    });
+  };
   const [verificationComments, setVerificationComments] = useState('');
 
   // Salary slip generation state
@@ -467,6 +526,27 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
         other_allowances: 0
       } as Omit<Employee, 'id' | 'created_at' | 'updated_at'>);
 
+      // Upload queued documents if any
+      if (queuedDocuments.length > 0) {
+        startAction('Uploading employee documents...');
+        for (const doc of queuedDocuments) {
+          try {
+            await employeeDocumentService.uploadDocument({
+              employee_id: newEmployee.id,
+              document_type: doc.document_type,
+              document_name: doc.document_name,
+              document_description: doc.document_description,
+              file: doc.file,
+              expiry_date: doc.expiry_date
+            });
+          } catch (uploadErr) {
+            console.error(`Failed to upload ${doc.document_name}:`, uploadErr);
+            showError(`Failed to upload ${doc.document_name}`);
+          }
+        }
+        endAction();
+      }
+
       // Generate and set temporary password
       const tempPassword = employeeAuthService.generateTemporaryPassword();
       await employeeAuthService.setTemporaryPassword(newEmployee.id, tempPassword);
@@ -527,6 +607,17 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
   };
 
   const resetEmployeeForm = () => {
+    queuedDocuments.forEach(doc => URL.revokeObjectURL(doc.previewUrl));
+    setQueuedDocuments([]);
+    setNewDocForm({
+      document_type: 'aadhar_card',
+      document_name: '',
+      document_description: '',
+      expiry_date: '',
+      file: null
+    });
+    if (queuedFileInputRef.current) queuedFileInputRef.current.value = '';
+
     setEmployeeForm({
       employee_number: '',
       first_name: '',
@@ -3731,12 +3822,18 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     State
                   </label>
-                  <input
-                    type="text"
+                  <select
                     value={employeeForm.state || ''}
                     onChange={(e) => setEmployeeForm({ ...employeeForm, state: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-                  />
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 bg-white"
+                  >
+                    <option value="">Select State / Union Territory</option>
+                    {INDIAN_STATES.map((st) => (
+                      <option key={st} value={st}>
+                        {st}
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
                 <div>
@@ -3805,6 +3902,138 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
                   />
                 </div>
               </div>
+            </div>
+
+            {/* Employee Documents Upload Queue */}
+            <div className="mt-8 border-t pt-6">
+              <h3 className="text-md font-semibold mb-2 flex items-center gap-2">
+                <FileText className="w-5 h-5 text-blue-600" />
+                Employee Documents Upload (Optional)
+              </h3>
+              <p className="text-xs text-gray-500 mb-4">
+                Attach identity proof, address proof, or qualification documents to be saved with the new employee record.
+              </p>
+
+              {/* Add document form */}
+              <div className="bg-gray-50 p-4 rounded-xl border border-gray-200 mb-4 space-y-3">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                      Document Type *
+                    </label>
+                    <select
+                      value={newDocForm.document_type}
+                      onChange={(e) => setNewDocForm({ ...newDocForm, document_type: e.target.value })}
+                      className="w-full text-xs rounded-lg border border-gray-300 px-3 py-2 bg-white"
+                    >
+                      <option value="aadhar_card">Aadhar Card</option>
+                      <option value="pan_card">PAN Card</option>
+                      <option value="passport">Passport</option>
+                      <option value="driving_license">Driving License</option>
+                      <option value="voter_id">Voter ID</option>
+                      <option value="education_certificate">Education Certificate</option>
+                      <option value="experience_letter">Experience Letter</option>
+                      <option value="bank_proof">Bank Account Proof</option>
+                      <option value="medical_certificate">Medical Certificate</option>
+                      <option value="resume">Resume/CV</option>
+                      <option value="photo">Photograph</option>
+                      <option value="other">Other</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                      Document Title / Name *
+                    </label>
+                    <input
+                      type="text"
+                      value={newDocForm.document_name}
+                      onChange={(e) => setNewDocForm({ ...newDocForm, document_name: e.target.value })}
+                      placeholder="e.g. Aadhar Card Copy"
+                      className="w-full text-xs rounded-lg border border-gray-300 px-3 py-2 bg-white"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                      Select File (PDF, PNG, JPG - Max 5MB) *
+                    </label>
+                    <input
+                      type="file"
+                      ref={queuedFileInputRef}
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          const autoName = newDocForm.document_name || file.name.replace(/\.[^/.]+$/, '');
+                          setNewDocForm({ ...newDocForm, file, document_name: autoName });
+                        }
+                      }}
+                      accept="application/pdf,image/jpeg,image/jpg,image/png"
+                      className="w-full text-xs text-gray-500 file:mr-2 file:py-1 file:px-2 file:rounded-md file:border-0 file:text-xs file:bg-blue-50 file:text-blue-700 cursor-pointer"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex justify-end pt-2">
+                  <button
+                    type="button"
+                    onClick={handleAddQueuedDocument}
+                    className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-medium hover:bg-blue-700 flex items-center gap-1"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Add Document to Queue
+                  </button>
+                </div>
+              </div>
+
+              {/* Queued Documents List */}
+              {queuedDocuments.length > 0 && (
+                <div className="space-y-2">
+                  <h4 className="text-xs font-semibold text-gray-700">
+                    Documents Queued for Upload ({queuedDocuments.length}):
+                  </h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {queuedDocuments.map((doc) => (
+                      <div
+                        key={doc.id}
+                        className="flex items-center justify-between bg-white p-3 rounded-lg border border-gray-200 shadow-sm"
+                      >
+                        <div className="flex items-center space-x-3 overflow-hidden">
+                          <div className="p-2 bg-blue-50 text-blue-600 rounded-lg">
+                            <FileText className="w-4 h-4" />
+                          </div>
+                          <div className="truncate">
+                            <div className="text-xs font-medium text-gray-900 truncate">{doc.document_name}</div>
+                            <div className="text-[10px] text-gray-500 capitalize">{doc.document_type.replace(/_/g, ' ')} • {(doc.file.size / 1024).toFixed(1)} KB</div>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center space-x-1 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setPreviewQueuedDoc(doc);
+                              setShowQueuedPreviewModal(true);
+                            }}
+                            className="p-1 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded"
+                            title="Instant In-App Preview"
+                          >
+                            <Eye className="w-4 h-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveQueuedDocument(doc.id)}
+                            className="p-1 text-red-600 hover:text-red-800 hover:bg-red-50 rounded"
+                            title="Remove from Queue"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="mt-6 flex justify-end space-x-3 border-t pt-4">
@@ -4477,12 +4706,18 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     State
                   </label>
-                  <input
-                    type="text"
+                  <select
                     value={employeeForm.state || ''}
                     onChange={(e) => setEmployeeForm({ ...employeeForm, state: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-                  />
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 bg-white"
+                  >
+                    <option value="">Select State / Union Territory</option>
+                    {INDIAN_STATES.map((st) => (
+                      <option key={st} value={st}>
+                        {st}
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
                 <div>
@@ -4552,6 +4787,16 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
                 </div>
               </div>
             </div>
+
+            {/* Employee Documents CRUD Management in Edit Mode */}
+            {employeeForm.id && (
+              <div className="mt-8 border-t border-gray-200 pt-6">
+                <EmployeeDocumentManager
+                  employeeId={employeeForm.id}
+                  employeeName={employeeForm.full_name || `${employeeForm.first_name || ''} ${employeeForm.last_name || ''}`}
+                />
+              </div>
+            )}
 
             <div className="mt-6 flex justify-end space-x-3 border-t pt-4">
               <button
@@ -8328,6 +8573,19 @@ Any other duties assigned by management from time to time`}
           </div>
         </div>
       )}
+
+      {/* In-App Preview Modal for Queued Upload Documents */}
+      <DocumentPreviewModal
+        isOpen={showQueuedPreviewModal}
+        onClose={() => {
+          setShowQueuedPreviewModal(false);
+          setPreviewQueuedDoc(null);
+        }}
+        title={previewQueuedDoc?.document_name || 'Document Preview'}
+        previewUrl={previewQueuedDoc?.previewUrl || null}
+        fileName={previewQueuedDoc?.file.name}
+        mimeType={previewQueuedDoc?.file.type}
+      />
     </div>
   );
 };

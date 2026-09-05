@@ -8,6 +8,7 @@ export interface UploadDocumentInput {
   document_description?: string;
   file: File;
   expiry_date?: string;
+  uploaded_by?: string;
 }
 
 export interface DocumentFilter {
@@ -18,8 +19,21 @@ export interface DocumentFilter {
 }
 
 const STORAGE_BUCKET = 'employee-documents';
-const MAX_FILE_SIZE = 2 * 1024 * 1024; // 2MB
-const ALLOWED_MIME_TYPES = ['application/pdf', 'image/jpeg', 'image/jpg', 'image/png'];
+const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB limit
+const ALLOWED_MIME_TYPES = [
+  'application/pdf',
+  'application/x-pdf',
+  'image/jpeg',
+  'image/jpg',
+  'image/png',
+  'image/webp'
+];
+
+const isAllowedFile = (file: File): boolean => {
+  if (ALLOWED_MIME_TYPES.includes(file.type)) return true;
+  const ext = file.name.split('.').pop()?.toLowerCase();
+  return ['pdf', 'jpg', 'jpeg', 'png', 'webp'].includes(ext || '');
+};
 
 export const employeeDocumentService = {
   /**
@@ -29,12 +43,12 @@ export const employeeDocumentService = {
     try {
       // Validate file size
       if (input.file.size > MAX_FILE_SIZE) {
-        throw new Error(`File size exceeds 2MB limit. File size: ${(input.file.size / 1024 / 1024).toFixed(2)}MB`);
+        throw new Error(`File size exceeds 5MB limit. File size: ${(input.file.size / 1024 / 1024).toFixed(2)}MB`);
       }
 
-      // Validate MIME type
-      if (!ALLOWED_MIME_TYPES.includes(input.file.type)) {
-        throw new Error(`File type not allowed. Allowed types: PDF, JPEG, JPG, PNG`);
+      // Validate MIME type & file extension (allowing PDF, JPEG, PNG, WEBP)
+      if (!isAllowedFile(input.file)) {
+        throw new Error(`File type not allowed. Allowed formats: PDF, JPEG, JPG, PNG, WEBP`);
       }
 
       // Generate unique file path: employee_id/timestamp_filename
@@ -67,7 +81,7 @@ export const employeeDocumentService = {
         storage_bucket: STORAGE_BUCKET,
         storage_path: uploadData.path,
         expiry_date: input.expiry_date,
-        uploaded_by: input.employee_id,
+        uploaded_by: input.uploaded_by || input.employee_id,
         verification_status: 'pending',
         is_active: true
       };
@@ -92,8 +106,110 @@ export const employeeDocumentService = {
   },
 
   /**
-   * Get documents with optional filters
+   * Replace an existing document with a new file
    */
+  async replaceDocument(id: string, newFile: File, _updatedBy?: string): Promise<EmployeeDocument> {
+    try {
+      const document = await this.getDocumentById(id);
+      if (!document) {
+        throw new Error('Document not found');
+      }
+
+      if (newFile.size > MAX_FILE_SIZE) {
+        throw new Error(`File size exceeds 5MB limit. File size: ${(newFile.size / 1024 / 1024).toFixed(2)}MB`);
+      }
+
+      if (!isAllowedFile(newFile)) {
+        throw new Error(`File type not allowed. Allowed formats: PDF, JPEG, JPG, PNG, WEBP`);
+      }
+
+      const oldPath = document.storage_path;
+      const timestamp = Date.now();
+      const sanitizedFileName = newFile.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+      const newPath = `${document.employee_id}/${timestamp}_${sanitizedFileName}`;
+
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from(STORAGE_BUCKET)
+        .upload(newPath, newFile, {
+          cacheControl: '3600',
+          upsert: false
+        });
+
+      if (uploadError) {
+        throw new Error(`Failed to upload replacement file: ${uploadError.message}`);
+      }
+
+      const { data, error: updateError } = await supabase
+        .from('employee_documents')
+        .update({
+          file_name: newFile.name,
+          file_size: newFile.size,
+          mime_type: newFile.type,
+          storage_path: uploadData.path,
+          verification_status: 'pending',
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', id)
+        .select()
+        .single();
+
+      if (updateError) {
+        await supabase.storage.from(STORAGE_BUCKET).remove([uploadData.path]);
+        throw new Error(`Failed to update document record: ${updateError.message}`);
+      }
+
+      if (oldPath) {
+        await supabase.storage.from(STORAGE_BUCKET).remove([oldPath]);
+      }
+
+      return data;
+    } catch (error) {
+      console.error('Replace document error:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Delete a document (only if pending verification, or force=true for admin)
+   */
+  async deleteDocument(id: string, force: boolean = false): Promise<void> {
+    try {
+      // Get document details
+      const document = await this.getDocumentById(id);
+      if (!document) {
+        throw new Error('Document not found');
+      }
+
+      // Allow deletion of pending/rejected documents, or forced deletion by admin
+      if (!force && document.verification_status === 'verified') {
+        throw new Error('Cannot delete verified documents');
+      }
+
+      // Delete from storage if storage path exists
+      if (document.storage_path) {
+        const { error: storageError } = await supabase.storage
+          .from(STORAGE_BUCKET)
+          .remove([document.storage_path]);
+
+        if (storageError) {
+          console.error('Storage delete error:', storageError);
+        }
+      }
+
+      // Hard delete from database
+      const { error } = await supabase
+        .from('employee_documents')
+        .delete()
+        .eq('id', id);
+
+      if (error) {
+        throw new Error(`Failed to delete document: ${error.message}`);
+      }
+    } catch (error) {
+      console.error('Delete document error:', error);
+      throw error;
+    }
+  },
   async getDocuments(filter?: DocumentFilter): Promise<EmployeeDocument[]> {
     try {
       let query = supabase
@@ -193,49 +309,6 @@ export const employeeDocumentService = {
       return data.signedUrl;
     } catch (error) {
       console.error('Get document URL error:', error);
-      throw error;
-    }
-  },
-
-  /**
-   * Delete a document (only if pending verification)
-   */
-  async deleteDocument(id: string): Promise<void> {
-    try {
-      // Get document details
-      const document = await this.getDocumentById(id);
-      if (!document) {
-        throw new Error('Document not found');
-      }
-
-      // Allow deletion of pending or rejected documents only
-      if (document.verification_status === 'verified') {
-        throw new Error('Cannot delete verified documents');
-      }
-
-      // Delete from storage if storage path exists
-      if (document.storage_path) {
-        const { error: storageError } = await supabase.storage
-          .from(STORAGE_BUCKET)
-          .remove([document.storage_path]);
-
-        if (storageError) {
-          console.error('Storage delete error:', storageError);
-          throw new Error(`Failed to delete file from storage: ${storageError.message}`);
-        }
-      }
-
-      // Hard delete from database (completely remove record)
-      const { error } = await supabase
-        .from('employee_documents')
-        .delete()
-        .eq('id', id);
-
-      if (error) {
-        throw new Error(`Failed to delete document: ${error.message}`);
-      }
-    } catch (error) {
-      console.error('Delete document error:', error);
       throw error;
     }
   },
