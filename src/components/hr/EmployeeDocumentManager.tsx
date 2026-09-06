@@ -12,7 +12,10 @@ import {
   XCircle,
   AlertCircle,
   Calendar,
-  File
+  File,
+  ShieldCheck,
+  Edit,
+  X
 } from 'lucide-react';
 import { employeeDocumentService } from '../../services/employeeDocumentService';
 import type { EmployeeDocument } from '../../types/employee';
@@ -62,6 +65,109 @@ export const EmployeeDocumentManager: React.FC<EmployeeDocumentManagerProps> = (
   const [previewDoc, setPreviewDoc] = useState<EmployeeDocument | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [showPreviewModal, setShowPreviewModal] = useState<boolean>(false);
+
+  // Status Verification Modal State
+  const [showStatusModal, setShowStatusModal] = useState<boolean>(false);
+  const [documentToVerify, setDocumentToVerify] = useState<EmployeeDocument | null>(null);
+  const [statusForm, setStatusForm] = useState<{
+    status: 'pending' | 'verified' | 'rejected' | 'expired';
+    comments: string;
+  }>({
+    status: 'verified',
+    comments: ''
+  });
+  const [updatingStatus, setUpdatingStatus] = useState<boolean>(false);
+
+  const handleOpenStatusModal = (doc: EmployeeDocument) => {
+    setDocumentToVerify(doc);
+    setStatusForm({
+      status: doc.verification_status || 'verified',
+      comments: doc.verification_comments || ''
+    });
+    setShowStatusModal(true);
+  };
+
+  const handleUpdateStatusSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!documentToVerify) return;
+
+    try {
+      setUpdatingStatus(true);
+      await employeeDocumentService.updateVerificationStatus(
+        documentToVerify.id,
+        statusForm.status,
+        undefined,
+        statusForm.comments
+      );
+
+      showSuccess(`Document verification status updated to "${statusForm.status}"`);
+      setShowStatusModal(false);
+      setDocumentToVerify(null);
+      loadDocuments();
+    } catch (err: any) {
+      console.error('Error updating document status:', err);
+      showError(err.message || 'Failed to update document status');
+    } finally {
+      setUpdatingStatus(false);
+    }
+  };
+
+  // Edit Document Modal State
+  const [showEditModal, setShowEditModal] = useState<boolean>(false);
+  const [documentToEdit, setDocumentToEdit] = useState<EmployeeDocument | null>(null);
+  const [editForm, setEditForm] = useState<{
+    document_type: string;
+    document_name: string;
+    document_description: string;
+    expiry_date: string;
+    newFile: File | null;
+  }>({
+    document_type: 'aadhar_card',
+    document_name: '',
+    document_description: '',
+    expiry_date: '',
+    newFile: null
+  });
+  const [updatingEdit, setUpdatingEdit] = useState<boolean>(false);
+
+  const handleOpenEditModal = (doc: EmployeeDocument) => {
+    setDocumentToEdit(doc);
+    setEditForm({
+      document_type: doc.document_type || 'aadhar_card',
+      document_name: doc.document_name || '',
+      document_description: doc.document_description || '',
+      expiry_date: doc.expiry_date ? doc.expiry_date.split('T')[0] : '',
+      newFile: null
+    });
+    setShowEditModal(true);
+  };
+
+  const handleEditSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!documentToEdit) return;
+
+    try {
+      setUpdatingEdit(true);
+      await employeeDocumentService.updateDocument({
+        id: documentToEdit.id,
+        document_type: editForm.document_type,
+        document_name: editForm.document_name,
+        document_description: editForm.document_description,
+        expiry_date: editForm.expiry_date || undefined,
+        file: editForm.newFile || undefined
+      });
+
+      showSuccess(`Document "${editForm.document_name}" updated successfully`);
+      setShowEditModal(false);
+      setDocumentToEdit(null);
+      loadDocuments();
+    } catch (err: any) {
+      console.error('Error updating document details:', err);
+      showError(err.message || 'Failed to update document details');
+    } finally {
+      setUpdatingEdit(false);
+    }
+  };
 
   // Form State for New Upload
   const [uploadForm, setUploadForm] = useState({
@@ -461,7 +567,18 @@ export const EmployeeDocumentManager: React.FC<EmployeeDocumentManagerProps> = (
                       </td>
 
                       <td className="px-4 py-3">
-                        {getStatusBadge(doc.verification_status)}
+                        <div
+                          onClick={() => !readOnly && handleOpenStatusModal(doc)}
+                          className={!readOnly ? 'cursor-pointer group inline-block' : ''}
+                          title={!readOnly ? 'Click to change verification status' : undefined}
+                        >
+                          {getStatusBadge(doc.verification_status)}
+                        </div>
+                        {doc.verification_comments && (
+                          <div className="text-[10px] text-gray-500 mt-1 italic max-w-xs truncate">
+                            "{doc.verification_comments}"
+                          </div>
+                        )}
                         {doc.expiry_date && (
                           <div className="text-[10px] text-gray-500 mt-1 flex items-center">
                             <Calendar className="w-3 h-3 mr-1 text-gray-400" />
@@ -496,6 +613,24 @@ export const EmployeeDocumentManager: React.FC<EmployeeDocumentManagerProps> = (
 
                           {!readOnly && (
                             <>
+                              <button
+                                type="button"
+                                onClick={() => handleOpenEditModal(doc)}
+                                className="p-1.5 text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 rounded-lg transition-colors"
+                                title="Edit Document Details & File"
+                              >
+                                <Edit className="w-4 h-4" />
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => handleOpenStatusModal(doc)}
+                                className="p-1.5 text-emerald-600 hover:text-emerald-800 hover:bg-emerald-50 rounded-lg transition-colors"
+                                title="Change Verification Status"
+                              >
+                                <ShieldCheck className="w-4 h-4" />
+                              </button>
+
                               <button
                                 type="button"
                                 onClick={() => triggerReplace(doc)}
@@ -542,6 +677,217 @@ export const EmployeeDocumentManager: React.FC<EmployeeDocumentManagerProps> = (
         mimeType={previewDoc?.mime_type}
         onDownload={previewDoc ? () => handleDownload(previewDoc) : undefined}
       />
+
+      {/* Edit Document Details & File Modal */}
+      {showEditModal && documentToEdit && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
+          <div className="bg-white rounded-xl shadow-xl max-w-lg w-full overflow-hidden border border-gray-100">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gray-50/80">
+              <h3 className="text-base font-semibold text-gray-900 flex items-center gap-2">
+                <Edit className="w-5 h-5 text-indigo-600" />
+                Edit Employee Document Details
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowEditModal(false)}
+                className="text-gray-400 hover:text-gray-600 p-1 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleEditSubmit} className="p-6 space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1">
+                    Document Type *
+                  </label>
+                  <select
+                    value={editForm.document_type}
+                    onChange={(e) => setEditForm({ ...editForm, document_type: e.target.value })}
+                    className="w-full text-xs rounded-lg border border-gray-300 px-3 py-2 bg-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                    required
+                  >
+                    {DOCUMENT_TYPES.map((type) => (
+                      <option key={type.value} value={type.value}>
+                        {type.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1">
+                    Document Name / Title *
+                  </label>
+                  <input
+                    type="text"
+                    value={editForm.document_name}
+                    onChange={(e) => setEditForm({ ...editForm, document_name: e.target.value })}
+                    placeholder="e.g. Aadhar Card Front & Back"
+                    className="w-full text-xs rounded-lg border border-gray-300 px-3 py-2 bg-white focus:ring-2 focus:ring-indigo-500 font-medium"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1">
+                    Expiry Date (Optional)
+                  </label>
+                  <input
+                    type="date"
+                    value={editForm.expiry_date}
+                    onChange={(e) => setEditForm({ ...editForm, expiry_date: e.target.value })}
+                    className="w-full text-xs rounded-lg border border-gray-300 px-3 py-2 bg-white focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1">
+                    Replace File (Optional)
+                  </label>
+                  <input
+                    type="file"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0] || null;
+                      setEditForm({ ...editForm, newFile: file });
+                    }}
+                    accept="application/pdf,image/jpeg,image/jpg,image/png"
+                    className="w-full text-xs text-gray-500 file:mr-2 file:py-1 file:px-2 file:rounded-md file:border-0 file:text-xs file:font-medium file:bg-gray-100 file:text-gray-700 hover:file:bg-gray-200 cursor-pointer"
+                  />
+                  {documentToEdit.file_name && (
+                    <div className="text-[10px] text-gray-400 mt-1 truncate">
+                      Current file: {documentToEdit.file_name}
+                    </div>
+                  )}
+                </div>
+
+                <div className="md:col-span-2">
+                  <label className="block text-xs font-semibold text-gray-700 mb-1">
+                    Notes / Description (Optional)
+                  </label>
+                  <textarea
+                    value={editForm.document_description}
+                    onChange={(e) => setEditForm({ ...editForm, document_description: e.target.value })}
+                    placeholder="Additional notes about this document..."
+                    rows={2}
+                    className="w-full text-xs rounded-lg border border-gray-300 p-2.5 bg-white focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end space-x-2 pt-3 border-t border-gray-100">
+                <button
+                  type="button"
+                  onClick={() => setShowEditModal(false)}
+                  className="px-4 py-2 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={updatingEdit}
+                  className="flex items-center px-4 py-2 text-xs font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 disabled:opacity-50"
+                >
+                  {updatingEdit ? (
+                    <>
+                      <RefreshCw className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                      Saving Changes...
+                    </>
+                  ) : (
+                    'Save Changes'
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Verification Status Change Modal */}
+      {showStatusModal && documentToVerify && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full overflow-hidden border border-gray-100">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gray-50/80">
+              <h3 className="text-base font-semibold text-gray-900 flex items-center gap-2">
+                <ShieldCheck className="w-5 h-5 text-blue-600" />
+                Update Document Verification Status
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowStatusModal(false)}
+                className="text-gray-400 hover:text-gray-600 p-1 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdateStatusSubmit} className="p-6 space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">
+                  Document Title
+                </label>
+                <div className="text-xs font-medium text-gray-900 bg-gray-50 px-3 py-2 rounded-lg border border-gray-200">
+                  {documentToVerify.document_name}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">
+                  Verification Status *
+                </label>
+                <select
+                  value={statusForm.status}
+                  onChange={(e) => setStatusForm({ ...statusForm, status: e.target.value as any })}
+                  className="w-full text-xs rounded-lg border border-gray-300 px-3 py-2 bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-medium"
+                >
+                  <option value="verified">Verified (Approved)</option>
+                  <option value="pending">Pending Verification</option>
+                  <option value="rejected">Rejected (Needs Re-upload)</option>
+                  <option value="expired">Expired</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">
+                  Verification Remarks / Comments (Optional)
+                </label>
+                <textarea
+                  value={statusForm.comments}
+                  onChange={(e) => setStatusForm({ ...statusForm, comments: e.target.value })}
+                  placeholder="e.g. Verified against original Aadhar card / Image is clear..."
+                  rows={3}
+                  className="w-full text-xs rounded-lg border border-gray-300 p-3 bg-white focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div className="flex justify-end space-x-2 pt-3 border-t border-gray-100">
+                <button
+                  type="button"
+                  onClick={() => setShowStatusModal(false)}
+                  className="px-4 py-2 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={updatingStatus}
+                  className="flex items-center px-4 py-2 text-xs font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                >
+                  {updatingStatus ? (
+                    <>
+                      <RefreshCw className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                      Updating...
+                    </>
+                  ) : (
+                    'Save Status'
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Delete Confirmation Modal */}
       <ConfirmDialog

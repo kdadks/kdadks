@@ -11,6 +11,16 @@ export interface UploadDocumentInput {
   uploaded_by?: string;
 }
 
+export interface UpdateDocumentInput {
+  id: string;
+  document_type?: string;
+  document_name?: string;
+  document_description?: string;
+  expiry_date?: string;
+  file?: File;
+  updated_by?: string;
+}
+
 export interface DocumentFilter {
   employee_id?: string;
   document_type?: string;
@@ -33,6 +43,11 @@ const isAllowedFile = (file: File): boolean => {
   if (ALLOWED_MIME_TYPES.includes(file.type)) return true;
   const ext = file.name.split('.').pop()?.toLowerCase();
   return ['pdf', 'jpg', 'jpeg', 'png', 'webp'].includes(ext || '');
+};
+
+const isValidUUID = (str?: string): boolean => {
+  if (!str) return false;
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
 };
 
 export const employeeDocumentService = {
@@ -66,8 +81,14 @@ export const employeeDocumentService = {
 
       if (uploadError) {
         console.error('Storage upload error:', uploadError);
-        throw new Error(`Failed to upload file: ${uploadError.message}`);
+        throw new Error(`Failed to upload file to storage: ${uploadError.message}`);
       }
+
+      // Sanitize uploaded_by UUID for database foreign key safety
+      const rawUploadedBy = input.uploaded_by || input.employee_id;
+      const uploadedBy = isValidUUID(rawUploadedBy)
+        ? rawUploadedBy
+        : (isValidUUID(input.employee_id) ? input.employee_id : null);
 
       // Create database record
       const documentData: Partial<EmployeeDocument> = {
@@ -77,11 +98,11 @@ export const employeeDocumentService = {
         document_description: input.document_description,
         file_name: input.file.name,
         file_size: input.file.size,
-        mime_type: input.file.type,
+        mime_type: input.file.type || 'application/octet-stream',
         storage_bucket: STORAGE_BUCKET,
         storage_path: uploadData.path,
-        expiry_date: input.expiry_date,
-        uploaded_by: input.uploaded_by || input.employee_id,
+        expiry_date: input.expiry_date || undefined,
+        uploaded_by: uploadedBy || input.employee_id,
         verification_status: 'pending',
         is_active: true
       };
@@ -165,6 +186,78 @@ export const employeeDocumentService = {
       return data;
     } catch (error) {
       console.error('Replace document error:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Update all document metadata (document_type, document_name, document_description, expiry_date, and optional file)
+   */
+  async updateDocument(input: UpdateDocumentInput): Promise<EmployeeDocument> {
+    try {
+      const document = await this.getDocumentById(input.id);
+      if (!document) {
+        throw new Error('Document not found');
+      }
+
+      const updates: Partial<EmployeeDocument> = {
+        updated_at: new Date().toISOString()
+      };
+
+      if (input.document_type) updates.document_type = input.document_type;
+      if (input.document_name) updates.document_name = input.document_name;
+      if (input.document_description !== undefined) updates.document_description = input.document_description;
+      if (input.expiry_date !== undefined) updates.expiry_date = input.expiry_date || undefined;
+
+      // Handle optional file replacement
+      if (input.file) {
+        if (input.file.size > MAX_FILE_SIZE) {
+          throw new Error(`File size exceeds 5MB limit. File size: ${(input.file.size / 1024 / 1024).toFixed(2)}MB`);
+        }
+        if (!isAllowedFile(input.file)) {
+          throw new Error(`File type not allowed. Allowed formats: PDF, JPEG, JPG, PNG, WEBP`);
+        }
+
+        const oldPath = document.storage_path;
+        const timestamp = Date.now();
+        const sanitizedFileName = input.file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+        const newPath = `${document.employee_id}/${timestamp}_${sanitizedFileName}`;
+
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from(STORAGE_BUCKET)
+          .upload(newPath, input.file, {
+            cacheControl: '3600',
+            upsert: false
+          });
+
+        if (uploadError) {
+          throw new Error(`Failed to upload replacement file: ${uploadError.message}`);
+        }
+
+        updates.file_name = input.file.name;
+        updates.file_size = input.file.size;
+        updates.mime_type = input.file.type || 'application/octet-stream';
+        updates.storage_path = uploadData.path;
+
+        if (oldPath) {
+          await supabase.storage.from(STORAGE_BUCKET).remove([oldPath]);
+        }
+      }
+
+      const { data, error: updateError } = await supabase
+        .from('employee_documents')
+        .update(updates)
+        .eq('id', input.id)
+        .select()
+        .single();
+
+      if (updateError) {
+        throw new Error(`Failed to update document record: ${updateError.message}`);
+      }
+
+      return data;
+    } catch (error) {
+      console.error('Update document error:', error);
       throw error;
     }
   },
@@ -318,18 +411,19 @@ export const employeeDocumentService = {
    */
   async updateVerificationStatus(
     id: string,
-    status: 'verified' | 'rejected',
-    verifiedBy: string,
+    status: 'verified' | 'rejected' | 'pending' | 'expired',
+    verifiedBy?: string,
     comments?: string
   ): Promise<EmployeeDocument> {
     try {
+      const sanitizedVerifiedBy = isValidUUID(verifiedBy) ? verifiedBy : null;
       const { data, error } = await supabase
         .from('employee_documents')
         .update({
           verification_status: status,
-          verified_by: verifiedBy,
+          verified_by: sanitizedVerifiedBy,
           verification_date: new Date().toISOString(),
-          verification_comments: comments
+          verification_comments: comments || null
         })
         .eq('id', id)
         .select()

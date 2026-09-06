@@ -516,9 +516,12 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
       }
 
       const fullName = `${employeeForm.first_name} ${employeeForm.middle_name || ''} ${employeeForm.last_name}`.trim();
+      const companyId = selectedCompany?.id || employeeForm.company_settings_id || employeeForm.company_setting_id;
 
       const newEmployee = await employeeService.createEmployee({
         ...employeeForm,
+        company_settings_id: companyId,
+        company_setting_id: companyId,
         full_name: fullName,
         gross_salary: employeeForm.basic_salary || 0,
         hra: 0,
@@ -527,6 +530,7 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
       } as Omit<Employee, 'id' | 'created_at' | 'updated_at'>);
 
       // Upload queued documents if any
+      let uploadSuccessCount = 0;
       if (queuedDocuments.length > 0) {
         startAction('Uploading employee documents...');
         for (const doc of queuedDocuments) {
@@ -537,14 +541,19 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
               document_name: doc.document_name,
               document_description: doc.document_description,
               file: doc.file,
-              expiry_date: doc.expiry_date
+              expiry_date: doc.expiry_date,
+              uploaded_by: newEmployee.id
             });
-          } catch (uploadErr) {
+            uploadSuccessCount++;
+          } catch (uploadErr: any) {
             console.error(`Failed to upload ${doc.document_name}:`, uploadErr);
-            showError(`Failed to upload ${doc.document_name}`);
+            showError(`Document "${doc.document_name}" upload failed: ${uploadErr.message || 'Storage error'}`);
           }
         }
         endAction();
+        if (uploadSuccessCount > 0) {
+          showSuccess(`Uploaded ${uploadSuccessCount} of ${queuedDocuments.length} document(s) successfully`);
+        }
       }
 
       // Generate and set temporary password
@@ -590,9 +599,12 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
       }
 
       const fullName = `${employeeForm.first_name} ${employeeForm.middle_name || ''} ${employeeForm.last_name}`.trim();
+      const companyId = selectedCompany?.id || employeeForm.company_settings_id || employeeForm.company_setting_id;
 
       const updatedEmployee = await employeeService.updateEmployee(employeeForm.id, {
         ...employeeForm,
+        company_settings_id: companyId,
+        company_setting_id: companyId,
         full_name: fullName
       } as Partial<Employee>);
 
@@ -628,7 +640,9 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
       employment_type: 'full-time',
       employment_status: 'active',
       basic_salary: 0,
-      currency_code: 'INR'
+      currency_code: 'INR',
+      company_settings_id: selectedCompany?.id,
+      company_setting_id: selectedCompany?.id
     });
   };
 
@@ -6723,7 +6737,7 @@ Any other duties assigned by management from time to time`}
 
                   {/* Position Details */}
                   <div className="bg-blue-50 p-4 rounded-lg space-y-3">
-                    <h4 className="font-medium text-blue-700">Position Details</h4>
+                    <h4 className="font-medium text-blue-700">1. Position Details</h4>
                     <div className="grid grid-cols-2 gap-3">
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Position</label>
@@ -6753,7 +6767,19 @@ Any other duties assigned by management from time to time`}
                         />
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Work Location</label>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Work Location Type</label>
+                        <select
+                          value={(editedDocumentData as OfferLetterData).work_location_type || 'onsite'}
+                          onChange={(e) => setEditedDocumentData({ ...editedDocumentData, work_location_type: e.target.value as any })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                        >
+                          <option value="onsite">Onsite</option>
+                          <option value="hybrid">Hybrid</option>
+                          <option value="remote">Remote</option>
+                        </select>
+                      </div>
+                      <div className="col-span-2">
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Work Location Address</label>
                         <input
                           type="text"
                           value={(editedDocumentData as OfferLetterData).work_location || ''}
@@ -6779,7 +6805,7 @@ Any other duties assigned by management from time to time`}
 
                   {/* Roles */}
                   <div className="bg-green-50 p-4 rounded-lg space-y-3">
-                    <h4 className="font-medium text-green-700">Roles & Responsibilities</h4>
+                    <h4 className="font-medium text-green-700">2. Roles & Responsibilities</h4>
                     <textarea
                       rows={6}
                       value={(editedDocumentData as OfferLetterData).roles_responsibilities || ''}
@@ -6790,7 +6816,7 @@ Any other duties assigned by management from time to time`}
 
                   {/* Compensation */}
                   <div className="bg-yellow-50 p-4 rounded-lg space-y-3">
-                    <h4 className="font-medium text-yellow-700">Compensation</h4>
+                    <h4 className="font-medium text-yellow-700">3. Compensation & Benefits</h4>
                     <div className="grid grid-cols-2 gap-3">
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Annual CTC</label>
@@ -6798,7 +6824,7 @@ Any other duties assigned by management from time to time`}
                           type="number"
                           value={(editedDocumentData as OfferLetterData).annual_ctc || ''}
                           onChange={(e) => setEditedDocumentData({ ...editedDocumentData, annual_ctc: parseFloat(e.target.value) })}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm font-semibold"
                         />
                       </div>
                       <div>
@@ -6813,7 +6839,7 @@ Any other duties assigned by management from time to time`}
                               gross_salary: parseFloat(e.target.value)
                             }
                           })}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm font-semibold"
                         />
                       </div>
                       <div>
@@ -6877,6 +6903,55 @@ Any other duties assigned by management from time to time`}
                         />
                       </div>
                     </div>
+
+                    {/* Statutory & Entity Benefits Itemized List */}
+                    <div className="bg-white p-3 rounded-md border border-yellow-200 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <h5 className="font-medium text-xs text-gray-700 uppercase tracking-wider">Statutory & Entity Benefits Fields</h5>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const currentList = Array.isArray((editedDocumentData as OfferLetterData).benefits) ? ((editedDocumentData as OfferLetterData).benefits as string[]) : [];
+                            setEditedDocumentData({ ...editedDocumentData, benefits: [...currentList, 'New Statutory Benefit'] });
+                          }}
+                          className="text-xs text-blue-600 hover:text-blue-800 font-medium flex items-center gap-1"
+                        >
+                          <Plus className="w-3.5 h-3.5" /> Add Benefit Item
+                        </button>
+                      </div>
+                      <div className="space-y-2">
+                        {(Array.isArray((editedDocumentData as OfferLetterData).benefits) ? ((editedDocumentData as OfferLetterData).benefits as string[]) : []).map((bItem: string, idx: number) => (
+                          <div key={idx} className="flex items-center gap-2">
+                            <span className="text-xs text-gray-400 font-semibold w-5">{idx + 1}.</span>
+                            <input
+                              type="text"
+                              value={bItem}
+                              onChange={(e) => {
+                                const currentList = [...(((editedDocumentData as OfferLetterData).benefits as string[]) || [])];
+                                currentList[idx] = e.target.value;
+                                setEditedDocumentData({ ...editedDocumentData, benefits: currentList });
+                              }}
+                              className="flex-1 px-3 py-1.5 border border-gray-300 rounded-md text-xs font-mono"
+                              placeholder="e.g. House Rent Allowance (HRA), EPF Pension Matching, Medical Insurance"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const currentList = (((editedDocumentData as OfferLetterData).benefits as string[]) || []).filter((_: any, i: number) => i !== idx);
+                                setEditedDocumentData({ ...editedDocumentData, benefits: currentList });
+                              }}
+                              className="p-1 text-red-500 hover:text-red-700 hover:bg-red-50 rounded"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        ))}
+                        {(!((editedDocumentData as OfferLetterData).benefits) || ((editedDocumentData as OfferLetterData).benefits?.length || 0) === 0) && (
+                          <p className="text-xs text-gray-500 italic">No specific benefit items added. Click "+ Add Benefit Item" above to add benefits.</p>
+                        )}
+                      </div>
+                    </div>
+
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Salary Payment Note</label>
                       <textarea
@@ -6899,7 +6974,7 @@ Any other duties assigned by management from time to time`}
 
                   {/* Working Hours */}
                   <div className="bg-purple-50 p-4 rounded-lg space-y-3">
-                    <h4 className="font-medium text-purple-700">Working Hours</h4>
+                    <h4 className="font-medium text-purple-700">4. Working Hours</h4>
                     <div className="grid grid-cols-3 gap-3">
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Start Time</label>
@@ -6942,7 +7017,7 @@ Any other duties assigned by management from time to time`}
 
                   {/* Probation & Notice */}
                   <div className="bg-orange-50 p-4 rounded-lg space-y-3">
-                    <h4 className="font-medium text-orange-700">Probation & Notice Period</h4>
+                    <h4 className="font-medium text-orange-700">5. Probation & Notice Period</h4>
                     <div className="grid grid-cols-2 gap-3">
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Probation Period (months)</label>
@@ -6985,7 +7060,7 @@ Any other duties assigned by management from time to time`}
 
                   {/* Leave & Confidentiality */}
                   <div className="bg-gray-50 p-4 rounded-lg space-y-3">
-                    <h4 className="font-medium text-gray-700">Leave & Confidentiality</h4>
+                    <h4 className="font-medium text-gray-700">6. Leave & Confidentiality</h4>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Leave Policy Note</label>
                       <textarea
@@ -7006,9 +7081,47 @@ Any other duties assigned by management from time to time`}
                     </div>
                   </div>
 
+                  {/* Intellectual Property & Asset Clauses */}
+                  <div className="bg-purple-50 p-4 rounded-lg space-y-3">
+                    <div className="flex items-center gap-2">
+                      <Shield className="w-4 h-4 text-purple-600" />
+                      <h4 className="font-medium text-purple-900 text-sm">7. Intellectual Property & Company Asset Clauses</h4>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Governing Law Jurisdiction</label>
+                      <input
+                        type="text"
+                        value={(editedDocumentData as OfferLetterData).jurisdiction || ''}
+                        onChange={(e) => setEditedDocumentData({ ...editedDocumentData, jurisdiction: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm bg-white"
+                        placeholder="e.g., Republic of India (High Court Jurisdiction)"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Intellectual Property (IP) Assignment Clause</label>
+                      <textarea
+                        rows={2}
+                        value={(editedDocumentData as OfferLetterData).ip_clause_text || ''}
+                        onChange={(e) => setEditedDocumentData({ ...editedDocumentData, ip_clause_text: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-xs font-mono bg-white"
+                        placeholder="All intellectual property created during employment belongs exclusively to the company..."
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Company Asset Management & Return Clause</label>
+                      <textarea
+                        rows={2}
+                        value={(editedDocumentData as OfferLetterData).asset_clause_text || ''}
+                        onChange={(e) => setEditedDocumentData({ ...editedDocumentData, asset_clause_text: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-xs font-mono bg-white"
+                        placeholder="Employee is responsible for company assets and must return all physical/digital property upon exit..."
+                      />
+                    </div>
+                  </div>
+
                   {/* Signatory */}
                   <div className="bg-indigo-50 p-4 rounded-lg space-y-3">
-                    <h4 className="font-medium text-indigo-700">Signatory Details</h4>
+                    <h4 className="font-medium text-indigo-700">8. Signatory Details</h4>
                     <div className="grid grid-cols-3 gap-3">
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Signatory Name</label>
@@ -7054,7 +7167,7 @@ Any other duties assigned by management from time to time`}
 
                   {/* Additional */}
                   <div className="bg-red-50 p-4 rounded-lg space-y-3">
-                    <h4 className="font-medium text-red-700">Additional Information</h4>
+                    <h4 className="font-medium text-red-700">9. Additional Information</h4>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Terms & Conditions</label>
                       <textarea
@@ -7251,6 +7364,34 @@ Any other duties assigned by management from time to time`}
                     </div>
                   </div>
 
+                  {/* Post-Employment IP & Asset Clearance */}
+                  <div className="bg-purple-50 p-4 rounded-lg space-y-3">
+                    <div className="flex items-center gap-2">
+                      <Shield className="w-4 h-4 text-purple-600" />
+                      <h4 className="font-medium text-purple-900 text-sm">Post-Employment IP & Asset Clearance Clauses</h4>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Post-Employment IP Obligation Note</label>
+                      <textarea
+                        rows={2}
+                        value={(editedDocumentData as ExperienceCertificateData).ip_clause_text || ''}
+                        onChange={(e) => setEditedDocumentData({ ...editedDocumentData, ip_clause_text: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white text-xs font-mono"
+                        placeholder="Reaffirmation of IP ownership..."
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Asset Exit Clearance Confirmation</label>
+                      <textarea
+                        rows={2}
+                        value={(editedDocumentData as ExperienceCertificateData).asset_clause_text || ''}
+                        onChange={(e) => setEditedDocumentData({ ...editedDocumentData, asset_clause_text: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white text-xs font-mono"
+                        placeholder="Confirmation of full return of company assets and keys..."
+                      />
+                    </div>
+                  </div>
+
                   {/* Signatory Details */}
                   <div className="bg-green-50 p-4 rounded-lg space-y-3">
                     <h4 className="font-medium text-green-700">Signatory Details</h4>
@@ -7290,8 +7431,9 @@ Any other duties assigned by management from time to time`}
               {/* ── Edit: Intern Offer Letter ─────────────────────────────────── */}
               {editingDocument.document_type === 'intern_offer_letter' && (
                 <div className="space-y-4">
+                  {/* Core Details */}
                   <div className="bg-indigo-50 p-4 rounded-lg space-y-3">
-                    <h4 className="font-medium text-indigo-700">Program & Core Details</h4>
+                    <h4 className="font-medium text-indigo-700">1. Core Details</h4>
                     <div className="grid grid-cols-2 gap-3">
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Program Name</label>
@@ -7318,6 +7460,19 @@ Any other duties assigned by management from time to time`}
                           className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm" />
                       </div>
                       <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Offer Date</label>
+                        <input type="date" value={(editedDocumentData as InternOfferLetterData).offer_date || ''}
+                          onChange={(e) => setEditedDocumentData({ ...editedDocumentData, offer_date: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm" />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Duration & Scope */}
+                  <div className="bg-blue-50 p-4 rounded-lg space-y-3">
+                    <h4 className="font-medium text-blue-700">2. Scope & Duration</h4>
+                    <div className="grid grid-cols-3 gap-3">
+                      <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
                         <input type="date" value={(editedDocumentData as InternOfferLetterData).joining_date || ''}
                           onChange={(e) => setEditedDocumentData({ ...editedDocumentData, joining_date: e.target.value })}
@@ -7329,24 +7484,107 @@ Any other duties assigned by management from time to time`}
                           onChange={(e) => setEditedDocumentData({ ...editedDocumentData, end_date: e.target.value })}
                           className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm" />
                       </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Duration (display)</label>
+                        <input type="text" value={(editedDocumentData as InternOfferLetterData).internship_duration || ''}
+                          onChange={(e) => setEditedDocumentData({ ...editedDocumentData, internship_duration: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm" placeholder="e.g. 3 months" />
+                      </div>
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Internship Scope</label>
-                      <textarea rows={3} value={(editedDocumentData as InternOfferLetterData).internship_scope || ''}
+                      <textarea rows={2} value={(editedDocumentData as InternOfferLetterData).internship_scope || ''}
                         onChange={(e) => setEditedDocumentData({ ...editedDocumentData, internship_scope: e.target.value })}
                         className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm" />
                     </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Program Notes</label>
+                      <textarea rows={2} value={(editedDocumentData as InternOfferLetterData).program_notes || ''}
+                        onChange={(e) => setEditedDocumentData({ ...editedDocumentData, program_notes: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm" />
+                    </div>
+                  </div>
+
+                  {/* Supervisor & Location */}
+                  <div className="bg-green-50 p-4 rounded-lg space-y-3">
+                    <h4 className="font-medium text-green-700">3. Supervisor & Location</h4>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Supervisor Name</label>
+                        <input type="text" value={(editedDocumentData as InternOfferLetterData).supervisor_name || ''}
+                          onChange={(e) => setEditedDocumentData({ ...editedDocumentData, supervisor_name: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Supervisor Title</label>
+                        <input type="text" value={(editedDocumentData as InternOfferLetterData).supervisor_title || ''}
+                          onChange={(e) => setEditedDocumentData({ ...editedDocumentData, supervisor_title: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Work Location Type</label>
+                        <select
+                          value={(editedDocumentData as InternOfferLetterData).work_location_type || 'onsite'}
+                          onChange={(e) => setEditedDocumentData({ ...editedDocumentData, work_location_type: e.target.value as any })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                        >
+                          <option value="onsite">Onsite</option>
+                          <option value="hybrid">Hybrid</option>
+                          <option value="remote">Remote</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Working Days</label>
+                        <input type="text" value={(editedDocumentData as InternOfferLetterData).working_days || ''}
+                          onChange={(e) => setEditedDocumentData({ ...editedDocumentData, working_days: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Start Time</label>
+                        <input type="text" value={(editedDocumentData as InternOfferLetterData).working_hours_start || ''}
+                          onChange={(e) => setEditedDocumentData({ ...editedDocumentData, working_hours_start: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">End Time</label>
+                        <input type="text" value={(editedDocumentData as InternOfferLetterData).working_hours_end || ''}
+                          onChange={(e) => setEditedDocumentData({ ...editedDocumentData, working_hours_end: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm" />
+                      </div>
+                      <div className="col-span-2">
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Work Location Address</label>
+                        <textarea rows={2} value={(editedDocumentData as InternOfferLetterData).work_location || ''}
+                          onChange={(e) => setEditedDocumentData({ ...editedDocumentData, work_location: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm font-mono" />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Duties & Learning */}
+                  <div className="bg-yellow-50 p-4 rounded-lg space-y-3">
+                    <h4 className="font-medium text-yellow-700">4. Duties & Learning Objectives</h4>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Duties & Responsibilities</label>
                       <textarea rows={4} value={(editedDocumentData as InternOfferLetterData).duties_and_responsibilities || ''}
                         onChange={(e) => setEditedDocumentData({ ...editedDocumentData, duties_and_responsibilities: e.target.value })}
                         className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm font-mono" />
                     </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Learning Objectives</label>
+                      <textarea rows={3} value={(editedDocumentData as InternOfferLetterData).learning_objectives || ''}
+                        onChange={(e) => setEditedDocumentData({ ...editedDocumentData, learning_objectives: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm font-mono" />
+                    </div>
+                  </div>
+
+                  {/* Compensation */}
+                  <div className="bg-orange-50 p-4 rounded-lg space-y-3">
+                    <h4 className="font-medium text-orange-700">5. Compensation</h4>
                     <div className="flex items-center gap-3">
                       <input type="checkbox" checked={!!(editedDocumentData as InternOfferLetterData).is_paid}
                         onChange={(e) => setEditedDocumentData({ ...editedDocumentData, is_paid: e.target.checked })}
                         className="w-4 h-4 rounded" />
-                      <label className="text-sm text-gray-700">Paid internship</label>
+                      <label className="text-sm text-gray-700 font-medium">Paid internship</label>
                     </div>
                     {(editedDocumentData as InternOfferLetterData).is_paid && (
                       <div className="grid grid-cols-2 gap-3">
@@ -7364,9 +7602,65 @@ Any other duties assigned by management from time to time`}
                         </div>
                       </div>
                     )}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Reimbursement Details</label>
+                      <input type="text" value={(editedDocumentData as InternOfferLetterData).reimbursement_details || ''}
+                        onChange={(e) => setEditedDocumentData({ ...editedDocumentData, reimbursement_details: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm" />
+                    </div>
                   </div>
+
+                  {/* Legal & Compliance Clauses */}
+                  <div className="bg-red-50 p-4 rounded-lg space-y-3">
+                    <h4 className="font-medium text-red-700">6. Legal & Compliance Clauses</h4>
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-3">
+                        <input type="checkbox" id="edit_confClause"
+                          checked={(editedDocumentData as InternOfferLetterData).confidentiality_clause !== false}
+                          onChange={(e) => setEditedDocumentData({ ...editedDocumentData, confidentiality_clause: e.target.checked })}
+                          className="w-4 h-4 text-red-600 rounded" />
+                        <label htmlFor="edit_confClause" className="text-sm font-medium text-gray-700">Include Confidentiality / NDA clause</label>
+                      </div>
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-3">
+                          <input type="checkbox" id="edit_ipClause"
+                            checked={(editedDocumentData as InternOfferLetterData).ip_assignment_clause !== false}
+                            onChange={(e) => setEditedDocumentData({ ...editedDocumentData, ip_assignment_clause: e.target.checked })}
+                            className="w-4 h-4 text-red-600 rounded" />
+                          <label htmlFor="edit_ipClause" className="text-sm font-medium text-gray-700">Include Intellectual Property Assignment clause</label>
+                        </div>
+                        <textarea
+                          value={(editedDocumentData as InternOfferLetterData).ip_clause_text || ''}
+                          onChange={(e) => setEditedDocumentData({ ...editedDocumentData, ip_clause_text: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-xs font-mono"
+                          rows={2}
+                          placeholder="All source code, designs, algorithms, intellectual property..."
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Company Asset Care & Return Clause</label>
+                        <textarea
+                          value={(editedDocumentData as InternOfferLetterData).asset_clause_text || ''}
+                          onChange={(e) => setEditedDocumentData({ ...editedDocumentData, asset_clause_text: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-xs font-mono"
+                          rows={2}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Governing Law Jurisdiction</label>
+                        <input
+                          type="text"
+                          value={(editedDocumentData as InternOfferLetterData).jurisdiction || ''}
+                          onChange={(e) => setEditedDocumentData({ ...editedDocumentData, jurisdiction: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Signatory Details */}
                   <div className="bg-purple-50 p-4 rounded-lg space-y-3">
-                    <h4 className="font-medium text-purple-700">Signatory Details</h4>
+                    <h4 className="font-medium text-purple-700">7. Signatory Details</h4>
                     <div className="grid grid-cols-3 gap-3">
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Signatory Name</label>
@@ -7387,6 +7681,41 @@ Any other duties assigned by management from time to time`}
                           className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm" />
                       </div>
                     </div>
+                    <div className="flex items-center">
+                      <input
+                        type="checkbox"
+                        id="intern_acceptance_section"
+                        checked={(editedDocumentData as InternOfferLetterData).acceptance_section !== false}
+                        onChange={(e) => setEditedDocumentData({ ...editedDocumentData, acceptance_section: e.target.checked })}
+                        className="h-4 w-4 text-indigo-600 border-gray-300 rounded"
+                      />
+                      <label htmlFor="intern_acceptance_section" className="ml-2 text-sm text-gray-700">
+                        Include Candidate Acceptance Section
+                      </label>
+                    </div>
+                  </div>
+
+                  {/* Additional Sections */}
+                  <div className="bg-red-50 p-4 rounded-lg space-y-3">
+                    <h4 className="font-medium text-red-700">8. Additional Information</h4>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Terms & Conditions</label>
+                      <textarea
+                        rows={3}
+                        value={(editedDocumentData as InternOfferLetterData).terms_and_conditions || ''}
+                        onChange={(e) => setEditedDocumentData({ ...editedDocumentData, terms_and_conditions: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Other Details</label>
+                      <textarea
+                        rows={2}
+                        value={(editedDocumentData as InternOfferLetterData).other_details || ''}
+                        onChange={(e) => setEditedDocumentData({ ...editedDocumentData, other_details: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                      />
+                    </div>
                   </div>
                 </div>
               )}
@@ -7401,6 +7730,12 @@ Any other duties assigned by management from time to time`}
                         <label className="block text-sm font-medium text-gray-700 mb-1">Program Name</label>
                         <input type="text" value={(editedDocumentData as InternExperienceCertificateData).program_name || PROGRAM_NAME_DEFAULT}
                           onChange={(e) => setEditedDocumentData({ ...editedDocumentData, program_name: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Program Batch</label>
+                        <input type="text" value={(editedDocumentData as InternExperienceCertificateData).program_batch || ''}
+                          onChange={(e) => setEditedDocumentData({ ...editedDocumentData, program_batch: e.target.value })}
                           className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm" />
                       </div>
                       <div>
@@ -7433,8 +7768,33 @@ Any other duties assigned by management from time to time`}
                           onChange={(e) => setEditedDocumentData({ ...editedDocumentData, last_working_date: e.target.value })}
                           className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm" />
                       </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Issued Date</label>
+                        <input type="date" value={(editedDocumentData as InternExperienceCertificateData).issued_date || ''}
+                          onChange={(e) => setEditedDocumentData({ ...editedDocumentData, issued_date: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm" />
+                      </div>
                     </div>
                   </div>
+
+                  <div className="bg-cyan-50 p-4 rounded-lg space-y-3">
+                    <h4 className="font-medium text-cyan-700">Supervisor Info</h4>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Supervisor Name</label>
+                        <input type="text" value={(editedDocumentData as InternExperienceCertificateData).supervisor_name || ''}
+                          onChange={(e) => setEditedDocumentData({ ...editedDocumentData, supervisor_name: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Supervisor Title</label>
+                        <input type="text" value={(editedDocumentData as InternExperienceCertificateData).supervisor_title || ''}
+                          onChange={(e) => setEditedDocumentData({ ...editedDocumentData, supervisor_title: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm" />
+                      </div>
+                    </div>
+                  </div>
+
                   <div className="bg-blue-50 p-4 rounded-lg space-y-3">
                     <h4 className="font-medium text-blue-700">Projects, Achievements & Performance</h4>
                     <div>
@@ -7479,6 +7839,26 @@ Any other duties assigned by management from time to time`}
                       </select>
                     </div>
                   </div>
+
+                  <div className="bg-orange-50 p-4 rounded-lg space-y-3">
+                    <h4 className="font-medium text-orange-700">Compensation Reference</h4>
+                    <div className="flex items-center gap-3">
+                      <input type="checkbox" id="edit_wasPaid"
+                        checked={!!(editedDocumentData as InternExperienceCertificateData).was_paid}
+                        onChange={(e) => setEditedDocumentData({ ...editedDocumentData, was_paid: e.target.checked })}
+                        className="w-4 h-4 rounded" />
+                      <label htmlFor="edit_wasPaid" className="text-sm text-gray-700 font-medium">Intern received a stipend</label>
+                    </div>
+                    {(editedDocumentData as InternExperienceCertificateData).was_paid && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Stipend Details</label>
+                        <input type="text" value={(editedDocumentData as InternExperienceCertificateData).stipend_details || ''}
+                          onChange={(e) => setEditedDocumentData({ ...editedDocumentData, stipend_details: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm" />
+                      </div>
+                    )}
+                  </div>
+
                   <div className="bg-purple-50 p-4 rounded-lg space-y-3">
                     <h4 className="font-medium text-purple-700">Signatory Details</h4>
                     <div className="grid grid-cols-3 gap-3">

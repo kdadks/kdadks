@@ -99,9 +99,17 @@ export const employeeService = {
       (employee.special_allowance || 0) +
       (employee.other_allowances || 0)
 
+    const company_settings_id = employee.company_settings_id || employee.company_setting_id || null;
+    const payload = {
+      ...employee,
+      company_settings_id,
+      gross_salary
+    };
+    delete (payload as any).company_setting_id;
+
     const { data, error } = await supabase
       .from('employees')
-      .insert([{ ...employee, gross_salary }])
+      .insert([payload])
       .select()
       .single()
 
@@ -130,9 +138,15 @@ export const employeeService = {
       }
     }
 
+    const payload = { ...employee };
+    if (payload.company_setting_id && !payload.company_settings_id) {
+      payload.company_settings_id = payload.company_setting_id;
+    }
+    delete (payload as any).company_setting_id;
+
     const { data, error } = await supabase
       .from('employees')
-      .update(employee)
+      .update(payload)
       .eq('id', id)
       .select()
       .single()

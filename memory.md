@@ -1,8 +1,8 @@
 # Project Memory — KDADKS Website
 
-> Auto-updated by Kilo agent after every implementation. Last updated: 2026-09-05 11:51 BST
+> Auto-updated by Kilo agent after every implementation. Last updated: 2026-09-06 15:31 BST
 
-A comprehensive knowledge base for the KDADKS website codebase. This file serves as a single source of truth for project architecture, conventions, patterns, and key implementation details.
+A comprehensive knowledge base for the KDADKS website codebase. This file serves as a single source of truth for project architecture, conventions, patterns, menu structures, and key implementation details.
 
 ---
 
@@ -29,12 +29,14 @@ Whenever a code modification introduces new critical paths, adds new routes/comp
 
 ## 1. Project Overview
 
-**KDADKS Website** is a React 18 + TypeScript single-page application (SPA) with a dual-purpose architecture:
+**KDADKS Website** is a React 18 + TypeScript single-page application (SPA) with a multi-portal architecture:
 
-- **Public Marketing Site** (`/`) — showcases four brands (IT Wala, Ayuh Clinic, Nirchal, Raahirides) across IT consulting, healthcare, fashion, and travel.
-- **Admin Dashboard** (`/admin/*`) — secure invoice management system with CRM, HR, finance, and reporting modules.
-- **Employee Portal** (`/employee/*`) — self-service for employees (profile, leaves, attendance, salary slips, documents, performance feedback).
-- **Payment Flows** (`/payment/*`) — Stripe/PayPal payment processing.
+- **Public Marketing Site** (`/`) — showcases four core brands (IT Wala, Ayuh Clinic, Nirchal, Raahirides) across IT consulting, healthcare, fashion, and travel.
+- **Admin Dashboard** (`/admin/*`) — enterprise management system with CRM, Sales Pipeline, Billing & Revenue, HR & Operations, Service Desk Triage, Governance, Financial Reporting, and RBAC modules.
+- **Customer Support & Invoices Portal** (`/portal/*`) — self-service portal for customers to submit tickets, track SLAs, complete multi-question CSAT surveys, review account invoices, and manage PBKDF2 credentials.
+- **Internal ITSM Triage Portal** (`/itsm/*`) — direct, high-density triage workspace for support agents and staff with business hours SLA stopwatch countdowns, team notes, and CSAT breakdown.
+- **Employee Portal** (`/employee/*`) — self-service portal for employees (profile, leaves, attendance, salary slips, document vault, performance feedback).
+- **Payment Gateway Processing** (`/payment/*`) — Stripe/PayPal payment flows and checkout pages.
 
 ### Tech Stack
 
@@ -46,7 +48,7 @@ Whenever a code modification introduces new critical paths, adds new routes/comp
 | Icons        | Lucide React 0.263.1                          |
 | Animations   | Framer Motion 10.16.4                         |
 | Backend      | Supabase (PostgreSQL) 2.52.1 with RLS         |
-| Auth         | Supabase Auth (email/password) via `simpleAuth.ts` |
+| Auth         | Supabase Auth + Web Crypto PBKDF2 (Customers) via `simpleAuth.ts` & `customerAuthService.ts` |
 | Deployment   | Netlify (CI/CD via GitHub Actions)            |
 | Email        | Resend API + Microsoft 365 Exchange SMTP      |
 | Payments     | Stripe + PayPal                               |
@@ -93,12 +95,23 @@ Key utility functions in `src/utils/taxUtils.ts`:
 
 - `src/main.tsx` — mounts `<App />` into `#root`
 - `src/App.tsx` — wraps application with `<CompanyProvider>` and `<RouterProvider>`
-- `src/components/Router.tsx` — BrowserRouter with all routes, lazy-loaded public pages, direct imports for admin/employee
+- `src/components/Router.tsx` — BrowserRouter with all routes across Admin, Customer Portal, ITSM Triage, Employee Portal, Payment Flows, and Public Marketing site.
 
-### Admin Dashboard Shell
+### Admin Dashboard Shell & Navigation Options
 
 `src/components/admin/SimpleAdminDashboard.tsx` is the central admin shell:
-- Sidebar navigation with collapsible sections: Sales, Customers, Catalog & Pricing, Billing & Revenue, Finance, HR & Operations, Communication, Governance, Reporting & Analytics, Settings
+- Sidebar navigation with **11 collapsible sections**:
+  1. **Sales** (`openSections.sales`): Leads, Opportunities, Quotes, Contracts
+  2. **Customers** (`openSections.customers`): Customers, Customer 360 Hub
+  3. **Catalog & Pricing** (`openSections.catalog`): Products, Rate Cards
+  4. **Billing & Revenue** (`openSections.billing`): Subscriptions, Invoices, Payments
+  5. **Finance** (`openSections.finance`): Finance Reports, Income, Expenses
+  6. **HR & Operations** (`openSections.hr`): Employees & Docs, Attendance, Leave Management, Compensation, Reviews & Feedback, Settlement, TDS Report, Policies & SOPs
+  7. **Service Desk** (`openSections.servicedesk`): Support Triage Desk
+  8. **Communication** (`openSections.communication`): Announcements
+  9. **Governance** (`openSections.governance`): Board Resolutions
+  10. **Reporting & Analytics** (`openSections.reporting`): Reporting Hub, Customer Reporting, Lead Reporting, Opportunity Reporting, Subscription Reporting, Quote Reporting, Invoice Reporting, HR Reporting (Attendance, Leave, Compensation, Reviews)
+  11. **Settings / Configuration** (`openSections.configuration`): Settings, Roles & Permissions
 - `pathToView` record maps URL paths to `ActiveView` type (40+ views)
 - `renderMainContent()` switch statement renders the appropriate component per view
 - Auth check via `simpleAuth.isAuthenticated()` — redirects to `/admin/login` if not authenticated
@@ -107,41 +120,68 @@ Key utility functions in `src/utils/taxUtils.ts`:
 - `useConfirmDialog()` hook for confirmation dialogs
 - `CompanySelector` component for multi-entity switching in the header
 
-### Routing
+### Complete Application Routing Table
 
-Routes are defined in `src/components/Router.tsx`. Admin routes all go to `SimpleAdminDashboard` which uses URL-based view switching via `useLocation()`. Key route groups:
-
-| Route Pattern                  | Component/View           |
-|-------------------------------|--------------------------|
-| `/admin`                      | Dashboard                |
-| `/admin/invoices`             | InvoiceManagement        |
-| `/admin/quotes`               | QuoteManagement          |
-| `/admin/contracts`            | ContractManagement       |
-| `/admin/customers`            | CustomerManagement       |
-| `/admin/customer-360`         | Customer360Hub           |
-| `/admin/leads`                | LeadManagement           |
-| `/admin/opportunities`        | OpportunityManagement    |
-| `/admin/products`             | ProductManagement        |
-| `/admin/rate-cards`           | RateCardManagement       |
-| `/admin/payments`             | PaymentManagement        |
-| `/admin/subscriptions`        | SubscriptionManagement   |
-| `/admin/board-resolutions`    | BoardResolutionManagement|
-| `/admin/announcements`        | Announcements            |
-| `/admin/expenses`             | ExpenseManagement        |
-| `/admin/income`               | IncomeManagement         |
-| `/admin/finance`              | FinanceManagement        |
-| `/admin/settings`             | InvoiceSettings          |
-| `/admin/roles`                | RoleManagement (RBAC)    |
-| `/admin/users`                | RoleManagement (Users)   |
-| `/admin/hr/employees`         | EmploymentDocuments      |
-| `/admin/hr/leave`             | LeaveManagement          |
-| `/admin/hr/attendance`        | AttendanceManagement     |
-| `/admin/hr/settlement`        | FullFinalSettlement      |
-| `/admin/hr/tds-report`        | TDSReport                |
-| `/admin/hr/performance`       | PerformanceFeedback      |
-| `/admin/hr/compensation`      | CompensationManagement   |
-| `/admin/hr/policies`          | PolicyManagement         |
-| `/admin/reporting/*`          | Various reporting components |
+| Route Pattern                  | Component/View           | Access Protection | Description |
+|-------------------------------|--------------------------|-------------------|-------------|
+| `/`                           | `HomePage`               | Public            | Main landing page showcasing 4 brand verticals |
+| `/privacy`                    | `PrivacyPolicy`          | Public            | Privacy Policy |
+| `/terms`                      | `TermsConditions`        | Public            | Terms & Conditions |
+| `/shipping`                   | `ShippingPolicy`         | Public            | Shipping & Delivery Policy |
+| `/refund`                     | `CancellationRefund`     | Public            | Cancellation & Refund Policy |
+| `/team`                       | `Team`                   | Public            | Company leadership & team directory |
+| `/support`                    | `CustomerSupport`        | Public            | Customer support contact page |
+| `/service-inquiry`            | `ServiceInquiry`         | Public            | Service inquiry form |
+| `/consultation`               | `BookConsultation`       | Public            | Schedule business consultation |
+| `/partnership`                | `Partnership`            | Public            | Partnership opportunities |
+| `/portal`                     | `CustomerPortal`         | Customer Gate     | Customer Self-Service Portal landing |
+| `/portal/tickets`             | `CustomerPortal`         | Customer Gate     | Customer ticket management & CSAT surveys |
+| `/portal/invoices`            | `CustomerPortal`         | Customer Gate     | Customer account invoice viewer & statements |
+| `/itsm` / `/itsm/tickets`     | `AgentTriageDesk`        | Protected (`itsm_tickets` RBAC) | Direct ITSM Support Desk Agent Triage workspace |
+| `/admin/login`                | `AdminLogin_Fresh`       | Admin             | Admin authentication login screen |
+| `/admin`                      | `SimpleAdminDashboard`   | Admin Auth        | Dashboard overview |
+| `/admin/invoices`             | `InvoiceManagement`      | Admin Auth        | Invoice management & payment tracking |
+| `/admin/quotes`               | `QuoteManagement`        | Admin Auth        | Quote management & PDF generator |
+| `/admin/contracts`            | `ContractManagement`     | Admin Auth        | Contract management & legal templates |
+| `/admin/customers`            | `CustomerManagement`     | Admin Auth        | Customer management & contacts |
+| `/admin/customer-360`         | `Customer360Hub`         | Admin Auth        | Customer 360 Hub & B2B org chart |
+| `/admin/leads`                | `LeadManagement`         | Admin Auth        | CRM Lead management & follow-up tasks |
+| `/admin/opportunities`        | `OpportunityManagement`  | Admin Auth        | CRM Opportunity sales pipeline |
+| `/admin/products`             | `ProductManagement`      | Admin Auth        | Product & service catalog |
+| `/admin/rate-cards`           | `RateCardManagement`     | Admin Auth        | Rate cards & billable hourly rates |
+| `/admin/payments`             | `PaymentManagement`      | Admin Auth        | Payment management & gateway reconciliation |
+| `/admin/subscriptions`        | `SubscriptionManagement` | Admin Auth        | Subscription management & auto-invoicing |
+| `/admin/board-resolutions`    | `BoardResolutionManagement`| Admin Auth      | Board resolution management |
+| `/admin/announcements`        | `Announcements`          | Admin Auth        | Internal announcements |
+| `/admin/expenses`             | `ExpenseManagement`      | Admin Auth        | Expense management |
+| `/admin/income`               | `IncomeManagement`       | Admin Auth        | Non-invoice income recording |
+| `/admin/finance`              | `FinanceManagement`      | Admin Auth        | Finance reports & P&L health |
+| `/admin/settings`             | `InvoiceSettings`        | Admin Auth        | Organization & invoice settings |
+| `/admin/roles` / `/admin/users`| `RoleManagement`        | Admin Auth        | RBAC Roles, User assignments & audit logs |
+| `/admin/hr/employees`         | `EmploymentDocuments`    | Admin Auth        | Employee directory & document manager |
+| `/admin/hr/leave`             | `LeaveManagement` (HR)   | Admin Auth        | HR leave approval desk |
+| `/admin/hr/attendance`        | `AttendanceManagement` (HR)| Admin Auth      | HR attendance tracking |
+| `/admin/hr/settlement`        | `FullFinalSettlement`    | Admin Auth        | Exiting employee full & final settlement |
+| `/admin/hr/tds-report`        | `TDSReport`              | Admin Auth        | Employee TDS report & Form 16 / 24Q |
+| `/admin/hr/performance`       | `PerformanceFeedback`    | Admin Auth        | Employee performance reviews & feedback |
+| `/admin/hr/compensation`      | `CompensationManagement` | Admin Auth        | Employee compensation & salary breakdown |
+| `/admin/hr/policies`          | `PolicyManagement`       | Admin Auth        | HR Policy & SOP management system |
+| `/admin/itsm/tickets`         | `AgentTriageDesk`        | Admin Auth        | Support Triage Desk embedded in Admin |
+| `/admin/reporting/*`          | Various Reporting Views  | Admin Auth        | Reporting hub across business verticals |
+| `/employee/login`             | `EmployeeLogin`          | Employee          | Employee portal sign-in |
+| `/employee/change-password`   | `ChangePassword`         | Employee          | Password change form |
+| `/employee`                   | `EmployeeDashboard`      | Employee Auth   | Employee portal dashboard |
+| `/employee/leaves`            | `LeaveManagement`        | Employee Auth   | Employee leave application & balance |
+| `/employee/attendance`        | `AttendanceMarking`      | Employee Auth   | Employee daily attendance marking |
+| `/employee/profile`           | `EmployeeProfile`        | Employee Auth   | Employee profile details |
+| `/employee/salary`            | `EmployeeSalarySlips`    | Employee Auth   | View & download salary slips |
+| `/employee/documents`         | `EmployeeDocuments`      | Employee Auth   | View & download personal employee documents |
+| `/employee/performance`       | `EmployeePerformanceFeedback`| Employee Auth | View performance reviews |
+| `/employee/compensation`      | `EmployeeCompensation`   | Employee Auth   | View compensation breakdown & increments |
+| `/payment/:token`             | `CheckoutPage`           | Public            | Secure invoice payment checkout |
+| `/payment/checkout/:requestId`| `CheckoutPage`           | Public            | Stripe/PayPal payment checkout |
+| `/payment/success/:requestId` | `PaymentSuccessPage`     | Public            | Payment confirmation screen |
+| `/payment/status/:requestId`  | `PaymentPage`            | Public            | Payment status checking screen |
 
 ### State Management Pattern
 
@@ -158,7 +198,7 @@ The app uses React Context + hooks (no Redux):
 
 ### Component Patterns
 
-**Tab-based navigation** (used in InvoiceManagement, QuoteManagement, LeadManagement, OpportunityManagement):
+**Tab-based navigation** (used in InvoiceManagement, QuoteManagement, LeadManagement, OpportunityManagement, PolicyManagement, RoleManagement):
 ```tsx
 const [activeTab, setActiveTab] = useState<'dashboard' | 'invoices' | 'customers'>('dashboard');
 ```
@@ -182,11 +222,10 @@ const [filters, setFilters] = useState<FilterType>({});
 
 ```
 src/
-├── api/                          # API route handlers
-│   └── webhooks.ts
+├── api/                          # API route handlers (webhooks.ts)
 ├── components/
 │   ├── admin/                    # Admin dashboard components
-│   │   ├── SimpleAdminDashboard.tsx   # Main admin shell (1548 lines)
+│   │   ├── SimpleAdminDashboard.tsx   # Main admin shell (2100+ lines)
 │   │   ├── AdminLogin.tsx / AdminLogin_Fresh.tsx
 │   │   ├── Announcements.tsx
 │   │   ├── CompensationManagement.tsx
@@ -200,9 +239,20 @@ src/
 │   │   ├── RateCardManagement.tsx
 │   │   ├── SalaryRateAnalyzer.tsx
 │   │   ├── SubscriptionManagement.tsx
+│   │   ├── roles/                # Role-Based Access Control (RBAC) UI
+│   │   │   ├── RoleManagement.tsx       # RBAC Shell (Roles, Users, Matrix, Audit Log)
+│   │   │   ├── RoleListTab.tsx          # Role catalog & capability progress bars
+│   │   │   ├── RoleModal.tsx            # Role creation/edit modal with permission matrix
+│   │   │   ├── UserAssignmentsTab.tsx   # User-to-role assignment table
+│   │   │   ├── UserAssignmentModal.tsx  # User assignment modal & Supabase Auth invite form
+│   │   │   ├── RoleAccessMatrixTab.tsx  # Comparative permissions matrix table
+│   │   │   └── RoleAuditLogTab.tsx      # RBAC audit trail timeline
 │   │   └── reporting/            # Reporting & analytics dashboards
-│   │       ├── ReportingCard.tsx    # Reusable stat card component
-│   │       ├── SimpleBarChart.tsx   # Reusable bar chart component
+│   │       ├── ReportingHub.tsx         # Unified reporting landing page
+│   │       ├── ReportingCard.tsx        # Reusable stat card with trend indicator
+│   │       ├── SimpleBarChart.tsx       # Reusable bar chart component
+│   │       ├── DateRangeFilter.tsx      # Date range picker component
+│   │       ├── ExportButton.tsx         # CSV export component
 │   │       ├── CustomerReporting.tsx
 │   │       ├── LeadReporting.tsx
 │   │       ├── OpportunityReporting.tsx
@@ -225,7 +275,10 @@ src/
 │   │   └── ViewContractModal.tsx
 │   ├── customer/
 │   │   ├── CustomerManagement.tsx
-│   │   └── CustomerContactModal.tsx
+│   │   ├── CustomerContactModal.tsx
+│   │   ├── Customer360Hub.tsx            # Customer 360 operational dashboard
+│   │   ├── CustomerHierarchyPanel.tsx    # B2B company org chart panel
+│   │   └── ContactNetworkPanel.tsx       # Cross-company contact network panel
 │   ├── employee/                # Employee portal components
 │   │   ├── EmployeeLayout.tsx
 │   │   ├── EmployeeDashboard.tsx
@@ -243,19 +296,28 @@ src/
 │   ├── hr/                      # HR management components
 │   │   ├── AttendanceManagement.tsx
 │   │   ├── EmployeeNotes.tsx
-│   │   ├── EmployeeDocumentManager.tsx # HR full document CRUD management
+│   │   ├── EmployeeDocumentManager.tsx # Full employee document upload, verification & replacement manager
 │   │   ├── EmploymentDocuments.tsx
 │   │   ├── FullFinalSettlement.tsx
 │   │   ├── InternConversionWorkflow.tsx
 │   │   ├── RehireWorkflow.tsx
 │   │   ├── LeaveManagement.tsx
-│   │   ├── PolicyManagement.tsx
+│   │   ├── PolicyManagement.tsx        # HR Policy & SOP management component
 │   │   └── TDSReport.tsx
 │   ├── invoice/
-│   │   ├── InvoiceManagement.tsx   # Core invoicing (6071 lines)
+│   │   ├── InvoiceManagement.tsx   # Core invoicing engine
 │   │   ├── CreateInvoice.tsx
 │   │   └── EditInvoice.tsx
-│   ├── lead/                    # CRM pipeline
+│   ├── itsm/                    # Service Desk / ITSM Support Subsystem
+│   │   ├── CustomerPortal.tsx           # Customer self-service portal (/portal)
+│   │   ├── CustomerResetPasswordModal.tsx # Customer 24h password reset modal
+│   │   ├── AgentTriageDesk.tsx          # High-density agent triage desk (/itsm & /admin/itsm/tickets)
+│   │   ├── ITSMAgentLogin.tsx           # Agent sign-in page
+│   │   ├── ITSMAgentResetPasswordModal.tsx # Agent forgot password modal
+│   │   ├── TicketDetailModal.tsx        # Ticket details workspace & CSAT survey breakdown
+│   │   ├── CSATModal.tsx                # Interactive 5-question customer survey modal
+│   │   └── ProtectedITSMRoute.tsx       # Auth & RBAC route protection wrapper
+│   ├── lead/                    # CRM pipeline components
 │   │   ├── LeadManagement.tsx
 │   │   └── OpportunityManagement.tsx
 │   ├── payment/
@@ -267,13 +329,14 @@ src/
 │   ├── product/
 │   │   └── ProductManagement.tsx
 │   ├── quote/
-│   │   ├── QuoteManagement.tsx    # Core quoting (1380+ lines)
+│   │   ├── QuoteManagement.tsx    # Core quoting component
 │   │   ├── CreateQuote.tsx
 │   │   └── QuoteRateCardSelector.tsx
 │   ├── settings/
 │   │   └── OrganizationSettings.tsx
 │   ├── shared/
-│   │   └── Toast.tsx
+│   │   ├── Toast.tsx
+│   │   └── DocumentPreviewModal.tsx
 │   ├── ui/                      # Reusable UI components
 │   │   ├── CompanySelector.tsx
 │   │   ├── ConfirmDialog.tsx
@@ -285,105 +348,98 @@ src/
 │   │   ├── RichTextEditor.tsx
 │   │   ├── Toast.tsx
 │   │   └── ToastProvider.tsx
-│   ├── public pages/            # Marketing site components
-│   │   ├── Header.tsx, Hero.tsx, About.tsx, Services.tsx,
-│   │   ├── Testimonials.tsx, Contact.tsx, Footer.tsx,
-│   │   ├── Team.tsx, PrivacyPolicy.tsx, TermsConditions.tsx,
-│   │   ├── ShippingPolicy.tsx, CancellationRefund.tsx,
-│   │   ├── CustomerSupport.tsx, ServiceInquiry.tsx,
-│   │   ├── BookConsultation.tsx, Partnership.tsx,
-│   │   └── SEO.tsx, SEOContent.tsx, ScrollToTop.tsx
+│   ├── public pages/            # Marketing site components (Header, Hero, About, Services, etc.)
 │   ├── Router.tsx               # Main application router
 │   └── App.tsx                  # Root component
 ├── contexts/
+│   ├── ActionProgressContext.tsx
 │   ├── AuthContext.tsx
 │   └── CompanyContext.tsx
 ├── services/                    # Centralized data access layer
-│   ├── invoiceService.ts        # (2323 lines) — invoices, customers, products, company settings, countries, terms
-│   ├── quoteService.ts          # (937 lines) — quotes, quote settings
-│   ├── paymentService.ts        # (908 lines) — payments, payment gateways
-│   ├── leadService.ts           # (317 lines) — lead CRUD, stats, number generation
-│   ├── opportunityService.ts    # (405 lines) — opportunity CRUD, stats, lead→opp conversion, opp→quote conversion
-│   ├── leadActivityService.ts   # (250+ lines) — lead/opportunity activity tracking, notes
-│   ├── leadFollowUpService.ts   # (200+ lines) — follow-up task CRUD, reminders, stale lead detection, alerts
-│   ├── contractService.ts       # — contract CRUD
-│   ├── employeeService.ts       # — employee CRUD
-│   ├── subscriptionService.ts   # — subscriptions
-│   ├── rateCardService.ts       # — rate cards
-│   ├── compensationService.ts   # — employee compensation
-│   ├── attendanceService.ts     # — attendance
-│   ├── leaveService.ts          # — leave management
-│   ├── expenseService.ts        # — expenses
-│   ├── financeService.ts        # — finance & financial reports (P&L, Health, Trends, multi-company filtered)
-│   ├── incomeService.ts         # — income
-│   ├── emailService.ts          # — email (Resend)
-│   ├── backupEmailService.ts    # — backup email (SMTP)
-│   ├── fallbackEmailService.ts  # — fallback email
-│   ├── auditLogService.ts       # — audit logs
-│   ├── boardResolutionService.ts# — board resolutions
-│   ├── documentService.ts       # — document management
-│   ├── employeeDocumentService.ts
+│   ├── invoiceService.ts        # Invoices, customers, products, company settings
+│   ├── quoteService.ts          # Quotes & quote settings
+│   ├── paymentService.ts        # Payments & gateways
+│   ├── leadService.ts           # Lead CRUD & stats
+│   ├── opportunityService.ts    # Opportunity CRUD & conversions
+│   ├── leadActivityService.ts   # Lead/Opportunity activity timeline
+│   ├── leadFollowUpService.ts   # Follow-up task CRUD, alerts & stale lead detection
+│   ├── contractService.ts       # Contract management
+│   ├── employeeService.ts       # Employee CRUD & profile management
+│   ├── employeeDocumentService.ts# Storage bucket upload, replacement, download & verification status
+│   ├── customerAuthService.ts   # Web Crypto PBKDF2 customer authentication & password reset
+│   ├── itsmTicketService.ts     # Support ticket CRUD, queue filters, & metrics
+│   ├── itsmSlaService.ts        # Business hours (Mon-Fri 09-18) SLA stopwatch engine
+│   ├── itsmAttachmentService.ts # ITSM file attachment upload & metadata
+│   ├── itsmCsatService.ts       # CSAT survey feedback submission (5 questions)
+│   ├── customer360Service.ts    # Customer 360 metrics & parallel data fetching
+│   ├── customerHierarchyService.ts# B2B company relationships & contact network cross-links
+│   ├── policyService.ts         # HR Policy & SOP CRUD, jurisdiction templates, & acknowledgments
+│   ├── roleService.ts           # RBAC role CRUD, Supabase auth user provisioning, & audit logging
+│   ├── subscriptionService.ts   # Subscriptions & auto-invoice generation
+│   ├── rateCardService.ts       # Rate cards
+│   ├── compensationService.ts   # Employee compensation
+│   ├── attendanceService.ts     # Attendance marking & records
+│   ├── leaveService.ts          # Leave requests & balances
+│   ├── expenseService.ts        # Expense management
+│   ├── financeService.ts        # Financial reports & health analysis
+│   ├── incomeService.ts         # Non-invoice income
+│   ├── emailService.ts          # Resend API transactional emails
+│   ├── backupEmailService.ts    # Backup SMTP email provider
+│   ├── fallbackEmailService.ts  # Fallback email service
+│   ├── auditLogService.ts       # Audit logging
+│   ├── boardResolutionService.ts# Board resolutions
+│   ├── documentService.ts       # Document management
 │   ├── employeeNotesService.ts
 │   ├── employeeAuthService.ts
-│   ├── paymentProviders.ts      # — Stripe/PayPal providers
-│   ├── paymentStatusService.ts  # — payment status tracking
-│   ├── pdfBrandingService.ts    # — PDF branding
+│   ├── paymentProviders.ts      # Stripe/PayPal providers
+│   ├── paymentStatusService.ts  # Payment status tracking
+│   ├── pdfBrandingService.ts    # PDF branding banners
 │   ├── performanceFeedbackService.ts
-│   ├── settlementService.ts     # — full & final settlement
-│   ├── supabaseService.ts       # — Supabase utilities
-│   ├── salaryService.ts         # — salary
+│   ├── settlementService.ts     # Full & final settlement
+│   ├── supabaseService.ts       # Supabase client helpers
+│   ├── salaryService.ts         # Salary calculation
 │   ├── salaryStructureService.ts
-│   ├── tdsReportService.ts      # — TDS reports
-│   ├── policyService.ts         # — Policy & SOP management
-│   ├── itsmTicketService.ts     # — ITSM ticket CRUD, state machine & Resend email integration
-│   ├── itsmSlaService.ts        # — Mon-Fri 09:00-18:00 SLA calculator & stopwatch engine
-│   ├── itsmAttachmentService.ts # — file attachment uploads & metadata
-│   ├── itsmCsatService.ts       # — CSAT survey feedback collection
-│   └── exchangeRateService.ts   # — currency exchange rates
+│   ├── tdsReportService.ts      # TDS report calculation
+│   └── exchangeRateService.ts   # Currency exchange rates
 ├── types/                        # TypeScript type definitions
-│   ├── invoice.ts               # (574 lines) — core domain types
-│   ├── lead.ts                  # (403 lines) — lead & opportunity types
-│   ├── quote.ts                 # (263 lines) — quote types
-│   ├── contract.ts              # (373 lines) — contract types
-│   ├── employee.ts              # — employee types
-│   ├── payroll.ts               # — payroll types
-│   ├── payment.ts               # — payment types
-│   ├── admin.ts                 # — admin types
-│   ├── announcement.ts          # — announcement types
-│   ├── policy.ts                # — Policy & SOP domain types
-│   ├── itsm.ts                  # — ITSM tickets, comments, SLA stopwatches & CSAT types
-│   └── auth.ts                  # — auth types
+│   ├── invoice.ts
+│   ├── lead.ts
+│   ├── quote.ts
+│   ├── contract.ts
+│   ├── employee.ts              # Employee & EmployeeDocument types
+│   ├── payroll.ts
+│   ├── payment.ts
+│   ├── admin.ts
+│   ├── announcement.ts
+│   ├── policy.ts                # HR Policy & SOP domain types
+│   ├── itsm.ts                  # Support ticket, comment, SLA & CSAT types
+│   ├── role.ts                  # RBAC role, permission, module & audit types
+│   ├── customer360.ts           # Customer 360 KPI & timeline types
+│   ├── customerHierarchy.ts     # B2B company hierarchy & contact link types
+│   └── auth.ts
 ├── utils/                        # Utility functions
-│   ├── taxUtils.ts              # (542 lines) — multi-country tax/banking fields
-│   ├── currencyConverter.ts     # — currency conversion & formatting
-│   ├── leadEntityUtils.ts       # — entity prefix, tax, validation helpers
-│   ├── simpleAuth.ts            # — auth wrapper
-│   ├── supabaseErrorHandler.ts  # — error handling
-│   ├── indianTaxCalculator.ts   # — Indian tax calculations
-│   ├── payrollCalculator.ts     # — payroll calculations
-│   ├── salaryCalculator.ts      # — salary calculations
-│   ├── seo.ts                   # — SEO helpers
-│   ├── customerCodeUtils.ts     # — customer code utilities
+│   ├── taxUtils.ts              # Multi-country tax & banking fields (540+ lines)
+│   ├── currencyConverter.ts     # Multi-currency formatting & live conversion
+│   ├── leadEntityUtils.ts       # Entity prefixing & validation
+│   ├── customerCodeUtils.ts     # Auto-generated customer code formatting
+│   ├── simpleAuth.ts            # Admin Auth wrapper
+│   ├── supabaseErrorHandler.ts  # Error handling
+│   ├── indianTaxCalculator.ts   # Indian tax math
+│   ├── payrollCalculator.ts     # Payroll math
+│   ├── salaryCalculator.ts      # Salary breakdown math
+│   ├── seo.ts                   # Meta tag helper
+│   ├── adminPermissions.ts      # Permission validation & entity boundary checks
 │   ├── boardResolutionPDFGenerator.ts
 │   ├── contractPDFGenerator.ts
-│   ├── employmentDocumentTemplates.ts # — jurisdiction-aware prefilled document templates & IP/Asset clauses
+│   ├── employmentDocumentTemplates.ts # Prefilled employment contract templates
 │   ├── internDocumentTemplates.ts
+│   ├── policyPDFGenerator.ts    # Branded HR Policy & SOP PDF exporter
 │   ├── pdfBrandingUtils.ts
 │   └── salarySlipPDFGenerator.ts
-├── config/
-│   ├── supabase.ts              # — Supabase client config
-│   └── emailConfig.ts           # — email configuration
-├── constants/
-│   ├── businesses.ts            # — 4 brand definitions
-│   └── countries.ts             # — country constants
 ├── data/
 │   ├── indianContractTemplates.ts
 │   ├── irishContractTemplates.ts
-│   └── jurisdictionPolicyTemplates.ts # — Prefilled HR policies & SOPs for IN, IE, US, GB, AE, GLOBAL
-├── database/
-│   └── initializer.ts           # — database initialization
-├── examples/
-│   └── invoice-demo.ts
+│   └── jurisdictionPolicyTemplates.ts # Prefilled policies for IN, IE, US, GB, AE, SG
 └── vite-env.d.ts
 ```
 
@@ -413,7 +469,7 @@ docs/                           # Project documentation (70+ files)
 
 database/
 ├── migrations/                 # Supabase SQL migrations (40+ files)
-└── (schema.sql and seed-data.sql referenced but may be in migrations)
+└── (schema.sql and seed-data.sql referenced but located in migrations)
 
 scripts/
 ├── cleanup-project.js
@@ -524,7 +580,7 @@ const openModal = (mode: 'view' | 'edit' | 'add', lead?: Lead) => {
 
 ---
 
-## 5. CRM Pipeline (Lead → Opportunity → Quote → Invoice)
+## 5. CRM Pipeline & Subsystem Workflows
 
 The complete sales pipeline with status/stage transitions:
 
@@ -576,12 +632,15 @@ The complete sales pipeline with status/stage transitions:
 - Status badges with color coding
 - Can convert accepted quote to invoice via `quoteService.convertToInvoice()`
 - Automated draft contract creation workflow for accepted quotes: when a quote status is updated to `accepted` or when clicking "Create Draft Contract" on accepted quotes, reuses the exact feature-rich `CreateContractModal` component (`src/components/contract/CreateContractModal.tsx`). Pre-populates company legal details, customer data, quote total, items/deliverables scope of work, dates, and terms while enabling full tabbed editing (Basic Info, Parties, Sections, Milestones) and dynamic jurisdiction template switching (`IRL` Irish Law vs `IND` Indian Law).
+
+### Contract Management (`src/components/contract/ContractManagement.tsx`)
+
 - Overhauled contract PDF generator ([`contractPDFGenerator.ts`](file:///Users/prashant/Documents/Application%20directory/Kdadks/src/utils/contractPDFGenerator.ts)) with enterprise-grade typography and table formatting:
   - Smart proportional column width allocation (`colWeights` prioritizing description columns while narrowing `#` / `Phase` / `S.No` index columns).
   - Per-row footer boundary checking (`this.currentY + rHeight > this.contentEndY - 2`), preventing tables from overlapping page footers, branding banners, or page numbers.
   - Repeated table header rendering on multi-page table breaks.
   - Corporate Deep Blue accent bars (`#1e3a8a`), slate dark body text (`#1e293b`), and clean hanging bullet indents for section rendering.
-- Added database migration [`037_add_contracts_cro_vat_and_company_settings_id.sql`](file:///Users/prashant/Documents/Application%20directory/Kdadks/database/migrations/037_add_contracts_cro_vat_and_company_settings_id.sql) introducing `company_settings_id`, `customer_id`, `party_a_vat_number`, `party_a_cro_number`, `party_b_vat_number`, `party_b_cro_number` to `contracts` table.
+- Database migration [`037_add_contracts_cro_vat_and_company_settings_id.sql`](file:///Users/prashant/Documents/Application%20directory/Kdadks/database/migrations/037_add_contracts_cro_vat_and_company_settings_id.sql) introducing `company_settings_id`, `customer_id`, `party_a_vat_number`, `party_a_cro_number`, `party_b_vat_number`, `party_b_cro_number` to `contracts` table.
 - Implemented `safeInsertContract` and `safeUpdateContract` resilience handlers in [`contractService.ts`](file:///Users/prashant/Documents/Application%20directory/Kdadks/src/services/contractService.ts) to handle DB schema column updates seamlessly without throwing `PGRST204` errors.
 - Separated Irish Entity tax fields (`party_a_vat_number`, `party_a_cro_number`, `party_b_vat_number`, `party_b_cro_number`) from Indian GSTIN/PAN fields across [`CreateContractModal.tsx`](file:///Users/prashant/Documents/Application%20directory/Kdadks/src/components/contract/CreateContractModal.tsx), [`EditContractModal.tsx`](file:///Users/prashant/Documents/Application%20directory/Kdadks/src/components/contract/EditContractModal.tsx), and [`contractService.ts`](file:///Users/prashant/Documents/Application%20directory/Kdadks/src/services/contractService.ts).
 - Guaranteed explicit `company_settings_id` stamping across all contract creation and edit flows (`ContractManagement.tsx`, `CreateContractModal.tsx`, `EditContractModal.tsx`, `QuoteManagement.tsx`).
@@ -589,23 +648,14 @@ The complete sales pipeline with status/stage transitions:
 - Fixed `contractService.generateContractNumber` entity prefix resolution to properly map `'IE'` / `'IRL'` to `'IRL'` (preventing Irish contracts from defaulting to `'IND'`).
 - Enforced strict entity boundary isolation on `/admin/contracts` via `.eq('company_settings_id', company_settings_id)` in `contractService.getContracts` & `getStatistics`, ensuring Irish entity views strictly show contracts linked to the Ireland entity.
 
-### Contract Management (`src/components/contract/ContractManagement.tsx`)
-
-- Entity-aware dashboard statistics calculation in `contractService.getStatistics(companySettingsId)` natively aggregating contract values for the selected entity
-- Strict company entity isolation via `company_settings_id` filter across contracts table view and dashboard tiles
-
 ### Invoice Management (`src/components/invoice/InvoiceManagement.tsx`)
 
-- 6071-line monolithic component handling full invoice lifecycle
+- 6000+ line component handling full invoice lifecycle
 - Tab-based: dashboard, invoices, customers, products, settings
 - IGST-compliant with HSN/SAC codes
 - Multi-currency support (EUR, USD, INR) with live/cached exchange rate conversion via `exchangeRateService`.
 - Multi-currency grid view displaying both primary currency and calculated INR value (`(~₹...)`) in both **Dashboard** and **Invoices** tabs.
 - Exact paid amount tracking displaying the user-entered payment value under Amount and Payment status columns once an invoice is marked as paid.
-
-### Lead Management (`src/components/lead/LeadManagement.tsx`)
-
-- Add/Edit lead modal includes explicit **Status** dropdown selector (`new` | `contacted` | `qualified` | `disqualified` | `converted`), permitting direct status updates when creating or editing leads.
 
 ### Lead/Opportunity Activity Tracking
 
@@ -687,85 +737,161 @@ A comprehensive enterprise-grade customer self-service and agent triage desk mod
   - `ProtectedITSMRoute.tsx` — Route protection wrapper enforcing user authentication and `'itsm_tickets'` module RBAC permission checks for `/itsm` direct access.
   - `TicketDetailModal.tsx` — Workspace viewer with timeline, public/private agent notes (`is_internal = true` with yellow background & padlock icon), team @mentions, attachment preview/download, resolution notes, SOP/KB policy linking, and complete **Customer CSAT Survey Breakdown** displaying all 5 question star ratings and text comments inside `/itsm` and `/admin/itsm/tickets`.
   - `CSATModal.tsx` — Interactive 5-question customer feedback survey modal with star rating and comments for each category.
-- **Admin RBAC & User Creation (`src/components/admin/roles/` & `UserAssignmentModal.tsx`):**
-  - Enhanced User Assignment Modal allowing Super Admins to provision new Supabase Auth staff user accounts directly from `/admin/roles` with full name, work email, password, company entity scope, role assignment, and optional welcome credentials email dispatch via Resend API.
-- **Admin Customer Management (`src/components/customer/CustomerManagement.tsx`):**
-  - Added **Passcode / Send Credentials** row action button to set temporary onboarding passcodes and dispatch welcome emails via Resend API.
-- **Database Migrations:**
-  - `database/migrations/038_itsm_support_portal.sql` — PostgreSQL tables `itsm_ticket_categories`, `itsm_tickets`, `itsm_comments`, `itsm_attachments`, `itsm_audit_logs`, `itsm_csat_surveys`, `itsm_ticket_number_sequences`, PL/pgSQL function `calculate_business_deadline`, sequence RPC `get_next_itsm_ticket_number`, and multi-tenant RLS policies.
-  - `database/migrations/039_customer_auth_credentials.sql` — Added `password_hash`, `must_change_password`, `password_reset_token`, `password_reset_expires_at`, `failed_login_attempts`, and `locked_until` columns to `customers` table with token indices.
-  - `database/migrations/040_itsm_csat_multi_question.sql` — Added `responses` JSONB column to `itsm_csat_surveys` table for storing 5-question rating & comment breakdowns.
+
+### HR Policy & SOP Management System
+
+Provides enterprise-grade policy lifecycle management, jurisdiction-aware standard templates, digital employee acknowledgments, version tracking, and automated PDF exports (`/admin/hr/policies`).
+
+1. **Policy Management Component (`src/components/hr/PolicyManagement.tsx`)**:
+   - Tabbed UI for Policy List, Policy Details/Preview, Policy Form (Create/Edit), and Employee Acknowledgments Matrix.
+   - Entity filtering (`useCompanyContext`), Category (Code of Conduct, Leave & Attendance, IT & Security, Health & Safety, Compensation, General), Jurisdiction (India, Ireland, USA, UK, UAE, Singapore), and Approval Status.
+   - Rich Text Editor integration (`RichTextEditor.tsx` / TinyMCE) with structural JSONB section builders.
+
+2. **Policy Service (`src/services/policyService.ts`)**:
+   - CRUD operations on `policies` table with version incrementing (`version`, `template_version`).
+   - Digital employee acknowledgment logging (`acknowledgePolicy`, `getPolicyAcknowledgements`) capturing IP addresses, timestamps, and version compliance.
+
+3. **Jurisdiction Policy Templates (`src/data/jurisdictionPolicyTemplates.ts`)**:
+   - Prefilled policies for legal jurisdictions:
+     - **India (IN)**: POSH policy, Standing Orders, Shops & Establishments compliance, PF & Gratuity clauses.
+     - **Ireland (IE)**: Organisation of Working Time Act compliance, Sick Leave Act 2022, GDPR data protection.
+     - **United States (US)**: At-will employment disclaimers, FLSA overtime classification, FMLA leave.
+     - **UK (GB)**: Employment Rights Act 1996 compliance, Working Time Regulations 1998, Statutory Sick Pay.
+     - **UAE (AE)**: UAE Labour Law (Federal Decree-Law No. 33 of 2021) compliance, End of Service Gratuity rules.
+     - **Singapore (SG)**: Employment Act (Cap. 91) compliance, CPF regulations.
+
+4. **Policy PDF Generator (`src/utils/policyPDFGenerator.ts`)**:
+   - Generates publication-ready policy PDFs applying company branding header, table of contents, section numbering, disclaimer boxes, and signatory metadata blocks.
+
+### HR Employee Document Management Subsystem
+
+Provides comprehensive document upload, verification status tracking, replacement, and secure storage for employee onboarding and compliance documents (`/admin/hr/employees` via `EmployeeDocumentManager.tsx`).
+
+- **Storage Bucket:** `employee-documents` (Supabase Storage bucket with 5MB file size limit and MIME validation allowing PDF, JPEG, PNG, WEBP).
+- **Supported Document Types:** Aadhar Card, PAN Card, Passport, Driving License, Voter ID, Education Certificate, Experience Letter, Bank Account Proof, Medical Certificate, Resume/CV, Photograph, Other.
+- **Verification Status Lifecycle:** `pending` → `verified` | `rejected` | `expired`.
+- **Status Verification Modal:** Allows HR administrators to set verification status, assign verification timestamps, and record verification comments/notes.
+- **Document Actions:** File upload, document replacement (`replacingId`), document preview via `DocumentPreviewModal.tsx`, direct file download, and secure deletion with confirmation dialog (`ConfirmDialog`).
+- **Service Layer (`src/services/employeeDocumentService.ts`):** Handles file uploads, path sanitization (`employee_id/timestamp_filename`), UUID verification, database CRUD on `employment_documents`, signed URL generation, and storage cleanup.
 
 ---
 
 ## 6. Database Schema
 
-The database uses **9+ interconnected tables** with foreign key relationships (Supabase PostgreSQL with RLS):
+The database uses **25+ interconnected tables** with foreign key relationships (Supabase PostgreSQL with RLS):
 
 ### Core Tables
-| Table              | Relationships                          |
-|--------------------|----------------------------------------|
-| countries          | Referenced by customers, company_settings |
-| company_settings   | → countries, invoice_settings          |
-| invoices           | → customers, invoice_items, products, company_settings, invoice_settings |
-| customers          | → countries, company_settings          |
-| invoice_items      | → invoices, products                   |
-| products           | → company_settings                     |
-| invoice_settings   | → company_settings                     |
-| payments           | → invoices                             |
-| terms_templates    | → company_settings                     |
 
-### CRM & Customer Tables (recently added)
-| Table              | Relationships                          |
-|--------------------|----------------------------------------|
-| customer_contacts  | → customers, company_settings           |
-| leads              | → customers, company_settings, countries |
-| opportunities      | → leads, customers, company_settings    |
-| lead_activities    | → leads, opportunities (polymorphic)    |
-| lead_follow_up_tasks | → leads, opportunities, company_settings |
-| quotes             | → customers, company_settings          |
-| quote_items        | → quotes, products                     |
-| customer_relationships | → customers (from/to), company_settings — B2B many-to-many company hierarchy |
-| contact_customer_links | → customer_contacts, customers — many-to-many contact-to-company cross-links |
+| Table              | Relationships / Purpose |
+|--------------------|-------------------------|
+| `countries`        | Referenced by customers, company_settings |
+| `company_settings` | → countries, invoice_settings |
+| `invoices`         | → customers, invoice_items, products, company_settings, invoice_settings |
+| `customers`        | → countries, company_settings — PBKDF2 hash, reset tokens |
+| `invoice_items`    | → invoices, products |
+| `products`         | → company_settings |
+| `invoice_settings` | → company_settings |
+| `payments`         | → invoices |
+| `terms_templates`  | → company_settings |
 
-### HR Tables
-| Table              | Relationships                          |
-|--------------------|----------------------------------------|
-| employees          | → company_settings, countries          |
-| employee_compensation | → employees                        |
-| attendance_records | → employees                            |
-| leave_requests     | → employees                            |
-| salary_slips       | → employees                            |
-| employment_documents | → employees                          |
-| full_final_settlements | → employees                        |
-| salary_increments  | → employees                            |
-| policies           | → company_settings — HR policies & SOP documents per company entity and jurisdiction |
-| roles              | → company_settings — System and custom RBAC roles with JSONB permission mapping |
-| user_role_assignments | → roles, company_settings — User-to-role mappings with entity scoping and Supabase auth |
-| role_audit_logs    | Chronological audit log of RBAC modifications |
+### CRM & Customer Tables
 
-### Key Functions
+| Table              | Relationships / Purpose |
+|--------------------|-------------------------|
+| `customer_contacts`| → customers, company_settings |
+| `leads`            | → customers, company_settings, countries |
+| `opportunities`    | → leads, customers, company_settings |
+| `lead_activities`  | → leads, opportunities (polymorphic) |
+| `lead_follow_up_tasks` | → leads, opportunities, company_settings |
+| `quotes`           | → customers, company_settings |
+| `quote_items`      | → quotes, products |
+| `customer_relationships` | → customers (from/to), company_settings — B2B many-to-many company hierarchy |
+| `contact_customer_links` | → customer_contacts, customers — many-to-many contact-to-company cross-links |
+
+### Support & Governance Tables
+
+| Table                   | Relationships / Purpose |
+|-------------------------|-------------------------|
+| `itsm_tickets`          | → customers, company_settings — INC/REQ/PRB tickets, SLAs, priorities |
+| `itsm_ticket_categories`| ITSM ticket category directory |
+| `itsm_comments`         | → itsm_tickets — public customer responses & private agent notes |
+| `itsm_attachments`      | → itsm_tickets — file attachments metadata |
+| `itsm_csat_surveys`     | → itsm_tickets — 5-question rating & comment feedback |
+| `contracts`             | → customers, company_settings — legal contracts, CRO/VAT numbers, milestones |
+| `board_resolutions`     | → company_settings — corporate board resolutions & voting |
+| `announcements`         | → company_settings — target audience announcements |
+| `subscriptions`         | → customers, company_settings — SUB-YYYY-XXXX recurring plans |
+
+### HR & Security Tables
+
+| Table                  | Relationships / Purpose |
+|------------------------|-------------------------|
+| `employees`            | → company_settings, countries |
+| `employee_compensation`| → employees |
+| `attendance_records`   | → employees |
+| `leave_requests`       | → employees |
+| `salary_slips`         | → employees |
+| `employment_documents` | → employees — employee document vault & verification metadata |
+| `full_final_settlements`| → employees |
+| `salary_increments`    | → employees |
+| `policies`             | → company_settings — HR policies & SOP documents with JSONB sections |
+| `policy_acknowledgements`| → policies, employees — digital signature logs |
+| `roles`                | → company_settings — System and custom RBAC roles with JSONB permission mapping |
+| `user_role_assignments`| → roles, company_settings — User-to-role mappings with entity scoping & Supabase auth |
+| `role_audit_logs`      | Chronological audit log of RBAC modifications |
+
+### Key Functions & RPCs
 - `get_next_lead_opportunity_number(p_record_type)` — generates LEAD/OPP numbers with sequence per year
+- `get_next_subscription_number(p_year)` — generates SUB-YYYY-XXXX subscription numbers
+- `get_next_itsm_ticket_number(p_record_type)` — generates INC/REQ/PRB support ticket numbers
+- `calculate_business_deadline(start_time, hours)` — calculates business hours SLA deadlines (Mon-Fri 09-18)
+- `get_auth_users()` — RPC exposing Supabase `auth.users` securely for RBAC user assignment
 
-### Database Migrations
+### Database Migrations Directory (`database/migrations/`)
 
-Migrations are in `database/migrations/` (40+ SQL files). Key recent migrations:
-- `036_role_based_access_control.sql` — Tables `roles`, `user_role_assignments`, and `role_audit_logs` for RBAC with granular action permissions across 26 modules, default role seeds (Super Admin, Sales Manager, Finance Officer, HR Manager, Compliance Officer, Auditor, Employee Portal), auto-assignment of `admin@kdadks.com`, secure RPC function `get_auth_users()`, and view `system_auth_users` exposing `auth.users` safely for admin assignment.
-- `035_policy_sop_management.sql` — Table `policies` for entity-filtered HR policies and SOPs across law jurisdictions with RLS and JSONB sections.
-- `034_subscription_unique_ids_and_drafts.sql` — Unique Subscription ID generation (`SUB-YYYY-XXXX`), `draft` status constraint, `source_subscription_id` lineage tracking, atomic sequence generator RPC `get_next_subscription_number(p_year)`.
-- `033_customer_b2b_hierarchy.sql` — B2B hierarchy tables: `customer_relationships` (company↔company many-to-many) and `contact_customer_links` (contact↔company many-to-many cross-links)
-- `032_add_company_settings_id_to_subscription_plans.sql`
-- `031_add_completion_notes_to_lead_follow_up_tasks.sql`
-- `030_customer_contacts.sql` — multiple contacts per customer
-- `029_lead_follow_up_tasks.sql` — follow-up tasks, priorities, recurrence, alerts
-- `028_add_lead_currency_code.sql`
-- `027_fix_lead_country_foreign_key.sql`
-- `026_lead_opportunity_id_sequences.sql` — number generation sequences
-- `025_lead_opportunity_workflow.sql` — CRM pipeline tables
-- `022_add_iban_swift_to_company_settings.sql`
-- `023_add_cro_vat_to_company_settings.sql`
+Migrated database files in order:
+- `002_add_pdf_branding_images.sql` — PDF branding headers & footers
+- `003_add_intl_banking_to_invoices.sql` — International banking IBAN/SWIFT fields
+- `003_add_quote_project_fields.sql` — Quote project dates & metadata
+- `004_add_salary_slips_table.sql` — Salary slips table schema
+- `005_add_organization_details.sql` — Organization legal details
+- `006_add_missing_employee_fields.sql` — Employee profile enhancements
+- `007_full_final_settlement.sql` — Full & final settlement schema
+- `008_enhance_invoices_with_quote_features.sql` — Quote item parity in invoices
+- `009_employee_uploaded_documents.sql` — Employee document table schema
+- `010_announcements.sql` — Announcements table & target audience
+- `011_performance_feedback.sql` — Performance appraisal schema
+- `012_compensation_management.sql` — Compensation & salary breakdown schema
+- `013_expense_finance_management.sql` — Expenses, non-invoice income & finance tables
+- `014_invoice_payments_sync.sql` — Payment-to-invoice status synchronization
+- `015_multi_currency_support.sql` — Exchange rates & multi-currency schema
+- `016_fix_expense_number_generation.sql` — Expense ID sequence generator
+- `017_intern_document_templates.sql` — Internship document templates
+- `018_employee_notes_rehire_intern_conversion.sql` — Employee notes & workflow flags
+- `019_per_company_invoice_settings.sql` — Entity-isolated invoice settings
+- `020_employee_documents_bucket_and_rls.sql` — Storage bucket `employee-documents` & RLS policies
+- `021_update_invoice_number_format.sql` — Invoice sequence format updates
+- `022_add_iban_swift_to_company_settings.sql` — Company IBAN/SWIFT columns
+- `023_add_cro_vat_to_company_settings.sql` — Irish CRO & VAT registration columns
+- `024_increase_pan_length.sql` — PAN regex & character length fix
+- `025_lead_opportunity_workflow.sql` — CRM Lead & Opportunity tables
+- `026_lead_opportunity_id_sequences.sql` — Lead & Opportunity sequence RPC `get_next_lead_opportunity_number`
+- `027_fix_lead_country_foreign_key.sql` — Country foreign key constraints
+- `028_add_lead_currency_code.sql` — Currency code column on leads
+- `029_lead_follow_up_tasks.sql` — Follow-up task table schema
+- `030_customer_contacts.sql` — Multiple contacts per customer
+- `031_add_completion_notes_to_lead_follow_up_tasks.sql` — Follow-up task completion notes
+- `032_add_company_settings_id_to_subscription_plans.sql` — Subscriptions multi-entity isolation
+- `033_customer_b2b_hierarchy.sql` — B2B hierarchy `customer_relationships` & `contact_customer_links`
+- `034_subscription_unique_ids_and_drafts.sql` — Subscription sequence RPC `get_next_subscription_number`
+- `035_policy_sop_management.sql` — `policies` & `policy_acknowledgements` tables with JSONB sections
+- `036_role_based_access_control.sql` — RBAC tables `roles`, `user_role_assignments`, `role_audit_logs`, & `system_auth_users` view
+- `037_add_contracts_cro_vat_and_company_settings_id.sql` — Irish CRO/VAT & entity ID on contracts
+- `038_itsm_support_portal.sql` — ITSM support tables, SLA calculation function & sequence RPC `get_next_itsm_ticket_number`
+- `039_customer_auth_credentials.sql` — Customer PBKDF2 password hash & reset token columns
+- `040_itsm_csat_multi_question.sql` — Added `responses` JSONB column to `itsm_csat_surveys` for 5-question breakdown
 
-**Important:** `.gitignore` ignores `*.sql` at root — SQL files must be in subdirectories to be tracked.
+**Important:** `.gitignore` ignores `*.sql` at root — SQL files must be in subdirectories (`database/migrations/`) to be tracked.
 
 ---
 
@@ -807,7 +933,7 @@ npm run deploy:netlify   # Deploy to Netlify
 npm validate         # Validate deployment configuration
 ```
 
-### Database Setup (Required for Invoice/CRM Features)
+### Database Setup (Required for Invoice/CRM/ITSM Features)
 
 1. **Schema:** Run migrations from `database/migrations/` in Supabase SQL Editor
 2. **RLS:** Run `scripts/configure-rls.sql` or `scripts/rls-audit-and-fix.mjs`
@@ -822,26 +948,33 @@ npm validate         # Validate deployment configuration
 |------|---------|
 | `src/config/supabase.ts` | Supabase client initialization, `isSupabaseConfigured` check |
 | `src/utils/simpleAuth.ts` | Auth wrapper — login, logout, session check, clearAuthState |
+| `src/services/customerAuthService.ts` | Web Crypto PBKDF2 customer authentication & password reset tokens |
 | `src/contexts/CompanyContext.tsx` | Multi-entity context provider, loads company settings |
-| `src/services/invoiceService.ts` | 2323-line core service for invoices, customers, products, countries, company settings |
-| `src/components/admin/SimpleAdminDashboard.tsx` | 1548-line admin shell with sidebar, routing, dashboard stats |
-| `src/components/invoice/InvoiceManagement.tsx` | 6071-line core invoicing component |
+| `src/services/invoiceService.ts` | Core service for invoices, customers, products, countries, company settings |
+| `src/components/admin/SimpleAdminDashboard.tsx` | Admin shell with 11 collapsible sidebar navigation sections |
+| `src/components/invoice/InvoiceManagement.tsx` | Core invoicing component with multi-currency grid view |
+| `src/components/itsm/CustomerPortal.tsx` | Customer self-service ticket portal, invoice viewer, & CSAT survey |
+| `src/components/itsm/AgentTriageDesk.tsx` | Support Triage Desk with 7 queue views & SLA stopwatch chips |
+| `src/services/itsmTicketService.ts` | Support ticket CRUD, queue filters, & metrics |
+| `src/services/itsmSlaService.ts` | Mon-Fri 09-18 business hours SLA stopwatch engine |
 | `src/components/lead/OpportunityManagement.tsx` | Opportunity management UI (pipeline stages) |
 | `src/services/leadFollowUpService.ts` | Follow-up task service (CRUD, Action Notes, overdue detection, alerts) |
 | `src/services/leadActivityService.ts` | Activity service with unified timeline generation for leads/opportunities |
-| `src/utils/taxUtils.ts` | 542-line multi-country tax & banking field utilities |
+| `src/utils/taxUtils.ts` | Multi-country tax & banking field utilities (540+ lines) |
 | `src/utils/leadEntityUtils.ts` | Entity prefix, tax label, validation for leads/opportunities |
-| `src/components/hr/PolicyManagement.tsx` | Comprehensive HR Policy & SOP lifecycle management UI with jurisdiction templates |
-| `src/services/policyService.ts` | CRUD service for entity-filtered HR policies, version control, and employee acknowledgments |
-| `src/services/roleService.ts` | CRUD service for RBAC roles, granular permissions, user assignments, Supabase Auth invites, and audit logs |
-| `src/components/admin/roles/RoleManagement.tsx` | Comprehensive RBAC management UI with roles catalog, user assignments, access matrix, and audit logs |
+| `src/components/hr/PolicyManagement.tsx` | Comprehensive HR Policy & SOP lifecycle management UI |
+| `src/services/policyService.ts` | CRUD service for entity-filtered HR policies, version control, & acknowledgments |
+| `src/components/hr/EmployeeDocumentManager.tsx` | Full employee document upload, verification status modal, & replacement manager |
+| `src/services/employeeDocumentService.ts` | Storage bucket `employee-documents` upload, download, & DB CRUD |
+| `src/services/roleService.ts` | CRUD service for RBAC roles, granular permissions, user assignments, & audit logs |
+| `src/components/admin/roles/RoleManagement.tsx` | Comprehensive RBAC management UI with roles catalog, matrix & audit logs |
 | `src/hooks/useRolePermissions.ts` | Dynamic permission check hook for React components (`can`, `hasAny`, `isAdmin`) |
-| `src/types/role.ts` | Domain types for RBAC roles, permissions, modules, categories, user assignments, and presets |
-| `src/data/jurisdictionPolicyTemplates.ts` | Country-specific default policy templates across law jurisdictions (IN, IE, US, GB, AE, SG) |
+| `src/types/role.ts` | Domain types for RBAC roles, permissions, modules, & user assignments |
+| `src/data/jurisdictionPolicyTemplates.ts` | Country-specific default policy templates across legal jurisdictions (IN, IE, US, GB, AE, SG) |
 | `src/utils/policyPDFGenerator.ts` | Branded PDF exporter for official HR policies and SOP documents |
-| `src/contexts/ActionProgressContext.tsx` | Global context provider for action progress notifications and loading indicators |
+| `src/contexts/ActionProgressContext.tsx` | Global context provider for action progress notifications |
 | `src/utils/customerCodeUtils.ts` | Customer code auto-generation utility with country entity prefixing |
-| `src/types/policy.ts` | Type definitions for HR policies, SOP sections, approval statuses, and employee acknowledgments |
+| `src/types/policy.ts` | Type definitions for HR policies, SOP sections, & acknowledgments |
 | `netlify.toml` | Build config, redirects (SPA fallback), security headers, scheduled functions |
 
 ---
@@ -896,16 +1029,6 @@ All reporting components follow a consistent enterprise-grade pattern:
 - `HRCompensationReporting.tsx` — salary ranges, department averages, recent increments
 - `HRPerformanceReporting.tsx` — performance metrics
 
-**Routes:**
-- `/admin/reporting` → `reporting-hub` (ReportingHub landing)
-- `/admin/reporting/hub` → `reporting-hub`
-- `/admin/reporting/customers` → `reporting-customers`
-- `/admin/reporting/leads` → `reporting-leads`
-- `/admin/reporting/opportunities` → `reporting-opportunities`
-- `/admin/reporting/quotes` → `reporting-quotes`
-- `/admin/reporting/invoices` → `reporting-invoices`
-- `/admin/reporting/subscriptions` → `reporting-subscriptions`
-
 ---
 
 ## 11. HR Policy & SOP Management System Workflow
@@ -938,23 +1061,6 @@ The **HR Policy & SOP Management System** provides enterprise-grade policy lifec
 
 5. **Database Migration (`database/migrations/035_policy_sop_management.sql`)**:
    - Defines `policies` and `policy_acknowledgements` tables with Row Level Security (RLS) policies, JSONB section arrays, versioning timestamps, and audit logging support.
-
----
-
-## 12. Recent Changes (Git Log)
-
-Recent commits indicate active development on:
-1. **HR Policy & SOP Management System** — implemented end-to-end policy management workflow (`PolicyManagement.tsx`, `policyService.ts`, `035_policy_sop_management.sql`, `jurisdictionPolicyTemplates.ts`, `policyPDFGenerator.ts`), global progress tracking context (`ActionProgressContext.tsx`), customer code auto-generation utility (`customerCodeUtils.ts`), and Contract Template Management (`ContractTemplateManagement.tsx`, `EditTemplateModal.tsx`) [Commit `6e60189`].
-2. **Lead & Opportunity Management** — full CRUD with note functionality, currency support, entity filtering.
-3. **Follow-up Task Management** — task priorities, recurring follow-ups, due dates, reminders, automated alerts for overdue and stale leads.
-4. **Lead Timeline & Activity Tracking** — unified chronological timeline consolidating all touchpoints (calls, emails, meetings, notes, tasks, status changes).
-5. **Multi-country tax/banking refactor** — `resolveCountryCode` function, VAT/CRO field display, IBAN/SWIFT fields.
-6. **Subscription management** — draft invoice generation from subscription data.
-7. **Payment gateway** — webhook security, RLS fixes.
-8. **Company rebranding** — from "Kdadks Service Private Limited" to "Kdadks".
-9. **Vite Build Optimization & Code Splitting** — resolved dynamic import warnings (`invoiceService`, `quoteService`, `employeeService`), added `manualChunks` in `vite.config.ts` for vendor libraries (`vendor-react`, `vendor-supabase`, `vendor-icons`, `vendor-pdf-canvas`, `vendor-tinymce`, `vendor-motion`), and lazy-loaded admin sub-components (`React.lazy` + `Suspense`) in `SimpleAdminDashboard.tsx`, reducing initial bundle entry size from ~4.7 MB to ~517 kB.
-10. **HR Employment Documents & PDF Branding** — extended Experience Certificate, Relieving Letter, Form 16, Form 24Q, Internship Offer Letter, and Internship Experience Certificate PDFs with selected company header/footer branding (`PDFBrandingUtils.applyBranding`), converted Form 16 Part B and Form 24Q TDS schedule into structured PDF tables, resolved text overlapping for Internship position details and Work Location, added additional terms & conditions matching Offer Letter (IP Assignment, Asset Care & Return, Confidentiality, Notice Period, Governing Law Jurisdiction), and introduced multi-page automatic page breaks (`checkBreak`) to prevent bottom text overlap with footer images.
-11. **Compensation Table Data Integration & Signature/Width Layout Fixes** — updated Salary Certificate, Form 16, and Form 24Q document generators and UI to fetch real salary structure components from `employee_compensation` database table via `compensationService.getCurrentCompensation`, formatted Salary Certificate "TO WHOM IT MAY CONCERN" and text body across full document printable width (`contentWidth`), and reformatted Internship Offer Letter signature blocks to place Candidate Acceptance and Company Signatures side-by-side in two columns with `checkBreak` protection against footer image collisions.
 
 ---
 

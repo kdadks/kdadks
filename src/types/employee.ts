@@ -115,6 +115,10 @@ export interface Employee {
   failed_login_attempts?: number;
   locked_until?: string;
 
+  // Company Association
+  company_settings_id?: string | null;
+  company_setting_id?: string | null;
+
   // Metadata
   created_by?: string;
   created_at?: string;
@@ -223,6 +227,9 @@ export interface InternOfferLetterData {
   ip_clause_text?: string;
   asset_clause_text?: string;
   jurisdiction?: string;
+  acceptance_section?: boolean;
+  terms_and_conditions?: string;
+  other_details?: string;
 
   // ── Version Control ───────────────────────────────────────────────────────
   version_meta?: DocumentVersionMeta;
