@@ -119,6 +119,7 @@ export interface Customer {
   id: string;
   company_name?: string;
   contact_person?: string;
+  relationship_manager?: string;
   email?: string;
   phone?: string;
   
@@ -409,6 +410,7 @@ export interface UpdateInvoiceData {
 export interface CreateCustomerData {
   company_name?: string;
   contact_person?: string;
+  relationship_manager?: string;
   email?: string;
   phone?: string;
   address_line1?: string;

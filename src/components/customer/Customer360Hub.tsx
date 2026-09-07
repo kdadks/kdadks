@@ -4,7 +4,7 @@ import {
   Users, Building2, Search, ArrowRight, DollarSign, FileText,
   Briefcase, RefreshCw, Plus, CheckCircle, AlertTriangle,
   Phone, Mail, MapPin, Globe, CreditCard, Clock, Award,
-  TrendingUp, Compass, UserPlus, FilePlus, ShieldCheck, Network, GitBranch, LifeBuoy
+  TrendingUp, Compass, UserPlus, FilePlus, ShieldCheck, Network, GitBranch, LifeBuoy, UserCheck
 } from 'lucide-react';
 import { customer360Service } from '../../services/customer360Service';
 import { invoiceService } from '../../services/invoiceService';
@@ -232,6 +232,12 @@ export const Customer360Hub: React.FC = () => {
                       <span>{currentCustomer.contact_person}</span>
                     </div>
                   )}
+                  {currentCustomer.relationship_manager && (
+                    <div className="flex items-center gap-1.5 bg-blue-500/20 text-blue-200 border border-blue-500/30 px-2.5 py-0.5 rounded-md text-xs">
+                      <UserCheck className="w-4 h-4 text-blue-400" />
+                      <span>RM: <strong className="text-white">{currentCustomer.relationship_manager}</strong></span>
+                    </div>
+                  )}
                   {currentCustomer.email && (
                     <div className="flex items-center gap-1.5">
                       <Mail className="w-4 h-4 text-orange-400" />
@@ -412,6 +418,16 @@ export const Customer360Hub: React.FC = () => {
                         <span className="text-gray-500">Legal Company Name:</span>
                         <div className="font-semibold text-gray-800 text-sm">{currentCustomer.company_name || 'N/A'}</div>
                       </div>
+
+                      {currentCustomer.relationship_manager && (
+                        <div className="pt-1 border-t border-gray-100">
+                          <span className="text-gray-500">Relationship Manager:</span>
+                          <div className="font-semibold text-blue-700 flex items-center gap-1 mt-0.5">
+                            <UserCheck className="w-3.5 h-3.5 text-blue-600" />
+                            {currentCustomer.relationship_manager}
+                          </div>
+                        </div>
+                      )}
 
                       <div className="grid grid-cols-2 gap-2 pt-1 border-t border-gray-100">
                         <div>

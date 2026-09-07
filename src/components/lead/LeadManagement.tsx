@@ -188,7 +188,9 @@ const LeadManagement: React.FC = () => {
     gstin: '',
     pan: '',
     vat_number: '',
-    cro_number: ''
+    cro_number: '',
+    submitter_name: '',
+    assigned_person_name: ''
   });
 
   useEffect(() => {
@@ -341,7 +343,7 @@ const LeadManagement: React.FC = () => {
         country_id: selectedCompany?.country_id || 'IN',
         company_settings_id: entityId ?? undefined, customer_id: undefined,
         budget_min: undefined, budget_max: undefined, currency_code: selectedCompany?.country?.currency_code || 'INR', expected_close_date: undefined,
-        gstin: '', pan: '', vat_number: '', cro_number: ''
+        gstin: '', pan: '', vat_number: '', cro_number: '', submitter_name: '', assigned_person_name: ''
       });
     } else if (lead) {
       setFormData({
@@ -353,7 +355,8 @@ const LeadManagement: React.FC = () => {
         company_settings_id: lead.company_settings_id ?? entityId ?? undefined,
         customer_id: lead.customer_id || undefined,
         budget_min: lead.budget_min, budget_max: lead.budget_max, currency_code: lead.currency_code || selectedCompany?.country?.currency_code || 'INR', expected_close_date: lead.expected_close_date || undefined,
-        gstin: lead.gstin || '', pan: lead.pan || '', vat_number: lead.vat_number || '', cro_number: lead.cro_number || ''
+        gstin: lead.gstin || '', pan: lead.pan || '', vat_number: lead.vat_number || '', cro_number: lead.cro_number || '',
+        submitter_name: lead.submitter_name || '', assigned_person_name: lead.assigned_person_name || ''
       });
       loadNotes(lead.id);
       loadTimeline(lead.id);
@@ -653,13 +656,14 @@ const LeadManagement: React.FC = () => {
             {loading ? <div className="text-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto" /></div> : leads.length === 0 ? <div className="text-center py-12 text-gray-500">No leads found</div> : (
               <div className="overflow-x-auto">
                 <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50"><tr><th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Lead #</th><th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Contact</th><th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Company</th><th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Source</th><th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th><th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Entity</th></tr></thead>
+                  <thead className="bg-gray-50"><tr><th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Lead #</th><th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Contact</th><th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Company</th><th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Submitter & Assigned</th><th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Source</th><th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th><th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Entity</th></tr></thead>
                   <tbody className="bg-white divide-y divide-gray-200">
                     {leads.slice(0, 10).map(lead => (
                       <tr key={lead.id} className="hover:bg-gray-50">
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{lead.lead_number}</td>
                         <td className="px-6 py-4 whitespace-nowrap"><div className="text-sm text-gray-900">{lead.first_name} {lead.last_name}</div><div className="text-sm text-gray-500">{lead.email || lead.phone}</div></td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{lead.company_name || '—'}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-xs text-gray-600"><div><span className="font-medium text-gray-700">Sub:</span> {lead.submitter_name || '—'}</div><div><span className="font-medium text-gray-700">Assigned:</span> {lead.assigned_person_name || '—'}</div></td>
                         <td className="px-6 py-4 whitespace-nowrap">{renderSourceBadge(lead.source)}</td>
                         <td className="px-6 py-4 whitespace-nowrap">{renderStatusBadge(lead.status)}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{lead.company_settings ? lead.company_settings.company_name : '—'}</td>
@@ -710,13 +714,14 @@ const LeadManagement: React.FC = () => {
               <>
                 <div className="overflow-x-auto">
                   <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50"><tr><th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Lead #</th><th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Contact</th><th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Company</th><th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Source</th><th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th><th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Budget</th><th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Entity</th><th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th></tr></thead>
+                    <thead className="bg-gray-50"><tr><th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Lead #</th><th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Contact</th><th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Company</th><th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Submitter & Assigned</th><th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Source</th><th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th><th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Budget</th><th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Entity</th><th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th></tr></thead>
                     <tbody className="bg-white divide-y divide-gray-200">
                       {leads.map(lead => (
                         <tr key={lead.id} className="hover:bg-gray-50">
                           <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{lead.lead_number}</td>
                           <td className="px-6 py-4 whitespace-nowrap"><div className="text-sm font-medium text-gray-900">{lead.first_name} {lead.last_name}</div><div className="text-sm text-gray-500">{lead.email || lead.phone}</div></td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{lead.company_name || '—'}</td>
+                          <td className="px-6 py-4 whitespace-nowrap text-xs text-gray-600"><div><span className="font-medium text-gray-700">Sub:</span> {lead.submitter_name || '—'}</div><div><span className="font-medium text-gray-700">Assigned:</span> {lead.assigned_person_name || '—'}</div></td>
                           <td className="px-6 py-4 whitespace-nowrap">{renderSourceBadge(lead.source)}</td>
                           <td className="px-6 py-4 whitespace-nowrap">{renderStatusBadge(lead.status)}</td>
                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{lead.budget_min || lead.budget_max ? formatCurrencyWithSymbol(lead.budget_min || 0, lead.currency_code || 'INR') + ' - ' + formatCurrencyWithSymbol(lead.budget_max || 0, lead.currency_code || 'INR') : '—'}</td>
@@ -764,6 +769,8 @@ const LeadManagement: React.FC = () => {
             <div><label className="block text-sm font-medium text-gray-700 mb-1">Phone</label><input type="tel" value={formData.phone} onChange={e => handleChange('phone', e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500" placeholder="Enter phone" /></div>
             <div><label className="block text-sm font-medium text-gray-700 mb-1">Job Title</label><input type="text" value={formData.job_title} onChange={e => handleChange('job_title', e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500" placeholder="Enter job title" /></div>
             <div><label className="block text-sm font-medium text-gray-700 mb-1">Company Name</label><input type="text" value={formData.company_name} onChange={e => handleChange('company_name', e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500" placeholder="Enter company name" /></div>
+            <div><label className="block text-sm font-medium text-gray-700 mb-1">Lead Submitter Name</label><input type="text" value={formData.submitter_name || ''} onChange={e => handleChange('submitter_name', e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500" placeholder="Enter submitter name" /></div>
+            <div><label className="block text-sm font-medium text-gray-700 mb-1">Assigned Person Name</label><input type="text" value={formData.assigned_person_name || ''} onChange={e => handleChange('assigned_person_name', e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500" placeholder="Enter assigned person name" /></div>
             <div><label className="block text-sm font-medium text-gray-700 mb-1">Source</label><select value={formData.source} onChange={e => handleChange('source', e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white focus:ring-blue-500 focus:border-blue-500">{LEAD_SOURCES.map(s => (<option key={s.value} value={s.value}>{s.label}</option>))}</select></div>
             <div><label className="block text-sm font-medium text-gray-700 mb-1">Associate Customer</label><select value={formData.customer_id || ''} onChange={e => handleChange('customer_id', e.target.value || undefined)} className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white focus:ring-blue-500 focus:border-blue-500"><option value="">Select Customer (Optional)</option>{customers.map(c => (<option key={c.id} value={c.id}>{formatCustomerOption(c, companies, selectedCompany)}</option>))}</select></div>
           </div>
@@ -1014,6 +1021,8 @@ const LeadManagement: React.FC = () => {
                 <div><label className="block text-sm font-medium text-gray-700 mb-1">Phone</label><input type="tel" value={formData.phone} onChange={e => handleChange('phone', e.target.value)} disabled={modalMode === 'view'} placeholder="Enter phone" className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50" /></div>
                 <div><label className="block text-sm font-medium text-gray-700 mb-1">Job Title</label><input type="text" value={formData.job_title} onChange={e => handleChange('job_title', e.target.value)} disabled={modalMode === 'view'} placeholder="Enter job title" className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50" /></div>
                 <div><label className="block text-sm font-medium text-gray-700 mb-1">Company Name</label><input type="text" value={formData.company_name} onChange={e => handleChange('company_name', e.target.value)} disabled={modalMode === 'view'} placeholder="Enter company name" className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50" /></div>
+                <div><label className="block text-sm font-medium text-gray-700 mb-1">Lead Submitter Name</label><input type="text" value={formData.submitter_name || ''} onChange={e => handleChange('submitter_name', e.target.value)} disabled={modalMode === 'view'} placeholder="Enter submitter name" className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50" /></div>
+                <div><label className="block text-sm font-medium text-gray-700 mb-1">Assigned Person Name</label><input type="text" value={formData.assigned_person_name || ''} onChange={e => handleChange('assigned_person_name', e.target.value)} disabled={modalMode === 'view'} placeholder="Enter assigned person name" className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50" /></div>
                 <div><label className="block text-sm font-medium text-gray-700 mb-1">Status</label><select value={formData.status || 'new'} onChange={e => handleChange('status', e.target.value as LeadStatus)} disabled={modalMode === 'view'} className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50">{LEAD_STATUSES.map(s => (<option key={s.value} value={s.value}>{s.label}</option>))}</select></div>
                 <div><label className="block text-sm font-medium text-gray-700 mb-1">Source</label><select value={formData.source} onChange={e => handleChange('source', e.target.value)} disabled={modalMode === 'view'} className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50">{LEAD_SOURCES.map(s => (<option key={s.value} value={s.value}>{s.label}</option>))}</select></div>
                 <div className="col-span-2"><label className="block text-sm font-medium text-gray-700 mb-1">Associate Customer</label><select value={formData.customer_id || ''} onChange={e => handleChange('customer_id', e.target.value || undefined)} disabled={modalMode === 'view'} className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50"><option value="">Select Customer (Optional)</option>{customers.map(c => (<option key={c.id} value={c.id}>{formatCustomerOption(c, companies, selectedCompany)}</option>))}</select></div>

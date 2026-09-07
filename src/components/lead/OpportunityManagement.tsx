@@ -14,6 +14,7 @@ import type { Opportunity, OpportunityStage, CreateOpportunityData, OpportunityF
 import type { Customer, CompanySettings, Country } from '../../types/invoice';
 import { getCustomerDisplayIds } from '../../utils/customerCodeUtils';
 import { formatCurrencyWithSymbol } from '../../utils/currencyConverter';
+import { CurrencyDisplay } from '../ui/CurrencyDisplay';
 
 const SHARED_VALUE = '__shared__';
 
@@ -78,6 +79,11 @@ const OpportunityManagement: React.FC = () => {
   });
 
   const entityId = selectedCompany?.id ?? null;
+  const entityCurrencyCode = selectedCompany?.country?.currency_code || (
+    selectedCompany?.country_id === 'IE' || selectedCompany?.country?.code === 'IE' || selectedCompany?.country?.code === 'IRL' ? 'EUR' :
+    selectedCompany?.country_id === 'US' || selectedCompany?.country?.code === 'US' || selectedCompany?.country?.code === 'USA' ? 'USD' :
+    selectedCompany?.country_id === 'GB' || selectedCompany?.country_id === 'UK' || selectedCompany?.country?.code === 'GB' ? 'GBP' : 'INR'
+  );
 
   const handleOpenConvertQuoteModal = (opp: Opportunity) => {
     setOpportunityToConvert(opp);
@@ -200,7 +206,7 @@ const OpportunityManagement: React.FC = () => {
       
       if (activeTab === 'dashboard') {
         const [statsData, opportunitiesData] = await Promise.all([
-          opportunityService.getOpportunityStats(entityId ?? undefined),
+          opportunityService.getOpportunityStats(entityId ?? undefined, entityCurrencyCode),
           opportunityService.getOpportunities({ ...filters, ...entityFilter }, 1, 10)
         ]);
         setStats(statsData);
@@ -410,19 +416,44 @@ const OpportunityManagement: React.FC = () => {
       {activeTab === 'dashboard' && (
         <div className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            {[
-              { label: 'Total Opportunities', value: stats?.total_opportunities || 0, icon: TrendingUp, color: 'text-blue-600' },
-               { label: 'Open Pipeline', value: stats?.open_pipeline_value || 0, icon: DollarSign, color: 'text-green-600' },
-              { label: 'Closed Won', value: stats?.closed_won_opportunities || 0, icon: Users, color: 'text-green-600' },
-              { label: 'Closed Lost', value: stats?.closed_lost_opportunities || 0, icon: Users, color: 'text-red-600' }
-            ].map(stat => (
-              <div key={stat.label} className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
-                <div className="flex items-center justify-between">
-                   <div><p className="text-sm text-gray-600">{stat.label}</p><p className="text-2xl font-semibold text-gray-900">{stat.value.toLocaleString()}</p></div>
-                  <stat.icon className={`w-8 h-8 ${stat.color}`} />
+            <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-gray-600">Total Opportunities</p>
+                  <p className="text-2xl font-semibold text-gray-900 mt-1">{stats?.total_opportunities || 0}</p>
                 </div>
+                <TrendingUp className="w-8 h-8 text-blue-600" />
               </div>
-            ))}
+            </div>
+            <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-gray-600">Open Pipeline</p>
+                  <p className="text-2xl font-semibold text-green-600 mt-1">
+                    {formatCurrencyWithSymbol(stats?.open_pipeline_value || 0, entityCurrencyCode)}
+                  </p>
+                </div>
+                <DollarSign className="w-8 h-8 text-green-600" />
+              </div>
+            </div>
+            <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-gray-600">Closed Won</p>
+                  <p className="text-2xl font-semibold text-green-600 mt-1">{stats?.closed_won_opportunities || 0}</p>
+                </div>
+                <Users className="w-8 h-8 text-green-600" />
+              </div>
+            </div>
+            <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-gray-600">Closed Lost</p>
+                  <p className="text-2xl font-semibold text-red-600 mt-1">{stats?.closed_lost_opportunities || 0}</p>
+                </div>
+                <Users className="w-8 h-8 text-red-600" />
+              </div>
+            </div>
           </div>
           <div className="bg-white rounded-lg shadow overflow-hidden">
             <div className="px-6 py-4 border-b border-gray-200"><h3 className="text-lg font-medium text-gray-900">Recent Opportunities</h3></div>
@@ -437,7 +468,15 @@ const OpportunityManagement: React.FC = () => {
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{opp.opportunity_name}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{opp.customer?.company_name || opp.customer?.contact_person || '—'}</td>
                         <td className="px-6 py-4 whitespace-nowrap">{renderStageBadge(opp.stage)}</td>
-                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{formatCurrencyWithSymbol(opp.estimated_value || 0, opp.currency_code || 'INR')}</td>
+                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                          <CurrencyDisplay 
+                            amount={opp.estimated_value || 0}
+                            currencyCode={opp.currency_code || entityCurrencyCode}
+                            targetCurrency={entityCurrencyCode}
+                            showBothCurrencies={true}
+                            conversionDate={opp.created_at}
+                          />
+                        </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{opp.company_settings?.company_name || '—'}</td>
                       </tr>
                     ))}
@@ -473,7 +512,15 @@ const OpportunityManagement: React.FC = () => {
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{opp.opportunity_name}</td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{opp.customer?.company_name || opp.customer?.contact_person || '—'}</td>
                           <td className="px-6 py-4 whitespace-nowrap">{renderStageBadge(opp.stage)}</td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{formatCurrencyWithSymbol(opp.estimated_value || 0, opp.currency_code || 'INR')}</td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                            <CurrencyDisplay 
+                              amount={opp.estimated_value || 0}
+                              currencyCode={opp.currency_code || entityCurrencyCode}
+                              targetCurrency={entityCurrencyCode}
+                              showBothCurrencies={true}
+                              conversionDate={opp.created_at}
+                            />
+                          </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{opp.company_settings?.company_name || '—'}</td>
                           <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                             <div className="flex items-center justify-end space-x-2">

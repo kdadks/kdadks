@@ -2,6 +2,7 @@ import { supabase, isSupabaseConfigured } from '../config/supabase';
 import { simpleAuth } from '../utils/simpleAuth';
 import { quoteService } from './quoteService';
 import { invoiceService } from './invoiceService';
+import { exchangeRateService } from './exchangeRateService';
 import type {
   Opportunity,
   OpportunityStage,
@@ -16,57 +17,59 @@ import type {
 } from '../types/lead';
 
 class OpportunityService {
-  async getOpportunityStats(companySettingsId?: string): Promise<OpportunityStats> {
+  async getOpportunityStats(companySettingsId?: string, targetCurrency: string = 'INR'): Promise<OpportunityStats> {
+    let query = supabase
+      .from('opportunities')
+      .select('stage, estimated_value, currency_code, created_at, company_settings_id');
+    
     if (companySettingsId) {
-      const { data, error } = await supabase
-        .from('opportunities')
-        .select('stage, estimated_value, created_at')
-        .eq('company_settings_id', companySettingsId);
-      
-      if (error) throw error;
-      
-      const now = new Date();
-      
-      return {
-        total_opportunities: data?.length || 0,
-        prospecting_opportunities: data?.filter(o => o.stage === 'prospecting').length || 0,
-        qualification_opportunities: data?.filter(o => o.stage === 'qualification').length || 0,
-        proposal_opportunities: data?.filter(o => o.stage === 'proposal').length || 0,
-        negotiation_opportunities: data?.filter(o => o.stage === 'negotiation').length || 0,
-        closed_won_opportunities: data?.filter(o => o.stage === 'closed_won').length || 0,
-        closed_lost_opportunities: data?.filter(o => o.stage === 'closed_lost').length || 0,
-        total_pipeline_value: data?.reduce((sum, o) => sum + (Number(o.estimated_value) || 0), 0) || 0,
-        open_pipeline_value: data?.filter(o => !['closed_won', 'closed_lost'].includes(o.stage)).reduce((sum, o) => sum + (Number(o.estimated_value) || 0), 0) || 0,
-        this_month_opportunities: data?.filter(o => {
-          const d = new Date(o.created_at);
-          return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
-        }).length || 0,
-        this_year_opportunities: data?.filter(o => {
-          const d = new Date(o.created_at);
-          return d.getFullYear() === now.getFullYear();
-        }).length || 0
-      };
+      query = query.eq('company_settings_id', companySettingsId);
     }
     
-    const { data, error } = await supabase
-      .from('opportunity_stats_view')
-      .select('*')
-      .single();
-    
+    const { data, error } = await query;
     if (error) throw error;
     
+    const now = new Date();
+    let totalPipelineValue = 0;
+    let openPipelineValue = 0;
+    
+    for (const o of data || []) {
+      let val = Number(o.estimated_value) || 0;
+      const curr = o.currency_code || 'INR';
+      if (val > 0 && curr !== targetCurrency) {
+        try {
+          const conversion = await exchangeRateService.convertCurrency(val, curr, targetCurrency);
+          if (conversion && typeof conversion.converted_amount === 'number') {
+            val = conversion.converted_amount;
+          }
+        } catch (e) {
+          console.warn(`Failed to convert opportunity estimated value (${curr} -> ${targetCurrency}):`, e);
+        }
+      }
+      totalPipelineValue += val;
+      if (!['closed_won', 'closed_lost'].includes(o.stage)) {
+        openPipelineValue += val;
+      }
+    }
+
     return {
-      total_opportunities: data?.total_opportunities || 0,
-      prospecting_opportunities: data?.prospecting_opportunities || 0,
-      qualification_opportunities: data?.qualification_opportunities || 0,
-      proposal_opportunities: data?.proposal_opportunities || 0,
-      negotiation_opportunities: data?.negotiation_opportunities || 0,
-      closed_won_opportunities: data?.closed_won_opportunities || 0,
-      closed_lost_opportunities: data?.closed_lost_opportunities || 0,
-      total_pipeline_value: data?.total_pipeline_value || 0,
-      open_pipeline_value: data?.open_pipeline_value || 0,
-      this_month_opportunities: data?.this_month_opportunities || 0,
-      this_year_opportunities: data?.this_year_opportunities || 0
+      total_opportunities: data?.length || 0,
+      prospecting_opportunities: data?.filter(o => o.stage === 'prospecting').length || 0,
+      qualification_opportunities: data?.filter(o => o.stage === 'qualification').length || 0,
+      proposal_opportunities: data?.filter(o => o.stage === 'proposal').length || 0,
+      negotiation_opportunities: data?.filter(o => o.stage === 'negotiation').length || 0,
+      closed_won_opportunities: data?.filter(o => o.stage === 'closed_won').length || 0,
+      closed_lost_opportunities: data?.filter(o => o.stage === 'closed_lost').length || 0,
+      total_pipeline_value: totalPipelineValue,
+      open_pipeline_value: openPipelineValue,
+      this_month_opportunities: data?.filter(o => {
+        const d = new Date(o.created_at);
+        return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+      }).length || 0,
+      this_year_opportunities: data?.filter(o => {
+        const d = new Date(o.created_at);
+        return d.getFullYear() === now.getFullYear();
+      }).length || 0
     };
   }
 

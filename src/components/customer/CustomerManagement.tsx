@@ -53,6 +53,7 @@ const CustomerManagement: React.FC = () => {
   const [formData, setFormData] = useState<CreateCustomerData>({
     company_name: '',
     contact_person: '',
+    relationship_manager: '',
     email: '',
     phone: '',
     address_line1: '',
@@ -124,6 +125,7 @@ const CustomerManagement: React.FC = () => {
       setFormData({
         company_name: '',
         contact_person: '',
+        relationship_manager: '',
         email: '',
         phone: '',
         address_line1: '',
@@ -142,6 +144,7 @@ const CustomerManagement: React.FC = () => {
       setFormData({
         company_name: customer.company_name ?? '',
         contact_person: customer.contact_person ?? '',
+        relationship_manager: customer.relationship_manager ?? '',
         email: customer.email ?? '',
         phone: customer.phone ?? '',
         address_line1: customer.address_line1 ?? '',
@@ -376,6 +379,11 @@ const CustomerManagement: React.FC = () => {
                         {customer.company_name && customer.contact_person && (
                           <div className="text-sm text-gray-500">{customer.contact_person}</div>
                         )}
+                        {customer.relationship_manager && (
+                          <div className="text-xs text-blue-600 font-medium mt-0.5 flex items-center gap-1">
+                            <span>RM:</span> {customer.relationship_manager}
+                          </div>
+                        )}
                         {customer.country && (
                           <div className="text-xs text-gray-400">{customer.country.name}</div>
                         )}
@@ -592,6 +600,12 @@ const CustomerManagement: React.FC = () => {
                   <label className="block text-sm font-medium text-gray-700 mb-1">Contact Person</label>
                   <input type="text" value={formData.contact_person} onChange={e => handleChange('contact_person', e.target.value)}
                     disabled={modalMode === 'view'} placeholder="Enter contact person name"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Relationship Manager</label>
+                  <input type="text" value={formData.relationship_manager || ''} onChange={e => handleChange('relationship_manager', e.target.value)}
+                    disabled={modalMode === 'view'} placeholder="e.g., John Doe (Key Account Manager)"
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50" />
                 </div>
                 <div>

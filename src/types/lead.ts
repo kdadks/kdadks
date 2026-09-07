@@ -79,6 +79,8 @@ export interface Lead {
   // Tracking
   created_by?: string;
   assigned_to?: string;
+  submitter_name?: string;
+  assigned_person_name?: string;
   qualified_at?: string;
   disqualified_at?: string;
   disqualified_reason?: string;
@@ -134,8 +136,10 @@ export interface CreateLeadData {
   postal_code?: string;
   country_id?: string;
   
-  // Assignment
+  // Assignment & Submitter
   assigned_to?: string;
+  submitter_name?: string;
+  assigned_person_name?: string;
 }
 
 export interface UpdateLeadData extends Partial<CreateLeadData> {

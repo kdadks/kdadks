@@ -88,7 +88,7 @@ class LeadService {
 
     if (filters) {
       if (filters.search) {
-        query = query.or(`lead_number.ilike.%${filters.search}%,first_name.ilike.%${filters.search}%,last_name.ilike.%${filters.search}%,company_name.ilike.%${filters.search}%,email.ilike.%${filters.search}%`);
+        query = query.or(`lead_number.ilike.%${filters.search}%,first_name.ilike.%${filters.search}%,last_name.ilike.%${filters.search}%,company_name.ilike.%${filters.search}%,email.ilike.%${filters.search}%,submitter_name.ilike.%${filters.search}%,assigned_person_name.ilike.%${filters.search}%`);
       }
       if (filters.status) {
         query = query.eq('status', filters.status);
@@ -161,6 +161,12 @@ class LeadService {
     return data;
   }
 
+  private isColumnMissingError(error: any): boolean {
+    if (!error) return false;
+    const msg = (error.message || error.details || JSON.stringify(error)).toLowerCase();
+    return msg.includes('column') && (msg.includes('does not exist') || msg.includes('schema cache') || msg.includes('pgrst204'));
+  }
+
   async createLead(leadData: CreateLeadData): Promise<Lead> {
     if (!isSupabaseConfigured) {
       throw new Error('Database is not configured');
@@ -173,15 +179,17 @@ class LeadService {
 
     const leadNumber = await this.generateLeadNumber();
 
-    const { data, error } = await supabase
+    const insertPayload: any = {
+      ...leadData,
+      lead_number: leadNumber,
+      created_by: currentUser.id,
+      status: 'new',
+      probability: 0
+    };
+
+    let { data, error } = await supabase
       .from('leads')
-      .insert({
-        ...leadData,
-        lead_number: leadNumber,
-        created_by: currentUser.id,
-        status: 'new',
-        probability: 0
-      })
+      .insert(insertPayload)
       .select(`
         *,
         customer:customers(*),
@@ -189,17 +197,37 @@ class LeadService {
       `)
       .single();
     
+    if (error && this.isColumnMissingError(error)) {
+      delete insertPayload.submitter_name;
+      delete insertPayload.assigned_person_name;
+
+      const fallback = await supabase
+        .from('leads')
+        .insert(insertPayload)
+        .select(`
+          *,
+          customer:customers(*),
+          company_settings:company_settings(*)
+        `)
+        .single();
+
+      if (fallback.error) throw fallback.error;
+      return fallback.data;
+    }
+
     if (error) throw error;
     return data;
   }
 
   async updateLead(id: string, leadData: UpdateLeadData): Promise<Lead> {
-    const { data, error } = await supabase
+    const updatePayload: any = {
+      ...leadData,
+      updated_at: new Date().toISOString()
+    };
+
+    let { data, error } = await supabase
       .from('leads')
-      .update({
-        ...leadData,
-        updated_at: new Date().toISOString()
-      })
+      .update(updatePayload)
       .eq('id', id)
       .select(`
         *,
@@ -207,6 +235,25 @@ class LeadService {
         company_settings:company_settings(*)
       `)
       .single();
+
+    if (error && this.isColumnMissingError(error)) {
+      delete updatePayload.submitter_name;
+      delete updatePayload.assigned_person_name;
+
+      const fallback = await supabase
+        .from('leads')
+        .update(updatePayload)
+        .eq('id', id)
+        .select(`
+          *,
+          customer:customers(*),
+          company_settings:company_settings(*)
+        `)
+        .single();
+
+      if (fallback.error) throw fallback.error;
+      return fallback.data;
+    }
     
     if (error) throw error;
     return data;

@@ -1,6 +1,6 @@
 # Project Memory — KDADKS Website
 
-> Auto-updated by Kilo agent after every implementation. Last updated: 2026-09-07 12:03 BST
+> Auto-updated by Kilo agent after every implementation. Last updated: 2026-09-07 17:02 BST
 
 A comprehensive knowledge base for the KDADKS website codebase. This file serves as a single source of truth for project architecture, conventions, patterns, menu structures, and key implementation details.
 
@@ -588,8 +588,10 @@ The complete sales pipeline with status/stage transitions:
 
 **Status Flow:** `new` → `contacted` → `qualified` → `converted` / `disqualified`
 
-- Quick Create tab for fast lead entry
+- Quick Create tab for fast lead entry with Submitter Name (`submitter_name`) and Assigned Person Name (`assigned_person_name`) free-text fields
+- **Database Schema & Graceful Fallback:** Migration `database/migrations/041_add_submitter_and_assigned_person_to_leads.sql` adds `submitter_name` and `assigned_person_name` text columns to `leads`. `leadService.ts` includes `isColumnMissingError` detection and fallback handling so saving leads operates safely both before and after applying DB schema changes.
 - Dashboard with stats cards (total, new, qualified, converted)
+- Submitter & Assigned Person columns displayed in All Leads and Dashboard Recent Leads tables
 - Entity association with `__shared__` sentinel for shared leads
 - Notes support via `leadActivityService` (activity_type: 'note')
 - PAN validation regex: `^[A-Z]{5}[0-9]{4}[A-Z]{1}$`
@@ -652,6 +654,9 @@ The complete sales pipeline with status/stage transitions:
   - `CurrencyDisplay.tsx`: Extended with `targetCurrency` and `targetAmount` props, supporting automatic cross-currency conversion and rendering original contract currency alongside target base currency values (e.g., `$1,000.00 (~₹83,150.00)` for IND, `$1,000.00 (~€915.00)` for IRL).
   - `ContractManagement.tsx`: Updated `renderContractTable` (shared by Recent Contracts in Dashboard tab and Contracts tab list view) to render `<CurrencyDisplay>` targeted to the selected company's entity currency.
   - `ViewContractModal.tsx`: Displays converted contract values and milestone payment breakdown dynamically matching the active entity target currency (`INR` vs `EUR`).
+- Implemented entity-aware multi-currency display & conversion across Opportunity Management (`OpportunityManagement.tsx` & `opportunityService.ts`):
+  - `opportunityService.getOpportunityStats`: Converts opportunity estimated values to active entity base currency (`INR` for IND entity, `EUR` for IRL entity) before calculating total and open pipeline values.
+  - `OpportunityManagement.tsx`: Open Pipeline dashboard tile renders total converted pipeline value in the entity base currency (`INR` for IND, `EUR` for IRL). Recent Opportunities (Dashboard tab) and All Opportunities tab list view render `<CurrencyDisplay>` showing opportunity currency & estimated value alongside converted base currency values (`$1,000.00 (~₹83,150.00)` for IND, `$1,000.00 (~€915.00)` for IRL).
 
 ### Invoice Management (`src/components/invoice/InvoiceManagement.tsx`)
 
@@ -683,6 +688,7 @@ The complete sales pipeline with status/stage transitions:
 
 A centralized 360-degree operational dashboard connecting all records for a customer across Kdadks:
 - **Core Service (`src/services/customer360Service.ts`):** Parallel fetching and metrics calculation aggregating Customer Profile, Contacts, Leads, Opportunities, Quotes, Contracts, Subscriptions, Invoices, Payments, B2B Relationships, and Contact Cross-Links.
+- **Relationship Manager Support:** Free-text field `relationship_manager` in `public.customers` (added via migration `database/migrations/042_add_relationship_manager_to_customers.sql`), managed via `CustomerManagement.tsx` (Add/Edit modals and table view) and displayed prominently in the Customer 360° Hub top header banner and Overview tab details card.
 - **Multi-Entity Currency Conversion:** Automatically detects the active entity context. For **Indian Entity**, all invoices, quotes, revenue metrics, and actual payment values are converted and displayed in **INR (₹)**. For **Irish Entity**, values are displayed in **Euro (€)**.
 - **Type Definitions (`src/types/customer360.ts`):** Defines `Customer360Data` (includes `relationships[]` and `contactLinks[]`), `CustomerFinancialMetrics`, and `CustomerActivityTimelineItem`.
 - **Executive KPI Cards:** Lifetime Revenue (LTV), Total Collected Revenue, Outstanding Balance, Subscription MRR, Open Sales Pipeline Value, and Opportunity Win Rate.
