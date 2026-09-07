@@ -23,58 +23,93 @@ interface CurrencyDisplayProps {
   amount: number;
   currencyCode: string;
   inrAmount?: number;
+  targetCurrency?: string; // Target base currency, defaults to 'INR'
+  targetAmount?: number;   // Pre-calculated target currency amount (optional)
   showBothCurrencies?: boolean;
   className?: string;
   conversionDate?: string; // Add date for historical conversion
 }
 
 /**
- * Component to display currency amounts with optional INR conversion
+ * Component to display currency amounts with optional target currency conversion
  */
 export const CurrencyDisplay: React.FC<CurrencyDisplayProps> = ({
   amount,
   currencyCode,
   inrAmount,
+  targetCurrency = 'INR',
+  targetAmount,
   showBothCurrencies = false,
   className = '',
   conversionDate
 }) => {
-  const [calculatedInrAmount, setCalculatedInrAmount] = useState<number | null>(inrAmount || null);
+  const effectiveTargetCurrency = targetCurrency || 'INR';
+  const initialTargetAmount = targetAmount !== undefined && targetAmount !== null
+    ? targetAmount
+    : (effectiveTargetCurrency === 'INR' ? (inrAmount ?? null) : null);
+
+  const [calculatedTargetAmount, setCalculatedTargetAmount] = useState<number | null>(initialTargetAmount);
   const [isCalculating, setIsCalculating] = useState(false);
 
-  // Effect to calculate INR amount if missing and needed
+  // Effect to calculate target currency amount if missing and needed
   useEffect(() => {
-    if (showBothCurrencies && currencyCode !== 'INR' && !inrAmount && !calculatedInrAmount && !isCalculating) {
+    if (targetAmount !== undefined && targetAmount !== null) {
+      setCalculatedTargetAmount(targetAmount);
+      return;
+    }
+    if (effectiveTargetCurrency === 'INR' && inrAmount !== undefined && inrAmount !== null) {
+      setCalculatedTargetAmount(inrAmount);
+      return;
+    }
+
+    if (showBothCurrencies && currencyCode !== effectiveTargetCurrency && calculatedTargetAmount === null && !isCalculating) {
       setIsCalculating(true);
       
-      // Use a more conservative approach - try conversion but with timeout
       const convertWithTimeout = async () => {
         try {
-          const convertedAmount = await Promise.race([
-            exchangeRateService.convertToINR(amount, currencyCode, conversionDate),
-            new Promise<number>((_, reject) => 
+          const converted = await Promise.race([
+            exchangeRateService.convertCurrency(amount, currencyCode, effectiveTargetCurrency, conversionDate),
+            new Promise<null>((_, reject) => 
               setTimeout(() => reject(new Error('Timeout')), 5000)
             )
           ]);
-          setCalculatedInrAmount(convertedAmount);
-        } catch (error) {
-          console.warn('Failed to convert currency in CurrencyDisplay:', error);
-          // Use a simple fallback approximation for common currencies
-          let fallbackRate = 1.0;
-          switch (currencyCode) {
-            case 'USD': fallbackRate = 83.0; break;
-            case 'GBP': fallbackRate = 105.0; break;
-            case 'EUR': fallbackRate = 90.0; break;
-            case 'AUD': fallbackRate = 55.0; break;
-            case 'CAD': fallbackRate = 61.0; break;
-            case 'SGD': fallbackRate = 62.0; break;
-            case 'AED': fallbackRate = 22.5; break;
-            case 'SAR': fallbackRate = 22.0; break;
-            case 'JPY': fallbackRate = 0.56; break;
-            case 'CNY': fallbackRate = 11.5; break;
-            default: fallbackRate = 1.0;
+          if (converted && typeof converted.converted_amount === 'number') {
+            setCalculatedTargetAmount(converted.converted_amount);
+          } else {
+            throw new Error('Invalid conversion output');
           }
-          setCalculatedInrAmount(amount * fallbackRate);
+        } catch (error) {
+          console.warn(`Failed to convert currency ${currencyCode} -> ${effectiveTargetCurrency} in CurrencyDisplay:`, error);
+          let rateFromInr = 1.0;
+          switch (currencyCode) {
+            case 'USD': rateFromInr = 83.15; break;
+            case 'GBP': rateFromInr = 116.05; break;
+            case 'EUR': rateFromInr = 101.15; break;
+            case 'AUD': rateFromInr = 55.30; break;
+            case 'CAD': rateFromInr = 61.20; break;
+            case 'SGD': rateFromInr = 62.10; break;
+            case 'AED': rateFromInr = 22.60; break;
+            case 'SAR': rateFromInr = 22.15; break;
+            case 'JPY': rateFromInr = 0.57; break;
+            case 'CNY': rateFromInr = 11.60; break;
+            default: rateFromInr = 1.0;
+          }
+          let rateTargetInr = 1.0;
+          switch (effectiveTargetCurrency) {
+            case 'USD': rateTargetInr = 83.15; break;
+            case 'GBP': rateTargetInr = 116.05; break;
+            case 'EUR': rateTargetInr = 101.15; break;
+            case 'AUD': rateTargetInr = 55.30; break;
+            case 'CAD': rateTargetInr = 61.20; break;
+            case 'SGD': rateTargetInr = 62.10; break;
+            case 'AED': rateTargetInr = 22.60; break;
+            case 'SAR': rateTargetInr = 22.15; break;
+            case 'JPY': rateTargetInr = 0.57; break;
+            case 'CNY': rateTargetInr = 11.60; break;
+            default: rateTargetInr = 1.0;
+          }
+          const crossRate = rateFromInr / rateTargetInr;
+          setCalculatedTargetAmount(amount * crossRate);
         } finally {
           setIsCalculating(false);
         }
@@ -82,11 +117,12 @@ export const CurrencyDisplay: React.FC<CurrencyDisplayProps> = ({
 
       convertWithTimeout();
     }
-  }, [amount, currencyCode, inrAmount, showBothCurrencies, calculatedInrAmount, isCalculating, conversionDate]);
+  }, [amount, currencyCode, inrAmount, targetAmount, effectiveTargetCurrency, showBothCurrencies, calculatedTargetAmount, isCalculating, conversionDate]);
 
   const formatCurrency = (value: number, currency: string) => {
     const symbol = getCurrencySymbol(currency);
-    const formattedAmount = new Intl.NumberFormat('en-IN', {
+    const locale = currency === 'EUR' ? 'en-IE' : currency === 'USD' ? 'en-US' : currency === 'GBP' ? 'en-GB' : 'en-IN';
+    const formattedAmount = new Intl.NumberFormat(locale, {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2
     }).format(value);
@@ -94,9 +130,9 @@ export const CurrencyDisplay: React.FC<CurrencyDisplayProps> = ({
     return `${symbol}${formattedAmount}`;
   };
 
-  const effectiveInrAmount = inrAmount || calculatedInrAmount;
+  const effectiveAmount = calculatedTargetAmount;
 
-  if (!showBothCurrencies || currencyCode === 'INR' || (!effectiveInrAmount && !isCalculating)) {
+  if (!showBothCurrencies || currencyCode === effectiveTargetCurrency || (effectiveAmount === null && !isCalculating)) {
     return (
       <span className={className}>
         {formatCurrency(amount, currencyCode)}
@@ -108,7 +144,7 @@ export const CurrencyDisplay: React.FC<CurrencyDisplayProps> = ({
     <span className={className}>
       <span className="font-medium">{formatCurrency(amount, currencyCode)}</span>
       <span className="text-sm text-gray-500 ml-1">
-        {isCalculating ? '(calculating...)' : `(~${formatCurrency(effectiveInrAmount!, 'INR')})`}
+        {isCalculating ? '(calculating...)' : `(~${formatCurrency(effectiveAmount!, effectiveTargetCurrency)})`}
       </span>
     </span>
   );

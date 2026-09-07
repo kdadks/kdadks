@@ -1,6 +1,6 @@
 # Project Memory — KDADKS Website
 
-> Auto-updated by Kilo agent after every implementation. Last updated: 2026-09-06 15:31 BST
+> Auto-updated by Kilo agent after every implementation. Last updated: 2026-09-07 12:03 BST
 
 A comprehensive knowledge base for the KDADKS website codebase. This file serves as a single source of truth for project architecture, conventions, patterns, menu structures, and key implementation details.
 
@@ -647,6 +647,11 @@ The complete sales pipeline with status/stage transitions:
 - Fixed `contractService.createContract` and `updateContract` payload validation to sanitize `template_id` UUID strings (`isUuid`). Prevents PostgreSQL `22P02` syntax errors when passing built-in jurisdiction template IDs (e.g. `builtin-irish-sow`).
 - Fixed `contractService.generateContractNumber` entity prefix resolution to properly map `'IE'` / `'IRL'` to `'IRL'` (preventing Irish contracts from defaulting to `'IND'`).
 - Enforced strict entity boundary isolation on `/admin/contracts` via `.eq('company_settings_id', company_settings_id)` in `contractService.getContracts` & `getStatistics`, ensuring Irish entity views strictly show contracts linked to the Ireland entity.
+- Implemented entity-aware multi-currency display & conversion across Contract Dashboard and List Views:
+  - `contractService.getStatistics`: Converts individual contract values to the selected entity's base currency (`INR` for India / IND entity, `EUR` for Ireland / IRL entity) using `exchangeRateService` before computing total contract value.
+  - `CurrencyDisplay.tsx`: Extended with `targetCurrency` and `targetAmount` props, supporting automatic cross-currency conversion and rendering original contract currency alongside target base currency values (e.g., `$1,000.00 (~₹83,150.00)` for IND, `$1,000.00 (~€915.00)` for IRL).
+  - `ContractManagement.tsx`: Updated `renderContractTable` (shared by Recent Contracts in Dashboard tab and Contracts tab list view) to render `<CurrencyDisplay>` targeted to the selected company's entity currency.
+  - `ViewContractModal.tsx`: Displays converted contract values and milestone payment breakdown dynamically matching the active entity target currency (`INR` vs `EUR`).
 
 ### Invoice Management (`src/components/invoice/InvoiceManagement.tsx`)
 
@@ -722,7 +727,7 @@ A unified enterprise-grade access control and permissions management subsystem:
 
 A comprehensive enterprise-grade customer self-service and agent triage desk module (Phase 1 & Phase 2):
 - **Core Services (`src/services/`):**
-  - `customerAuthService.ts` — Web Crypto PBKDF2 SHA-256 customer password hashing, login verification, failed attempt lockouts (5 attempts -> 30 min lock), 24-hour token-based password reset, portal password changes, and admin onboarding passcode dispatch.
+  - `customerAuthService.ts` — Web Crypto PBKDF2 SHA-256 customer password hashing, UUID ID / Customer Code / Email lookup (`findCustomerForAuth`), login verification, failed attempt lockouts (5 attempts -> 30 min lock), 24-hour token-based password reset, portal password changes, and admin onboarding passcode dispatch.
   - `itsmTicketService.ts` — Data access layer for tickets, comments, sequence numbering (`INC-YYYYMMDD-XXXX`, `REQ-YYYYMMDD-XXXX`, `PRB-YYYYMMDD-XXXX`), queue filters, bulk operations, state machine transitions, and real DB KPI triage metrics calculation.
   - `itsmSlaService.ts` — Mon-Fri 09:00 - 18:00 business hours SLA calculator, TTO/TTR stopwatch countdown logic, pause/resume engine, and badge color solver (`green`, `yellow`, `red`, `paused`, `completed`).
   - `itsmAttachmentService.ts` — Multi-file attachment metadata and storage bucket management (`itsm-attachments`).
@@ -730,8 +735,8 @@ A comprehensive enterprise-grade customer self-service and agent triage desk mod
 - **Transactional Email Engine Integration (`src/services/emailService.ts`):**
   - Integrated Resend API infrastructure sending HTML/plain-text transactional emails for `sendAgentPasswordResetEmail` (staff 24h reset), `sendStaffWelcomeCredentialsEmail` (admin staff user provisioning credentials), `sendCustomerPasswordResetEmail` (customer 24h reset), `sendCustomerWelcomeCredentialsEmail` (onboarding temp passcode), `sendTicketCreatedEmail`, `sendTicketStatusUpdateEmail`, `sendTicketResolvedEmail`, and `sendTicketEscalatedEmail`.
 - **UI Components & Security Gates (`src/components/itsm/`):**
-  - `CustomerPortal.tsx` — Customer self-service portal (`/portal/tickets`, `/portal/invoices`, `/portal/profile`) protected by an explicit Customer Portal Sign-In gate (`customer_portal_session`), assigned Customer ID display (e.g. `IND-2026-0001`), integrated contact management, priority matrix, multi-file attachments, real-time status feed, self-cancellation, 72-hour resolution sign-off & CSAT trigger, account invoices viewer, and dedicated **Account Profile & Security** tab with PBKDF2 password change forms.
-  - `CustomerResetPasswordModal.tsx` — Password reset request modal (email/Customer ID submission) and 24h reset token verification form.
+  - `CustomerPortal.tsx` — Customer self-service portal (`/portal/tickets`, `/portal/invoices`, `/portal/profile`) protected by an explicit Customer Portal Sign-In gate (`customer_portal_session`) with interactive "Show Password" eye-icon toggles, UUID / Customer Code / Email lookup, assigned Customer ID display (e.g. `IND-2026-0001`), integrated contact management, priority matrix, multi-file attachments, real-time status feed, self-cancellation, 72-hour resolution sign-off & CSAT trigger, account invoices viewer, and dedicated **Account Profile & Security** tab with PBKDF2 password change forms (featuring password visibility toggles).
+  - `CustomerResetPasswordModal.tsx` — Password reset request modal (email/Customer ID submission) and 24h reset token verification form with interactive show password toggles.
   - `ITSMAgentLogin.tsx` & `ITSMAgentResetPasswordModal.tsx` — Dedicated Service Desk Agent & Staff Sign-In screen with integrated **"Forgot Password?"** reset request modal and token password updater.
   - `AgentTriageDesk.tsx` — High-density internal triage desk (`/admin/itsm/tickets` and direct Phase 2 route `/itsm`), header integrated with `CompanySelector` for strict single-entity selection when staff is assigned to multiple entities, executive KPI summary cards powered purely by real DB queries, 7 Queue View tabs, dual SLA stopwatch countdown chips, multi-parameter search/filters, and bulk operations toolbar.
   - `ProtectedITSMRoute.tsx` — Route protection wrapper enforcing user authentication and `'itsm_tickets'` module RBAC permission checks for `/itsm` direct access.

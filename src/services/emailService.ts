@@ -1,5 +1,7 @@
-import { ContactFormData } from '../config/emailConfig'
-import type { Invoice, Customer, CompanySettings } from '../types/invoice'
+import { ContactFormData } from '../config/emailConfig';
+import type { Invoice, Customer, CompanySettings } from '../types/invoice';
+import { invoiceService } from './invoiceService';
+import { getEntityPrefix } from '../utils/customerCodeUtils';
 
 export class EmailService {
   // Get API endpoint based on environment
@@ -1856,6 +1858,8 @@ This is an automated security notification. Please do not reply to this email.
       const subject = isCustomer
         ? `[Ticket #${ticketNumber}] Support Request Received: ${ticketTitle}`
         : `[TRIAGE ALERT] New ${ticketPriority} Ticket #${ticketNumber}: ${ticketTitle}`;
+      const logoUrl = await this.getCompanyLogoUrl();
+      const portalUrl = `${window.location.origin}/portal`;
 
       const text = `
 Dear ${recipientName},
@@ -1876,40 +1880,248 @@ Kdadks Support Team
 
       const html = `
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="x-apple-disable-message-reformatting">
     <title>Support Ticket #${ticketNumber}</title>
-    <style>
-        body { font-family: Arial, sans-serif; line-height: 1.6; color: #1f2937; margin: 0; padding: 0; background-color: #f3f4f6; }
-        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-        .header { background: linear-gradient(135deg, #4f46e5 0%, #3730a3 100%); padding: 25px; border-radius: 12px 12px 0 0; color: #ffffff; text-align: center; }
-        .content { background: #ffffff; padding: 25px; border: 1px solid #e5e7eb; border-radius: 0 0 12px 12px; }
-        .badge { background: #e0e7ff; color: #3730a3; padding: 4px 12px; border-radius: 20px; font-weight: bold; font-size: 14px; display: inline-block; margin-bottom: 15px; }
-        .detail-card { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 15px; margin: 15px 0; }
-        .footer { margin-top: 20px; text-align: center; color: #6b7280; font-size: 12px; }
-    </style>
 </head>
-<body>
-    <div class="container">
-        <div class="header">
-            <h1 style="margin:0; font-size: 22px;">🎫 ${isCustomer ? 'Support Request Received' : 'New Triage Ticket Alert'}</h1>
-            <p style="margin: 5px 0 0 0; opacity: 0.9;">Ticket #${ticketNumber}</p>
-        </div>
-        <div class="content">
-            <p>Dear <strong>${recipientName}</strong>,</p>
-            <p>${isCustomer ? 'We have received your support request and assigned it to our triage queue. Our support team will review it shortly.' : 'A new support ticket has been submitted and requires agent triage.'}</p>
-            <div class="detail-card">
-                <span class="badge">Priority: ${ticketPriority}</span>
-                <h3 style="margin: 5px 0 10px 0; color: #111827;">${ticketTitle}</h3>
-                <p style="margin: 0; font-size: 14px; color: #4b5563;"><strong>Ticket ID:</strong> #${ticketNumber}</p>
-            </div>
-            <p>You can view updates or add further comments in the portal.</p>
-        </div>
-        <div class="footer">
-            <p>&copy; ${new Date().getFullYear()} Kdadks Support Management Platform</p>
-        </div>
-    </div>
+<body style="margin:0; padding:0; background-color:#f4f6f8; font-family:Arial, Helvetica, sans-serif; color:#333333;">
+
+<!-- Email Wrapper -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+    style="width:100%; background-color:#f4f6f8; padding:30px 15px;">
+
+    <tr>
+        <td align="center">
+
+            <!-- Main Container -->
+            <table role="presentation"
+                width="600"
+                cellpadding="0"
+                cellspacing="0"
+                border="0"
+                style="width:100%; max-width:600px; background-color:#ffffff; border-radius:10px; overflow:hidden;">
+
+                <!-- Logo -->
+                <tr>
+                    <td align="center" style="padding:30px 20px 20px; background-color:#ffffff;">
+
+                        <img
+                            src="${logoUrl}"
+                            alt="Kdadks"
+                            width="180"
+                            style="max-width:180px; width:100%; height:auto; display:block; border:0; margin:0 auto;"
+                        />
+
+                    </td>
+                </tr>
+
+                <!-- Header -->
+                <tr>
+                    <td align="center" style="padding:10px 30px 30px;">
+
+                        <div style="font-size:34px; line-height:40px; margin-bottom:8px;">
+                            🎫
+                        </div>
+
+                        <h1 style="margin:0; font-size:26px; line-height:34px; font-weight:bold; color:#1f2937;">
+                            ${isCustomer ? 'Support Request Received' : 'New Triage Ticket'}
+                        </h1>
+
+                        <p style="margin:10px 0 0; font-size:15px; line-height:22px; color:#6b7280;">
+                            ${isCustomer
+                                ? 'We have received your support request.'
+                                : 'A new support ticket requires your attention.'
+                            }
+                        </p>
+
+                        <p style="margin:8px 0 0; font-size:13px; line-height:20px; color:#9ca3af;">
+                            Ticket #<strong style="color:#4b5563;">${ticketNumber}</strong>
+                        </p>
+
+                    </td>
+                </tr>
+
+                <!-- Content -->
+                <tr>
+                    <td style="padding:10px 40px 35px;">
+
+                        <!-- Greeting -->
+                        <p style="font-size:16px; line-height:24px; margin:0 0 20px;">
+                            Dear <strong>${recipientName}</strong>,
+                        </p>
+
+                        <!-- Main Message -->
+                        <p style="font-size:16px; line-height:24px; margin:0 0 25px; color:#4b5563;">
+                            ${isCustomer
+                                ? 'We have received your support request and assigned it to our triage queue. Our support team will review your request shortly and keep you updated through the customer portal.'
+                                : 'A new support ticket has been submitted and requires agent triage. Please review the ticket details below and take the appropriate action.'
+                            }
+                        </p>
+
+                        <!-- Ticket Details -->
+                        <table role="presentation"
+                            width="100%"
+                            cellpadding="0"
+                            cellspacing="0"
+                            border="0"
+                            style="background-color:#f8fafc; border:1px solid #e5e7eb; border-radius:8px; margin-bottom:25px;">
+
+                            <tr>
+                                <td style="padding:20px;">
+
+                                    <!-- Priority -->
+                                    <p style="margin:0 0 15px; font-size:13px; line-height:20px; color:#6b7280;">
+
+                                        <strong style="color:#374151;">
+                                            Priority
+                                        </strong>
+                                        <br>
+
+                                        <span style="display:inline-block; margin-top:6px; padding:5px 12px; background-color:#e0e7ff; border-radius:20px; font-size:13px; font-weight:bold; color:#3730a3;">
+                                            ${ticketPriority}
+                                        </span>
+
+                                    </p>
+
+                                    <!-- Ticket Title -->
+                                    <p style="margin:0 0 15px; font-size:13px; line-height:20px; color:#6b7280;">
+
+                                        <strong style="color:#374151;">
+                                            Issue
+                                        </strong>
+                                        <br>
+
+                                        <span style="font-size:16px; color:#111827;">
+                                            ${ticketTitle}
+                                        </span>
+
+                                    </p>
+
+                                    <!-- Ticket Number -->
+                                    <p style="margin:0; font-size:13px; line-height:20px; color:#6b7280;">
+
+                                        <strong style="color:#374151;">
+                                            Ticket ID
+                                        </strong>
+                                        <br>
+
+                                        <span style="font-size:15px; color:#111827;">
+                                            #${ticketNumber}
+                                        </span>
+
+                                    </p>
+
+                                </td>
+                            </tr>
+
+                        </table>
+
+                        <!-- Next Steps -->
+                        <table role="presentation"
+                            width="100%"
+                            cellpadding="0"
+                            cellspacing="0"
+                            border="0"
+                            style="background-color:#f8fafc; border:1px solid #e5e7eb; border-radius:8px; margin-bottom:25px;">
+
+                            <tr>
+                                <td style="padding:18px 20px;">
+
+                                    <p style="margin:0 0 8px; font-size:14px; line-height:20px; font-weight:bold; color:#374151;">
+                                        ${isCustomer ? 'What happens next?' : 'Next step'}
+                                    </p>
+
+                                    <p style="margin:0; font-size:14px; line-height:22px; color:#6b7280;">
+                                        ${isCustomer
+                                            ? 'Our support team will review your request and provide updates through the Kdadks Customer Portal. You can also add comments or additional information to your ticket at any time.'
+                                            : 'Please review the ticket in the support management portal and complete the required triage and assignment steps.'
+                                        }
+                                    </p>
+
+                                </td>
+                            </tr>
+
+                        </table>
+
+                        <!-- Portal CTA -->
+                        <table role="presentation"
+                            cellpadding="0"
+                            cellspacing="0"
+                            border="0"
+                            align="center"
+                            style="margin:0 auto 25px;">
+
+                            <tr>
+                                <td align="center"
+                                    bgcolor="#111827"
+                                    style="border-radius:6px;">
+
+                                    <a
+                                        href="${portalUrl}"
+                                        target="_blank"
+                                        style="display:inline-block; padding:14px 30px; font-size:16px; line-height:20px; font-weight:bold; color:#ffffff; text-decoration:none; border-radius:6px;"
+                                    >
+                                        ${isCustomer ? 'View My Support Ticket' : 'Open Ticket in Portal'}
+                                    </a>
+
+                                </td>
+                            </tr>
+
+                        </table>
+
+                        <!-- Closing -->
+                        <p style="font-size:14px; line-height:22px; color:#6b7280; margin:0;">
+                            ${isCustomer
+                                ? 'Thank you for contacting Kdadks Support. We appreciate your patience and will work to resolve your request as quickly as possible.'
+                                : 'Thank you for helping us provide timely and effective customer support.'
+                            }
+                        </p>
+
+                    </td>
+                </tr>
+
+                <!-- Support Section -->
+                <tr>
+                    <td style="padding:25px 40px; background-color:#f8fafc; border-top:1px solid #e5e7eb;">
+
+                        <p style="margin:0; font-size:14px; line-height:22px; color:#6b7280; text-align:center;">
+
+                            ${isCustomer
+                                ? 'You can track your ticket, add comments, and view support updates directly through your Kdadks Customer Portal.'
+                                : 'Please use the Kdadks Support Management Portal to manage and update this ticket.'
+                            }
+
+                        </p>
+
+                    </td>
+                </tr>
+
+                <!-- Footer -->
+                <tr>
+                    <td align="center" style="padding:25px 20px;">
+
+                        <p style="margin:0; font-size:13px; line-height:20px; color:#9ca3af;">
+                            &copy; ${new Date().getFullYear()} Kdadks Customer Success Operations
+                        </p>
+
+                        <p style="margin:8px 0 0; font-size:12px; line-height:18px; color:#9ca3af;">
+                            This is an automated message. Please do not reply directly to this email.
+                        </p>
+
+                    </td>
+                </tr>
+
+            </table>
+
+            <!-- End Main Container -->
+
+        </td>
+    </tr>
+
+</table>
 </body>
 </html>
       `.trim();
@@ -1947,6 +2159,8 @@ Kdadks Support Team
   ): Promise<void> {
     try {
       const subject = `[Ticket #${ticketNumber}] Update: ${ticketTitle} (${newStatus})`;
+      const logoUrl = await this.getCompanyLogoUrl();
+      const portalUrl = `${window.location.origin}/portal`;
 
       const text = `
 Dear ${recipientName},
@@ -1964,38 +2178,212 @@ Kdadks Support Team
 
       const html = `
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="x-apple-disable-message-reformatting">
     <title>Ticket Update #${ticketNumber}</title>
-    <style>
-        body { font-family: Arial, sans-serif; line-height: 1.6; color: #1f2937; margin: 0; padding: 0; background-color: #f3f4f6; }
-        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-        .header { background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%); padding: 20px; border-radius: 12px 12px 0 0; color: #ffffff; text-align: center; }
-        .content { background: #ffffff; padding: 25px; border: 1px solid #e5e7eb; border-radius: 0 0 12px 12px; }
-        .status-box { background: #eff6ff; border-left: 4px solid #2563eb; padding: 12px 15px; margin: 15px 0; border-radius: 4px; }
-        .comment-box { background: #f9fafb; border: 1px solid #e5e7eb; padding: 15px; border-radius: 8px; font-style: italic; color: #374151; margin: 15px 0; }
-        .footer { margin-top: 20px; text-align: center; color: #6b7280; font-size: 12px; }
-    </style>
 </head>
-<body>
-    <div class="container">
-        <div class="header">
-            <h2 style="margin:0;">🔔 Ticket Update: #${ticketNumber}</h2>
-        </div>
-        <div class="content">
-            <p>Dear <strong>${recipientName}</strong>,</p>
-            <p>Your support ticket <strong>${ticketTitle}</strong> has been updated.</p>
-            <div class="status-box">
-                <strong>Current Status:</strong> ${newStatus}
-            </div>
-            ${commentContent ? `<div class="comment-box">"${commentContent}"</div>` : ''}
-            <p>Please log in to the Customer Portal to respond if required.</p>
-        </div>
-        <div class="footer">
-            <p>&copy; ${new Date().getFullYear()} Kdadks Support Management Platform</p>
-        </div>
-    </div>
+<body style="margin:0; padding:0; background-color:#f4f6f8; font-family:Arial, Helvetica, sans-serif; color:#333333;">
+
+<!-- Email Wrapper -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+    style="width:100%; background-color:#f4f6f8; padding:30px 15px;">
+
+    <tr>
+        <td align="center">
+
+            <!-- Main Container -->
+            <table role="presentation"
+                width="600"
+                cellpadding="0"
+                cellspacing="0"
+                border="0"
+                style="width:100%; max-width:600px; background-color:#ffffff; border-radius:10px; overflow:hidden;">
+
+                <!-- Logo -->
+                <tr>
+                    <td align="center" style="padding:30px 20px 20px; background-color:#ffffff;">
+
+                        <img
+                            src="${logoUrl}"
+                            alt="Kdadks"
+                            width="180"
+                            style="max-width:180px; width:100%; height:auto; display:block; border:0; margin:0 auto;"
+                        />
+
+                    </td>
+                </tr>
+
+                <!-- Header -->
+                <tr>
+                    <td align="center" style="padding:10px 30px 30px;">
+
+                        <div style="font-size:34px; line-height:40px; margin-bottom:8px;">
+                            🔔
+                        </div>
+
+                        <h1 style="margin:0; font-size:26px; line-height:34px; font-weight:bold; color:#1f2937;">
+                            Ticket Update
+                        </h1>
+
+                        <p style="margin:10px 0 0; font-size:15px; line-height:22px; color:#6b7280;">
+                            There has been an update to your support request.
+                        </p>
+
+                        <p style="margin:8px 0 0; font-size:13px; line-height:20px; color:#9ca3af;">
+                            Ticket #<strong style="color:#4b5563;">${ticketNumber}</strong>
+                        </p>
+
+                    </td>
+                </tr>
+
+                <!-- Content -->
+                <tr>
+                    <td style="padding:10px 40px 35px;">
+
+                        <!-- Greeting -->
+                        <p style="font-size:16px; line-height:24px; margin:0 0 20px;">
+                            Dear <strong>${recipientName}</strong>,
+                        </p>
+
+                        <!-- Main Message -->
+                        <p style="font-size:16px; line-height:24px; margin:0 0 25px; color:#4b5563;">
+                            Your support ticket
+                            <strong>"${ticketTitle}"</strong>
+                            has been updated by our support team.
+                        </p>
+
+                        <!-- Status -->
+                        <table role="presentation"
+                            width="100%"
+                            cellpadding="0"
+                            cellspacing="0"
+                            border="0"
+                            style="background-color:#eff6ff; border:1px solid #bfdbfe; border-radius:8px; margin-bottom:25px;">
+
+                            <tr>
+                                <td style="padding:20px;">
+
+                                    <p style="margin:0 0 8px; font-size:13px; line-height:20px; color:#64748b;">
+                                        <strong style="color:#374151;">
+                                            Current Status
+                                        </strong>
+                                    </p>
+
+                                    <span style="display:inline-block; padding:7px 14px; background-color:#dbeafe; border-radius:20px; font-size:14px; font-weight:bold; color:#1d4ed8;">
+                                        ${newStatus}
+                                    </span>
+
+                                </td>
+                            </tr>
+
+                        </table>
+
+                        <!-- Optional Comment -->
+                        ${commentContent ? `
+                        <table role="presentation"
+                            width="100%"
+                            cellpadding="0"
+                            cellspacing="0"
+                            border="0"
+                            style="background-color:#f8fafc; border:1px solid #e5e7eb; border-radius:8px; margin-bottom:25px;">
+
+                            <tr>
+                                <td style="padding:20px;">
+
+                                    <p style="margin:0 0 8px; font-size:14px; line-height:20px; font-weight:bold; color:#374151;">
+                                        Latest Update
+                                    </p>
+
+                                    <p style="margin:0; font-size:14px; line-height:22px; color:#4b5563;">
+                                        "${commentContent}"
+                                    </p>
+
+                                </td>
+                            </tr>
+
+                        </table>
+                        ` : ''}
+
+                        <!-- Portal Message -->
+                        <p style="font-size:15px; line-height:23px; margin:0 0 25px; color:#4b5563;">
+                            You can log in to your Kdadks Customer Portal to view the
+                            latest ticket information, review updates, and add further
+                            comments if required.
+                        </p>
+
+                        <!-- Portal CTA -->
+                        <table role="presentation"
+                            cellpadding="0"
+                            cellspacing="0"
+                            border="0"
+                            align="center"
+                            style="margin:0 auto 25px;">
+
+                            <tr>
+                                <td align="center"
+                                    bgcolor="#111827"
+                                    style="border-radius:6px;">
+
+                                    <a
+                                        href="${portalUrl}"
+                                        target="_blank"
+                                        style="display:inline-block; padding:14px 30px; font-size:16px; line-height:20px; font-weight:bold; color:#ffffff; text-decoration:none; border-radius:6px;"
+                                    >
+                                        View Ticket in Portal
+                                    </a>
+
+                                </td>
+                            </tr>
+
+                        </table>
+
+                        <!-- Closing -->
+                        <p style="font-size:14px; line-height:22px; color:#6b7280; margin:0;">
+                            Thank you for your continued cooperation. Our support team
+                            will continue to assist you until your request is fully resolved.
+                        </p>
+
+                    </td>
+                </tr>
+
+                <!-- Support Section -->
+                <tr>
+                    <td style="padding:25px 40px; background-color:#f8fafc; border-top:1px solid #e5e7eb;">
+
+                        <p style="margin:0; font-size:14px; line-height:22px; color:#6b7280; text-align:center;">
+                            Please use the Kdadks Customer Portal for the latest ticket
+                            information and to communicate with our support team.
+                        </p>
+
+                    </td>
+                </tr>
+
+                <!-- Footer -->
+                <tr>
+                    <td align="center" style="padding:25px 20px;">
+
+                        <p style="margin:0; font-size:13px; line-height:20px; color:#9ca3af;">
+                            &copy; ${new Date().getFullYear()} Kdadks Customer Success Operations
+                        </p>
+
+                        <p style="margin:8px 0 0; font-size:12px; line-height:18px; color:#9ca3af;">
+                            This is an automated message. Please do not reply directly to this email.
+                        </p>
+
+                    </td>
+                </tr>
+
+            </table>
+
+            <!-- End Main Container -->
+
+        </td>
+    </tr>
+
+</table>
 </body>
 </html>
       `.trim();
@@ -2028,6 +2416,8 @@ Kdadks Support Team
   ): Promise<void> {
     try {
       const subject = `[Resolved] Ticket #${ticketNumber}: ${ticketTitle}`;
+      const logoUrl = await this.getCompanyLogoUrl();
+      const portalUrl = `${window.location.origin}/portal`;
 
       const text = `
 Dear ${recipientName},
@@ -2045,42 +2435,238 @@ Kdadks Support Team
 
       const html = `
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="x-apple-disable-message-reformatting">
     <title>Ticket Resolved #${ticketNumber}</title>
-    <style>
-        body { font-family: Arial, sans-serif; line-height: 1.6; color: #1f2937; margin: 0; padding: 0; background-color: #f3f4f6; }
-        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-        .header { background: linear-gradient(135deg, #10b981 0%, #059669 100%); padding: 25px; border-radius: 12px 12px 0 0; color: #ffffff; text-align: center; }
-        .content { background: #ffffff; padding: 25px; border: 1px solid #e5e7eb; border-radius: 0 0 12px 12px; }
-        .resolution-box { background: #ecfdf5; border: 1px solid #a7f3d0; padding: 15px; border-radius: 8px; margin: 15px 0; color: #065f46; }
-        .csat-prompt { background: #fef3c7; border: 1px solid #fde68a; padding: 15px; border-radius: 8px; text-align: center; margin: 20px 0; color: #92400e; }
-        .footer { margin-top: 20px; text-align: center; color: #6b7280; font-size: 12px; }
-    </style>
 </head>
-<body>
-    <div class="container">
-        <div class="header">
-            <h1 style="margin:0; font-size: 22px;">✅ Ticket Resolved!</h1>
-            <p style="margin: 5px 0 0 0; opacity: 0.9;">Ticket #${ticketNumber}</p>
-        </div>
-        <div class="content">
-            <p>Dear <strong>${recipientName}</strong>,</p>
-            <p>We are pleased to inform you that your issue <strong>"${ticketTitle}"</strong> has been resolved by our team.</p>
-            <div class="resolution-box">
-                <h4 style="margin: 0 0 5px 0;">Resolution Notes:</h4>
-                <p style="margin:0;">${resolutionNotes}</p>
-            </div>
-            <div class="csat-prompt">
-                <h4 style="margin: 0 0 5px 0;">⭐ Rate Your Support Experience</h4>
-                <p style="margin: 0; font-size: 14px;">Please log in to your portal within 72 hours to accept resolution and submit a 5-star satisfaction rating.</p>
-            </div>
-        </div>
-        <div class="footer">
-            <p>&copy; ${new Date().getFullYear()} Kdadks Support Management Platform</p>
-        </div>
-    </div>
+<body style="margin:0; padding:0; background-color:#f4f6f8; font-family:Arial, Helvetica, sans-serif; color:#333333;">
+
+<!-- Email Wrapper -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+    style="width:100%; background-color:#f4f6f8; padding:30px 15px;">
+
+    <tr>
+        <td align="center">
+
+            <!-- Main Container -->
+            <table role="presentation"
+                width="600"
+                cellpadding="0"
+                cellspacing="0"
+                border="0"
+                style="width:100%; max-width:600px; background-color:#ffffff; border-radius:10px; overflow:hidden;">
+
+                <!-- Logo -->
+                <tr>
+                    <td align="center" style="padding:30px 20px 20px; background-color:#ffffff;">
+
+                        <img
+                            src="${logoUrl}"
+                            alt="Kdadks"
+                            width="180"
+                            style="max-width:180px; width:100%; height:auto; display:block; border:0; margin:0 auto;"
+                        />
+
+                    </td>
+                </tr>
+
+                <!-- Header -->
+                <tr>
+                    <td align="center" style="padding:10px 30px 30px;">
+
+                        <div style="font-size:36px; line-height:40px; margin-bottom:8px;">
+                            ✓
+                        </div>
+
+                        <h1 style="margin:0; font-size:26px; line-height:34px; font-weight:bold; color:#1f2937;">
+                            Ticket Resolved
+                        </h1>
+
+                        <p style="margin:10px 0 0; font-size:15px; line-height:22px; color:#6b7280;">
+                            Your support request has been successfully resolved.
+                        </p>
+
+                        <p style="margin:8px 0 0; font-size:13px; line-height:20px; color:#9ca3af;">
+                            Ticket #<strong style="color:#4b5563;">${ticketNumber}</strong>
+                        </p>
+
+                    </td>
+                </tr>
+
+                <!-- Content -->
+                <tr>
+                    <td style="padding:10px 40px 35px;">
+
+                        <!-- Greeting -->
+                        <p style="font-size:16px; line-height:24px; margin:0 0 20px;">
+                            Dear <strong>${recipientName}</strong>,
+                        </p>
+
+                        <!-- Main Message -->
+                        <p style="font-size:16px; line-height:24px; margin:0 0 20px; color:#4b5563;">
+                            We are pleased to inform you that your support request
+                            <strong>"${ticketTitle}"</strong> has been resolved by
+                            the Kdadks Support Team.
+                        </p>
+
+                        <!-- Ticket Details -->
+                        <table role="presentation"
+                            width="100%"
+                            cellpadding="0"
+                            cellspacing="0"
+                            border="0"
+                            style="background-color:#f8fafc; border:1px solid #e5e7eb; border-radius:8px; margin-bottom:25px;">
+
+                            <tr>
+                                <td style="padding:18px 20px;">
+
+                                    <p style="margin:0 0 12px; font-size:13px; line-height:20px; color:#6b7280;">
+                                        <strong style="color:#374151;">Ticket Number</strong><br>
+                                        <span style="font-size:16px; color:#111827;">
+                                            #${ticketNumber}
+                                        </span>
+                                    </p>
+
+                                    <p style="margin:0; font-size:13px; line-height:20px; color:#6b7280;">
+                                        <strong style="color:#374151;">Issue</strong><br>
+                                        <span style="font-size:15px; color:#111827;">
+                                            ${ticketTitle}
+                                        </span>
+                                    </p>
+
+                                </td>
+                            </tr>
+
+                        </table>
+
+                        <!-- Resolution -->
+                        <table role="presentation"
+                            width="100%"
+                            cellpadding="0"
+                            cellspacing="0"
+                            border="0"
+                            style="background-color:#ecfdf5; border:1px solid #a7f3d0; border-radius:8px; margin-bottom:25px;">
+
+                            <tr>
+                                <td style="padding:20px;">
+
+                                    <p style="margin:0 0 8px; font-size:14px; line-height:20px; font-weight:bold; color:#065f46;">
+                                        Resolution Notes
+                                    </p>
+
+                                    <p style="margin:0; font-size:14px; line-height:22px; color:#047857;">
+                                        ${resolutionNotes}
+                                    </p>
+
+                                </td>
+                            </tr>
+
+                        </table>
+
+                        <!-- CSAT Section -->
+                        <table role="presentation"
+                            width="100%"
+                            cellpadding="0"
+                            cellspacing="0"
+                            border="0"
+                            style="background-color:#fff8e6; border:1px solid #f3e3b0; border-radius:8px; margin-bottom:25px;">
+
+                            <tr>
+                                <td align="center" style="padding:22px 20px;">
+
+                                    <div style="font-size:26px; line-height:32px; margin-bottom:8px;">
+                                        ★★★★★
+                                    </div>
+
+                                    <p style="margin:0 0 8px; font-size:17px; line-height:24px; font-weight:bold; color:#92400e;">
+                                        How was your support experience?
+                                    </p>
+
+                                    <p style="margin:0; font-size:14px; line-height:21px; color:#92400e;">
+                                        Please log in to your customer portal within
+                                        <strong>72 hours</strong> to accept the resolution
+                                        and submit your satisfaction rating.
+                                    </p>
+
+                                </td>
+                            </tr>
+
+                        </table>
+
+                        <!-- Portal CTA -->
+                        <table role="presentation"
+                            cellpadding="0"
+                            cellspacing="0"
+                            border="0"
+                            align="center"
+                            style="margin:0 auto 25px;">
+
+                            <tr>
+                                <td align="center"
+                                    bgcolor="#111827"
+                                    style="border-radius:6px;">
+
+                                    <a
+                                        href="${portalUrl}"
+                                        target="_blank"
+                                        style="display:inline-block; padding:14px 30px; font-size:16px; line-height:20px; font-weight:bold; color:#ffffff; text-decoration:none; border-radius:6px;"
+                                    >
+                                        View Ticket &amp; Rate Support
+                                    </a>
+
+                                </td>
+                            </tr>
+
+                        </table>
+
+                        <!-- Closing -->
+                        <p style="font-size:14px; line-height:22px; color:#6b7280; margin:0;">
+                            Thank you for giving us the opportunity to assist you.
+                            We appreciate your business and value your feedback.
+                        </p>
+
+                    </td>
+                </tr>
+
+                <!-- Support Section -->
+                <tr>
+                    <td style="padding:25px 40px; background-color:#f8fafc; border-top:1px solid #e5e7eb;">
+
+                        <p style="margin:0; font-size:14px; line-height:22px; color:#6b7280; text-align:center;">
+                            If you believe this issue has not been fully resolved,
+                            please contact the <strong>Kdadks Customer Support Team</strong>
+                            through your customer portal.
+                        </p>
+
+                    </td>
+                </tr>
+
+                <!-- Footer -->
+                <tr>
+                    <td align="center" style="padding:25px 20px;">
+
+                        <p style="margin:0; font-size:13px; line-height:20px; color:#9ca3af;">
+                            &copy; ${new Date().getFullYear()} Kdadks Customer Success Operations
+                        </p>
+
+                        <p style="margin:8px 0 0; font-size:12px; line-height:18px; color:#9ca3af;">
+                            This is an automated message. Please do not reply directly to this email.
+                        </p>
+
+                    </td>
+                </tr>
+
+            </table>
+
+            <!-- End Main Container -->
+
+        </td>
+    </tr>
+
+</table>
 </body>
 </html>
       `.trim();
@@ -2177,6 +2763,61 @@ Please review immediately on the Triage Desk.
   }
 
   /**
+   * Helper to format a customer's display ID (e.g. "IND-2026-0009") with entity prefix
+   */
+  private static async getFormattedCustomerId(customer: any): Promise<string> {
+    if (!customer) return '';
+    const rawCode = customer.customer_code || (customer.id ? customer.id.slice(0, 8) : '');
+    if (!rawCode) return '';
+
+    // If it already contains an entity prefix (e.g. IND-2026-0009 or IRL-2026-0001), return capitalized
+    if (/^[A-Z]{2,4}-\d{4}-\d+$/i.test(rawCode)) {
+      return rawCode.toUpperCase();
+    }
+
+    try {
+      const companies = await invoiceService.getCompanySettings();
+      let company = null;
+      if (customer.company_settings_id) {
+        company = companies.find((c: any) => c.id === customer.company_settings_id);
+      }
+      if (!company && companies.length > 0) {
+        company = companies.find((c: any) => c.is_default) || companies[0];
+      }
+      const prefix = getEntityPrefix(company);
+      return `${prefix}-${rawCode}`;
+    } catch (err) {
+      console.warn('Could not fetch company settings for customer ID formatting:', err);
+      return `IND-${rawCode}`;
+    }
+  }
+
+  /**
+   * Helper to get company logo URL for HTML emails
+   */
+  private static async getCompanyLogoUrl(companySettingsId?: string): Promise<string> {
+    try {
+      const companies = await invoiceService.getCompanySettings();
+      let company = null;
+      if (companySettingsId) {
+        company = companies.find((c: any) => c.id === companySettingsId);
+      }
+      if (!company && companies.length > 0) {
+        company = companies.find((c: any) => c.is_default) || companies[0];
+      }
+      if (company?.logo_image_url) {
+        return company.logo_image_url;
+      }
+    } catch (e) {
+      // ignore
+    }
+    if (typeof window !== 'undefined' && window.location?.origin) {
+      return `${window.location.origin}/Logo.png`;
+    }
+    return 'https://kdadks.com/Logo.png';
+  }
+
+  /**
    * Send Customer Portal Password Reset Email via Resend API
    */
   static async sendCustomerPasswordResetEmail(customer: any, token: string, resetUrl: string): Promise<boolean> {
@@ -2184,44 +2825,235 @@ Please review immediately on the Triage Desk.
     if (!toEmail) return false;
 
     const companyName = customer.company_name || customer.contact_person || 'Valued Customer';
-    const customerCode = customer.customer_code || customer.id.slice(0, 8);
+    const customerCode = await this.getFormattedCustomerId(customer);
+    const logoUrl = await this.getCompanyLogoUrl(customer.company_settings_id);
     const subject = `Password Reset Request — Customer Portal (${customerCode})`;
 
     const text = `Hello ${companyName},\n\nYou requested a password reset for your Customer Portal account (${customerCode}).\n\nPlease reset your password using the following link (valid for 24 hours):\n${resetUrl}\n\nIf you did not request this, please ignore this email.`;
 
     const html = `
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
     <meta charset="utf-8">
-    <style>
-        body { font-family: Arial, sans-serif; background-color: #f4f6f9; margin: 0; padding: 20px; }
-        .container { max-width: 600px; background: #ffffff; margin: 0 auto; border-radius: 12px; overflow: hidden; border: 1px solid #e2e8f0; }
-        .header { background: linear-gradient(135deg, #4f46e5 0%, #3730a3 100%); color: white; padding: 24px; text-align: center; }
-        .content { padding: 24px; color: #1e293b; font-size: 14px; line-height: 1.6; }
-        .button { display: inline-block; background-color: #4f46e5; color: white !important; padding: 12px 24px; border-radius: 8px; font-weight: bold; text-decoration: none; margin: 16px 0; }
-        .footer { background: #f8fafc; padding: 16px; text-align: center; font-size: 12px; color: #64748b; border-top: 1px solid #e2e8f0; }
-    </style>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="x-apple-disable-message-reformatting">
+    <title>Reset Your Kdadks Portal Password</title>
 </head>
-<body>
-    <div class="container">
-        <div class="header">
-            <h2 style="margin:0;">Customer Portal Password Reset</h2>
-            <p style="margin:5px 0 0 0; font-size:12px; opacity:0.9;">Account ID: ${customerCode}</p>
-        </div>
-        <div class="content">
-            <p>Hello <strong>${companyName}</strong>,</p>
-            <p>We received a request to reset your password for the Kdadks Customer Support & Billing Portal.</p>
-            <div style="text-align: center;">
-                <a href="${resetUrl}" class="button" target="_blank">Reset Account Password</a>
-            </div>
-            <p style="font-size: 12px; color: #64748b;">Or copy and paste this link into your browser:<br/><a href="${resetUrl}" style="color: #4f46e5;">${resetUrl}</a></p>
-            <p style="font-size: 12px; color: #94a3b8;">This security link is valid for 24 hours. If you did not request a password reset, you can safely ignore this message.</p>
-        </div>
-        <div class="footer">
-            <p>&copy; ${new Date().getFullYear()} Kdadks Customer Success Operations</p>
-        </div>
-    </div>
+<body style="margin:0; padding:0; background-color:#f4f6f8; font-family:Arial, Helvetica, sans-serif; color:#333333;">
+
+<!-- Email Wrapper -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+    style="width:100%; background-color:#f4f6f8; padding:30px 15px;">
+
+    <tr>
+        <td align="center">
+
+            <!-- Main Container -->
+            <table role="presentation"
+                width="600"
+                cellpadding="0"
+                cellspacing="0"
+                border="0"
+                style="width:100%; max-width:600px; background-color:#ffffff; border-radius:10px; overflow:hidden;">
+
+                <!-- Logo -->
+                <tr>
+                    <td align="center" style="padding:30px 20px 20px; background-color:#ffffff;">
+
+                        <img
+                            src="${logoUrl}"
+                            alt="Kdadks"
+                            width="180"
+                            style="max-width:180px; width:100%; height:auto; display:block; border:0; margin:0 auto;"
+                        />
+
+                    </td>
+                </tr>
+
+                <!-- Header -->
+                <tr>
+                    <td align="center" style="padding:10px 30px 30px;">
+
+                        <h1 style="margin:0; font-size:26px; line-height:34px; font-weight:bold; color:#1f2937;">
+                            Reset Your Password
+                        </h1>
+
+                        <p style="margin:12px 0 0; font-size:15px; line-height:22px; color:#6b7280;">
+                            Securely reset your Kdadks Customer Portal password.
+                        </p>
+
+                        <p style="margin:8px 0 0; font-size:13px; line-height:20px; color:#9ca3af;">
+                            Customer ID: <strong style="color:#4b5563;">${customerCode}</strong>
+                        </p>
+
+                    </td>
+                </tr>
+
+                <!-- Content -->
+                <tr>
+                    <td style="padding:10px 40px 35px;">
+
+                        <!-- Greeting -->
+                        <p style="font-size:16px; line-height:24px; margin:0 0 20px;">
+                            Hello <strong>${companyName}</strong>,
+                        </p>
+
+                        <!-- Main Message -->
+                        <p style="font-size:16px; line-height:24px; margin:0 0 20px; color:#4b5563;">
+                            We received a request to reset the password for your
+                            <strong>Kdadks Customer Support &amp; Billing Portal</strong>
+                            account.
+                        </p>
+
+                        <!-- Account Details -->
+                        <table role="presentation"
+                            width="100%"
+                            cellpadding="0"
+                            cellspacing="0"
+                            border="0"
+                            style="background-color:#f8fafc; border:1px solid #e5e7eb; border-radius:8px; margin-bottom:25px;">
+
+                            <tr>
+                                <td style="padding:18px 20px;">
+
+                                    <p style="margin:0; font-size:14px; line-height:20px; color:#6b7280;">
+                                        <strong style="color:#374151;">Customer ID</strong><br>
+
+                                        <span style="font-size:16px; color:#111827;">
+                                            ${customerCode}
+                                        </span>
+                                    </p>
+
+                                </td>
+                            </tr>
+
+                        </table>
+
+                        <!-- Instructions -->
+                        <p style="font-size:15px; line-height:23px; margin:0 0 25px; color:#4b5563;">
+                            Click the button below to create a new password for your account.
+                            The password reset link is unique to your account and will expire
+                            after <strong>24 hours</strong>.
+                        </p>
+
+                        <!-- CTA Button -->
+                        <table role="presentation"
+                            cellpadding="0"
+                            cellspacing="0"
+                            border="0"
+                            align="center"
+                            style="margin:0 auto 25px;">
+
+                            <tr>
+                                <td align="center"
+                                    bgcolor="#111827"
+                                    style="border-radius:6px;">
+
+                                    <a
+                                        href="${resetUrl}"
+                                        target="_blank"
+                                        style="display:inline-block; padding:14px 30px; font-size:16px; line-height:20px; font-weight:bold; color:#ffffff; text-decoration:none; border-radius:6px;"
+                                    >
+                                        Reset Account Password
+                                    </a>
+
+                                </td>
+                            </tr>
+
+                        </table>
+
+                        <!-- Alternative Link -->
+                        <p style="font-size:13px; line-height:20px; color:#6b7280; margin:0 0 20px;">
+                            If the button above does not work, copy and paste the following
+                            link into your browser:
+                        </p>
+
+                        <p style="font-size:12px; line-height:20px; margin:0 0 25px; word-break:break-all;">
+
+                            <a
+                                href="${resetUrl}"
+                                target="_blank"
+                                style="color:#4f46e5; text-decoration:underline;"
+                            >
+                                ${resetUrl}
+                            </a>
+
+                        </p>
+
+                        <!-- Security Notice -->
+                        <table role="presentation"
+                            width="100%"
+                            cellpadding="0"
+                            cellspacing="0"
+                            border="0"
+                            style="background-color:#fff8e6; border:1px solid #f3e3b0; border-radius:8px; margin-bottom:20px;">
+
+                            <tr>
+                                <td style="padding:15px 18px;">
+
+                                    <p style="margin:0; font-size:13px; line-height:20px; color:#6b7280;">
+
+                                        <strong style="color:#374151;">
+                                            Security Notice
+                                        </strong>
+                                        <br>
+
+                                        This password reset link is valid for
+                                        <strong>24 hours</strong> and can only be used
+                                        to reset your account password.
+
+                                    </p>
+
+                                </td>
+                            </tr>
+
+                        </table>
+
+                        <!-- Didn't Request -->
+                        <p style="font-size:14px; line-height:22px; color:#6b7280; margin:0;">
+                            If you did not request a password reset, you can safely ignore
+                            this email. Your existing password will remain unchanged.
+                        </p>
+
+                    </td>
+                </tr>
+
+                <!-- Support Section -->
+                <tr>
+                    <td style="padding:25px 40px; background-color:#f8fafc; border-top:1px solid #e5e7eb;">
+
+                        <p style="margin:0; font-size:14px; line-height:22px; color:#6b7280; text-align:center;">
+                            If you need assistance accessing your account, please contact
+                            the <strong>Kdadks Customer Support Team</strong>.
+                        </p>
+
+                    </td>
+                </tr>
+
+                <!-- Footer -->
+                <tr>
+                    <td align="center" style="padding:25px 20px;">
+
+                        <p style="margin:0; font-size:13px; line-height:20px; color:#9ca3af;">
+                            &copy; ${new Date().getFullYear()} Kdadks Customer Success Operations
+                        </p>
+
+                        <p style="margin:8px 0 0; font-size:12px; line-height:18px; color:#9ca3af;">
+                            This is an automated message. Please do not reply directly to this email.
+                        </p>
+
+                    </td>
+                </tr>
+
+            </table>
+
+            <!-- End Main Container -->
+
+        </td>
+    </tr>
+
+</table>
 </body>
 </html>
     `.trim();
@@ -2253,7 +3085,8 @@ Please review immediately on the Triage Desk.
     if (!toEmail) return false;
 
     const companyName = customer.company_name || customer.contact_person || 'Valued Customer';
-    const customerCode = customer.customer_code || customer.id.slice(0, 8);
+    const customerCode = await this.getFormattedCustomerId(customer);
+    const logoUrl = await this.getCompanyLogoUrl(customer.company_settings_id);
     const portalUrl = `${window.location.origin}/portal`;
     const subject = `Welcome to Kdadks Customer Portal — Your Account Credentials (${customerCode})`;
 
@@ -2267,34 +3100,88 @@ Please review immediately on the Triage Desk.
     <style>
         body { font-family: Arial, sans-serif; background-color: #f4f6f9; margin: 0; padding: 20px; }
         .container { max-width: 600px; background: #ffffff; margin: 0 auto; border-radius: 12px; overflow: hidden; border: 1px solid #e2e8f0; }
-        .header { background: linear-gradient(135deg, #4f46e5 0%, #3730a3 100%); color: white; padding: 24px; text-align: center; }
-        .content { padding: 24px; color: #1e293b; font-size: 14px; line-height: 1.6; }
-        .cred-box { background: #f1f5f9; padding: 16px; border-radius: 8px; font-family: monospace; margin: 16px 0; border: 1px border-slate-300; }
-        .button { display: inline-block; background-color: #4f46e5; color: white !important; padding: 12px 24px; border-radius: 8px; font-weight: bold; text-decoration: none; margin: 16px 0; }
-        .footer { background: #f8fafc; padding: 16px; text-align: center; font-size: 12px; color: #64748b; border-top: 1px solid #e2e8f0; }
     </style>
 </head>
 <body>
     <div class="container">
-        <div class="header">
-            <h2 style="margin:0;">Welcome to Kdadks Portal</h2>
-            <p style="margin:5px 0 0 0; font-size:12px; opacity:0.9;">Customer ID: ${customerCode}</p>
+        <!-- Logo Area -->
+        <div style="padding: 30px 20px 20px; text-align: center; background-color: #ffffff;">
+            <img src="${logoUrl}" alt="Kdadks Logo" style="max-height: 50px; width: auto; max-width: 220px; display: inline-block;" />
         </div>
-        <div class="content">
-            <p>Hello <strong>${companyName}</strong>,</p>
-            <p>Your official Customer Support & Invoices Portal account has been activated. You can now track support tickets, access invoices, and manage company contact persons online.</p>
-            
-            <div class="cred-box">
-                <p style="margin:4px 0;"><strong>Customer ID / Email:</strong> ${customerCode} (${toEmail})</p>
-                <p style="margin:4px 0;"><strong>Temporary Security Passcode:</strong> <span style="color:#4f46e5; font-weight:bold;">${tempPassword}</span></p>
+
+        <!-- Header Title -->
+        <div style="padding: 10px 30px 25px; text-align: center;">
+            <h1 style="margin: 0; font-size: 26px; line-height: 34px; font-weight: bold; color: #1f2937;">
+                Welcome to Kdadks Portal
+            </h1>
+            <p style="margin: 12px 0 0; font-size: 15px; line-height: 22px; color: #6b7280;">
+                Your Customer Support &amp; Invoices Portal is now ready.
+            </p>
+        </div>
+
+        <!-- Body Content -->
+        <div style="padding: 10px 40px 35px;">
+            <p style="font-size: 16px; line-height: 24px; margin: 0 0 20px; color: #111827;">
+                Hello <strong>${companyName}</strong>,
+            </p>
+
+            <p style="font-size: 16px; line-height: 24px; margin: 0 0 25px; color: #4b5563;">
+                Your official <strong>Customer Support &amp; Invoices Portal</strong> account has been successfully activated. You can now:
+            </p>
+
+            <!-- Checklist -->
+            <div style="font-size: 15px; line-height: 26px; color: #4b5563; margin-bottom: 25px;">
+                <div>✓ Track and manage support tickets</div>
+                <div>✓ Access and download invoices</div>
+                <div>✓ Manage company contact persons</div>
+                <div>✓ View and manage your customer information</div>
             </div>
 
-            <div style="text-align: center;">
-                <a href="${portalUrl}" class="button" target="_blank">Sign In to Customer Portal</a>
+            <!-- Account Box -->
+            <div style="background-color: #f8fafc; border: 1px solid #e5e7eb; border-radius: 8px; padding: 20px; margin-bottom: 25px;">
+                <div style="margin-bottom: 15px;">
+                    <div style="font-size: 14px; font-weight: bold; color: #374151;">Customer ID:</div>
+                    <div style="font-size: 16px; color: #111827; margin-top: 2px; font-weight: 600;">${customerCode}</div>
+                </div>
+
+                <div style="margin-bottom: 15px;">
+                    <div style="font-size: 14px; font-weight: bold; color: #374151;">Registered Email:</div>
+                    <div style="font-size: 16px; color: #111827; margin-top: 2px;">${toEmail}</div>
+                </div>
+
+                <div>
+                    <div style="font-size: 14px; font-weight: bold; color: #374151;">Temporary Security Passcode:</div>
+                    <div style="display: inline-block; margin-top: 8px; padding: 10px 15px; background-color: #e5e7eb; border-radius: 5px; font-size: 18px; font-weight: bold; letter-spacing: 2px; color: #111827; font-family: monospace;">
+                        ${tempPassword}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Security Reminder -->
+            <p style="font-size: 14px; line-height: 22px; color: #6b7280; margin: 0 0 25px;">
+                <strong style="color: #374151;">Security Reminder:</strong> Please keep your temporary passcode confidential. We recommend changing your credentials after your first sign-in.
+            </p>
+
+            <!-- CTA Button -->
+            <div style="text-align: center; margin: 30px 0 10px;">
+                <a href="${portalUrl}" style="display: inline-block; background-color: #111827; color: #ffffff; padding: 14px 28px; font-size: 16px; font-weight: bold; text-decoration: none; border-radius: 6px;">
+                    Sign In to Customer Portal
+                </a>
             </div>
         </div>
-        <div class="footer">
-            <p>&copy; ${new Date().getFullYear()} Kdadks Customer Success Operations</p>
+
+        <!-- Support Bar -->
+        <div style="padding: 25px 40px; background-color: #f8fafc; border-top: 1px solid #e5e7eb; text-align: center;">
+            <p style="margin: 0; font-size: 14px; line-height: 22px; color: #6b7280;">
+                If you need assistance accessing your account, please contact the <strong>Kdadks Customer Support Team</strong>.
+            </p>
+        </div>
+
+        <!-- Footer -->
+        <div style="padding: 25px 20px; text-align: center; background-color: #ffffff;">
+            <p style="margin: 0; font-size: 13px; line-height: 20px; color: #9ca3af;">
+                © ${new Date().getFullYear()} Kdadks Customer Success Operations
+            </p>
         </div>
     </div>
 </body>

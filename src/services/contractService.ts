@@ -6,6 +6,7 @@
 import { supabase, isSupabaseConfigured } from '../config/supabase';
 import { simpleAuth } from '../utils/simpleAuth';
 import { convertToINR } from '../utils/currencyConverter';
+import { exchangeRateService } from './exchangeRateService';
 import { getEntityPrefix } from '../utils/customerCodeUtils';
 import { IRISH_CONTRACT_TEMPLATES } from '../data/irishContractTemplates';
 import { INDIAN_CONTRACT_TEMPLATES } from '../data/indianContractTemplates';
@@ -802,9 +803,9 @@ class ContractService {
   // =====================================================
 
   /**
-   * Get contract statistics
+   * Get contract statistics with values converted to target currency (INR for IND entity, EUR for IRL entity)
    */
-  async getStatistics(companySettingsId?: string): Promise<ContractStatistics> {
+  async getStatistics(companySettingsId?: string, targetCurrency: string = 'INR'): Promise<ContractStatistics> {
     if (!isSupabaseConfigured) {
       throw new Error('Database is not configured');
     }
@@ -845,7 +846,7 @@ class ContractService {
       }
     };
 
-    contracts?.forEach(contract => {
+    for (const contract of contracts || []) {
       // Status counts
       if (contract.status === 'active') stats.active_contracts++;
       if (contract.status === 'draft') stats.draft_contracts++;
@@ -859,8 +860,24 @@ class ContractService {
         }
       }
 
-      // Contract values
-      const val = contract.contract_value || 0;
+      // Contract values converted to target currency
+      let val = contract.contract_value || 0;
+      const contractCurrency = contract.currency_code || 'INR';
+      if (val > 0 && contractCurrency !== targetCurrency) {
+        try {
+          const conversion = await exchangeRateService.convertCurrency(
+            val,
+            contractCurrency,
+            targetCurrency
+          );
+          if (conversion && typeof conversion.converted_amount === 'number') {
+            val = conversion.converted_amount;
+          }
+        } catch (e) {
+          console.warn(`Failed to convert contract value (${contractCurrency} -> ${targetCurrency}):`, e);
+        }
+      }
+
       stats.total_contract_value += val;
       if (contract.status === 'active') {
         stats.active_contract_value += val;
@@ -870,7 +887,7 @@ class ContractService {
       if (contract.contract_type) {
         stats.contracts_by_type[contract.contract_type as keyof typeof stats.contracts_by_type]++;
       }
-    });
+    }
 
     return stats;
   }

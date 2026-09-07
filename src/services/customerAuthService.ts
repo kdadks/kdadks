@@ -106,22 +106,61 @@ export class CustomerAuthService {
   }
 
   /**
-   * Authenticate customer using Customer Code or Email and Passcode
+   * Helper method to lookup a customer by ID UUID, Customer Code, Email, or Company Name
+   */
+  static async findCustomerForAuth(queryVal: string): Promise<Customer | null> {
+    const trimmed = queryVal.trim();
+    if (!trimmed) return null;
+
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(trimmed);
+
+    if (isSupabaseConfigured) {
+      if (isUuid) {
+        const { data, error } = await supabase
+          .from('customers')
+          .select('*, country:countries(*)')
+          .eq('id', trimmed)
+          .maybeSingle();
+
+        if (!error && data) return data as Customer;
+      }
+
+      // Try exact match on email or customer_code
+      const { data: exactData } = await supabase
+        .from('customers')
+        .select('*, country:countries(*)')
+        .or(`email.ilike.${trimmed},customer_code.ilike.${trimmed}`);
+
+      if (exactData && exactData.length > 0) {
+        return exactData[0] as Customer;
+      }
+    }
+
+    // Fallback search via invoiceService
+    const res = await invoiceService.getCustomers({ search: trimmed }, 1, 50);
+    const matched = res.data.find(
+      (c) =>
+        c.id === trimmed ||
+        c.email?.toLowerCase() === trimmed.toLowerCase() ||
+        c.customer_code?.toLowerCase() === trimmed.toLowerCase() ||
+        c.customer_code?.toLowerCase().endsWith(trimmed.toLowerCase()) ||
+        c.company_name?.toLowerCase().includes(trimmed.toLowerCase())
+    );
+
+    return matched || null;
+  }
+
+  /**
+   * Authenticate customer using Customer Code, ID UUID, or Email and Passcode
    */
   static async login(emailOrCode: string, password?: string): Promise<CustomerLoginResult> {
     const queryVal = emailOrCode.trim();
 
-    // Query customer by code or email
-    const res = await invoiceService.getCustomers({ search: queryVal });
-    const customer = res.data.find(
-      (c) =>
-        c.email?.toLowerCase() === queryVal.toLowerCase() ||
-        c.customer_code?.toLowerCase() === queryVal.toLowerCase() ||
-        c.company_name?.toLowerCase().includes(queryVal.toLowerCase())
-    ) || res.data[0];
+    // Query customer by ID, code, or email
+    const customer = await this.findCustomerForAuth(queryVal);
 
     if (!customer) {
-      return { success: false, message: 'Invalid Customer Code or Account Email. Record not found.' };
+      return { success: false, message: 'Invalid Customer Code, Email or Account ID. Record not found.' };
     }
 
     // Check account locking
@@ -142,7 +181,7 @@ export class CustomerAuthService {
         if (attempts >= this.MAX_FAILED_ATTEMPTS) {
           const lockTime = new Date();
           lockTime.setMinutes(lockTime.getMinutes() + this.LOCK_DURATION_MINUTES);
-          lockTime.toISOString();
+          lockUntil = lockTime.toISOString();
         }
 
         if (isSupabaseConfigured) {
@@ -173,12 +212,7 @@ export class CustomerAuthService {
    */
   static async requestPasswordReset(emailOrCode: string): Promise<{ success: boolean; message: string }> {
     const queryVal = emailOrCode.trim();
-    const res = await invoiceService.getCustomers({ search: queryVal });
-    const customer = res.data.find(
-      (c) =>
-        c.email?.toLowerCase() === queryVal.toLowerCase() ||
-        c.customer_code?.toLowerCase() === queryVal.toLowerCase()
-    ) || res.data[0];
+    const customer = await this.findCustomerForAuth(queryVal);
 
     if (!customer) {
       return { success: false, message: 'Customer account not found.' };

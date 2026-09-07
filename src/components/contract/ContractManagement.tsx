@@ -23,6 +23,7 @@ import { useConfirmDialog } from '../../hooks/useConfirmDialog';
 import { useActionProgress } from '../../contexts/ActionProgressContext';
 import ConfirmDialog from '../ui/ConfirmDialog';
 import { generateContractPDF } from '../../utils/contractPDFGenerator';
+import { CurrencyDisplay } from '../ui/CurrencyDisplay';
 import ViewContractModal from './ViewContractModal';
 import EditContractModal from './EditContractModal';
 import StatusUpdateModal from './StatusUpdateModal';
@@ -110,7 +111,12 @@ const ContractManagement: React.FC = () => {
       setTotalPages(Math.ceil(contractsData.total / perPage));
 
       // Load statistics
-      const statsData = await contractService.getStatistics(selectedCompany?.id);
+      const targetCurrencyCode = selectedCompany?.country?.currency_code || (
+        selectedCompany?.country_id === 'IE' || selectedCompany?.country?.code === 'IE' || selectedCompany?.country?.code === 'IRL' ? 'EUR' :
+        selectedCompany?.country_id === 'US' || selectedCompany?.country?.code === 'US' || selectedCompany?.country?.code === 'USA' ? 'USD' :
+        selectedCompany?.country_id === 'GB' || selectedCompany?.country_id === 'UK' || selectedCompany?.country?.code === 'GB' ? 'GBP' : 'INR'
+      );
+      const statsData = await contractService.getStatistics(selectedCompany?.id, targetCurrencyCode);
       setStats(statsData);
 
     } catch (err) {
@@ -553,8 +559,14 @@ const ContractManagement: React.FC = () => {
                   </span>
                 </td>
                 <td className="px-3 py-3 whitespace-nowrap">
-                  <div className="text-sm text-gray-900">
-                    {formatCurrency(contract.contract_value, contract.currency_code)}
+                  <div className="text-sm font-medium text-gray-900">
+                    <CurrencyDisplay 
+                      amount={contract.contract_value || 0}
+                      currencyCode={contract.currency_code || entityCurrencyCode}
+                      targetCurrency={entityCurrencyCode}
+                      showBothCurrencies={true}
+                      conversionDate={contract.contract_date}
+                    />
                   </div>
                 </td>
                 <td className="px-3 py-3 whitespace-nowrap">

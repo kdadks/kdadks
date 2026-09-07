@@ -274,7 +274,13 @@ class InvoiceService {
 
     if (filters) {
       if (filters.search) {
-        query = query.or(`company_name.ilike.%${filters.search}%,contact_person.ilike.%${filters.search}%,email.ilike.%${filters.search}%`);
+        const s = filters.search.trim();
+        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s);
+        if (isUuid) {
+          query = query.or(`id.eq.${s},company_name.ilike.%${s}%,contact_person.ilike.%${s}%,email.ilike.%${s}%,customer_code.ilike.%${s}%`);
+        } else {
+          query = query.or(`company_name.ilike.%${s}%,contact_person.ilike.%${s}%,email.ilike.%${s}%,customer_code.ilike.%${s}%`);
+        }
       }
       if (filters.country_id) {
         query = query.eq('country_id', filters.country_id);
