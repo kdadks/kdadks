@@ -25,20 +25,29 @@ export const CompanyProvider: React.FC<{ children: ReactNode }> = ({ children })
       setLoading(true);
       setError(null);
       const data = await invoiceService.getCompanySettings();
-      setCompanies(data);
+      setCompanies(prev => {
+        if (JSON.stringify(prev) === JSON.stringify(data)) return prev;
+        return data;
+      });
       setSelectedCompany(prev => {
+        let next: CompanySettings | null = null;
         if (prev && data.some(c => c.id === prev.id)) {
-          return data.find(c => c.id === prev.id) || prev;
+          next = data.find(c => c.id === prev.id) || prev;
+        } else {
+          const storedId = localStorage.getItem('kdadks_selected_company_id');
+          if (storedId && data.some(c => c.id === storedId)) {
+            next = data.find(c => c.id === storedId) || null;
+          } else {
+            next = data.find(c => c.is_default) || data[0] || null;
+          }
         }
-        const storedId = localStorage.getItem('kdadks_selected_company_id');
-        if (storedId && data.some(c => c.id === storedId)) {
-          return data.find(c => c.id === storedId) || null;
+        if (next) {
+          localStorage.setItem('kdadks_selected_company_id', next.id);
         }
-        const def = data.find(c => c.is_default) || data[0] || null;
-        if (def) {
-          localStorage.setItem('kdadks_selected_company_id', def.id);
+        if (prev && next && JSON.stringify(prev) === JSON.stringify(next)) {
+          return prev;
         }
-        return def;
+        return next;
       });
     } catch (err) {
       console.error('Failed to load company settings:', err);

@@ -193,7 +193,7 @@ const InvoiceSettings: React.FC = () => {
 
   useEffect(() => {
     loadData();
-  }, [selectedCompany]);
+  }, [selectedCompany?.id]);
 
   const loadData = async () => {
     try {
@@ -213,7 +213,6 @@ const InvoiceSettings: React.FC = () => {
 
       setCountries(countriesData);
       setCompanySettings(companyData);
-      refreshCompanies();
 
       if (selectedCompany) {
         const settings = await invoiceService.getInvoiceSettings(selectedCompany.id);
@@ -347,6 +346,7 @@ const InvoiceSettings: React.FC = () => {
       }
 
       closeCompanyModal();
+      await refreshCompanies();
       await loadData();
     } catch (error) {
       console.error('Failed to save company settings:', error);
@@ -383,6 +383,7 @@ const InvoiceSettings: React.FC = () => {
       try {
         await invoiceService.deleteCompanySettings(company.id);
         showSuccess('Company settings deleted successfully!');
+        await refreshCompanies();
         await loadData();
       } catch (error) {
         console.error('Failed to delete company settings:', error);
