@@ -3805,11 +3805,14 @@ const getBankingCodeField = (company: CompanySettings | undefined | null): keyof
 
   const handleMarkAsPaid = (invoice: Invoice) => {
     setMarkAsPaidInvoice(invoice);
-    // For non-INR invoices, leave amount blank so user explicitly enters the actual INR received
-    // For INR invoices, pre-fill with the invoice total
     const isNonINR = invoice.currency_code && invoice.currency_code !== 'INR';
-    setMarkAsPaidAmount(isNonINR ? '' : String(invoice.total_amount));
-    setMarkAsPaidDate(new Date().toISOString().split('T')[0]);
+    const paidInfo = getInvoicePaidInfo(invoice);
+    if (paidInfo.amount > 0 && (invoice.payment_status === 'paid' || invoice.status === 'completed')) {
+      setMarkAsPaidAmount(String(paidInfo.amount));
+    } else {
+      setMarkAsPaidAmount(isNonINR ? '' : String(invoice.total_amount));
+    }
+    setMarkAsPaidDate(invoice.paid_at || new Date().toISOString().split('T')[0]);
     setMarkAsPaidMethod('bank_transfer');
     setMarkAsPaidReference('');
     setMarkAsPaidDialogOpen(true);
@@ -3822,15 +3825,15 @@ const getBankingCodeField = (company: CompanySettings | undefined | null): keyof
     setMarkAsPaidLoading(true);
     try {
       const isNonINR = markAsPaidInvoice.currency_code && markAsPaidInvoice.currency_code !== 'INR';
-      const exchangeRate = markAsPaidInvoice.exchange_rate || (markAsPaidInvoice.inr_total_amount && markAsPaidInvoice.total_amount ? markAsPaidInvoice.inr_total_amount / markAsPaidInvoice.total_amount : 1);
-      
-      const inrAmount = isNonINR ? amount : (amount * (exchangeRate || 1));
-      const invoiceCurrAmount = isNonINR ? (exchangeRate ? amount / exchangeRate : markAsPaidInvoice.total_amount) : amount;
+      const inrAmount = isNonINR ? amount : (markAsPaidInvoice.exchange_rate ? amount * markAsPaidInvoice.exchange_rate : amount);
+
+      // Delete any previous payment records for this invoice to prevent duplicate payment rows
+      await supabase.from('payments').delete().eq('invoice_id', markAsPaidInvoice.id);
 
       await invoiceService.createPayment({
         invoice_id: markAsPaidInvoice.id,
         payment_date: markAsPaidDate,
-        amount: invoiceCurrAmount,
+        amount: isNonINR ? amount : markAsPaidInvoice.total_amount,
         inr_amount: inrAmount,
         original_currency_code: isNonINR ? 'INR' : (markAsPaidInvoice.currency_code || 'INR'),
         original_amount: amount,
@@ -3838,9 +3841,45 @@ const getBankingCodeField = (company: CompanySettings | undefined | null): keyof
         reference_number: markAsPaidReference || undefined,
         created_by: undefined
       });
-      // Set invoice status to 'completed' and payment_status to 'paid'
-      await invoiceService.updateInvoiceStatus(markAsPaidInvoice.id, 'completed', 'paid');
-      showSuccess(`✅ Invoice ${markAsPaidInvoice.invoice_number} marked as paid!`);
+
+      // Update invoice table directly with the exact entered paid amount in paid_amount (preserving inr_total_amount)
+      const invoiceUpdates: Record<string, any> = { 
+        paid_at: markAsPaidDate,
+        status: 'completed',
+        payment_status: 'paid'
+      };
+
+      // If inr_subtotal is available and this is non-INR, restore inr_total_amount to the issue date exchange value
+      if (isNonINR && markAsPaidInvoice.inr_subtotal) {
+        invoiceUpdates.inr_total_amount = Number(markAsPaidInvoice.inr_subtotal) + Number(markAsPaidInvoice.inr_tax_amount || 0);
+      }
+
+      try {
+        const { error: updateErr } = await supabase
+          .from('invoices')
+          .update({ 
+            ...invoiceUpdates,
+            paid_amount: inrAmount,
+            paid_currency: isNonINR ? 'INR' : (markAsPaidInvoice.currency_code || 'INR')
+          })
+          .eq('id', markAsPaidInvoice.id);
+
+        if (updateErr) {
+          console.warn('Could not update paid_amount on invoices (column may need migration):', updateErr.message);
+          await supabase
+            .from('invoices')
+            .update(invoiceUpdates)
+            .eq('id', markAsPaidInvoice.id);
+        }
+      } catch (err) {
+        console.warn('Error updating invoice with paid_amount:', err);
+        await supabase
+          .from('invoices')
+          .update(invoiceUpdates)
+          .eq('id', markAsPaidInvoice.id);
+      }
+
+      showSuccess(`✅ Invoice ${markAsPaidInvoice.invoice_number} payment recorded! Received: ₹${inrAmount.toLocaleString('en-IN')}`);
       setMarkAsPaidDialogOpen(false);
       setMarkAsPaidInvoice(null);
       await loadData();
@@ -3963,10 +4002,11 @@ const getBankingCodeField = (company: CompanySettings | undefined | null): keyof
     setCurrentPage(1);
   };
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-IN', {
+  const formatCurrency = (amount: number, currency = 'INR') => {
+    const locale = currency === 'EUR' ? 'en-IE' : currency === 'USD' ? 'en-US' : currency === 'GBP' ? 'en-GB' : 'en-IN';
+    return new Intl.NumberFormat(locale, {
       style: 'currency',
-      currency: 'INR'
+      currency: currency
     }).format(amount);
   };
 
@@ -4106,41 +4146,86 @@ const getBankingCodeField = (company: CompanySettings | undefined | null): keyof
     </div>
   );
 
-  const getPaidAmount = (invoice: Invoice) => {
-    if (invoice.payments && invoice.payments.length > 0) {
-      const firstPayment = invoice.payments[0];
-      const isInvoiceNonINR = invoice.currency_code && invoice.currency_code !== 'INR';
-      
-      // If payment amount is significantly larger than invoice.total_amount (e.g. 90,000 INR vs 1,000 EUR),
-      // or if original_currency_code is 'INR', p.amount was saved as INR amount instead of invoice currency.
-      if (isInvoiceNonINR && (firstPayment.amount > (invoice.total_amount || 0) * 2 || firstPayment.original_currency_code === 'INR')) {
-        const totalInrPaid = invoice.payments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
-        const exchangeRate = invoice.exchange_rate || (invoice.inr_total_amount && invoice.total_amount ? invoice.inr_total_amount / invoice.total_amount : 0);
-        return exchangeRate > 0 ? totalInrPaid / exchangeRate : (invoice.total_amount || 0);
-      }
+  const isIndianCompany = (invoice?: Invoice | null) => {
+    const company = invoice?.company_settings || selectedCompany || companySettings.find(c => c.is_default);
+    if (!company) return true;
+    return Boolean(company.is_default || company.country?.code === 'IN' || company.country?.currency_code === 'INR');
+  };
 
-      return invoice.payments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
+  const getInvoiceIssueInrAmount = (invoice: Invoice) => {
+    if (invoice.currency_code === 'INR') return invoice.total_amount;
+    // Prefer inr_subtotal + inr_tax_amount to reflect the issued currency exchange value
+    if (invoice.inr_subtotal && Number(invoice.inr_subtotal) > 0) {
+      return Number(invoice.inr_subtotal) + Number(invoice.inr_tax_amount || 0);
     }
-    return (invoice.payment_status === 'paid' || invoice.status === 'completed' || invoice.status === 'paid')
-      ? Number(invoice.total_amount || 0)
-      : 0;
+    if (invoice.exchange_rate && invoice.total_amount && Number(invoice.exchange_rate) > 0) {
+      return Number(invoice.total_amount) * Number(invoice.exchange_rate);
+    }
+    return invoice.inr_total_amount;
+  };
+
+  const getInvoicePaidInfo = (invoice: Invoice) => {
+    const isInd = isIndianCompany(invoice);
+
+    // 1. Direct paid_amount on invoice
+    if (invoice.paid_amount && Number(invoice.paid_amount) > 0) {
+      return {
+        amount: Number(invoice.paid_amount),
+        currency: invoice.paid_currency || (isInd ? 'INR' : (invoice.currency_code || 'INR'))
+      };
+    }
+
+    // 2. Payments array (prioritize non-AUTO payments)
+    if (invoice.payments && invoice.payments.length > 0) {
+      const sorted = [...invoice.payments].sort((a, b) => {
+        const aIsAuto = Boolean((a.reference_number || '').startsWith('AUTO-') || (a.notes || '').includes('Auto-'));
+        const bIsAuto = Boolean((b.reference_number || '').startsWith('AUTO-') || (b.notes || '').includes('Auto-'));
+        if (aIsAuto !== bIsAuto) return aIsAuto ? 1 : -1;
+        const timeB = new Date(b.created_at || b.payment_date || 0).getTime();
+        const timeA = new Date(a.created_at || a.payment_date || 0).getTime();
+        return timeB - timeA;
+      });
+      const p = sorted[0];
+      if (isInd) {
+        const inrVal = p.inr_amount || (p.original_currency_code === 'INR' ? p.original_amount : null) || p.amount;
+        return {
+          amount: Number(inrVal || 0),
+          currency: 'INR'
+        };
+      } else {
+        return {
+          amount: Number(p.amount || p.original_amount || 0),
+          currency: p.original_currency_code || invoice.currency_code || 'EUR'
+        };
+      }
+    }
+
+    // 3. Fallback when marked paid/completed
+    if (invoice.payment_status === 'paid' || invoice.status === 'completed' || invoice.status === 'paid') {
+      if (isInd && invoice.currency_code !== 'INR' && invoice.inr_total_amount) {
+        return {
+          amount: Number(invoice.inr_total_amount),
+          currency: 'INR'
+        };
+      }
+      return {
+        amount: Number(invoice.total_amount || 0),
+        currency: invoice.currency_code || 'INR'
+      };
+    }
+
+    return {
+      amount: 0,
+      currency: isInd ? 'INR' : (invoice.currency_code || 'INR')
+    };
+  };
+
+  const getPaidAmount = (invoice: Invoice) => {
+    return getInvoicePaidInfo(invoice).amount;
   };
 
   const getInrPaidAmount = (invoice: Invoice) => {
-    if (invoice.payments && invoice.payments.length > 0) {
-      const firstPayment = invoice.payments[0];
-      const isInvoiceNonINR = invoice.currency_code && invoice.currency_code !== 'INR';
-      
-      if (isInvoiceNonINR && (firstPayment.amount > (invoice.total_amount || 0) * 2 || firstPayment.original_currency_code === 'INR')) {
-        return invoice.payments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
-      }
-
-      return invoice.payments.reduce((sum, p) => sum + Number(p.inr_amount || (p.original_currency_code === 'INR' ? p.amount : 0) || 0), 0) ||
-        (invoice.inr_total_amount ? invoice.payments.reduce((sum, p) => sum + Number(p.amount || 0), 0) * (invoice.inr_total_amount / (invoice.total_amount || 1)) : 0);
-    }
-    return (invoice.payment_status === 'paid' || invoice.status === 'completed' || invoice.status === 'paid')
-      ? Number(invoice.inr_total_amount || invoice.total_amount || 0)
-      : 0;
+    return getInvoicePaidInfo(invoice).amount;
   };
 
   const renderInvoiceTable = (invoiceList: Invoice[] = invoices) => (
@@ -4201,22 +4286,21 @@ const getBankingCodeField = (company: CompanySettings | undefined | null): keyof
                 <CurrencyDisplay 
                   amount={invoice.total_amount}
                   currencyCode={invoice.currency_code}
-                  inrAmount={invoice.inr_total_amount}
+                  inrAmount={getInvoiceIssueInrAmount(invoice)}
                   showBothCurrencies={true}
                   conversionDate={invoice.invoice_date}
                 />
               </div>
-              {(invoice.payment_status === 'paid' || invoice.status === 'completed' || invoice.status === 'paid') && (
-                <div className="mt-1 text-[11px] text-emerald-700 font-semibold bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded inline-flex items-center gap-1">
-                  <span>Paid:</span>
-                  <CurrencyDisplay 
-                    amount={getPaidAmount(invoice)} 
-                    currencyCode={invoice.currency_code} 
-                    inrAmount={getInrPaidAmount(invoice)} 
-                    showBothCurrencies={true} 
-                  />
-                </div>
-              )}
+              {(invoice.payment_status === 'paid' || invoice.status === 'completed' || invoice.status === 'paid') && (() => {
+                const paidInfo = getInvoicePaidInfo(invoice);
+                if (paidInfo.amount <= 0) return null;
+                return (
+                  <div className="mt-1 text-[11px] text-emerald-700 font-semibold bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded inline-flex items-center gap-1">
+                    <span>Paid:</span>
+                    <span className="font-bold">{formatCurrency(paidInfo.amount, paidInfo.currency)}</span>
+                  </div>
+                );
+              })()}
             </td>
             <td className="px-4 py-3 whitespace-nowrap">
               <span className={`inline-flex px-2 py-0.5 text-[11px] font-bold rounded-full uppercase ${getStatusColor(invoice.status)}`}>
@@ -4265,12 +4349,12 @@ const getBankingCodeField = (company: CompanySettings | undefined | null): keyof
                   </button>
                 )}
 
-                {/* Mark as Paid Button */}
-                {(invoice.status === 'sent' || invoice.status === 'draft') && invoice.payment_status !== 'paid' && (
+                {/* Mark as Paid / Record Payment Button */}
+                {invoice.status !== 'cancelled' && (
                   <button 
                     onClick={() => handleMarkAsPaid(invoice)}
                     className="p-1 text-emerald-600 hover:text-emerald-900 hover:bg-emerald-50 rounded transition"
-                    title="Mark as Paid"
+                    title={invoice.payment_status === 'paid' ? "Update Payment Details" : "Mark as Paid"}
                   >
                     <CheckCircle className="w-4 h-4" />
                   </button>
@@ -4353,22 +4437,21 @@ const getBankingCodeField = (company: CompanySettings | undefined | null): keyof
                 <CurrencyDisplay 
                   amount={invoice.total_amount}
                   currencyCode={invoice.currency_code}
-                  inrAmount={invoice.inr_total_amount}
+                  inrAmount={getInvoiceIssueInrAmount(invoice)}
                   showBothCurrencies={true}
                   conversionDate={invoice.invoice_date}
                 />
               </div>
-              {(invoice.payment_status === 'paid' || invoice.status === 'completed' || invoice.status === 'paid') && (
-                <div className="mt-1 text-[11px] text-emerald-700 font-semibold bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded inline-flex items-center gap-1">
-                  <span>Paid:</span>
-                  <CurrencyDisplay 
-                    amount={getPaidAmount(invoice)} 
-                    currencyCode={invoice.currency_code} 
-                    inrAmount={getInrPaidAmount(invoice)} 
-                    showBothCurrencies={true} 
-                  />
-                </div>
-              )}
+              {(invoice.payment_status === 'paid' || invoice.status === 'completed' || invoice.status === 'paid') && (() => {
+                const paidInfo = getInvoicePaidInfo(invoice);
+                if (paidInfo.amount <= 0) return null;
+                return (
+                  <div className="mt-1 text-[11px] text-emerald-700 font-semibold bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded inline-flex items-center gap-1">
+                    <span>Paid:</span>
+                    <span className="font-bold">{formatCurrency(paidInfo.amount, paidInfo.currency)}</span>
+                  </div>
+                );
+              })()}
             </td>
             <td className="px-4 py-3 whitespace-nowrap">
               <span className={`inline-flex px-2 py-0.5 text-[11px] font-bold rounded-full uppercase ${getStatusColor(invoice.status)}`}>

@@ -263,6 +263,11 @@ export interface Invoice {
   status: 'draft' | 'sent' | 'paid' | 'cancelled' | 'overdue' | 'completed';
   payment_status: 'pending' | 'partial' | 'paid';
 
+  // Separately captured actual payment info (INR for Indian Entity)
+  paid_amount?: number;
+  paid_currency?: string;
+  paid_at?: string;
+
   // Quote conversion tracking
   created_from_quote_id?: string;
   quote_reference?: string;

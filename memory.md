@@ -1,6 +1,6 @@
 # Project Memory — KDADKS Website
 
-> Auto-updated by Kilo agent after every implementation. Last updated: 2026-09-08 12:08 BST
+> Auto-updated by Kilo agent after every implementation. Last updated: 2026-09-11 15:53 BST
 
 A comprehensive knowledge base for the KDADKS website codebase. This file serves as a single source of truth for project architecture, conventions, patterns, menu structures, and key implementation details.
 
@@ -665,7 +665,17 @@ The complete sales pipeline with status/stage transitions:
 - IGST-compliant with HSN/SAC codes
 - Multi-currency support (EUR, USD, INR) with live/cached exchange rate conversion via `exchangeRateService`.
 - Multi-currency grid view displaying both primary currency and calculated INR value (`(~₹...)`) in both **Dashboard** and **Invoices** tabs.
-- Exact paid amount tracking displaying the user-entered payment value under Amount and Payment status columns once an invoice is marked as paid.
+- **Foreign Currency Invoice & Separate Paid Data Architecture**:
+  - Invoices issued in foreign currencies retain their issued foreign currency total (`total_amount`) and the estimated/exchanged INR value at the time of invoice issuance (`inr_total_amount` / `inr_subtotal + inr_tax_amount`). `inr_total_amount` is NEVER overwritten upon payment.
+  - When marked as paid by admin for an Indian Legal Entity, the exact INR amount received in the IND bank account is captured separately in `paid_amount`, `paid_currency: 'INR'`, and `paid_at` on the `invoices` table (and in `payments.inr_amount`).
+  - **Invoices & Dashboard UI (`Amount & INR Value` column)**:
+    - **Top Line (Invoice Amount)**: Shows issued foreign currency amount with historical exchange INR value at issue time via `<CurrencyDisplay amount={invoice.total_amount} currencyCode={invoice.currency_code} inrAmount={getInvoiceIssueInrAmount(invoice)} showBothCurrencies={true} conversionDate={invoice.invoice_date} />` (e.g., `€30.00 (~₹3,290.90)`).
+    - **Bottom Line (`Paid:`)**: Displays the actual captured paid data directly without exchange-rate distortions or duplicate sums (`Paid: ₹2,969.40` for IND entity, or `Paid: €30.00` for foreign entities).
+  - **Finance Reports & All Transactions (`src/services/financeService.ts`)**:
+    - Groups payments by `invoice_id` and prioritizes genuine manual/admin payments over `AUTO-` sync trigger rows. Stale duplicate payment rows are automatically cleaned up in the background.
+    - Resolves `actualAmount` and `actualCurrency` for IND entities using `inv.paid_amount || payment.inr_amount || payment.original_amount` in `'INR'`.
+  - **Database Migration (`database/migrations/043_add_paid_amount_to_invoices.sql`)**:
+    - Adds `paid_amount DECIMAL(15, 2)`, `paid_currency VARCHAR(10) DEFAULT 'INR'`, and `paid_at DATE` to `public.invoices` table, with backfill logic from the latest genuine payment in `payments`.
 
 ### Lead/Opportunity Activity Tracking
 

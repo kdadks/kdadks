@@ -335,18 +335,17 @@ export const financeService = {
       .from('payments')
       .select(`
         id, 
+        created_at,
         payment_date, 
         amount, 
+        inr_amount,
+        original_amount,
+        original_currency_code,
         payment_method, 
         reference_number,
+        notes,
         invoices!inner(
-          id,
-          invoice_number, 
-          invoice_date, 
-          total_amount, 
-          tax_amount, 
-          currency_code,
-          company_settings_id,
+          *,
           customers(company_name)
         )
       `)
@@ -383,8 +382,48 @@ export const financeService = {
 
     const income: FinancialTransaction[] = [];
 
-    // Transform payments from invoices
+    // Group payments by invoice_id to handle duplicate payment records from re-marking paid
+    const paymentsByInvoice: Record<string, any[]> = {};
     (payments || []).forEach((payment: any) => {
+      const invId = payment.invoices?.id || payment.invoice_id;
+      if (!invId) return;
+      if (!paymentsByInvoice[invId]) {
+        paymentsByInvoice[invId] = [];
+      }
+      paymentsByInvoice[invId].push(payment);
+    });
+
+    const validPaymentsList: any[] = [];
+    
+    // For each invoice, if there are multiple payment records, prioritize real/manual payments over auto-sync trigger rows
+    Object.entries(paymentsByInvoice).forEach(([, payList]) => {
+      if (payList.length > 1) {
+        payList.sort((a, b) => {
+          const aIsAuto = Boolean((a.reference_number || '').startsWith('AUTO-') || (a.notes || '').includes('Auto-'));
+          const bIsAuto = Boolean((b.reference_number || '').startsWith('AUTO-') || (b.notes || '').includes('Auto-'));
+          if (aIsAuto !== bIsAuto) {
+            return aIsAuto ? 1 : -1; // Non-auto comes first
+          }
+          const timeB = new Date(b.created_at || b.payment_date || 0).getTime();
+          const timeA = new Date(a.created_at || a.payment_date || 0).getTime();
+          return timeB - timeA;
+        });
+        // Keep the best payment
+        validPaymentsList.push(payList[0]);
+        // Delete older duplicate / auto payments from DB in background
+        const staleIds = payList.slice(1).map(p => p.id).filter(Boolean);
+        if (staleIds.length > 0) {
+          supabase.from('payments').delete().in('id', staleIds).then(({ error }) => {
+            if (error) console.warn('Cleaned stale payment records:', error.message);
+          });
+        }
+      } else {
+        validPaymentsList.push(payList[0]);
+      }
+    });
+
+    // Transform payments from invoices
+    validPaymentsList.forEach((payment: any) => {
       const inv = payment.invoices;
       if (!inv) return;
       if (companySettingsId) {
@@ -394,17 +433,51 @@ export const financeService = {
           if (inv.company_settings_id !== companySettingsId) return;
         }
       }
+
+      const isIndEntity = !inv.company_settings_id || (indianCompanyId && inv.company_settings_id === indianCompanyId) || isIndian;
+      const isInvoiceNonINR = inv.currency_code && inv.currency_code !== 'INR';
+
+      let actualAmount = payment.amount;
+      let actualCurrency = inv.currency_code || 'INR';
+
+      if (isIndEntity || payment.inr_amount || payment.original_currency_code === 'INR') {
+        actualCurrency = 'INR';
+        // Priority 1: Check if invoice has paid_amount directly saved
+        if (inv.paid_amount && Number(inv.paid_amount) > 0) {
+          actualAmount = Number(inv.paid_amount);
+        }
+        // Priority 2: Payment has inr_amount
+        else if (payment.inr_amount && Number(payment.inr_amount) > 0) {
+          actualAmount = Number(payment.inr_amount);
+        }
+        // Priority 3: Payment recorded in original INR
+        else if (payment.original_currency_code === 'INR' && payment.original_amount) {
+          actualAmount = Number(payment.original_amount);
+        }
+        // Priority 4: Foreign currency invoice with INR payment
+        else if (isInvoiceNonINR) {
+          if (payment.amount > (inv.total_amount || 0) * 2) {
+            actualAmount = Number(payment.amount);
+          } else {
+            const rate = inv.exchange_rate || (inv.inr_total_amount && inv.total_amount ? inv.inr_total_amount / inv.total_amount : 1);
+            actualAmount = Number(payment.amount) * rate;
+          }
+        } else {
+          actualAmount = Number(payment.amount);
+        }
+      }
+
       income.push({
         source_type: 'invoice',
-        source_id: inv.id,
+        source_id: payment.id || inv.id,
         reference_number: inv.invoice_number,
         transaction_date: payment.payment_date,
         party_name: inv.customers?.company_name || 'Unknown',
         party_type: 'customer',
-        gross_amount: payment.amount,
+        gross_amount: actualAmount,
         tax_amount: 0, // Tax is on the invoice level
-        net_amount: payment.amount,
-        currency: inv.currency_code || 'INR',
+        net_amount: actualAmount,
+        currency: actualCurrency,
         description: `Invoice Payment - ${inv.invoice_number}`
       });
     });
@@ -438,7 +511,7 @@ export const financeService = {
     // Get paid invoices (by invoice_date as fallback)
     let invoiceQuery = supabase
       .from('invoices')
-      .select('id, invoice_number, invoice_date, total_amount, tax_amount, currency_code, company_settings_id, customers(company_name)')
+      .select('*, customers(company_name)')
       .eq('status', 'paid')
       .gte('invoice_date', startDate)
       .lte('invoice_date', endDate);
@@ -479,6 +552,21 @@ export const financeService = {
 
     // Transform invoices
     (invoices || []).forEach((inv: any) => {
+      const isIndEntity = !inv.company_settings_id || (indianCompanyId && inv.company_settings_id === indianCompanyId);
+      const isInvoiceNonINR = inv.currency_code && inv.currency_code !== 'INR';
+
+      let actualAmount = inv.total_amount;
+      let actualCurrency = inv.currency_code || 'INR';
+
+      if (isIndEntity) {
+        actualCurrency = 'INR';
+        if (inv.paid_amount && Number(inv.paid_amount) > 0) {
+          actualAmount = Number(inv.paid_amount);
+        } else if (isInvoiceNonINR && inv.inr_total_amount) {
+          actualAmount = Number(inv.inr_total_amount);
+        }
+      }
+
       income.push({
         source_type: 'invoice',
         source_id: inv.id,
@@ -486,10 +574,10 @@ export const financeService = {
         transaction_date: inv.invoice_date,
         party_name: inv.customers?.company_name || 'Unknown',
         party_type: 'customer',
-        gross_amount: inv.total_amount,
+        gross_amount: actualAmount,
         tax_amount: inv.tax_amount || 0,
-        net_amount: inv.total_amount,
-        currency: inv.currency_code || 'INR',
+        net_amount: actualAmount,
+        currency: actualCurrency,
         description: 'Invoice Payment'
       });
     });

@@ -1728,7 +1728,7 @@ class InvoiceService {
     // Fetch raw invoice data
     let query = supabase
       .from('invoices')
-      .select('id, status, payment_status, total_amount, inr_total_amount, original_currency_code, invoice_date');
+      .select('id, status, payment_status, total_amount, inr_total_amount, paid_amount, original_currency_code, invoice_date');
 
     if (companySettingsId) {
       query = query.eq('company_settings_id', companySettingsId);
@@ -1744,7 +1744,7 @@ class InvoiceService {
     // Fetch actual payments to get real revenue amounts
     const { data: payments, error: paymentsError } = await supabase
       .from('payments')
-      .select('invoice_id, amount, payment_date');
+      .select('invoice_id, amount, inr_amount, original_amount, original_currency_code, payment_date, created_at, reference_number, notes');
 
     if (paymentsError) {
       console.warn('⚠️ Could not fetch payments table, falling back to invoice amounts:', paymentsError.message);
@@ -1754,24 +1754,50 @@ class InvoiceService {
     const currentMonth = currentDate.getMonth();
     const currentYear = currentDate.getFullYear();
 
-    // Build a set of PAID (non-cancelled) invoice IDs — only payments on paid invoices count as revenue
-    const paidInvoiceIds = new Set(
-      invoices?.filter(i => i.payment_status === 'paid' && i.status !== 'cancelled').map(i => i.id) || []
+    // Build a map of PAID (non-cancelled) invoices
+    const paidInvoicesMap = new Map<string, any>(
+      invoices?.filter(i => i.payment_status === 'paid' && i.status !== 'cancelled').map(i => [i.id, i]) || []
     );
 
-    const validPayments = (payments || []).filter(p => paidInvoiceIds.has(p.invoice_id));
+    // Group payments by invoice_id to handle duplicate payment records from re-marking paid
+    const paymentsByInvoice: Record<string, any[]> = {};
+    (payments || []).forEach(p => {
+      if (paidInvoicesMap.has(p.invoice_id)) {
+        if (!paymentsByInvoice[p.invoice_id]) paymentsByInvoice[p.invoice_id] = [];
+        paymentsByInvoice[p.invoice_id].push(p);
+      }
+    });
 
-    // Revenue = sum of actual payments received (from payments table)
-    const total_revenue = validPayments.reduce((sum, p) => sum + (p.amount || 0), 0);
+    const validPayments = Object.entries(paymentsByInvoice).map(([invId, list]) => {
+      list.sort((a, b) => {
+        const aIsAuto = Boolean((a.reference_number || '').startsWith('AUTO-') || (a.notes || '').includes('Auto-'));
+        const bIsAuto = Boolean((b.reference_number || '').startsWith('AUTO-') || (b.notes || '').includes('Auto-'));
+        if (aIsAuto !== bIsAuto) return aIsAuto ? 1 : -1;
+        const timeB = new Date(b.created_at || b.payment_date || 0).getTime();
+        const timeA = new Date(a.created_at || a.payment_date || 0).getTime();
+        return timeB - timeA;
+      });
+      const topPayment = list[0];
+      const inv = paidInvoicesMap.get(invId);
+      return {
+        ...topPayment,
+        invoice_paid_amount: inv?.paid_amount
+      };
+    });
+
+    // Revenue = sum of actual payments received (from payments table or invoice.paid_amount)
+    // Use inr_amount when available for INR entity reporting, fallback to amount
+    const getPaymentValue = (p: any) => p.invoice_paid_amount || p.inr_amount || (p.original_currency_code === 'INR' ? p.original_amount : null) || p.amount || 0;
+    const total_revenue = validPayments.reduce((sum, p) => sum + getPaymentValue(p), 0);
 
     const this_month_revenue = validPayments.filter(p => {
       const d = new Date(p.payment_date);
       return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
-    }).reduce((sum, p) => sum + (p.amount || 0), 0);
+    }).reduce((sum, p) => sum + getPaymentValue(p), 0);
 
     const this_year_revenue = validPayments.filter(p => {
       return new Date(p.payment_date).getFullYear() === currentYear;
-    }).reduce((sum, p) => sum + (p.amount || 0), 0);
+    }).reduce((sum, p) => sum + getPaymentValue(p), 0);
 
     // Pending = invoice amounts not yet paid.
     // Use native total_amount when companySettingsId is specified so currency value matches the entity currency.
