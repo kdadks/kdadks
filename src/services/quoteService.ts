@@ -843,7 +843,7 @@ class QuoteService {
       })) || []
     };
 
-    const invoice = await invoiceService.createInvoice(invoiceData);
+    const invoice = await invoiceService.createInvoice(invoiceData, undefined, quote.company_settings_id);
 
     // Update quote status to converted
     await supabase

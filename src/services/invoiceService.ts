@@ -120,6 +120,43 @@ class InvoiceService {
     return data;
   }
 
+  /**
+   * Resolves the company entity and determines if it represents the Ireland (IRL) entity
+   */
+  async resolveCompanyEntity(companySettingsId?: string): Promise<{
+    company: CompanySettings | null;
+    entityCode: 'IND' | 'IRL';
+    isIrish: boolean;
+  }> {
+    let company: CompanySettings | null = null;
+    if (companySettingsId) {
+      const companies = await this.getCompanySettings();
+      company = companies.find(c => c.id === companySettingsId) || null;
+      if (!company) {
+        try {
+          const { data } = await supabase
+            .from('company_settings')
+            .select(`*, country:countries(*)`)
+            .eq('id', companySettingsId)
+            .maybeSingle();
+          if (data) company = data;
+        } catch {
+          // ignore error
+        }
+      }
+    }
+
+    if (!company) {
+      company = await this.getDefaultCompanySettings();
+    }
+
+    const countryCode = (company?.country?.code || company?.country_id || '').toUpperCase();
+    const isIrish = countryCode === 'IE' || countryCode === 'IRL' || !!company?.cro_number || !!company?.vat_number;
+    const entityCode: 'IND' | 'IRL' = isIrish ? 'IRL' : 'IND';
+
+    return { company, entityCode, isIrish };
+  }
+
   async updateCompanySettings(id: string, settings: UpdateCompanySettingsData): Promise<CompanySettings> {
     const { data, error } = await supabase
       .from('company_settings')
@@ -178,7 +215,139 @@ class InvoiceService {
     const { data, error } = await query.maybeSingle();
     
     if (error && error.code !== 'PGRST116') throw error;
-    return data;
+
+    // Resolve entity context
+    const { isIrish } = await this.resolveCompanyEntity(companySettingsId);
+
+    if (data) {
+      // For Ireland entity, ensure standard IRL prefix and format
+      if (isIrish) {
+        let needsUpdate = false;
+        let prefix = data.invoice_prefix;
+        let format = data.number_format;
+        if (!format.includes('IRL') && !format.includes('XXXX')) {
+          format = 'INV/IRL/YYYY/MM/XXXX';
+          needsUpdate = true;
+        }
+        if (!prefix.includes('IRL')) {
+          prefix = 'INV/IRL';
+          needsUpdate = true;
+        }
+        if (needsUpdate) {
+          data.invoice_prefix = prefix;
+          data.number_format = format;
+          try {
+            await supabase
+              .from('invoice_settings')
+              .update({ invoice_prefix: prefix, number_format: format })
+              .eq('id', data.id);
+          } catch (e) {
+            console.warn('Could not auto-update IRL invoice format in DB:', e);
+          }
+        }
+      }
+      return data;
+    }
+
+    // No row found in invoice_settings for this company_settings_id
+    if (isIrish) {
+      const currentYear = new Date().getFullYear();
+      const defaultIrlSettings: InvoiceSettings = {
+        id: `irl-settings-${companySettingsId || 'default'}`,
+        company_settings_id: companySettingsId || null,
+        invoice_prefix: 'INV/IRL',
+        invoice_suffix: '',
+        number_format: 'INV/IRL/YYYY/MM/XXXX',
+        current_number: 1,
+        reset_annually: true,
+        financial_year_start_month: 1, // Calendar year (Jan-Dec)
+        current_financial_year: currentYear.toString(),
+        payment_terms: 'Payment due within 30 days',
+        notes: 'Thank you for your business!',
+        footer_text: '',
+        default_tax_rate: 23,
+        enable_gst: false,
+        due_days: 30,
+        late_fee_percentage: 0,
+        template_name: 'default',
+        currency_position: 'before',
+        is_active: true,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+
+      if (companySettingsId) {
+        try {
+          const { data: inserted, error: insertError } = await supabase
+            .from('invoice_settings')
+            .insert({
+              company_settings_id: companySettingsId,
+              invoice_prefix: 'INV/IRL',
+              number_format: 'INV/IRL/YYYY/MM/XXXX',
+              current_number: 1,
+              reset_annually: true,
+              financial_year_start_month: 1,
+              current_financial_year: currentYear.toString(),
+              payment_terms: 'Payment due within 30 days',
+              notes: 'Thank you for your business!',
+              default_tax_rate: 23,
+              enable_gst: false,
+              due_days: 30,
+              template_name: 'default',
+              currency_position: 'before',
+              is_active: true
+            })
+            .select('*')
+            .maybeSingle();
+
+          if (!insertError && inserted) {
+            return inserted;
+          }
+        } catch (insertErr) {
+          console.warn('Could not auto-insert default IRL invoice settings:', insertErr);
+        }
+      }
+      return defaultIrlSettings;
+    }
+
+    // For IND entity, check if global settings (company_settings_id IS NULL) exist
+    if (companySettingsId) {
+      const { data: globalSettings } = await supabase
+        .from('invoice_settings')
+        .select('*')
+        .is('company_settings_id', null)
+        .eq('is_active', true)
+        .maybeSingle();
+      if (globalSettings) {
+        return globalSettings;
+      }
+    }
+
+    // Fallback default IND settings
+    const currentFY = this.calculateFinancialYear(4, new Date());
+    return {
+      id: `ind-settings-${companySettingsId || 'default'}`,
+      company_settings_id: companySettingsId || null,
+      invoice_prefix: 'INV',
+      invoice_suffix: '',
+      number_format: 'PREFIX/YYYY/MM/###',
+      current_number: 1,
+      reset_annually: true,
+      financial_year_start_month: 4,
+      current_financial_year: currentFY,
+      payment_terms: 'Payment due within 30 days',
+      notes: 'Thank you for your business!',
+      footer_text: '',
+      default_tax_rate: 18,
+      enable_gst: true,
+      due_days: 30,
+      late_fee_percentage: 0,
+      template_name: 'default',
+      currency_position: 'inr_before',
+      is_active: true,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
   }
 
   async updateInvoiceSettings(id: string, settings: UpdateInvoiceSettingsData): Promise<InvoiceSettings> {
@@ -558,89 +727,189 @@ class InvoiceService {
   }
 
   // Invoice Number Generation
-  async previewInvoiceNumber(companySettingsId?: string): Promise<string> {
+  /**
+   * Helper to compute next invoice number, sequence and financial year per legal entity
+   * - IND: preserves existing format (PREFIX/YYYY/MM/### e.g. INV/2026/09/010) and sequence
+   * - IRL: uses format INV/IRL/YYYY/MM/XXXX (e.g. INV/IRL/2026/09/0001) with dedicated IRL sequence
+   */
+  private async calculateNextInvoiceDetails(companySettingsId?: string): Promise<{
+    invoiceNumber: string;
+    nextSequentialNumber: number;
+    currentFinancialYear: string;
+    settings: InvoiceSettings;
+    isIrish: boolean;
+    entityCode: 'IND' | 'IRL';
+  }> {
+    const { isIrish, entityCode, company } = await this.resolveCompanyEntity(companySettingsId);
     const settings = await this.getInvoiceSettings(companySettingsId);
     if (!settings) throw new Error('Invoice settings not found');
 
     const currentDate = new Date();
     const currentYear = currentDate.getFullYear();
     const currentMonth = currentDate.getMonth() + 1;
-    
-    // Calculate current financial year
-    const fyStartMonth = settings.financial_year_start_month || 4; // Default to April
-    const currentFinancialYear = this.calculateFinancialYear(fyStartMonth, currentDate);
-    
-    let nextSequentialNumber = settings.current_number;
-    
-    // Check if there are any invoices in the database
-    const { count: invoiceCount } = await supabase
-      .from('invoices')
-      .select('*', { count: 'exact', head: true });
-    
-    const actualInvoiceCount = invoiceCount || 0; // Handle null case
-    
-    console.log(`🔍 Preview - Database state:`, {
-      invoiceCount: actualInvoiceCount,
-      settingsCurrentNumber: settings.current_number,
-      currentFinancialYear,
-      settingsFinancialYear: settings.current_financial_year
-    });
-    
-    // If no invoices exist, reset to 1
-    if (actualInvoiceCount === 0) {
-      nextSequentialNumber = 1;
-      console.log(`🔄 Preview: No invoices found in database - would reset sequential number to 1`);
-    }
-    // Check if we need to reset the counter for new financial year (only if reset_annually is enabled)
-    else if (settings.reset_annually && this.isNewFinancialYear(settings.current_financial_year, currentFinancialYear)) {
-      // New financial year detected - would reset the sequential number
-      nextSequentialNumber = 1;
-      console.log(`🔄 Preview: New financial year detected: ${settings.current_financial_year} → ${currentFinancialYear}`);
-      console.log(`📊 Preview: Would reset sequential number from ${settings.current_number} to 1`);
-    }
-    // Check if settings counter is ahead of actual invoice count for the current financial year (possible data inconsistency)
-    else if (actualInvoiceCount > 0 && settings.current_number > actualInvoiceCount + 1) {
-      // Count invoices in the current financial year to get a more accurate sync point
-      const fyStartDate = new Date(currentYear, fyStartMonth - 1, 1);
-      const fyEndDate = new Date(currentYear + (fyStartMonth <= 3 ? 1 : 0), fyStartMonth - 1, 0);
-      const { count: fyInvoiceCount } = await supabase
+    const currentMonthStr = currentMonth.toString().padStart(2, '0');
+
+    let nextSequentialNumber = settings.current_number || 1;
+    let currentFinancialYear: string;
+
+    if (isIrish) {
+      // ── IRL Entity Logic ──────────────────────────────────────────────────
+      // In Ireland, financial year is the calendar year (Jan - Dec)
+      currentFinancialYear = currentYear.toString();
+
+      // 1. Query existing IRL invoices count
+      let irlCountQuery = supabase
         .from('invoices')
-        .select('*', { count: 'exact', head: true })
-        .gte('created_at', fyStartDate.toISOString())
-        .lte('created_at', fyEndDate.toISOString());
-      const fyActualCount = fyInvoiceCount || 0;
-      if (settings.current_number > fyActualCount + 1) {
-        nextSequentialNumber = fyActualCount + 1;
-        console.log(`⚠️ Preview: Settings counter (${settings.current_number}) ahead of FY invoice count (${fyActualCount}), syncing to ${nextSequentialNumber}`);
+        .select('*', { count: 'exact', head: true });
+
+      if (company?.id) {
+        irlCountQuery = irlCountQuery.or(`company_settings_id.eq.${company.id},invoice_number.ilike.INV/IRL/%`);
+      } else {
+        irlCountQuery = irlCountQuery.ilike('invoice_number', 'INV/IRL/%');
       }
-    }
 
-    // Generate preview number based on format (without saving to database)
-    let previewNumber = settings.number_format;
-    
-    // Handle different format patterns
-    previewNumber = previewNumber.replace(/PREFIX/g, settings.invoice_prefix);
-    previewNumber = previewNumber.replace(/YYYY/g, currentYear.toString());
-    previewNumber = previewNumber.replace(/MM/g, currentMonth.toString().padStart(2, '0'));
-    
-    // Handle dynamic number padding: 3 digits until reaching 1000, then 4+ digits
-    const numberStr = nextSequentialNumber < 1000 
-      ? nextSequentialNumber.toString().padStart(3, '0')
-      : nextSequentialNumber.toString();
-    
-    // Handle different number padding patterns with dynamic logic
-    previewNumber = previewNumber.replace(/####/g, numberStr);
-    previewNumber = previewNumber.replace(/###/g, numberStr);
-    previewNumber = previewNumber.replace(/NNNN/g, numberStr);
-    previewNumber = previewNumber.replace(/NNN/g, numberStr);
-    
-    if (settings.invoice_suffix) {
-      previewNumber = previewNumber.replace(/SUFFIX/g, settings.invoice_suffix);
-    }
+      const { count: irlInvoiceCount } = await irlCountQuery;
+      const actualIrlCount = irlInvoiceCount || 0;
 
-    console.log(`👀 Preview invoice number: ${previewNumber} (FY: ${currentFinancialYear}, Number: ${nextSequentialNumber}, Reset: ${settings.reset_annually}, InvoiceCount: ${invoiceCount})`);
-    
-    return previewNumber;
+      // 2. Query latest IRL invoice in the current year to ensure strictly sequential and collision-free numbers
+      const { data: latestIrlInvoices } = await supabase
+        .from('invoices')
+        .select('invoice_number')
+        .ilike('invoice_number', `INV/IRL/${currentYear}/%`)
+        .order('invoice_number', { ascending: false })
+        .limit(10);
+
+      let maxIrlSeq = 0;
+      if (latestIrlInvoices && latestIrlInvoices.length > 0) {
+        for (const inv of latestIrlInvoices) {
+          if (inv.invoice_number) {
+            const parts = inv.invoice_number.split('/');
+            const lastPart = parts[parts.length - 1];
+            const seq = parseInt(lastPart, 10);
+            if (!isNaN(seq) && seq > maxIrlSeq) {
+              maxIrlSeq = seq;
+            }
+          }
+        }
+      }
+
+      console.log('🇮🇪 IRL Invoice Number State:', {
+        actualIrlCount,
+        maxIrlSeq,
+        settingsCurrentNumber: settings.current_number,
+        currentFinancialYear,
+        settingsFinancialYear: settings.current_financial_year
+      });
+
+      if (actualIrlCount === 0 && maxIrlSeq === 0) {
+        nextSequentialNumber = 1;
+      } else if (settings.reset_annually && settings.current_financial_year && settings.current_financial_year !== currentFinancialYear) {
+        // New calendar year reset
+        nextSequentialNumber = 1;
+      } else {
+        if (maxIrlSeq >= nextSequentialNumber) {
+          nextSequentialNumber = maxIrlSeq + 1;
+        }
+      }
+
+      // Format for IRL: strictly INV/IRL/YYYY/MM/XXXX with 4-digit zero padding
+      const numberStr = nextSequentialNumber.toString().padStart(4, '0');
+      const invoiceNumber = `INV/IRL/${currentYear}/${currentMonthStr}/${numberStr}`;
+
+      return {
+        invoiceNumber,
+        nextSequentialNumber,
+        currentFinancialYear,
+        settings,
+        isIrish: true,
+        entityCode: 'IRL'
+      };
+    } else {
+      // ── IND Entity Logic ──────────────────────────────────────────────────
+      // Preserve existing sequence and format for IND
+      const fyStartMonth = settings.financial_year_start_month || 4; // Default to April
+      currentFinancialYear = this.calculateFinancialYear(fyStartMonth, currentDate);
+
+      // Count only IND invoices (exclude IRL invoices)
+      let indCountQuery = supabase
+        .from('invoices')
+        .select('*', { count: 'exact', head: true });
+
+      if (company?.id) {
+        indCountQuery = indCountQuery.eq('company_settings_id', company.id);
+      } else {
+        indCountQuery = indCountQuery.not('invoice_number', 'ilike', 'INV/IRL/%');
+      }
+
+      const { count: indInvoiceCount } = await indCountQuery;
+      const actualInvoiceCount = indInvoiceCount || 0;
+
+      console.log('🇮🇳 IND Invoice Number State:', {
+        actualInvoiceCount,
+        settingsCurrentNumber: settings.current_number,
+        currentFinancialYear,
+        settingsFinancialYear: settings.current_financial_year
+      });
+
+      if (actualInvoiceCount === 0) {
+        nextSequentialNumber = 1;
+      } else if (settings.reset_annually && this.isNewFinancialYear(settings.current_financial_year, currentFinancialYear)) {
+        nextSequentialNumber = 1;
+      } else if (actualInvoiceCount > 0 && settings.current_number > actualInvoiceCount + 1) {
+        const fyStartDate = new Date(currentYear, fyStartMonth - 1, 1);
+        const fyEndDate = new Date(currentYear + (fyStartMonth <= 3 ? 1 : 0), fyStartMonth - 1, 0);
+        let fyQuery = supabase
+          .from('invoices')
+          .select('*', { count: 'exact', head: true })
+          .gte('created_at', fyStartDate.toISOString())
+          .lte('created_at', fyEndDate.toISOString())
+          .not('invoice_number', 'ilike', 'INV/IRL/%');
+
+        if (company?.id) {
+          fyQuery = fyQuery.eq('company_settings_id', company.id);
+        }
+
+        const { count: fyInvoiceCount } = await fyQuery;
+        const fyActualCount = fyInvoiceCount || 0;
+        if (settings.current_number > fyActualCount + 1) {
+          nextSequentialNumber = fyActualCount + 1;
+        }
+      }
+
+      // Dynamic number padding: 3 digits until 1000, then 4 digits
+      const numberStr = nextSequentialNumber < 1000 
+        ? nextSequentialNumber.toString().padStart(3, '0')
+        : nextSequentialNumber.toString();
+
+      let invoiceNumber = settings.number_format || 'PREFIX/YYYY/MM/###';
+      invoiceNumber = invoiceNumber.replace(/PREFIX/g, settings.invoice_prefix || 'INV');
+      invoiceNumber = invoiceNumber.replace(/YYYY/g, currentYear.toString());
+      invoiceNumber = invoiceNumber.replace(/MM/g, currentMonthStr);
+      invoiceNumber = invoiceNumber.replace(/XXXX/g, numberStr);
+      invoiceNumber = invoiceNumber.replace(/####/g, numberStr);
+      invoiceNumber = invoiceNumber.replace(/###/g, numberStr);
+      invoiceNumber = invoiceNumber.replace(/NNNN/g, numberStr);
+      invoiceNumber = invoiceNumber.replace(/NNN/g, numberStr);
+
+      if (settings.invoice_suffix) {
+        invoiceNumber = invoiceNumber.replace(/SUFFIX/g, settings.invoice_suffix);
+      }
+
+      return {
+        invoiceNumber,
+        nextSequentialNumber,
+        currentFinancialYear,
+        settings,
+        isIrish: false,
+        entityCode: 'IND'
+      };
+    }
+  }
+
+  async previewInvoiceNumber(companySettingsId?: string): Promise<string> {
+    const details = await this.calculateNextInvoiceDetails(companySettingsId);
+    console.log(`👀 Preview invoice number: ${details.invoiceNumber} (Entity: ${details.entityCode}, Next#: ${details.nextSequentialNumber})`);
+    return details.invoiceNumber;
   }
 
   /**
@@ -648,165 +917,49 @@ class InvoiceService {
    * Used for uniqueness checking before final save
    */
   async generateNextInvoiceNumber(companySettingsId?: string): Promise<string> {
-    const settings = await this.getInvoiceSettings(companySettingsId);
-    if (!settings) throw new Error('Invoice settings not found');
-
-    const currentDate = new Date();
-    const currentYear = currentDate.getFullYear();
-    const currentMonth = currentDate.getMonth() + 1;
-    
-    // Calculate current financial year
-    const fyStartMonth = settings.financial_year_start_month || 4; // Default to April
-    const currentFinancialYear = this.calculateFinancialYear(fyStartMonth, currentDate);
-    
-    let nextSequentialNumber = settings.current_number;
-    
-    // Check if there are any invoices in the database
-    const { count: invoiceCount } = await supabase
-      .from('invoices')
-      .select('*', { count: 'exact', head: true });
-    
-    const actualInvoiceCount = invoiceCount || 0; // Handle null case
-    
-    // If no invoices exist, reset to 1
-    if (actualInvoiceCount === 0) {
-      nextSequentialNumber = 1;
-      console.log(`🔄 Generate: No invoices found in database - would use sequential number 1`);
-    }
-    // Check if we need to reset the counter for new financial year (only if reset_annually is enabled)
-    else if (settings.reset_annually && this.isNewFinancialYear(settings.current_financial_year, currentFinancialYear)) {
-      // New financial year detected - would reset the sequential number
-      nextSequentialNumber = 1;
-      console.log(`🔄 Generate: New financial year detected: ${settings.current_financial_year} → ${currentFinancialYear}`);
-      console.log(`📊 Generate: Would reset sequential number from ${settings.current_number} to 1`);
-    }
-    // Check if settings counter is ahead of actual invoice count (possible data inconsistency)
-    else if (actualInvoiceCount > 0 && settings.current_number > actualInvoiceCount + 1) {
-      // Settings counter is ahead, sync it to actual count + 1
-      nextSequentialNumber = actualInvoiceCount + 1;
-      console.log(`⚠️ Generate: Settings counter (${settings.current_number}) ahead of invoice count (${actualInvoiceCount}), syncing to ${nextSequentialNumber}`);
-    }
-
-    // Generate invoice number based on format (without updating database)
-    let invoiceNumber = settings.number_format;
-    
-    // Handle different format patterns
-    invoiceNumber = invoiceNumber.replace(/PREFIX/g, settings.invoice_prefix);
-    invoiceNumber = invoiceNumber.replace(/YYYY/g, currentYear.toString());
-    invoiceNumber = invoiceNumber.replace(/MM/g, currentMonth.toString().padStart(2, '0'));
-    
-    // Handle dynamic number padding: 3 digits until reaching 1000, then 4 digits
-    const numberStr = nextSequentialNumber < 1000 
-      ? nextSequentialNumber.toString().padStart(3, '0')
-      : nextSequentialNumber.toString();
-    
-    // Handle different number padding patterns with dynamic logic
-    invoiceNumber = invoiceNumber.replace(/####/g, numberStr);
-    invoiceNumber = invoiceNumber.replace(/###/g, numberStr);
-    invoiceNumber = invoiceNumber.replace(/NNNN/g, numberStr);
-    invoiceNumber = invoiceNumber.replace(/NNN/g, numberStr);
-    
-    if (settings.invoice_suffix) {
-      invoiceNumber = invoiceNumber.replace(/SUFFIX/g, settings.invoice_suffix);
-    }
-
-    console.log(`🔢 Generated next invoice number (no DB update): ${invoiceNumber} (FY: ${currentFinancialYear}, Number: ${nextSequentialNumber}, InvoiceCount: ${actualInvoiceCount})`);
-    
-    return invoiceNumber;
+    const details = await this.calculateNextInvoiceDetails(companySettingsId);
+    console.log(`🔢 Generated next invoice number (no DB update): ${details.invoiceNumber} (Entity: ${details.entityCode}, Next#: ${details.nextSequentialNumber})`);
+    return details.invoiceNumber;
   }
 
   async generateInvoiceNumber(companySettingsId?: string): Promise<string> {
-    const settings = await this.getInvoiceSettings(companySettingsId);
-    if (!settings) throw new Error('Invoice settings not found');
+    const details = await this.calculateNextInvoiceDetails(companySettingsId);
+    const { invoiceNumber, nextSequentialNumber, currentFinancialYear, settings, isIrish, entityCode } = details;
 
-    const currentDate = new Date();
-    const currentYear = currentDate.getFullYear();
-    const currentMonth = currentDate.getMonth() + 1;
-    
-    // Calculate current financial year
-    const fyStartMonth = settings.financial_year_start_month || 4; // Default to April
-    const currentFinancialYear = this.calculateFinancialYear(fyStartMonth, currentDate);
-    
-    let nextSequentialNumber = settings.current_number;
-    
-    // Check if there are any invoices in the database
-    const { count: invoiceCount } = await supabase
-      .from('invoices')
-      .select('*', { count: 'exact', head: true });
-    
-    const actualInvoiceCount = invoiceCount || 0; // Handle null case
-    
-    console.log(`🔍 Generate - Database state:`, {
-      invoiceCount: actualInvoiceCount,
-      settingsCurrentNumber: settings.current_number,
-      currentFinancialYear,
-      settingsFinancialYear: settings.current_financial_year
-    });
-    
-    // If no invoices exist, reset to 1
-    if (actualInvoiceCount === 0) {
-      nextSequentialNumber = 1;
-      console.log(`🔄 No invoices found in database - resetting sequential number to 1`);
-    }
-    // Check if we need to reset the counter for new financial year (only if reset_annually is enabled)
-    else if (settings.reset_annually && this.isNewFinancialYear(settings.current_financial_year, currentFinancialYear)) {
-      // New financial year detected - reset the sequential number
-      nextSequentialNumber = 1;
-      console.log(`🔄 New financial year detected: ${settings.current_financial_year} → ${currentFinancialYear}`);
-      console.log(`📊 Resetting sequential number from ${settings.current_number} to 1 (Financial Year Start: ${fyStartMonth === 4 ? 'April' : `Month ${fyStartMonth}`})`);
-    }
-    // Check if settings counter is ahead of actual invoice count for the current financial year (possible data inconsistency)
-    else if (actualInvoiceCount > 0 && settings.current_number > actualInvoiceCount + 1) {
-      // Count invoices in the current financial year to get a more accurate sync point
-      const fyStartDate = new Date(currentYear, fyStartMonth - 1, 1);
-      const fyEndDate = new Date(currentYear + (fyStartMonth <= 3 ? 1 : 0), fyStartMonth - 1, 0);
-      const { count: fyInvoiceCount } = await supabase
-        .from('invoices')
-        .select('*', { count: 'exact', head: true })
-        .gte('created_at', fyStartDate.toISOString())
-        .lte('created_at', fyEndDate.toISOString());
-      const fyActualCount = fyInvoiceCount || 0;
-      if (settings.current_number > fyActualCount + 1) {
-        nextSequentialNumber = fyActualCount + 1;
-        console.log(`⚠️ Generate: Settings counter (${settings.current_number}) ahead of FY invoice count (${fyActualCount}), syncing to ${nextSequentialNumber}`);
+    // Update settings in database to reserve sequential number
+    try {
+      if (settings.id && !settings.id.startsWith('irl-settings-') && !settings.id.startsWith('ind-settings-')) {
+        await supabase
+          .from('invoice_settings')
+          .update({
+            current_number: nextSequentialNumber + 1,
+            current_financial_year: currentFinancialYear
+          })
+          .eq('id', settings.id);
+      } else if (companySettingsId) {
+        await supabase
+          .from('invoice_settings')
+          .upsert({
+            company_settings_id: companySettingsId,
+            invoice_prefix: isIrish ? 'INV/IRL' : (settings.invoice_prefix || 'INV'),
+            number_format: isIrish ? 'INV/IRL/YYYY/MM/XXXX' : (settings.number_format || 'PREFIX/YYYY/MM/###'),
+            current_number: nextSequentialNumber + 1,
+            current_financial_year: currentFinancialYear,
+            reset_annually: settings.reset_annually,
+            financial_year_start_month: isIrish ? 1 : (settings.financial_year_start_month || 4),
+            default_tax_rate: isIrish ? 23 : (settings.default_tax_rate || 18),
+            enable_gst: isIrish ? false : (settings.enable_gst ?? true),
+            due_days: settings.due_days || 30,
+            template_name: settings.template_name || 'default',
+            currency_position: isIrish ? 'before' : (settings.currency_position || 'inr_before'),
+            is_active: true
+          }, { onConflict: 'company_settings_id' });
       }
+    } catch (saveErr) {
+      console.warn(`Could not update invoice settings counter in DB for ${entityCode}:`, saveErr);
     }
 
-    // Generate invoice number based on format
-    let invoiceNumber = settings.number_format;
-    
-    // Handle different format patterns
-    invoiceNumber = invoiceNumber.replace(/PREFIX/g, settings.invoice_prefix);
-    invoiceNumber = invoiceNumber.replace(/YYYY/g, currentYear.toString());
-    invoiceNumber = invoiceNumber.replace(/MM/g, currentMonth.toString().padStart(2, '0'));
-    
-    // Handle dynamic number padding: 3 digits until reaching 1000, then 4 digits
-    const numberStr = nextSequentialNumber < 1000 
-      ? nextSequentialNumber.toString().padStart(3, '0')
-      : nextSequentialNumber.toString();
-    
-    // Handle different number padding patterns with dynamic logic
-    invoiceNumber = invoiceNumber.replace(/####/g, numberStr);
-    invoiceNumber = invoiceNumber.replace(/###/g, numberStr);
-    invoiceNumber = invoiceNumber.replace(/NNNN/g, numberStr);
-    invoiceNumber = invoiceNumber.replace(/NNN/g, numberStr);
-    
-    if (settings.invoice_suffix) {
-      invoiceNumber = invoiceNumber.replace(/SUFFIX/g, settings.invoice_suffix);
-    }
-
-    // Update current number and current financial year in database
-    // This ensures the next invoice gets the correct incremented number
-    await supabase
-      .from('invoice_settings')
-      .update({ 
-        current_number: nextSequentialNumber + 1, // Set to next number for the next invoice
-        current_financial_year: currentFinancialYear // Store current financial year for future comparison
-      })
-      .eq('id', settings.id);
-
-    console.log(`📋 Generated and reserved invoice number: ${invoiceNumber} (FY: ${currentFinancialYear}, Next#: ${nextSequentialNumber + 1}, Reset: ${settings.reset_annually}, InvoiceCount: ${invoiceCount})`);
-    
+    console.log(`📋 Generated and reserved invoice number: ${invoiceNumber} (Entity: ${entityCode}, FY: ${currentFinancialYear}, Next#: ${nextSequentialNumber + 1})`);
     return invoiceNumber;
   }
 
@@ -907,6 +1060,7 @@ class InvoiceService {
 
     for (const sub of dueSubs) {
       try {
+        const subCompanyId = sub.company_settings_id || sub.customer?.company_settings_id;
         const invoice = await invoiceService.createInvoice({
           customer_id: sub.customer_id,
           invoice_date: sub.next_billing_date || new Date().toISOString().split('T')[0],
@@ -926,7 +1080,7 @@ class InvoiceService {
               tax_rate: 0,
             },
           ],
-        }, undefined, undefined);
+        }, undefined, subCompanyId);
 
         // Update the subscription's next_billing_date
         const newNextDate = sub.plan?.billing_interval === 'monthly'
@@ -944,6 +1098,18 @@ class InvoiceService {
   }
 
   async createInvoice(invoiceData: CreateInvoiceData, invoiceNumber?: string, companySettingsId?: string): Promise<Invoice> {
+    // If companySettingsId not provided, check if customer is linked to a specific company
+    if (!companySettingsId && invoiceData.customer_id) {
+      try {
+        const customer = await this.getCustomerById(invoiceData.customer_id);
+        if (customer?.company_settings_id) {
+          companySettingsId = customer.company_settings_id;
+        }
+      } catch {
+        // ignore error
+      }
+    }
+
     let finalInvoiceNumber: string;
     
     if (invoiceNumber) {
@@ -1691,7 +1857,7 @@ class InvoiceService {
     };
 
     // Create the new invoice
-    return await this.createInvoice(newInvoiceData);
+    return await this.createInvoice(newInvoiceData, undefined, originalInvoice.company_settings_id);
   }
 
   // Payments
@@ -2378,7 +2544,7 @@ class InvoiceService {
         }))
       };
 
-      const invoice = await this.createInvoice(invoiceData);
+      const invoice = await this.createInvoice(invoiceData, undefined, quote.company_settings_id);
       invoices.push({
         invoiceId: invoice.id,
         invoiceNumber: invoice.invoice_number
@@ -2439,7 +2605,7 @@ class InvoiceService {
           }))
         };
 
-        const invoice = await this.createInvoice(invoiceData);
+        const invoice = await this.createInvoice(invoiceData, undefined, quote.company_settings_id);
         invoices.push({
           invoiceId: invoice.id,
           invoiceNumber: invoice.invoice_number

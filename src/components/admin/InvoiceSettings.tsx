@@ -398,23 +398,26 @@ const InvoiceSettings: React.FC = () => {
   const openInvoiceSettingsModal = (mode: 'view' | 'edit' | 'add', settings?: InvoiceSettings) => {
     setInvoiceSettingsModalMode(mode);
 
+    const isIrish = selectedCompany?.country_id === 'IE' || selectedCompany?.country?.code === 'IE' || selectedCompany?.country?.code === 'IRL' || !!selectedCompany?.cro_number || !!selectedCompany?.vat_number;
+    const currentYr = new Date().getFullYear();
+
     if (mode === 'add') {
       setInvoiceSettingsFormData({
-        invoice_prefix: 'INV',
+        invoice_prefix: isIrish ? 'INV/IRL' : 'INV',
         invoice_suffix: '',
-        number_format: 'PREFIX/YYYY/MM/###',
+        number_format: isIrish ? 'INV/IRL/YYYY/MM/XXXX' : 'PREFIX/YYYY/MM/###',
         reset_annually: true,
-        financial_year_start_month: 4,
-        current_financial_year: '2024-25',
+        financial_year_start_month: isIrish ? 1 : 4,
+        current_financial_year: isIrish ? currentYr.toString() : '2026-27',
         payment_terms: '',
         notes: '',
         footer_text: '',
-        default_tax_rate: 18,
-        enable_gst: true,
+        default_tax_rate: isIrish ? 23 : 18,
+        enable_gst: !isIrish,
         due_days: 30,
         late_fee_percentage: 0,
         template_name: 'default',
-        currency_position: 'inr_before'
+        currency_position: isIrish ? 'before' : 'inr_before'
       });
     } else if (settings) {
       setInvoiceSettingsFormData({
@@ -928,7 +931,9 @@ const InvoiceSettings: React.FC = () => {
                     isReadOnly ? 'bg-gray-50 text-gray-500' : ''
                   }`}
                 >
-                  <option value="PREFIX/YYYY/MM/###">PREFIX/YYYY/MM/### (INV/2026/06/010)</option>
+                  <option value="PREFIX/YYYY/MM/###">PREFIX/YYYY/MM/### (INV/2026/06/010 - India)</option>
+                  <option value="INV/IRL/YYYY/MM/XXXX">INV/IRL/YYYY/MM/XXXX (INV/IRL/2026/06/0001 - Ireland)</option>
+                  <option value="PREFIX/YYYY/MM/XXXX">PREFIX/YYYY/MM/XXXX (INV/IRL/2026/06/0001)</option>
                   <option value="YYYY-MM-####">YYYY-MM-#### (2024-01-0001)</option>
                   <option value="####">#### (0001)</option>
                   <option value="YYYY####">YYYY#### (20240001)</option>

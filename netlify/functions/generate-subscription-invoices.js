@@ -103,9 +103,10 @@ exports.handler = async (event) => {
 
         // Determine billing currency: use plan's currency (may differ from customer's default)
         const currencyCode = plan.currency_code || 'INR';
+        const isIrish = currencyCode === 'EUR' || customer?.country?.code === 'IE' || customer?.country?.code === 'IRL';
 
         // Generate invoice number
-        const invoiceNumber = await generateInvoiceNumber(supabase, invoiceSettings);
+        const invoiceNumber = await generateInvoiceNumber(supabase, invoiceSettings, isIrish);
 
         // Build line item description
         const billingPeriod = formatBillingPeriod(sub.next_billing_date, plan.billing_interval);
@@ -212,15 +213,34 @@ exports.handler = async (event) => {
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-async function generateInvoiceNumber(supabase, settings) {
+async function generateInvoiceNumber(supabase, settings, isIrish = false) {
   const now = new Date();
   const year = now.getFullYear();
   const month = (now.getMonth() + 1).toString().padStart(2, '0');
 
-  // Count existing invoices to determine next sequential number
+  if (isIrish) {
+    const { count } = await supabase
+      .from('invoices')
+      .select('*', { count: 'exact', head: true })
+      .ilike('invoice_number', 'INV/IRL/%');
+
+    const seq = (count || 0) + 1;
+    const numStr = seq.toString().padStart(4, '0');
+    const num = `INV/IRL/${year}/${month}/${numStr}`;
+    if (settings && settings.id) {
+      await supabase
+        .from('invoice_settings')
+        .update({ current_number: seq + 1 })
+        .eq('id', settings.id);
+    }
+    return num;
+  }
+
+  // Count existing IND invoices to determine next sequential number (exclude IRL invoices)
   const { count } = await supabase
     .from('invoices')
-    .select('*', { count: 'exact', head: true });
+    .select('*', { count: 'exact', head: true })
+    .not('invoice_number', 'ilike', 'INV/IRL/%');
 
   const seq = (count || 0) + 1;
   const numStr = seq < 1000 ? seq.toString().padStart(3, '0') : seq.toString();
@@ -229,6 +249,7 @@ async function generateInvoiceNumber(supabase, settings) {
   num = num.replace(/PREFIX/g, settings.invoice_prefix || 'INV');
   num = num.replace(/YYYY/g, year.toString());
   num = num.replace(/MM/g, month);
+  num = num.replace(/XXXX/g, numStr);
   num = num.replace(/####/g, numStr);
   num = num.replace(/###/g, numStr);
   num = num.replace(/NNNN/g, numStr);
@@ -238,10 +259,12 @@ async function generateInvoiceNumber(supabase, settings) {
   }
 
   // Update the counter in invoice_settings
-  await supabase
-    .from('invoice_settings')
-    .update({ current_number: seq + 1 })
-    .eq('id', settings.id);
+  if (settings && settings.id) {
+    await supabase
+      .from('invoice_settings')
+      .update({ current_number: seq + 1 })
+      .eq('id', settings.id);
+  }
 
   return num;
 }

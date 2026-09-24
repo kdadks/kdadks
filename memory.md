@@ -1,6 +1,6 @@
 # Project Memory — KDADKS Website
 
-> Auto-updated by Kilo agent after every implementation. Last updated: 2026-09-11 15:53 BST
+> Auto-updated by Kilo agent after every implementation. Last updated: 2026-09-24 17:05 BST
 
 A comprehensive knowledge base for the KDADKS website codebase. This file serves as a single source of truth for project architecture, conventions, patterns, menu structures, and key implementation details.
 
@@ -532,13 +532,25 @@ try {
 }
 ```
 
-### Invoice Numbering
+### Invoice Numbering & Multi-Entity Sequence Isolation
 
-- Format: `INV/YYYY/MM/###` (auto-generated)
-- Uses Supabase RPC: `get_next_lead_opportunity_number({ p_record_type: 'lead'|'opportunity' })`
-- Collision detection implemented in `QuoteManagement.tsx` (retry loop up to 10 attempts)
-- Lead numbers and Opportunity numbers also use the same RPC function
-- Invoice numbers may use a separate mechanism via `invoiceService.generateInvoiceNumber()`
+Invoice numbers are generated strictly per legal entity to ensure sequence independence and clear jurisdiction identification:
+- **India Legal Entity (IND):**
+  - **Format:** `INV/YYYY/MM/###` (e.g., `INV/2026/09/010`), retaining dynamic padding (3 digits until reaching 1000, then 4 digits: `001`, `010`, `1000`).
+  - **Financial Year:** Starts April 1 (`fyStartMonth: 4`, format `YYYY-YY` e.g., `2026-27`). Annual reset aligns with Indian fiscal year.
+  - **Sequence Isolation:** Counter is maintained independently in `invoice_settings` (for India company or global default) and counts only IND entity invoices (excluding `/IRL/` numbers).
+- **Ireland Legal Entity (IRL):**
+  - **Format:** `INV/IRL/YYYY/MM/XXXX` (e.g., `INV/IRL/2026/09/0001`), strictly requiring 4-digit zero padding (`0001`, `0002`, ..., `0015`).
+  - **Financial Year:** Calendar year (`fyStartMonth: 1`, format `YYYY` e.g., `2026`), resetting annually on January 1.
+  - **Sequence Isolation:** Counter is maintained independently in `invoice_settings` (`company_settings_id` = Ireland entity ID). Scans existing IRL invoices (`INV/IRL/YYYY/%`) to ensure zero sequence collisions.
+- **Service Implementation (`src/services/invoiceService.ts`):**
+  - `resolveCompanyEntity(companySettingsId)`: Introspects `country_id`, `country.code`, `cro_number`, `vat_number`, or default company to resolve `isIrish` and `entityCode: 'IND' | 'IRL'`.
+  - `getInvoiceSettings(companySettingsId)`: Entity-aware retrieval with automatic in-memory and database fallbacks for both Ireland (`INV/IRL/YYYY/MM/XXXX`, 23% VAT, calendar FY) and India (`PREFIX/YYYY/MM/###`, 18% GST, April FY).
+  - `previewInvoiceNumber`, `generateNextInvoiceNumber`, `generateInvoiceNumber`: Route through shared `calculateNextInvoiceDetails` with entity-isolated invoice counts and sequence tracking.
+  - Entity-context propagation: `quoteService.convertToInvoice`, `invoiceService.createInvoicesFromQuote`, `duplicateInvoice`, and subscription invoicing all pass `company_settings_id` to guarantee the resulting invoices belong to and are numbered for the appropriate legal entity.
+- **Configuration UI (`src/components/admin/InvoiceSettings.tsx`):**
+  - Displays `INV/IRL/YYYY/MM/XXXX` option in Number Format selector.
+  - Automatically pre-populates Ireland defaults (prefix `INV/IRL`, calendar year, 23% VAT, GST disabled) when configuring settings for an Irish company.
 
 ### Currency Handling
 
@@ -548,6 +560,7 @@ try {
 - PDF generation uses ASCII-safe currency symbols (Rs., $, EUR, etc.) to avoid Unicode issues with Helvetica font
 - Indian number formatting (lakh/crore system) in PDF generators
 - `formatAmountInWords()` converts numbers to words (Indian system: crore/lakh/thousand)
+- Responsive column wrapping via jsPDF `splitTextToSize`: Customer names (e.g. `customer.company_name` / `party_b_name`), attention lines, addresses, contact lines, tax fields, and company names in Quote (`QuoteManagement.tsx`), Contract (`contractPDFGenerator.ts`), and Invoice (`InvoiceManagement.tsx` download & email PDFs) are wrapped to column width bounds (85mm for two-column Bill To/From, `columnWidth` for Contract Parties and Signature blocks), preventing horizontal truncation on long customer names (e.g. `IRL-2026-0006`).
 
 ### Multi-Entity Filtering
 
@@ -637,7 +650,14 @@ The complete sales pipeline with status/stage transitions:
 
 ### Contract Management (`src/components/contract/ContractManagement.tsx`)
 
-- Overhauled contract PDF generator ([`contractPDFGenerator.ts`](file:///Users/prashant/Documents/Application%20directory/Kdadks/src/utils/contractPDFGenerator.ts)) with enterprise-grade typography and table formatting:
+- Overhauled contract PDF generator ([`contractPDFGenerator.ts`](file:///Users/prashant/Documents/Application%20directory/Kdadks/src/utils/contractPDFGenerator.ts)) with enterprise-grade typography, parties rendering, and table formatting:
+  - Added `await this.addPartiesSection()` invocation in `generate()` (previously omitted during layout redesign), ensuring Parties information is placed after the Contract Title and before the Preamble / Numbered Sections.
+  - Configured `includeParties?: boolean` in `ContractPDFOptions` (defaulting to `true`).
+  - Enhanced `addPartiesSection()` with:
+    - Page break check (`await this.checkPageBreak(35)`).
+    - Corporate Blue header (`PARTIES TO THE AGREEMENT`) and Slate divider lines.
+    - Comprehensive 2-column layout for Party A (First Party) and Party B (Second Party) with `splitTextToSize` line wrapping for company names, addresses, and contacts.
+    - Full tax registration rendering: PAN (`party_a_pan`, `party_b_pan`), GSTIN (`party_a_gstin`, `party_b_gstin`), VAT Number (`party_a_vat_number`, `party_b_vat_number`), and CRO Number (`party_a_cro_number`, `party_b_cro_number`).
   - Smart proportional column width allocation (`colWeights` prioritizing description columns while narrowing `#` / `Phase` / `S.No` index columns).
   - Per-row footer boundary checking (`this.currentY + rHeight > this.contentEndY - 2`), preventing tables from overlapping page footers, branding banners, or page numbers.
   - Repeated table header rendering on multi-page table breaks.
@@ -911,6 +931,10 @@ Migrated database files in order:
 - `038_itsm_support_portal.sql` — ITSM support tables, SLA calculation function & sequence RPC `get_next_itsm_ticket_number`
 - `039_customer_auth_credentials.sql` — Customer PBKDF2 password hash & reset token columns
 - `040_itsm_csat_multi_question.sql` — Added `responses` JSONB column to `itsm_csat_surveys` for 5-question breakdown
+- `041_add_submitter_and_assigned_person_to_leads.sql` — Submitter and assigned person fields for leads
+- `042_add_relationship_manager_to_customers.sql` — Relationship manager field for customers
+- `043_add_paid_amount_to_invoices.sql` — Separate paid amount, paid currency, and paid date fields for invoices
+- `044_irl_entity_invoice_numbering.sql` — Multi-entity unique invoice numbering and IRL `INV/IRL/YYYY/MM/XXXX` format configuration
 
 **Important:** `.gitignore` ignores `*.sql` at root — SQL files must be in subdirectories (`database/migrations/`) to be tracked.
 

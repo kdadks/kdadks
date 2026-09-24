@@ -1748,16 +1748,18 @@ const getBankingCodeField = (company: CompanySettings | undefined | null): keyof
       fromYPos += 5;
       downloadPdf.setFontSize(11);
       downloadPdf.setFont('helvetica', 'bold');
-      downloadPdf.text(company.company_name, leftMargin, fromYPos);
+      const companyNameLines = downloadPdf.splitTextToSize(company.company_name, 85);
+      downloadPdf.text(companyNameLines, leftMargin, fromYPos);
+      fromYPos += companyNameLines.length * 4.5;
       
-      fromYPos += 4;
       downloadPdf.setFontSize(8);
       downloadPdf.setFont('helvetica', 'normal');
       downloadPdf.setTextColor(60, 60, 60);
       
       if (company.legal_name && company.legal_name !== company.company_name) {
-        downloadPdf.text(company.legal_name, leftMargin, fromYPos);
-        fromYPos += 4;
+        const legalNameLines = downloadPdf.splitTextToSize(company.legal_name, 85);
+        downloadPdf.text(legalNameLines, leftMargin, fromYPos);
+        fromYPos += legalNameLines.length * 4;
       }
       
       if (company.address_line1) {
@@ -1780,18 +1782,21 @@ const getBankingCodeField = (company: CompanySettings | undefined | null): keyof
       }
       
       if (company.email) {
-        downloadPdf.text('Email: ' + String(company.email), leftMargin, fromYPos);
-        fromYPos += 4;
+        const emailLines = downloadPdf.splitTextToSize('Email: ' + String(company.email), 85);
+        downloadPdf.text(emailLines, leftMargin, fromYPos);
+        fromYPos += emailLines.length * 4;
       }
       
       if (company.phone) {
-        downloadPdf.text('Phone: ' + String(company.phone), leftMargin, fromYPos);
-        fromYPos += 4;
+        const phoneLines = downloadPdf.splitTextToSize('Phone: ' + String(company.phone), 85);
+        downloadPdf.text(phoneLines, leftMargin, fromYPos);
+        fromYPos += phoneLines.length * 4;
       }
       
       if (company.website) {
-        downloadPdf.text('Website: ' + String(company.website), leftMargin, fromYPos);
-        fromYPos += 4;
+        const websiteLines = downloadPdf.splitTextToSize('Website: ' + String(company.website), 85);
+        downloadPdf.text(websiteLines, leftMargin, fromYPos);
+        fromYPos += websiteLines.length * 4;
       }
       
       const companyWithCountry = { country: company.country } as Customer;
@@ -1799,18 +1804,21 @@ const getBankingCodeField = (company: CompanySettings | undefined | null): keyof
       taxFields.fields.forEach((field) => {
         const value = company[field.key as keyof CompanySettings] as string | undefined;
         if (value) {
-          downloadPdf.text(`${field.label}: ` + String(value), leftMargin, fromYPos);
-          fromYPos += 4;
+          const fieldLines = downloadPdf.splitTextToSize(`${field.label}: ` + String(value), 85);
+          downloadPdf.text(fieldLines, leftMargin, fromYPos);
+          fromYPos += fieldLines.length * 4;
         }
       });
       
       if (company.pan && !taxFields.fields.some(f => f.key === 'pan')) {
         const panLabel = (company.country?.code === 'IN' || company.country?.code === 'IND') ? 'PAN' : 'Tax ID';
-        downloadPdf.text(`${panLabel}: ` + String(company.pan), leftMargin, fromYPos);
-        fromYPos += 4;
+        const panLines = downloadPdf.splitTextToSize(`${panLabel}: ` + String(company.pan), 85);
+        downloadPdf.text(panLines, leftMargin, fromYPos);
+        fromYPos += panLines.length * 4;
       }
       
       // BILL TO Section (Right Column) - aligned with FROM section
+      const billToMaxWidth = 85;
       downloadPdf.setTextColor(0, 0, 0);
       downloadPdf.setFontSize(9);
       downloadPdf.setFont('helvetica', 'bold');
@@ -1820,51 +1828,64 @@ const getBankingCodeField = (company: CompanySettings | undefined | null): keyof
       downloadPdf.setFontSize(11);
       downloadPdf.setFont('helvetica', 'bold');
       downloadPdf.setTextColor(37, 99, 235);
-      downloadPdf.text(customer.company_name || customer.contact_person || 'N/A', billToX, billToYPos);
+      const customerName = customer.company_name || customer.contact_person || 'N/A';
+      const customerNameLines = downloadPdf.splitTextToSize(customerName, billToMaxWidth);
+      downloadPdf.text(customerNameLines, billToX, billToYPos);
+      billToYPos += customerNameLines.length * 4.5;
       
-      billToYPos += 4;
       downloadPdf.setFontSize(8);
       downloadPdf.setFont('helvetica', 'normal');
       downloadPdf.setTextColor(60, 60, 60);
       
       if (customer.contact_person && customer.company_name) {
-        downloadPdf.text('Attn: ' + String(customer.contact_person), billToX, billToYPos);
-        billToYPos += 4;
+        const attnLines = downloadPdf.splitTextToSize('Attn: ' + String(customer.contact_person), billToMaxWidth);
+        downloadPdf.text(attnLines, billToX, billToYPos);
+        billToYPos += attnLines.length * 4;
       }
       
       if (customer.address_line1) {
-        const address1Lines = downloadPdf.splitTextToSize(customer.address_line1, 85);
+        const address1Lines = downloadPdf.splitTextToSize(customer.address_line1, billToMaxWidth);
         downloadPdf.text(address1Lines, billToX, billToYPos);
         billToYPos += address1Lines.length * 4;
       }
       
       if (customer.address_line2) {
-        const address2Lines = downloadPdf.splitTextToSize(customer.address_line2, 85);
+        const address2Lines = downloadPdf.splitTextToSize(customer.address_line2, billToMaxWidth);
         downloadPdf.text(address2Lines, billToX, billToYPos);
         billToYPos += address2Lines.length * 4;
       }
       
       const customerLocation = [customer.city, customer.state, customer.postal_code].filter(Boolean).join(', ');
       if (customerLocation) {
-        const locationLines = downloadPdf.splitTextToSize(customerLocation, 85);
+        const locationLines = downloadPdf.splitTextToSize(customerLocation, billToMaxWidth);
         downloadPdf.text(locationLines, billToX, billToYPos);
         billToYPos += locationLines.length * 4;
       }
       
       if (customer.email) {
-        downloadPdf.text('Email: ' + String(customer.email), billToX, billToYPos);
-        billToYPos += 4;
+        const emailLines = downloadPdf.splitTextToSize('Email: ' + String(customer.email), billToMaxWidth);
+        downloadPdf.text(emailLines, billToX, billToYPos);
+        billToYPos += emailLines.length * 4;
       }
       
       if (customer.phone) {
-        downloadPdf.text('Phone: ' + String(customer.phone), billToX, billToYPos);
-        billToYPos += 4;
+        const phoneLines = downloadPdf.splitTextToSize('Phone: ' + String(customer.phone), billToMaxWidth);
+        downloadPdf.text(phoneLines, billToX, billToYPos);
+        billToYPos += phoneLines.length * 4;
       }
       
       if (customer.gstin) {
         const taxRegLabel = getTaxRegistrationLabel(customer);
-        downloadPdf.text(`${taxRegLabel}: ` + String(customer.gstin), billToX, billToYPos);
-        billToYPos += 4;
+        const taxRegLines = downloadPdf.splitTextToSize(`${taxRegLabel}: ` + String(customer.gstin), billToMaxWidth);
+        downloadPdf.text(taxRegLines, billToX, billToYPos);
+        billToYPos += taxRegLines.length * 4;
+      }
+
+      if (customer.pan) {
+        const panLabel = (customer.country?.code === 'IN' || customer.country?.code === 'IND') ? 'PAN' : 'Tax ID';
+        const panLines = downloadPdf.splitTextToSize(`${panLabel}: ` + String(customer.pan), billToMaxWidth);
+        downloadPdf.text(panLines, billToX, billToYPos);
+        billToYPos += panLines.length * 4;
       }
       
       // Payment Status Badge - compact and professional
@@ -2814,47 +2835,55 @@ const getBankingCodeField = (company: CompanySettings | undefined | null): keyof
       fromYPos += 5;
       emailPdf.setFontSize(11);
       emailPdf.setFont('helvetica', 'bold');
-      emailPdf.text(company.company_name, leftMargin, fromYPos);
+      const companyNameLines = emailPdf.splitTextToSize(company.company_name, 85);
+      emailPdf.text(companyNameLines, leftMargin, fromYPos);
+      fromYPos += companyNameLines.length * 4.5;
       
-      fromYPos += 4;
       emailPdf.setFontSize(8);
       emailPdf.setFont('helvetica', 'normal');
       emailPdf.setTextColor(60, 60, 60);
       
       if (company.legal_name && company.legal_name !== company.company_name) {
-        emailPdf.text(company.legal_name, leftMargin, fromYPos);
-        fromYPos += 4;
+        const legalNameLines = emailPdf.splitTextToSize(company.legal_name, 85);
+        emailPdf.text(legalNameLines, leftMargin, fromYPos);
+        fromYPos += legalNameLines.length * 4;
       }
       
       if (company.address_line1) {
-        emailPdf.text(company.address_line1, leftMargin, fromYPos);
-        fromYPos += 4;
+        const address1Lines = emailPdf.splitTextToSize(company.address_line1, 85);
+        emailPdf.text(address1Lines, leftMargin, fromYPos);
+        fromYPos += address1Lines.length * 4;
       }
       
       if (company.address_line2) {
-        emailPdf.text(company.address_line2, leftMargin, fromYPos);
-        fromYPos += 4;
+        const address2Lines = emailPdf.splitTextToSize(company.address_line2, 85);
+        emailPdf.text(address2Lines, leftMargin, fromYPos);
+        fromYPos += address2Lines.length * 4;
       }
       
       const companyLocation = [company.city, company.state, company.postal_code].filter(Boolean).join(', ');
       if (companyLocation) {
-        emailPdf.text(companyLocation, leftMargin, fromYPos);
-        fromYPos += 4;
+        const locationLines = emailPdf.splitTextToSize(companyLocation, 85);
+        emailPdf.text(locationLines, leftMargin, fromYPos);
+        fromYPos += locationLines.length * 4;
       }
       
       if (company.email) {
-        emailPdf.text('Email: ' + company.email, leftMargin, fromYPos);
-        fromYPos += 4;
+        const emailLines = emailPdf.splitTextToSize('Email: ' + company.email, 85);
+        emailPdf.text(emailLines, leftMargin, fromYPos);
+        fromYPos += emailLines.length * 4;
       }
       
       if (company.phone) {
-        emailPdf.text('Phone: ' + company.phone, leftMargin, fromYPos);
-        fromYPos += 4;
+        const phoneLines = emailPdf.splitTextToSize('Phone: ' + company.phone, 85);
+        emailPdf.text(phoneLines, leftMargin, fromYPos);
+        fromYPos += phoneLines.length * 4;
       }
       
       if (company.website) {
-        emailPdf.text('Website: ' + company.website, leftMargin, fromYPos);
-        fromYPos += 4;
+        const websiteLines = emailPdf.splitTextToSize('Website: ' + company.website, 85);
+        emailPdf.text(websiteLines, leftMargin, fromYPos);
+        fromYPos += websiteLines.length * 4;
       }
       
       const companyWithCountry = { country: company.country } as Customer;
@@ -2862,15 +2891,17 @@ const getBankingCodeField = (company: CompanySettings | undefined | null): keyof
       taxFields.fields.forEach((field) => {
         const value = company[field.key as keyof CompanySettings] as string | undefined;
         if (value) {
-          emailPdf.text(`${field.label}: ` + value, leftMargin, fromYPos);
-          fromYPos += 4;
+          const fieldLines = emailPdf.splitTextToSize(`${field.label}: ` + value, 85);
+          emailPdf.text(fieldLines, leftMargin, fromYPos);
+          fromYPos += fieldLines.length * 4;
         }
       });
       
       if (company.pan && !taxFields.fields.some(f => f.key === 'pan')) {
         const panLabel = (company.country?.code === 'IN' || company.country?.code === 'IND') ? 'PAN' : 'Tax ID';
-        emailPdf.text(`${panLabel}: ` + company.pan, leftMargin, fromYPos);
-        fromYPos += 4;
+        const panLines = emailPdf.splitTextToSize(`${panLabel}: ` + company.pan, 85);
+        emailPdf.text(panLines, leftMargin, fromYPos);
+        fromYPos += panLines.length * 4;
       }
       
       // BILL TO Section (Right Column) - aligned with FROM section
@@ -2888,7 +2919,7 @@ const getBankingCodeField = (company: CompanySettings | undefined | null): keyof
       const customerName = customer.company_name || customer.contact_person || 'N/A';
       const customerNameLines = emailPdf.splitTextToSize(customerName, billToMaxWidth);
       emailPdf.text(customerNameLines, billToX, billToYPos);
-      billToYPos += customerNameLines.length * 4;
+      billToYPos += customerNameLines.length * 4.5;
       
       emailPdf.setFontSize(8);
       emailPdf.setFont('helvetica', 'normal');
@@ -2940,6 +2971,14 @@ const getBankingCodeField = (company: CompanySettings | undefined | null): keyof
         const taxRegLines = emailPdf.splitTextToSize(taxRegText, billToMaxWidth);
         emailPdf.text(taxRegLines, billToX, billToYPos);
         billToYPos += taxRegLines.length * 4;
+      }
+
+      if (customer.pan) {
+        const panLabel = (customer.country?.code === 'IN' || customer.country?.code === 'IND') ? 'PAN' : 'Tax ID';
+        const panText = `${panLabel}: ` + customer.pan;
+        const panLines = emailPdf.splitTextToSize(panText, billToMaxWidth);
+        emailPdf.text(panLines, billToX, billToYPos);
+        billToYPos += panLines.length * 4;
       }
       
       // Payment Status Badge - compact and professional
@@ -3980,14 +4019,21 @@ const getBankingCodeField = (company: CompanySettings | undefined | null): keyof
         setTotalPages(invoicesData.total_pages);
       } else if (activeTab === 'create-invoice') {
         const entityFilter = { company_settings_id: selectedCompany?.id };
-        const [customersData, productsData, termsData] = await Promise.all([
+        const [customersData, productsData, termsData, previewNumber] = await Promise.all([
           invoiceService.getCustomers(entityFilter, 1, 1000),
           invoiceService.getProducts({}, 1, 1000),
-          invoiceService.getTermsTemplates()
+          invoiceService.getTermsTemplates(),
+          invoiceService.previewInvoiceNumber(selectedCompany?.id).catch(err => {
+            console.warn('Failed to preview invoice number on tab load:', err);
+            return 'INV-PREVIEW';
+          })
         ]);
         setCustomers(customersData.data || []);
         setProducts(productsData.data || []);
         setTermsTemplates(termsData || []);
+        if (previewNumber && previewNumber !== 'INV-PREVIEW') {
+          setGeneratedInvoiceNumber(previewNumber);
+        }
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load data');

@@ -33,6 +33,7 @@ export class ContractPDFGenerator {
       includeTableOfContents: false,
       includeSignatureBlocks: true,
       includeMilestones: true,
+      includeParties: true,
       ...options
     };
 
@@ -63,6 +64,11 @@ export class ContractPDFGenerator {
 
     // Add contract title (centered, bold)
     this.addContractTitle();
+
+    // Add parties information
+    if (this.options.includeParties !== false) {
+      await this.addPartiesSection();
+    }
 
     // Add preamble if present (without heading)
     if (this.contract.preamble && this.contract.preamble.trim()) {
@@ -175,6 +181,7 @@ export class ContractPDFGenerator {
   private addContractTitle(): void {
     const { leftMargin, rightMargin } = this.dimensions;
     const pageWidth = this.pdf.internal.pageSize.getWidth();
+    const titleMaxWidth = rightMargin - leftMargin;
 
     // Add space after header (6mm padding)
     this.currentY += 6;
@@ -183,51 +190,70 @@ export class ContractPDFGenerator {
     this.pdf.setFontSize(15);
     this.pdf.setFont('helvetica', 'bold');
     this.pdf.setTextColor(0, 0, 0);
-    this.pdf.text(this.contract.contract_title || 'CONTRACT', pageWidth / 2, this.currentY, { align: 'center' });
+
+    const titleText = this.contract.contract_title || 'CONTRACT';
+    const titleLines = this.pdf.splitTextToSize(titleText, titleMaxWidth);
+    titleLines.forEach((line: string) => {
+      this.pdf.text(line, pageWidth / 2, this.currentY, { align: 'center' });
+      this.currentY += 6;
+    });
     
     // Add thin underline beneath title
-    const textWidth = this.pdf.getTextWidth(this.contract.contract_title || 'CONTRACT');
+    const lastLine = titleLines[titleLines.length - 1] || 'CONTRACT';
+    const textWidth = Math.min(this.pdf.getTextWidth(lastLine), titleMaxWidth);
     const underlineX = (pageWidth - textWidth) / 2;
-    const underlineY = this.currentY + 1.5;
+    const underlineY = this.currentY - 4;
     this.pdf.setLineWidth(0.2);
     this.pdf.line(underlineX, underlineY, underlineX + textWidth, underlineY);
     
-    this.currentY += 8;
+    this.currentY += 4;
   }
 
   /**
    * Add parties information
    */
-  private addPartiesSection(): void {
+  private async addPartiesSection(): Promise<void> {
     const { leftMargin, rightMargin } = this.dimensions;
     const pageWidth = this.pdf.internal.pageSize.getWidth();
-    const columnWidth = (rightMargin - leftMargin - 8) / 2;
+    const columnWidth = (rightMargin - leftMargin - 10) / 2;
 
-    this.pdf.setFontSize(11);
+    await this.checkPageBreak(35);
+
+    this.pdf.setFontSize(10.5);
     this.pdf.setFont('helvetica', 'bold');
-    this.pdf.text('CONTRACT PARTIES', pageWidth / 2, this.currentY, { align: 'center' });
-    this.currentY += 6;
+    this.pdf.setTextColor(30, 58, 138); // Corporate Blue (#1e3a8a)
+    this.pdf.text('PARTIES TO THE AGREEMENT', pageWidth / 2, this.currentY, { align: 'center' });
+    this.currentY += 5;
 
-    // Draw line
+    // Draw top separator line
+    this.pdf.setDrawColor(203, 213, 225); // Slate 300 (#cbd5e1)
     this.pdf.setLineWidth(0.3);
     this.pdf.line(leftMargin, this.currentY, rightMargin, this.currentY);
-    this.currentY += 6;
+    this.currentY += 5;
 
     const partyBY = this.currentY;
 
     // Party A (Left Column)
     this.pdf.setFontSize(9);
     this.pdf.setFont('helvetica', 'bold');
-    this.pdf.setTextColor(0, 0, 0);
-    this.pdf.text('PARTY A:', leftMargin, this.currentY);
+    this.pdf.setTextColor(30, 58, 138);
+    this.pdf.text('PARTY A (FIRST PARTY):', leftMargin, this.currentY);
+    this.currentY += 4.5;
+
     this.pdf.setFontSize(8.5);
     this.pdf.setFont('helvetica', 'bold');
-    this.currentY += 5;
-    this.pdf.text(this.contract.party_a_name, leftMargin, this.currentY);
-    this.currentY += 4;
+    this.pdf.setTextColor(15, 23, 42); // Slate 900
+    const partyAName = this.contract.party_a_name || this.company?.company_name || 'Party A';
+    const partyANameLines = this.pdf.splitTextToSize(partyAName, columnWidth);
+    partyANameLines.forEach((line: string) => {
+      this.pdf.text(line, leftMargin, this.currentY);
+      this.currentY += 3.8;
+    });
 
     this.pdf.setFont('helvetica', 'normal');
     this.pdf.setFontSize(8);
+    this.pdf.setTextColor(51, 65, 85); // Slate 700
+
     if (this.contract.party_a_address) {
       const addressLines = this.pdf.splitTextToSize(this.contract.party_a_address, columnWidth);
       addressLines.forEach((line: string) => {
@@ -235,87 +261,143 @@ export class ContractPDFGenerator {
         this.currentY += 3.5;
       });
     }
-    
-    if (this.contract.party_a_gstin) {
-      this.currentY += 1;
-      this.pdf.text(`GSTIN: ${this.contract.party_a_gstin}`, leftMargin, this.currentY);
-      this.currentY += 3.5;
-    }
-    
-    if (this.contract.party_a_vat_number) {
-      this.currentY += 1;
-      this.pdf.text(`VAT Number: ${this.contract.party_a_vat_number}`, leftMargin, this.currentY);
-      this.currentY += 3.5;
-    }
-    
-    if (this.contract.party_a_cro_number) {
-      this.currentY += 1;
-      this.pdf.text(`CRO Number: ${this.contract.party_a_cro_number}`, leftMargin, this.currentY);
-      this.currentY += 3.5;
-    }
-    
+
     if (this.contract.party_a_contact) {
-      this.pdf.text(`Contact: ${this.contract.party_a_contact}`, leftMargin, this.currentY);
-      this.currentY += 3.5;
+      const contactLines = this.pdf.splitTextToSize(`Contact: ${this.contract.party_a_contact}`, columnWidth);
+      contactLines.forEach((line: string) => {
+        this.pdf.text(line, leftMargin, this.currentY);
+        this.currentY += 3.5;
+      });
+    }
+
+    if (this.contract.party_a_pan) {
+      this.currentY += 0.5;
+      const panLines = this.pdf.splitTextToSize(`PAN: ${this.contract.party_a_pan}`, columnWidth);
+      panLines.forEach((line: string) => {
+        this.pdf.text(line, leftMargin, this.currentY);
+        this.currentY += 3.5;
+      });
+    }
+
+    if (this.contract.party_a_gstin) {
+      this.currentY += 0.5;
+      const gstinLines = this.pdf.splitTextToSize(`GSTIN: ${this.contract.party_a_gstin}`, columnWidth);
+      gstinLines.forEach((line: string) => {
+        this.pdf.text(line, leftMargin, this.currentY);
+        this.currentY += 3.5;
+      });
+    }
+
+    if (this.contract.party_a_vat_number) {
+      this.currentY += 0.5;
+      const vatLines = this.pdf.splitTextToSize(`VAT Number: ${this.contract.party_a_vat_number}`, columnWidth);
+      vatLines.forEach((line: string) => {
+        this.pdf.text(line, leftMargin, this.currentY);
+        this.currentY += 3.5;
+      });
+    }
+
+    if (this.contract.party_a_cro_number) {
+      this.currentY += 0.5;
+      const croLines = this.pdf.splitTextToSize(`CRO Number: ${this.contract.party_a_cro_number}`, columnWidth);
+      croLines.forEach((line: string) => {
+        this.pdf.text(line, leftMargin, this.currentY);
+        this.currentY += 3.5;
+      });
     }
 
     const partyAEndY = this.currentY;
 
     // Party B (Right Column)
     this.currentY = partyBY;
-    const col2X = leftMargin + columnWidth + 8;
+    const col2X = leftMargin + columnWidth + 10;
+    const col2Width = rightMargin - col2X;
 
     this.pdf.setFontSize(9);
     this.pdf.setFont('helvetica', 'bold');
-    this.pdf.setTextColor(0, 0, 0);
-    this.pdf.text('PARTY B:', col2X, this.currentY);
+    this.pdf.setTextColor(30, 58, 138);
+    this.pdf.text('PARTY B (SECOND PARTY):', col2X, this.currentY);
+    this.currentY += 4.5;
+
     this.pdf.setFontSize(8.5);
     this.pdf.setFont('helvetica', 'bold');
-    this.currentY += 5;
-    this.pdf.text(this.contract.party_b_name, col2X, this.currentY);
-    this.currentY += 4;
+    this.pdf.setTextColor(15, 23, 42); // Slate 900
+    const partyBName = this.contract.party_b_name || 'Party B';
+    const partyBNameLines = this.pdf.splitTextToSize(partyBName, col2Width);
+    partyBNameLines.forEach((line: string) => {
+      this.pdf.text(line, col2X, this.currentY);
+      this.currentY += 3.8;
+    });
 
     this.pdf.setFont('helvetica', 'normal');
     this.pdf.setFontSize(8);
+    this.pdf.setTextColor(51, 65, 85); // Slate 700
+
     if (this.contract.party_b_address) {
-      const addressLines = this.pdf.splitTextToSize(this.contract.party_b_address, columnWidth);
+      const addressLines = this.pdf.splitTextToSize(this.contract.party_b_address, col2Width);
       addressLines.forEach((line: string) => {
         this.pdf.text(line, col2X, this.currentY);
         this.currentY += 3.5;
       });
     }
-    
-    if (this.contract.party_b_gstin) {
-      this.currentY += 1;
-      this.pdf.text(`GSTIN: ${this.contract.party_b_gstin}`, col2X, this.currentY);
-      this.currentY += 3.5;
-    }
-    
-    if (this.contract.party_b_vat_number) {
-      this.currentY += 1;
-      this.pdf.text(`VAT Number: ${this.contract.party_b_vat_number}`, col2X, this.currentY);
-      this.currentY += 3.5;
-    }
-    
-    if (this.contract.party_b_cro_number) {
-      this.currentY += 1;
-      this.pdf.text(`CRO Number: ${this.contract.party_b_cro_number}`, col2X, this.currentY);
-      this.currentY += 3.5;
-    }
-    
+
     if (this.contract.party_b_contact) {
-      this.pdf.text(`Contact: ${this.contract.party_b_contact}`, col2X, this.currentY);
-      this.currentY += 3.5;
+      const contactLines = this.pdf.splitTextToSize(`Contact: ${this.contract.party_b_contact}`, col2Width);
+      contactLines.forEach((line: string) => {
+        this.pdf.text(line, col2X, this.currentY);
+        this.currentY += 3.5;
+      });
+    }
+
+    if (this.contract.party_b_pan) {
+      this.currentY += 0.5;
+      const panLines = this.pdf.splitTextToSize(`PAN: ${this.contract.party_b_pan}`, col2Width);
+      panLines.forEach((line: string) => {
+        this.pdf.text(line, col2X, this.currentY);
+        this.currentY += 3.5;
+      });
+    }
+
+    if (this.contract.party_b_gstin) {
+      this.currentY += 0.5;
+      const gstinLines = this.pdf.splitTextToSize(`GSTIN: ${this.contract.party_b_gstin}`, col2Width);
+      gstinLines.forEach((line: string) => {
+        this.pdf.text(line, col2X, this.currentY);
+        this.currentY += 3.5;
+      });
+    }
+
+    if (this.contract.party_b_vat_number) {
+      this.currentY += 0.5;
+      const vatLines = this.pdf.splitTextToSize(`VAT Number: ${this.contract.party_b_vat_number}`, col2Width);
+      vatLines.forEach((line: string) => {
+        this.pdf.text(line, col2X, this.currentY);
+        this.currentY += 3.5;
+      });
+    }
+
+    if (this.contract.party_b_cro_number) {
+      this.currentY += 0.5;
+      const croLines = this.pdf.splitTextToSize(`CRO Number: ${this.contract.party_b_cro_number}`, col2Width);
+      croLines.forEach((line: string) => {
+        this.pdf.text(line, col2X, this.currentY);
+        this.currentY += 3.5;
+      });
     }
 
     // Set currentY to the maximum of both columns
     this.currentY = Math.max(partyAEndY, this.currentY);
-    this.currentY += 4;
+    this.currentY += 3;
 
-    // Draw line
+    // Draw bottom separator line
+    this.pdf.setDrawColor(203, 213, 225); // Slate 300
     this.pdf.setLineWidth(0.3);
     this.pdf.line(leftMargin, this.currentY, rightMargin, this.currentY);
     this.currentY += 6;
+
+    // Reset draw color and text color
+    this.pdf.setDrawColor(0, 0, 0);
+    this.pdf.setTextColor(0, 0, 0);
   }
 
   /**
@@ -1044,19 +1126,27 @@ export class ContractPDFGenerator {
 
     this.pdf.setFont('helvetica', 'normal');
     this.pdf.setFontSize(7.5);
-    this.pdf.text(this.contract.party_a_name, leftMargin, this.currentY);
-    this.currentY += 3;
+    const partyANameSigLines = this.pdf.splitTextToSize(this.contract.party_a_name || '', columnWidth - 10);
+    partyANameSigLines.forEach((line: string) => {
+      this.pdf.text(line, leftMargin, this.currentY);
+      this.currentY += 3;
+    });
     
     if (this.contract.party_a_contact) {
-      this.pdf.text(this.contract.party_a_contact, leftMargin, this.currentY);
-      this.currentY += 3;
+      const contactLines = this.pdf.splitTextToSize(this.contract.party_a_contact, columnWidth - 10);
+      contactLines.forEach((line: string) => {
+        this.pdf.text(line, leftMargin, this.currentY);
+        this.currentY += 3;
+      });
     }
 
     this.pdf.text('Date: __________________', leftMargin, this.currentY);
+    const partyASigEndY = this.currentY;
 
     // Party B signature (Right)
     this.currentY = signatureY;
     const col2X = leftMargin + columnWidth + 10;
+    const col2Width = rightMargin - col2X;
 
     this.pdf.setLineWidth(0.3);
     this.pdf.line(col2X, this.currentY, rightMargin, this.currentY);
@@ -1069,17 +1159,23 @@ export class ContractPDFGenerator {
 
     this.pdf.setFont('helvetica', 'normal');
     this.pdf.setFontSize(7.5);
-    this.pdf.text(this.contract.party_b_name, col2X, this.currentY);
-    this.currentY += 3;
+    const partyBNameSigLines = this.pdf.splitTextToSize(this.contract.party_b_name || '', col2Width);
+    partyBNameSigLines.forEach((line: string) => {
+      this.pdf.text(line, col2X, this.currentY);
+      this.currentY += 3;
+    });
     
     if (this.contract.party_b_contact) {
-      this.pdf.text(this.contract.party_b_contact, col2X, this.currentY);
-      this.currentY += 3;
+      const contactLines = this.pdf.splitTextToSize(this.contract.party_b_contact, col2Width);
+      contactLines.forEach((line: string) => {
+        this.pdf.text(line, col2X, this.currentY);
+        this.currentY += 3;
+      });
     }
 
     this.pdf.text('Date: __________________', col2X, this.currentY);
 
-    this.currentY += 0;
+    this.currentY = Math.max(partyASigEndY, this.currentY);
   }
 
   /**

@@ -326,6 +326,7 @@ export interface ContractPDFOptions {
   includeTableOfContents: boolean;
   includeSignatureBlocks: boolean;
   includeMilestones: boolean;
+  includeParties?: boolean;
   watermark?: string; // "DRAFT", "CONFIDENTIAL", etc.
   headerText?: string;
   footerText?: string;

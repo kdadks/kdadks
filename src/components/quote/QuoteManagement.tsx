@@ -1100,16 +1100,18 @@ const QuoteManagement: React.FC<QuoteManagementProps> = ({ onBackToDashboard }) 
 
       pdf.setFontSize(11);
       pdf.setFont('helvetica', 'bold');
-      pdf.text(company.company_name, leftMargin, fromYPos);
-      fromYPos += 4;
+      const companyNameLines = pdf.splitTextToSize(company.company_name, 85);
+      pdf.text(companyNameLines, leftMargin, fromYPos);
+      fromYPos += companyNameLines.length * 4.5;
 
       pdf.setFontSize(8);
       pdf.setFont('helvetica', 'normal');
       pdf.setTextColor(60, 60, 60);
 
       if (company.legal_name && company.legal_name !== company.company_name) {
-        pdf.text(company.legal_name, leftMargin, fromYPos);
-        fromYPos += 4;
+        const legalNameLines = pdf.splitTextToSize(company.legal_name, 85);
+        pdf.text(legalNameLines, leftMargin, fromYPos);
+        fromYPos += legalNameLines.length * 4;
       }
       if (company.address_line1) {
         const a1 = pdf.splitTextToSize(company.address_line1, 85);
@@ -1127,20 +1129,30 @@ const QuoteManagement: React.FC<QuoteManagementProps> = ({ onBackToDashboard }) 
         pdf.text(locLines, leftMargin, fromYPos);
         fromYPos += locLines.length * 4;
       }
-      if (company.email) { pdf.text('Email: ' + company.email, leftMargin, fromYPos); fromYPos += 4; }
-      if (company.phone) { pdf.text('Phone: ' + company.phone, leftMargin, fromYPos); fromYPos += 4; }
+      if (company.email) {
+        const emailLines = pdf.splitTextToSize('Email: ' + company.email, 85);
+        pdf.text(emailLines, leftMargin, fromYPos);
+        fromYPos += emailLines.length * 4;
+      }
+      if (company.phone) {
+        const phoneLines = pdf.splitTextToSize('Phone: ' + company.phone, 85);
+        pdf.text(phoneLines, leftMargin, fromYPos);
+        fromYPos += phoneLines.length * 4;
+      }
       const companyTaxFields = getCompanyTaxFields(company.country?.code);
       companyTaxFields.fields.forEach((field) => {
         const value = company[field.key as keyof typeof company] as string | undefined;
         if (value) {
-          pdf.text(`${field.label}: ` + value, leftMargin, fromYPos);
-          fromYPos += 4;
+          const fieldLines = pdf.splitTextToSize(`${field.label}: ` + value, 85);
+          pdf.text(fieldLines, leftMargin, fromYPos);
+          fromYPos += fieldLines.length * 4;
         }
       });
       if (company.pan && !companyTaxFields.fields.some(f => f.key === 'pan')) {
         const panLabel = (company.country?.code === 'IN' || company.country?.code === 'IND') ? 'PAN' : 'Tax ID';
-        pdf.text(`${panLabel}: ` + company.pan, leftMargin, fromYPos);
-        fromYPos += 4;
+        const panLines = pdf.splitTextToSize(`${panLabel}: ` + company.pan, 85);
+        pdf.text(panLines, leftMargin, fromYPos);
+        fromYPos += panLines.length * 4;
       }
 
       // Contact person (kept cleanly within 85mm column width to prevent overflow)
@@ -1170,6 +1182,7 @@ const QuoteManagement: React.FC<QuoteManagementProps> = ({ onBackToDashboard }) 
       }
 
       // TO (right column)
+      const billToMaxWidth = 85;
       pdf.setTextColor(0, 0, 0);
       pdf.setFontSize(9);
       pdf.setFont('helvetica', 'bold');
@@ -1179,43 +1192,60 @@ const QuoteManagement: React.FC<QuoteManagementProps> = ({ onBackToDashboard }) 
       pdf.setFontSize(11);
       pdf.setFont('helvetica', 'bold');
       pdf.setTextColor(37, 99, 235);
-      pdf.text(customer.company_name || customer.contact_person || 'N/A', billToX, billToYPos);
-      billToYPos += 4;
+      const customerName = customer.company_name || customer.contact_person || 'N/A';
+      const customerNameLines = pdf.splitTextToSize(customerName, billToMaxWidth);
+      pdf.text(customerNameLines, billToX, billToYPos);
+      billToYPos += customerNameLines.length * 4.5;
 
       pdf.setFontSize(8);
       pdf.setFont('helvetica', 'normal');
       pdf.setTextColor(60, 60, 60);
 
       if (customer.contact_person && customer.company_name) {
-        pdf.text('Attn: ' + customer.contact_person, billToX, billToYPos); billToYPos += 4;
+        const attnLines = pdf.splitTextToSize('Attn: ' + customer.contact_person, billToMaxWidth);
+        pdf.text(attnLines, billToX, billToYPos);
+        billToYPos += attnLines.length * 4;
       }
       if (customer.address_line1) {
-        const ca1 = pdf.splitTextToSize(customer.address_line1, 85);
-        pdf.text(ca1, billToX, billToYPos); billToYPos += ca1.length * 4;
+        const ca1 = pdf.splitTextToSize(customer.address_line1, billToMaxWidth);
+        pdf.text(ca1, billToX, billToYPos);
+        billToYPos += ca1.length * 4;
       }
       if (customer.address_line2) {
-        const ca2 = pdf.splitTextToSize(customer.address_line2, 85);
-        pdf.text(ca2, billToX, billToYPos); billToYPos += ca2.length * 4;
+        const ca2 = pdf.splitTextToSize(customer.address_line2, billToMaxWidth);
+        pdf.text(ca2, billToX, billToYPos);
+        billToYPos += ca2.length * 4;
       }
       const customerLocation = [customer.city, customer.state, customer.postal_code].filter(Boolean).join(', ');
       if (customerLocation) {
-        const clLines = pdf.splitTextToSize(customerLocation, 85);
-        pdf.text(clLines, billToX, billToYPos); billToYPos += clLines.length * 4;
+        const clLines = pdf.splitTextToSize(customerLocation, billToMaxWidth);
+        pdf.text(clLines, billToX, billToYPos);
+        billToYPos += clLines.length * 4;
       }
-      if (customer.email) { pdf.text('Email: ' + customer.email, billToX, billToYPos); billToYPos += 4; }
-      if (customer.phone) { pdf.text('Phone: ' + customer.phone, billToX, billToYPos); billToYPos += 4; }
+      if (customer.email) {
+        const emailLines = pdf.splitTextToSize('Email: ' + customer.email, billToMaxWidth);
+        pdf.text(emailLines, billToX, billToYPos);
+        billToYPos += emailLines.length * 4;
+      }
+      if (customer.phone) {
+        const phoneLines = pdf.splitTextToSize('Phone: ' + customer.phone, billToMaxWidth);
+        pdf.text(phoneLines, billToX, billToYPos);
+        billToYPos += phoneLines.length * 4;
+      }
       const customerTaxFields = getCompanyTaxFields(customer.country?.code);
       customerTaxFields.fields.forEach((field) => {
         const value = customer[field.key as keyof Customer] as string | undefined;
         if (value) {
-          pdf.text(`${field.label}: ` + value, billToX, billToYPos);
-          billToYPos += 4;
+          const taxFieldLines = pdf.splitTextToSize(`${field.label}: ` + value, billToMaxWidth);
+          pdf.text(taxFieldLines, billToX, billToYPos);
+          billToYPos += taxFieldLines.length * 4;
         }
       });
       if (customer.pan && !customerTaxFields.fields.some(f => f.key === 'pan')) {
         const panLabel = (customer.country?.code === 'IN' || customer.country?.code === 'IND') ? 'PAN' : 'Tax ID';
-        pdf.text(`${panLabel}: ` + customer.pan, billToX, billToYPos);
-        billToYPos += 4;
+        const panLines = pdf.splitTextToSize(`${panLabel}: ` + customer.pan, billToMaxWidth);
+        pdf.text(panLines, billToX, billToYPos);
+        billToYPos += panLines.length * 4;
       }
 
       // Status badge - shifted to the right of its original place to prevent overlapping contact info
