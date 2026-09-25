@@ -1,6 +1,6 @@
 # Project Memory — KDADKS Website
 
-> Auto-updated by Kilo agent after every implementation. Last updated: 2026-09-25 (later, later) BST
+> Auto-updated by AI agent after every implementation. Last updated: 2026-09-25 (later, later) BST
 
 A comprehensive knowledge base for the KDADKS website codebase. This file serves as a single source of truth for project architecture, conventions, patterns, menu structures, and key implementation details.
 
