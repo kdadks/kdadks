@@ -491,8 +491,16 @@ class SubscriptionService {
 
     const plan = subscription.plan;
 
-    // Determine the invoice date (use next_billing_date or today)
-    const invoiceDate = subscription.next_billing_date || new Date().toISOString().split('T')[0];
+    // Determine the invoice date. The Invoice Management UI rejects any
+    // invoice_date later than today ("Invoice date cannot be in the
+    // future"), so if this subscription's next_billing_date is still
+    // upcoming (e.g. generating an invoice ahead of schedule), issue the
+    // invoice today instead — otherwise admins could never save/finalize
+    // the resulting draft invoice. The subscription's actual billing cycle
+    // (next_billing_date) is preserved separately below.
+    const today = new Date().toISOString().split('T')[0];
+    const scheduledBillingDate = subscription.next_billing_date || today;
+    const invoiceDate = scheduledBillingDate <= today ? scheduledBillingDate : today;
 
     // Calculate due date (15 days from invoice date)
     const dueDate = new Date(invoiceDate);
@@ -532,11 +540,13 @@ class SubscriptionService {
       subscription.company_settings_id || undefined,
     );
 
-    // Advance the subscription's next_billing_date
+    // Advance the subscription's next_billing_date from its originally
+    // scheduled date (not the possibly-earlier invoice issue date) so the
+    // billing cadence is preserved even when invoicing ahead of schedule.
     const newNextBillingDate =
       plan.billing_interval === 'monthly'
-        ? this.calculateNextBillingDate(invoiceDate, 'monthly')
-        : this.calculateNextBillingDate(invoiceDate, 'annual');
+        ? this.calculateNextBillingDate(scheduledBillingDate, 'monthly')
+        : this.calculateNextBillingDate(scheduledBillingDate, 'annual');
 
     await this.updateNextBillingDate(subscriptionId, newNextBillingDate);
 

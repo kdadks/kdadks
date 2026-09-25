@@ -1,6 +1,6 @@
 # Project Memory — KDADKS Website
 
-> Auto-updated by Kilo agent after every implementation. Last updated: 2026-09-24 17:05 BST
+> Auto-updated by Kilo agent after every implementation. Last updated: 2026-09-25 (later, later) BST
 
 A comprehensive knowledge base for the KDADKS website codebase. This file serves as a single source of truth for project architecture, conventions, patterns, menu structures, and key implementation details.
 
@@ -561,6 +561,7 @@ Invoice numbers are generated strictly per legal entity to ensure sequence indep
 - Indian number formatting (lakh/crore system) in PDF generators
 - `formatAmountInWords()` converts numbers to words (Indian system: crore/lakh/thousand)
 - Responsive column wrapping via jsPDF `splitTextToSize`: Customer names (e.g. `customer.company_name` / `party_b_name`), attention lines, addresses, contact lines, tax fields, and company names in Quote (`QuoteManagement.tsx`), Contract (`contractPDFGenerator.ts`), and Invoice (`InvoiceManagement.tsx` download & email PDFs) are wrapped to column width bounds (85mm for two-column Bill To/From, `columnWidth` for Contract Parties and Signature blocks), preventing horizontal truncation on long customer names (e.g. `IRL-2026-0006`).
+- **Dashboard tile currency convention:** Admin dashboard stat tiles (`InvoiceManagement.tsx`, `IncomeManagement.tsx`) MUST derive their currency code from the active `selectedCompany` entity (`getCompanyCurrency(selectedCompany)` / `selectedCompany?.country?.currency_code`) rather than defaulting to `'INR'`, so Ireland-entity tiles render `€` and India-entity tiles render `₹`.
 
 ### Multi-Entity Filtering
 
@@ -696,6 +697,14 @@ The complete sales pipeline with status/stage transitions:
     - Resolves `actualAmount` and `actualCurrency` for IND entities using `inv.paid_amount || payment.inr_amount || payment.original_amount` in `'INR'`.
   - **Database Migration (`database/migrations/043_add_paid_amount_to_invoices.sql`)**:
     - Adds `paid_amount DECIMAL(15, 2)`, `paid_currency VARCHAR(10) DEFAULT 'INR'`, and `paid_at DATE` to `public.invoices` table, with backfill logic from the latest genuine payment in `payments`.
+  - **Entity-Aware Record Payment Currency**: The "Record Payment" dialog (`getMarkAsPaidEntityInfo()` in `InvoiceManagement.tsx`) determines the *entity's own settlement currency* (INR for India, EUR for Ireland — via `isIndianCompany()` + `company.country.currency_code`) rather than hardcoding INR. When the invoice's billed currency differs from the entity's settlement currency, the field label switches to `{ENTITY_CURRENCY} Amount Received ({symbol})` (e.g. `EUR Amount Received (€)` for an Ireland-entity invoice billed in USD) and `paid_currency`/`original_currency_code` are stored as that entity currency — never forced to `'INR'` for non-Indian entities.
+  - **Invoice Dashboard Entity Scoping**: `renderDashboard()` in `InvoiceManagement.tsx` calls `invoiceService.getInvoiceStats(selectedCompany?.id)` (previously omitted the entity id, causing tiles to aggregate across all entities). Dashboard tiles (Total Invoices, Total Revenue, Pending Amount, This Month) format amounts via `entityCurrencyCode = selectedCompany?.country?.currency_code || 'INR'` and render the matching icon badge symbol (`€` for Ireland, `₹` for India) instead of a hardcoded `₹`.
+
+### Subscription-to-Invoice Generation — Future Invoice Date Fix
+
+**Bug:** `subscriptionService.generateDraftInvoice(subscriptionId)` (invoked by the per-row "Generate Draft Invoice" action in `SubscriptionManagement.tsx`) always set `invoice_date = subscription.next_billing_date`, even when that date was still upcoming (e.g. generating an invoice ahead of schedule, or right after creating/activating a subscription whose first `next_billing_date` is a month/year out). Because the generated invoice is a `draft`, opening it in `InvoiceManagement.tsx` and clicking Save re-runs `handleSaveInvoice`'s client-side rule *"Invoice date cannot be in the future"*, which blocked admins from ever finalizing/updating that draft invoice.
+
+**Fix (`src/services/subscriptionService.ts` → `generateDraftInvoice`):** Cap the invoice's issue date at `min(next_billing_date, today)` — i.e. `invoiceDate = scheduledBillingDate <= today ? scheduledBillingDate : today`. The subscription's `next_billing_date` advancement (`newNextBillingDate`) still derives from the **original** `scheduledBillingDate` (not the capped invoice date), so the true billing cadence/cycle is unaffected — only the invoice's issued date is prevented from landing in the future. The bulk generator (`invoiceService.generateDraftInvoicesFromSubscriptions`) already only processes subscriptions via `subscriptionService.getDueSubscriptions()` (`next_billing_date <= today`), so it was not affected and needed no change.
 
 ### Lead/Opportunity Activity Tracking
 
@@ -814,6 +823,17 @@ Provides comprehensive document upload, verification status tracking, replacemen
 - **Status Verification Modal:** Allows HR administrators to set verification status, assign verification timestamps, and record verification comments/notes.
 - **Document Actions:** File upload, document replacement (`replacingId`), document preview via `DocumentPreviewModal.tsx`, direct file download, and secure deletion with confirmation dialog (`ConfirmDialog`).
 - **Service Layer (`src/services/employeeDocumentService.ts`):** Handles file uploads, path sanitization (`employee_id/timestamp_filename`), UUID verification, database CRUD on `employment_documents`, signed URL generation, and storage cleanup.
+- **Entity-Aware Employee ID & Document Number Generation (`src/services/employeeService.ts`):**
+  - `resolveEmployeeEntity(companySettingsId)` — resolves whether the target company entity is the Ireland (IRL) entity (country code `IE`/`IRL`, or presence of `cro_number`/`vat_number`), mirroring `invoiceService.resolveCompanyEntity`.
+  - `generateEmployeeId(department, companySettingsId)` — keeps the existing India format (`{DEPT_PREFIX}-000001`, e.g. `KDA-000001`) for the IND entity, and embeds `IRL` into the prefix for the Ireland entity (e.g. `KDA-IRL-000001`). The next sequence number is derived by scanning `employees.employee_number` for the exact entity-qualified prefix (scoped additionally by `company_settings_id` when provided), guaranteeing independent, collision-free sequences per entity.
+  - `generateDocumentNumber(documentType, companySettingsId)` — keeps the existing India format (e.g. `OL/2026/09/001`) and embeds `/IRL` into the prefix for Ireland (e.g. `OL/IRL/2026/09/001`). The sequence is derived by scanning `employment_documents.document_number` for the entity+period prefix rather than relying solely on the shared global `hr_document_settings` counter (which is still incremented for legacy/audit purposes but no longer determines the emitted number).
+  - `getEmployees(company_settings_id)` now filters strictly via `.eq('company_settings_id', ...)` (previously also matched rows with `company_settings_id IS NULL`, leaking unassigned employees into every entity's view).
+  - `EmploymentDocuments.tsx` reloads `employees`/`documents`/`salarySlips` whenever `selectedCompany` changes (previously only ran once on mount), and client-side filters the documents/salary-slip lists to employees belonging to the active entity.
+- **Entity Filtering Across Remaining HR Modules:** Several HR services (`compensationService`, `performanceFeedbackService`, `leaveAttendanceService`) are not entity-scoped server-side (no `company_settings_id` column on their tables). The following components now client-side filter their results to the `employees` list already scoped via `employeeService.getEmployees(selectedCompany?.id)`, and reload when `selectedCompany` changes:
+  - `src/components/admin/CompensationManagement.tsx` (`/admin/hr/compensation`): `loadData()` now depends on `selectedCompany` and filters `compensations`/`increments`/`bonuses` to entity employee ids. Currency formatting is entity-aware — `formatCurrencyForEntity(amount, currencyCode)` (module-level) is shadowed by a local `formatCurrency(amount)` closure in the main component and each sub-component (`CompensationTable`, `IncrementsTable`, `BonusesTable`, `CompensationModal`) that resolves the currency from `selectedCompany?.country?.currency_code` (`getEntityCurrencyCode`/`getEntityCurrencySymbol`), rendering `€` for Ireland and `₹` for India instead of a hardcoded INR formatter.
+  - `src/components/admin/PerformanceFeedback.tsx` (`/admin/hr/performance`): `loadData()` filters `performanceFeedbackService.getFeedback()` results to entity employee ids (no currency values in this module).
+  - `src/components/hr/LeaveManagement.tsx` (`/admin/hr/leave`): `filteredApplications` now also requires the application's `employee_id` to belong to the entity-scoped `employees` list (no currency values — leave is day-based).
+  - `src/components/hr/AttendanceManagement.tsx` (`/admin/hr/attendance`): `loadAttendanceRecords()` (the "View Records" tab, single-date across all employees) filters `leaveAttendanceService.getAttendanceByDate()` results to entity employee ids. The Monthly Summary tab was already inherently entity-scoped since it filters by a `selectedEmployee` chosen from the entity-scoped dropdown. `company_holidays` (Holiday Calendar tab) has no `company_settings_id` column and remains global (out of scope — would require a migration).
 
 ---
 

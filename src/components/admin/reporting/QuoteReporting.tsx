@@ -15,6 +15,7 @@ import ReportingCard from './ReportingCard';
 import SimpleBarChart from './SimpleBarChart';
 import DateRangeFilter, { DateRange, getDefaultDateRange } from './DateRangeFilter';
 import ExportButton from './ExportButton';
+import { formatCompactCurrency } from '../../../utils/currencyConverter';
 
 interface QuoteRow {
   id: string;
@@ -60,6 +61,10 @@ const QuoteReporting: React.FC = () => {
 
   const [stats, setStats] = useState<Stats | null>(null);
   const companyId = selectedCompany?.id ?? null;
+  const entityCurrencyCode = selectedCompany?.country?.currency_code || 'INR';
+
+  const getQuoteAmount = (q: { inr_total_amount?: number; total_amount?: number }) =>
+    entityCurrencyCode === 'INR' ? (q.inr_total_amount || q.total_amount || 0) : (q.total_amount || 0);
 
   const fetchData = useCallback(async () => {
     try {
@@ -150,7 +155,7 @@ const QuoteReporting: React.FC = () => {
       const converted = allQuotes.filter((q) => q.status === 'converted').length;
       const sent = allQuotes.filter((q) => q.status === 'sent').length;
       const totalAmount = allQuotes.reduce(
-        (s, q) => s + (q.inr_total_amount || q.total_amount || 0),
+        (s, q) => s + getQuoteAmount(q),
         0
       );
 
@@ -162,7 +167,7 @@ const QuoteReporting: React.FC = () => {
         const existing = custMap.get(name) || { count: 0, amount: 0 };
         custMap.set(name, {
           count: existing.count + 1,
-          amount: existing.amount + (q.inr_total_amount || q.total_amount || 0),
+          amount: existing.amount + getQuoteAmount(q),
         });
       });
       const topCustomers = Array.from(custMap.entries())
@@ -196,18 +201,13 @@ const QuoteReporting: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [companyId, dateRange, refreshKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [companyId, dateRange, refreshKey, entityCurrencyCode]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     fetchData();
   }, [fetchData]);
 
-  const formatCurrency = (v: number) => {
-    if (v >= 10000000) return `₹${(v / 10000000).toFixed(1)}Cr`;
-    if (v >= 100000) return `₹${(v / 100000).toFixed(1)}L`;
-    if (v >= 1000) return `₹${(v / 1000).toFixed(1)}K`;
-    return `₹${Math.round(v)}`;
-  };
+  const formatCurrency = (v: number) => formatCompactCurrency(v, entityCurrencyCode);
 
   const exportData = (stats?.quotes || []).map((q) => {
     const cust = Array.isArray(q.customer) ? q.customer[0] : q.customer;
@@ -215,7 +215,7 @@ const QuoteReporting: React.FC = () => {
       'Quote #': q.quote_number || '',
       Customer: cust?.company_name || cust?.contact_person || '',
       Status: q.status,
-      Amount: q.inr_total_amount || q.total_amount || 0,
+      Amount: getQuoteAmount(q),
       'Quote Date': q.quote_date || '',
       'Valid Until': q.valid_until || '',
     };

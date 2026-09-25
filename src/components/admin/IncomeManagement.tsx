@@ -357,7 +357,7 @@ const IncomeManagement: React.FC = () => {
               </div>
               <div>
                 <p className="text-sm text-gray-600">Total Income</p>
-                <p className="text-xl font-bold text-gray-900">{formatCurrency(stats.totalNetAmount)}</p>
+                <p className="text-xl font-bold text-gray-900">{formatCurrency(stats.totalNetAmount, getCompanyCurrency(selectedCompany))}</p>
               </div>
             </div>
           </div>
@@ -368,7 +368,7 @@ const IncomeManagement: React.FC = () => {
               </div>
               <div>
                 <p className="text-sm text-gray-600">This Month</p>
-                <p className="text-xl font-bold text-gray-900">{formatCurrency(stats.thisMonth)}</p>
+                <p className="text-xl font-bold text-gray-900">{formatCurrency(stats.thisMonth, getCompanyCurrency(selectedCompany))}</p>
               </div>
             </div>
           </div>

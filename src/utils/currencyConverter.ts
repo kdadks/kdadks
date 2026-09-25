@@ -262,6 +262,51 @@ export function formatCurrencyWithSymbol(amount: number, currencyCode: string): 
 }
 
 /**
+ * Get the display symbol for a currency code (used by compact/reporting formatters)
+ * @param currencyCode - Currency code
+ * @returns Currency symbol or the code itself with a trailing space
+ */
+export function getCurrencyDisplaySymbol(currencyCode: string): string {
+  const symbols: Record<string, string> = {
+    'INR': '₹',
+    'USD': '$',
+    'EUR': '€',
+    'GBP': '£',
+    'AED': 'AED ',
+    'SGD': 'S$',
+    'AUD': 'A$',
+    'CAD': 'C$',
+    'JPY': '¥',
+    'CNY': '¥',
+  };
+  return symbols[(currencyCode || 'INR').toUpperCase()] || `${currencyCode} `;
+}
+
+/**
+ * Format an amount in a compact, entity-currency-aware form for dashboard/reporting tiles.
+ * INR uses the Indian lakh/crore numbering system; all other currencies use K/M abbreviations.
+ * @param amount - Amount to format
+ * @param currencyCode - Currency code of the active entity (defaults to INR)
+ * @returns Compact formatted currency string, e.g. "₹1.2Cr", "€45.0K", "$3.4M"
+ */
+export function formatCompactCurrency(amount: number, currencyCode: string = 'INR'): string {
+  const code = (currencyCode || 'INR').toUpperCase();
+  const symbol = getCurrencyDisplaySymbol(code);
+  const v = amount || 0;
+
+  if (code === 'INR') {
+    if (v >= 10000000) return `${symbol}${(v / 10000000).toFixed(1)}Cr`;
+    if (v >= 100000) return `${symbol}${(v / 100000).toFixed(1)}L`;
+    if (v >= 1000) return `${symbol}${(v / 1000).toFixed(1)}K`;
+    return `${symbol}${Math.round(v)}`;
+  }
+
+  if (v >= 1000000) return `${symbol}${(v / 1000000).toFixed(1)}M`;
+  if (v >= 1000) return `${symbol}${(v / 1000).toFixed(1)}K`;
+  return `${symbol}${Math.round(v)}`;
+}
+
+/**
  * Convert amount from any source currency to target currency
  * @param amount - Source amount
  * @param fromCurrency - Source currency code (USD, EUR, INR, etc.)

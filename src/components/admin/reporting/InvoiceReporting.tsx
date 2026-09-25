@@ -16,6 +16,7 @@ import ReportingCard from './ReportingCard';
 import SimpleBarChart from './SimpleBarChart';
 import DateRangeFilter, { DateRange, getDefaultDateRange } from './DateRangeFilter';
 import ExportButton from './ExportButton';
+import { formatCompactCurrency, getCurrencyDisplaySymbol } from '../../../utils/currencyConverter';
 
 interface InvoiceRow {
   id: string;
@@ -63,6 +64,10 @@ const InvoiceReporting: React.FC = () => {
 
   const [stats, setStats] = useState<Stats | null>(null);
   const companyId = selectedCompany?.id ?? null;
+  const entityCurrencyCode = selectedCompany?.country?.currency_code || 'INR';
+
+  const getInvoiceAmount = (inv: { inr_total_amount?: number; total_amount?: number }) =>
+    entityCurrencyCode === 'INR' ? (inv.inr_total_amount || inv.total_amount || 0) : (inv.total_amount || 0);
 
   const fetchData = useCallback(async () => {
     try {
@@ -123,7 +128,7 @@ const InvoiceReporting: React.FC = () => {
         if (companyId) revQ = revQ.eq('company_settings_id', companyId);
         const { data: revData } = await revQ;
         const rev = (revData || []).reduce(
-          (s, inv) => s + (inv.inr_total_amount || inv.total_amount || 0),
+          (s, inv) => s + getInvoiceAmount(inv),
           0
         );
 
@@ -144,22 +149,22 @@ const InvoiceReporting: React.FC = () => {
       });
 
       const totalRevenue = paid.reduce(
-        (s, inv) => s + (inv.inr_total_amount || inv.total_amount || 0),
+        (s, inv) => s + getInvoiceAmount(inv),
         0
       );
       const prevRevenue = (prevInvoices || [])
         .filter((inv) => inv.payment_status === 'paid')
-        .reduce((s, inv) => s + (inv.inr_total_amount || inv.total_amount || 0), 0);
+        .reduce((s, inv) => s + getInvoiceAmount(inv), 0);
       const pendingAmount = pendingInvs.reduce(
-        (s, inv) => s + (inv.inr_total_amount || inv.total_amount || 0),
+        (s, inv) => s + getInvoiceAmount(inv),
         0
       );
       const overdueAmount = overdueInvs.reduce(
-        (s, inv) => s + (inv.inr_total_amount || inv.total_amount || 0),
+        (s, inv) => s + getInvoiceAmount(inv),
         0
       );
       const totalIssued = allInvoices.reduce(
-        (s, inv) => s + (inv.inr_total_amount || inv.total_amount || 0),
+        (s, inv) => s + getInvoiceAmount(inv),
         0
       );
       const collectionRate = totalIssued > 0 ? Math.round((totalRevenue / totalIssued) * 100) : 0;
@@ -180,7 +185,7 @@ const InvoiceReporting: React.FC = () => {
             );
             return daysOverdue >= prev && (max === Infinity || daysOverdue <= max);
           })
-          .reduce((s, inv) => s + (inv.inr_total_amount || inv.total_amount || 0), 0);
+          .reduce((s, inv) => s + getInvoiceAmount(inv), 0);
         return { label, value: Math.round(sum / 1000), color }; // in thousands
       });
 
@@ -193,7 +198,7 @@ const InvoiceReporting: React.FC = () => {
       allInvoices.forEach((inv) => {
         const cust = Array.isArray(inv.customer) ? inv.customer[0] : inv.customer;
         const name = cust?.company_name || cust?.contact_person || 'Unknown';
-        custMap.set(name, (custMap.get(name) || 0) + (inv.inr_total_amount || inv.total_amount || 0));
+        custMap.set(name, (custMap.get(name) || 0) + getInvoiceAmount(inv));
       });
       const topCustomers = Array.from(custMap.entries())
         .sort((a, b) => b[1] - a[1])
@@ -218,7 +223,7 @@ const InvoiceReporting: React.FC = () => {
       const thisMonthStart = `${now2.getFullYear()}-${String(now2.getMonth() + 1).padStart(2, '0')}-01`;
       const thisMonthRevenue = paid
         .filter((inv) => inv.invoice_date && inv.invoice_date >= thisMonthStart)
-        .reduce((s, inv) => s + (inv.inr_total_amount || inv.total_amount || 0), 0);
+        .reduce((s, inv) => s + getInvoiceAmount(inv), 0);
 
       setStats({
         total: allInvoices.length,
@@ -247,18 +252,13 @@ const InvoiceReporting: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [companyId, dateRange, refreshKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [companyId, dateRange, refreshKey, entityCurrencyCode]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     fetchData();
   }, [fetchData]);
 
-  const formatCurrency = (v: number) => {
-    if (v >= 10000000) return `₹${(v / 10000000).toFixed(1)}Cr`;
-    if (v >= 100000) return `₹${(v / 100000).toFixed(1)}L`;
-    if (v >= 1000) return `₹${(v / 1000).toFixed(1)}K`;
-    return `₹${Math.round(v)}`;
-  };
+  const formatCurrency = (v: number) => formatCompactCurrency(v, entityCurrencyCode);
 
   const exportData = (stats?.invoices || []).map((inv) => {
     const cust = Array.isArray(inv.customer) ? inv.customer[0] : inv.customer;
@@ -267,7 +267,7 @@ const InvoiceReporting: React.FC = () => {
       Customer: cust?.company_name || cust?.contact_person || '',
       Status: inv.status,
       'Payment Status': inv.payment_status,
-      Amount: inv.inr_total_amount || inv.total_amount || 0,
+      Amount: getInvoiceAmount(inv),
       Currency: inv.currency_code || 'INR',
       'Invoice Date': inv.invoice_date || '',
       'Due Date': inv.due_date || '',
@@ -390,7 +390,7 @@ const InvoiceReporting: React.FC = () => {
 
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
           <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-4">
-            Revenue Collected — ₹K (Last 6 Months)
+            Revenue Collected — {getCurrencyDisplaySymbol(entityCurrencyCode)}K (Last 6 Months)
           </h3>
           {loading ? (
             <div className="h-48 bg-gray-100 rounded animate-pulse" />

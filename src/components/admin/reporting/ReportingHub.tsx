@@ -17,6 +17,7 @@ import { supabase } from '../../../config/supabase';
 import { subscriptionService } from '../../../services/subscriptionService';
 import { useCompanyContext } from '../../../contexts/CompanyContext';
 import { useNavigate } from 'react-router-dom';
+import { formatCompactCurrency } from '../../../utils/currencyConverter';
 
 interface HubStats {
   totalCustomers: number;
@@ -59,13 +60,9 @@ const ReportingHub: React.FC = () => {
   const [refreshKey, setRefreshKey] = useState(0);
 
   const companyId = selectedCompany?.id ?? null;
+  const entityCurrencyCode = selectedCompany?.country?.currency_code || 'INR';
 
-  const formatCurrency = (v: number) => {
-    if (v >= 10000000) return `₹${(v / 10000000).toFixed(1)}Cr`;
-    if (v >= 100000) return `₹${(v / 100000).toFixed(1)}L`;
-    if (v >= 1000) return `₹${(v / 1000).toFixed(1)}K`;
-    return `₹${Math.round(v)}`;
-  };
+  const formatCurrency = (v: number) => formatCompactCurrency(v, entityCurrencyCode);
 
   const fetchStats = useCallback(async () => {
     try {
@@ -116,18 +113,20 @@ const ReportingHub: React.FC = () => {
       if (companyId) invQ = invQ.eq('company_settings_id', companyId);
       const { data: invData, count: invCount } = await invQ;
       const allInvoices = invData || [];
+      const getInvoiceAmount = (i: { inr_total_amount?: number; total_amount?: number }) =>
+        entityCurrencyCode === 'INR' ? (i.inr_total_amount || i.total_amount || 0) : (i.total_amount || 0);
       const paidInvs = allInvoices.filter((i) => i.payment_status === 'paid');
       const pendingInvs = allInvoices.filter(
         (i) => i.payment_status !== 'paid' && !['cancelled'].includes(i.status)
       );
       const collectedRevenue = paidInvs.reduce(
-        (s, i) => s + (i.inr_total_amount || i.total_amount || 0), 0
+        (s, i) => s + getInvoiceAmount(i), 0
       );
       const pendingRevenue = pendingInvs.reduce(
-        (s, i) => s + (i.inr_total_amount || i.total_amount || 0), 0
+        (s, i) => s + getInvoiceAmount(i), 0
       );
       const totalIssued = allInvoices.reduce(
-        (s, i) => s + (i.inr_total_amount || i.total_amount || 0), 0
+        (s, i) => s + getInvoiceAmount(i), 0
       );
       const collectionRate = totalIssued > 0 ? Math.round((collectedRevenue / totalIssued) * 100) : 0;
 

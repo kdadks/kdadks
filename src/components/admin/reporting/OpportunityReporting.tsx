@@ -15,6 +15,7 @@ import ReportingCard from './ReportingCard';
 import SimpleBarChart from './SimpleBarChart';
 import DateRangeFilter, { DateRange, getDefaultDateRange } from './DateRangeFilter';
 import ExportButton from './ExportButton';
+import { formatCompactCurrency } from '../../../utils/currencyConverter';
 
 interface OppRow {
   id: string;
@@ -79,6 +80,7 @@ const OpportunityReporting: React.FC = () => {
 
   const [stats, setStats] = useState<Stats | null>(null);
   const companyId = selectedCompany?.id ?? null;
+  const entityCurrencyCode = selectedCompany?.country?.currency_code || 'INR';
 
   const fetchData = useCallback(async () => {
     try {
@@ -206,12 +208,7 @@ const OpportunityReporting: React.FC = () => {
     fetchData();
   }, [fetchData]);
 
-  const formatCurrency = (v: number) => {
-    if (v >= 10000000) return `₹${(v / 10000000).toFixed(1)}Cr`;
-    if (v >= 100000) return `₹${(v / 100000).toFixed(1)}L`;
-    if (v >= 1000) return `₹${(v / 1000).toFixed(1)}K`;
-    return `₹${Math.round(v)}`;
-  };
+  const formatCurrency = (v: number) => formatCompactCurrency(v, entityCurrencyCode);
 
   const exportData = (stats?.opportunities || []).map((o) => {
     const cust = Array.isArray(o.customer) ? o.customer[0] : o.customer;

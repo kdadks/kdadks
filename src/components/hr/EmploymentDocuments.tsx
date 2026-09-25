@@ -240,12 +240,6 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
 
   useEffect(() => {
     loadData();
-  }, []);
-
-  useEffect(() => {
-    if (selectedCompany) {
-      setCompanySettings(selectedCompany);
-    }
   }, [selectedCompany]);
 
   const loadData = async () => {
@@ -258,9 +252,11 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
         employeeService.getHRDocumentSettings()
       ]);
 
+      // Entity-scope documents & salary slips to only the employees belonging to the selected entity
+      const entityEmployeeIds = new Set(employeesData.map(e => e.id));
       setEmployees(employeesData);
-      setDocuments(documentsData);
-      setSalarySlips(salarySlipsData);
+      setDocuments(documentsData.filter((doc: EmploymentDocument) => entityEmployeeIds.has(doc.employee_id)));
+      setSalarySlips(salarySlipsData.filter(slip => entityEmployeeIds.has(slip.employee_id)));
       setHRSettings(hrSettingsData);
 
       if (selectedCompany) {
@@ -2006,7 +2002,7 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
         return;
       }
 
-      const documentNumber = await employeeService.generateDocumentNumber(documentType);
+      const documentNumber = await employeeService.generateDocumentNumber(documentType, selectedEmployee.company_settings_id || selectedCompany?.id);
       let pdf: jsPDF;
 
       switch (documentType) {
@@ -3698,7 +3694,7 @@ const EmploymentDocuments: React.FC<EmploymentDocumentsProps> = ({ onBackToDashb
                     setEmployeeForm({ ...employeeForm, department: dept });
                     if (dept && employeeView === 'add') {
                       try {
-                        const generatedId = await employeeService.generateEmployeeId(dept);
+                        const generatedId = await employeeService.generateEmployeeId(dept, selectedCompany?.id);
                         setEmployeeForm(prev => ({ ...prev, department: dept, employee_number: generatedId }));
                       } catch (err) {
                         console.error('Failed to generate employee ID:', err);

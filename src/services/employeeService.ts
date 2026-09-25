@@ -23,6 +23,19 @@ import { compensationService } from './compensationService'
 export const employeeService = {
   // =============== Employee CRUD Operations ===============
 
+  // Resolves whether an entity is the Ireland (IRL) legal entity, for entity-aware ID/number generation
+  async resolveEmployeeEntity(companySettingsId?: string): Promise<{ isIrish: boolean; entityCode: 'IND' | 'IRL' }> {
+    if (!companySettingsId) return { isIrish: false, entityCode: 'IND' };
+    const { data: company } = await supabase
+      .from('company_settings')
+      .select('cro_number, vat_number, country:countries(code)')
+      .eq('id', companySettingsId)
+      .maybeSingle();
+    const countryCode = ((company as any)?.country?.code || '').toUpperCase();
+    const isIrish = countryCode === 'IE' || countryCode === 'IRL' || !!(company as any)?.cro_number || !!(company as any)?.vat_number;
+    return { isIrish, entityCode: isIrish ? 'IRL' : 'IND' };
+  },
+
   async getEmployees(company_settings_id?: string): Promise<Employee[]> {
     let query = supabase
       .from('employees')
@@ -30,7 +43,7 @@ export const employeeService = {
       .order('created_at', { ascending: false })
 
     if (company_settings_id) {
-      query = query.or(`company_settings_id.eq.${company_settings_id},company_settings_id.is.null`);
+      query = query.eq('company_settings_id', company_settings_id);
     }
 
     const { data, error } = await query
@@ -784,7 +797,7 @@ export const employeeService = {
 
   // =============== Document Number Generation ===============
 
-  async generateDocumentNumber(documentType: DocumentType): Promise<string> {
+  async generateDocumentNumber(documentType: DocumentType, companySettingsId?: string): Promise<string> {
     const settings = await this.getHRDocumentSettings()
 
     if (!settings) {
@@ -852,19 +865,37 @@ export const employeeService = {
         settingsUpdate = { offer_letter_current_number: currentNumber + 1 }
     }
 
-    // Generate document number
+    // Ireland entity documents embed IRL into the prefix (e.g. OL/IRL/2026/09/001) and get their own independent sequence
+    const { isIrish } = await this.resolveEmployeeEntity(companySettingsId);
+    const entityPrefix = isIrish ? `${prefix}/IRL` : prefix;
+
     const now = new Date()
     const year = now.getFullYear()
     const month = String(now.getMonth() + 1).padStart(2, '0')
-    const paddedNumber = String(currentNumber).padStart(3, '0')
 
-    let documentNumber = format
-      .replace('PREFIX', prefix)
+    const skeleton = format
+      .replace('PREFIX', entityPrefix)
       .replace('YYYY', String(year))
       .replace('MM', month)
-      .replace('###', paddedNumber)
+    const [searchPrefix] = skeleton.split('###')
 
-    // Update the counter
+    // Scan existing document numbers sharing this entity/period prefix to derive the next unique sequence
+    const { data: existingDocs } = await supabase
+      .from('employment_documents')
+      .select('document_number')
+      .ilike('document_number', `${searchPrefix}%`)
+
+    let maxNum = 0
+    for (const doc of existingDocs || []) {
+      const docNumber = doc.document_number as string
+      if (!docNumber.startsWith(searchPrefix)) continue
+      const num = parseInt(docNumber.substring(searchPrefix.length), 10)
+      if (!isNaN(num) && num > maxNum) maxNum = num
+    }
+
+    const documentNumber = `${searchPrefix}${String(maxNum + 1).padStart(3, '0')}`
+
+    // Keep the legacy running counter updated for backward compatibility
     if (Object.keys(settingsUpdate).length > 0) {
       await this.updateHRDocumentSettings(settingsUpdate)
     }
@@ -874,28 +905,36 @@ export const employeeService = {
 
   // =============== Employee ID Generation ===============
 
-  async generateEmployeeId(department: string): Promise<string> {
+  async generateEmployeeId(department: string, companySettingsId?: string): Promise<string> {
     const prefixMap: Record<string, string> = {
       'ITwala': 'ITW',
       'Kdadks': 'KDA',
       'Nirchal': 'NIR',
       'Ayuh Clinic': 'AYU',
     };
-    const prefix = prefixMap[department] || department.substring(0, 3).toUpperCase();
+    const deptPrefix = prefixMap[department] || department.substring(0, 3).toUpperCase();
 
-    // Fetch all employee_numbers with this prefix and find the highest sequence number
-    const { data } = await supabase
+    // Ireland entity employee IDs embed IRL (e.g. KDA-IRL-000001) and keep their own independent sequence
+    const { isIrish } = await this.resolveEmployeeEntity(companySettingsId);
+    const prefix = isIrish ? `${deptPrefix}-IRL` : deptPrefix;
+    const searchPrefix = `${prefix}-`;
+
+    let query = supabase
       .from('employees')
       .select('employee_number')
-      .ilike('employee_number', `${prefix}-%`);
+      .ilike('employee_number', `${searchPrefix}%`);
+    if (companySettingsId) {
+      query = query.eq('company_settings_id', companySettingsId);
+    }
+
+    const { data } = await query;
 
     let maxNum = 0;
     for (const emp of data || []) {
-      const parts = (emp.employee_number as string).split('-');
-      if (parts.length === 2) {
-        const num = parseInt(parts[1], 10);
-        if (!isNaN(num) && num > maxNum) maxNum = num;
-      }
+      const employeeNumber = emp.employee_number as string;
+      if (!employeeNumber.startsWith(searchPrefix)) continue;
+      const num = parseInt(employeeNumber.substring(searchPrefix.length), 10);
+      if (!isNaN(num) && num > maxNum) maxNum = num;
     }
 
     return `${prefix}-${String(maxNum + 1).padStart(6, '0')}`;

@@ -118,7 +118,9 @@ const AttendanceManagement: React.FC<AttendanceManagementProps> = ({ onBackToDas
   const loadAttendanceRecords = async () => {
     try {
       const records = await leaveAttendanceService.getAttendanceByDate(new Date(selectedDate));
-      setAttendanceRecords(records);
+      // getAttendanceByDate isn't entity-scoped server-side, so restrict to employees in the selected entity
+      const entityEmployeeIds = new Set(employees.map(e => e.id));
+      setAttendanceRecords(records.filter(r => entityEmployeeIds.has(r.employee_id)));
     } catch (error) {
       console.error('Error loading attendance records:', error);
     }

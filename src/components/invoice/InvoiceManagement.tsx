@@ -3844,12 +3844,12 @@ const getBankingCodeField = (company: CompanySettings | undefined | null): keyof
 
   const handleMarkAsPaid = (invoice: Invoice) => {
     setMarkAsPaidInvoice(invoice);
-    const isNonINR = invoice.currency_code && invoice.currency_code !== 'INR';
+    const { isForeign } = getMarkAsPaidEntityInfo(invoice);
     const paidInfo = getInvoicePaidInfo(invoice);
     if (paidInfo.amount > 0 && (invoice.payment_status === 'paid' || invoice.status === 'completed')) {
       setMarkAsPaidAmount(String(paidInfo.amount));
     } else {
-      setMarkAsPaidAmount(isNonINR ? '' : String(invoice.total_amount));
+      setMarkAsPaidAmount(isForeign ? '' : String(invoice.total_amount));
     }
     setMarkAsPaidDate(invoice.paid_at || new Date().toISOString().split('T')[0]);
     setMarkAsPaidMethod('bank_transfer');
@@ -3863,8 +3863,8 @@ const getBankingCodeField = (company: CompanySettings | undefined | null): keyof
     if (!amount || amount <= 0) return;
     setMarkAsPaidLoading(true);
     try {
-      const isNonINR = markAsPaidInvoice.currency_code && markAsPaidInvoice.currency_code !== 'INR';
-      const inrAmount = isNonINR ? amount : (markAsPaidInvoice.exchange_rate ? amount * markAsPaidInvoice.exchange_rate : amount);
+      const { entityCurrency, isForeign, symbol } = getMarkAsPaidEntityInfo(markAsPaidInvoice);
+      const entityAmount = isForeign ? amount : (markAsPaidInvoice.exchange_rate ? amount * markAsPaidInvoice.exchange_rate : amount);
 
       // Delete any previous payment records for this invoice to prevent duplicate payment rows
       await supabase.from('payments').delete().eq('invoice_id', markAsPaidInvoice.id);
@@ -3872,9 +3872,9 @@ const getBankingCodeField = (company: CompanySettings | undefined | null): keyof
       await invoiceService.createPayment({
         invoice_id: markAsPaidInvoice.id,
         payment_date: markAsPaidDate,
-        amount: isNonINR ? amount : markAsPaidInvoice.total_amount,
-        inr_amount: inrAmount,
-        original_currency_code: isNonINR ? 'INR' : (markAsPaidInvoice.currency_code || 'INR'),
+        amount: isForeign ? amount : markAsPaidInvoice.total_amount,
+        inr_amount: entityAmount,
+        original_currency_code: isForeign ? entityCurrency : (markAsPaidInvoice.currency_code || entityCurrency),
         original_amount: amount,
         payment_method: markAsPaidMethod || undefined,
         reference_number: markAsPaidReference || undefined,
@@ -3888,8 +3888,8 @@ const getBankingCodeField = (company: CompanySettings | undefined | null): keyof
         payment_status: 'paid'
       };
 
-      // If inr_subtotal is available and this is non-INR, restore inr_total_amount to the issue date exchange value
-      if (isNonINR && markAsPaidInvoice.inr_subtotal) {
+      // If inr_subtotal is available and this is a foreign-currency invoice, restore inr_total_amount to the issue date exchange value
+      if (isForeign && markAsPaidInvoice.inr_subtotal) {
         invoiceUpdates.inr_total_amount = Number(markAsPaidInvoice.inr_subtotal) + Number(markAsPaidInvoice.inr_tax_amount || 0);
       }
 
@@ -3898,8 +3898,8 @@ const getBankingCodeField = (company: CompanySettings | undefined | null): keyof
           .from('invoices')
           .update({ 
             ...invoiceUpdates,
-            paid_amount: inrAmount,
-            paid_currency: isNonINR ? 'INR' : (markAsPaidInvoice.currency_code || 'INR')
+            paid_amount: entityAmount,
+            paid_currency: isForeign ? entityCurrency : (markAsPaidInvoice.currency_code || entityCurrency)
           })
           .eq('id', markAsPaidInvoice.id);
 
@@ -3918,7 +3918,7 @@ const getBankingCodeField = (company: CompanySettings | undefined | null): keyof
           .eq('id', markAsPaidInvoice.id);
       }
 
-      showSuccess(`✅ Invoice ${markAsPaidInvoice.invoice_number} payment recorded! Received: ₹${inrAmount.toLocaleString('en-IN')}`);
+      showSuccess(`✅ Invoice ${markAsPaidInvoice.invoice_number} payment recorded! Received: ${symbol}${entityAmount.toLocaleString('en-IN')}`);
       setMarkAsPaidDialogOpen(false);
       setMarkAsPaidInvoice(null);
       await loadData();
@@ -4001,7 +4001,7 @@ const getBankingCodeField = (company: CompanySettings | undefined | null): keyof
         const entityFilter = { company_settings_id: selectedCompany?.id };
         const [invoicesData, statsData, customersData] = await Promise.all([
           invoiceService.getInvoices({ ...filters, ...entityFilter }, currentPage, 10),
-          invoiceService.getInvoiceStats(),
+          invoiceService.getInvoiceStats(selectedCompany?.id),
           invoiceService.getCustomers(entityFilter, 1, 1000)
         ]);
         setInvoices(invoicesData.data);
@@ -4086,7 +4086,11 @@ const getBankingCodeField = (company: CompanySettings | undefined | null): keyof
     }
   };
 
-  const renderDashboard = () => (
+  const renderDashboard = () => {
+    // Dashboard tiles reflect the currently selected entity's own currency (EUR for Ireland, INR for India, etc.)
+    const entityCurrencyCode = selectedCompany?.country?.currency_code || 'INR';
+    const entityCurrencySymbol = getEntityCurrencySymbol(entityCurrencyCode);
+    return (
     <div className="space-y-6">
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -4106,13 +4110,13 @@ const getBankingCodeField = (company: CompanySettings | undefined | null): keyof
           <div className="flex items-center">
             <div className="flex-shrink-0">
               <div className="h-8 w-8 bg-green-600 rounded-full flex items-center justify-center">
-                <span className="text-white text-sm font-bold">₹</span>
+                <span className="text-white text-sm font-bold">{entityCurrencySymbol}</span>
               </div>
             </div>
             <div className="ml-4">
               <p className="text-sm font-medium text-gray-600">Total Revenue</p>
               <p className="text-2xl font-semibold text-gray-900">
-                {formatCurrency(stats?.total_revenue || 0)}
+                {formatCurrency(stats?.total_revenue || 0, entityCurrencyCode)}
               </p>
             </div>
           </div>
@@ -4122,13 +4126,13 @@ const getBankingCodeField = (company: CompanySettings | undefined | null): keyof
           <div className="flex items-center">
             <div className="flex-shrink-0">
               <div className="h-8 w-8 bg-yellow-600 rounded-full flex items-center justify-center">
-                <span className="text-white text-sm font-bold">₹</span>
+                <span className="text-white text-sm font-bold">{entityCurrencySymbol}</span>
               </div>
             </div>
             <div className="ml-4">
               <p className="text-sm font-medium text-gray-600">Pending Amount</p>
               <p className="text-2xl font-semibold text-gray-900">
-                {formatCurrency(stats?.pending_amount || 0)}
+                {formatCurrency(stats?.pending_amount || 0, entityCurrencyCode)}
               </p>
             </div>
           </div>
@@ -4138,13 +4142,13 @@ const getBankingCodeField = (company: CompanySettings | undefined | null): keyof
           <div className="flex items-center">
             <div className="flex-shrink-0">
               <div className="h-8 w-8 bg-purple-600 rounded-full flex items-center justify-center">
-                <span className="text-white text-sm font-bold">₹</span>
+                <span className="text-white text-sm font-bold">{entityCurrencySymbol}</span>
               </div>
             </div>
             <div className="ml-4">
               <p className="text-sm font-medium text-gray-600">This Month</p>
               <p className="text-2xl font-semibold text-gray-900">
-                {formatCurrency(stats?.this_month_revenue || 0)}
+                {formatCurrency(stats?.this_month_revenue || 0, entityCurrencyCode)}
               </p>
             </div>
           </div>
@@ -4190,12 +4194,28 @@ const getBankingCodeField = (company: CompanySettings | undefined | null): keyof
         </div>
       </div>
     </div>
-  );
+    );
+  };
 
   const isIndianCompany = (invoice?: Invoice | null) => {
     const company = invoice?.company_settings || selectedCompany || companySettings.find(c => c.is_default);
     if (!company) return true;
     return Boolean(company.is_default || company.country?.code === 'IN' || company.country?.currency_code === 'INR');
+  };
+
+  const getEntityCurrencySymbol = (code: string) => {
+    const symbols: Record<string, string> = { INR: '₹', EUR: '€', USD: '$', GBP: '£', AED: 'AED', SGD: 'S$' };
+    return symbols[code.toUpperCase()] || code;
+  };
+
+  // Determines the entity's own bank/settlement currency (INR for India, EUR for Ireland, etc.)
+  // and whether the invoice's billed currency differs from it, requiring actual-received amount capture.
+  const getMarkAsPaidEntityInfo = (invoice: Invoice) => {
+    const isInd = isIndianCompany(invoice);
+    const company = invoice.company_settings || selectedCompany || companySettings.find(c => c.is_default);
+    const entityCurrency = isInd ? 'INR' : (company?.country?.currency_code || 'EUR');
+    const isForeign = Boolean(invoice.currency_code && invoice.currency_code !== entityCurrency);
+    return { isInd, entityCurrency, isForeign, symbol: getEntityCurrencySymbol(entityCurrency) };
   };
 
   const getInvoiceIssueInrAmount = (invoice: Invoice) => {
@@ -6202,9 +6222,12 @@ const getBankingCodeField = (company: CompanySettings | undefined | null): keyof
               </p>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {markAsPaidInvoice.currency_code && markAsPaidInvoice.currency_code !== 'INR'
-                    ? <>INR Amount Received (₹) <span className="text-red-500">*</span></>
-                    : <>Amount Paid <span className="text-red-500">*</span></>}
+                  {(() => {
+                    const { isForeign, entityCurrency, symbol } = getMarkAsPaidEntityInfo(markAsPaidInvoice);
+                    return isForeign
+                      ? <>{entityCurrency} Amount Received ({symbol}) <span className="text-red-500">*</span></>
+                      : <>Amount Paid <span className="text-red-500">*</span></>;
+                  })()}
                 </label>
                 <input
                   type="number"
@@ -6212,7 +6235,7 @@ const getBankingCodeField = (company: CompanySettings | undefined | null): keyof
                   step="0.01"
                   value={markAsPaidAmount}
                   onChange={e => setMarkAsPaidAmount(e.target.value)}
-                  placeholder={markAsPaidInvoice.currency_code && markAsPaidInvoice.currency_code !== 'INR' ? 'Enter actual INR amount received' : ''}
+                  placeholder={getMarkAsPaidEntityInfo(markAsPaidInvoice).isForeign ? `Enter actual ${getMarkAsPaidEntityInfo(markAsPaidInvoice).entityCurrency} amount received` : ''}
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
                 />
               </div>

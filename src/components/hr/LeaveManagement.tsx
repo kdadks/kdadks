@@ -215,10 +215,11 @@ const LeaveManagement: React.FC<LeaveManagementProps> = ({ onBackToDashboard, cu
   };
 
   const filteredApplications = leaveApplications.filter(app => {
+    const belongsToEntity = employees.some(e => e.id === app.employee_id);
     const matchesSearch = searchTerm === '' ||
       employees.find(e => e.id === app.employee_id)?.full_name.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = statusFilter === 'all' || app.status === statusFilter;
-    return matchesSearch && matchesStatus;
+    return belongsToEntity && matchesSearch && matchesStatus;
   });
 
   const getStatusBadge = (status: string) => {

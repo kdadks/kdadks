@@ -18,6 +18,7 @@ import { useCompanyContext } from '../../contexts/CompanyContext';
 import { useToast } from '../ui/ToastProvider';
 import ConfirmDialog from '../ui/ConfirmDialog';
 import { calculateSalaryBreakdown, type SalaryBreakdown } from '../../utils/salaryCalculator';
+import type { CompanySettings } from '../../types/invoice';
 
 interface Employee {
   id: string;
@@ -54,10 +55,17 @@ const bonusTypes = [
   { value: 'other', label: 'Other' }
 ];
 
-const formatCurrency = (amount: number) => {
-  return new Intl.NumberFormat('en-IN', {
+const CURRENCY_LOCALE_MAP: Record<string, string> = { INR: 'en-IN', EUR: 'en-IE', USD: 'en-US', GBP: 'en-GB', AED: 'en-AE' };
+const CURRENCY_SYMBOL_MAP: Record<string, string> = { INR: '₹', EUR: '€', USD: '$', GBP: '£', AED: 'AED' };
+
+const getEntityCurrencyCode = (company: CompanySettings | null): string => company?.country?.currency_code || 'INR';
+const getEntityCurrencySymbol = (currencyCode: string): string => CURRENCY_SYMBOL_MAP[currencyCode.toUpperCase()] || currencyCode;
+
+const formatCurrencyForEntity = (amount: number, currencyCode: string = 'INR') => {
+  const code = currencyCode.toUpperCase();
+  return new Intl.NumberFormat(CURRENCY_LOCALE_MAP[code] || 'en-US', {
     style: 'currency',
-    currency: 'INR',
+    currency: code,
     maximumFractionDigits: 0
   }).format(amount);
 };
@@ -69,6 +77,8 @@ const formatDate = (date: string) => {
 const CompensationManagement: React.FC = () => {
   const { showError, showSuccess } = useToast();
   const { selectedCompany } = useCompanyContext();
+  const entityCurrencyCode = getEntityCurrencyCode(selectedCompany);
+  const formatCurrency = (amount: number) => formatCurrencyForEntity(amount, entityCurrencyCode);
   const [activeTab, setActiveTab] = useState<TabType>('compensation');
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(true);
@@ -103,7 +113,7 @@ const CompensationManagement: React.FC = () => {
 
   useEffect(() => {
     loadData();
-  }, [activeTab, filterEmployee]);
+  }, [activeTab, filterEmployee, selectedCompany]);
 
   const loadEmployees = async () => {
     try {
@@ -117,18 +127,21 @@ const CompensationManagement: React.FC = () => {
   const loadData = async () => {
     setLoading(true);
     try {
+      // Services aren't entity-scoped server-side, so restrict results to employees in the selected entity
+      const entityEmployees = await employeeService.getEmployees(selectedCompany?.id);
+      const entityEmployeeIds = new Set(entityEmployees.map(e => e.id));
       switch (activeTab) {
         case 'compensation':
           const compData = await compensationService.getCompensations(filterEmployee || undefined);
-          setCompensations(compData);
+          setCompensations(compData.filter(c => entityEmployeeIds.has(c.employee_id)));
           break;
         case 'increments':
           const incData = await compensationService.getIncrements(filterEmployee || undefined);
-          setIncrements(incData);
+          setIncrements(incData.filter(i => entityEmployeeIds.has(i.employee_id)));
           break;
         case 'bonuses':
           const bonusData = await compensationService.getBonuses(filterEmployee || undefined);
-          setBonuses(bonusData);
+          setBonuses(bonusData.filter(b => entityEmployeeIds.has(b.employee_id)));
           break;
       }
     } catch (error) {
@@ -521,6 +534,8 @@ const CompensationTable: React.FC<{
   onEdit: (item: EmployeeCompensation) => void;
   onDelete: (id: string) => void;
 }> = ({ data, expandedRows, onToggleExpand, onView, onEdit, onDelete }) => {
+  const { selectedCompany } = useCompanyContext();
+  const formatCurrency = (amount: number) => formatCurrencyForEntity(amount, getEntityCurrencyCode(selectedCompany));
   if (data.length === 0) {
     return (
       <div className="text-center py-12">
@@ -699,6 +714,8 @@ const IncrementsTable: React.FC<{
   onApprove: (item: SalaryIncrement) => void;
   onReject: (id: string, reason: string) => void;
 }> = ({ data, onView, onEdit, onDelete, onApprove, onReject }) => {
+  const { selectedCompany } = useCompanyContext();
+  const formatCurrency = (amount: number) => formatCurrencyForEntity(amount, getEntityCurrencyCode(selectedCompany));
   if (data.length === 0) {
     return (
       <div className="text-center py-12">
@@ -796,6 +813,8 @@ const BonusesTable: React.FC<{
   onMarkPaid: (id: string) => void;
   onCancel: (id: string) => void;
 }> = ({ data, onView, onEdit, onDelete, onApprove, onMarkPaid, onCancel }) => {
+  const { selectedCompany } = useCompanyContext();
+  const formatCurrency = (amount: number) => formatCurrencyForEntity(amount, getEntityCurrencyCode(selectedCompany));
   if (data.length === 0) {
     return (
       <div className="text-center py-12">
@@ -904,6 +923,9 @@ const CompensationModal: React.FC<{
   onClose: () => void;
   onSave: (data: any) => void;
 }> = ({ mode, type, item, employees, onClose, onSave }) => {
+  const { selectedCompany } = useCompanyContext();
+  const currencySymbol = getEntityCurrencySymbol(getEntityCurrencyCode(selectedCompany));
+  const formatCurrency = (amount: number) => formatCurrencyForEntity(amount, getEntityCurrencyCode(selectedCompany));
   const [grossSalaryInput, setGrossSalaryInput] = useState<number>(0);
   const [salaryBreakdown, setSalaryBreakdown] = useState<SalaryBreakdown | null>(null);
   const [autoCalculate, setAutoCalculate] = useState(true);
@@ -1103,17 +1125,17 @@ const CompensationModal: React.FC<{
                     <div className="mt-3 p-3 bg-white rounded border border-green-200">
                       <p className="text-sm font-medium text-gray-700 mb-2">Breakdown Preview:</p>
                       <div className="grid grid-cols-2 gap-2 text-sm">
-                        <div><span className="text-gray-600">Basic (40%):</span> <span className="font-medium">₹{salaryBreakdown.basicSalary.toLocaleString('en-IN')}</span></div>
-                        <div><span className="text-gray-600">HRA (40%):</span> <span className="font-medium">₹{salaryBreakdown.hra.toLocaleString('en-IN')}</span></div>
-                        <div><span className="text-gray-600">Special (20%):</span> <span className="font-medium">₹{salaryBreakdown.specialAllowance.toLocaleString('en-IN')}</span></div>
-                        <div><span className="text-red-600">PT:</span> <span className="font-medium text-red-600">-₹{salaryBreakdown.professionalTax.toLocaleString('en-IN')}</span></div>
+                        <div><span className="text-gray-600">Basic (40%):</span> <span className="font-medium">{currencySymbol}{salaryBreakdown.basicSalary.toLocaleString('en-IN')}</span></div>
+                        <div><span className="text-gray-600">HRA (40%):</span> <span className="font-medium">{currencySymbol}{salaryBreakdown.hra.toLocaleString('en-IN')}</span></div>
+                        <div><span className="text-gray-600">Special (20%):</span> <span className="font-medium">{currencySymbol}{salaryBreakdown.specialAllowance.toLocaleString('en-IN')}</span></div>
+                        <div><span className="text-red-600">PT:</span> <span className="font-medium text-red-600">-{currencySymbol}{salaryBreakdown.professionalTax.toLocaleString('en-IN')}</span></div>
                         {salaryBreakdown.esi > 0 && (
-                          <div><span className="text-red-600">ESI (0.75%):</span> <span className="font-medium text-red-600">-₹{salaryBreakdown.esi.toLocaleString('en-IN')}</span></div>
+                          <div><span className="text-red-600">ESI (0.75%):</span> <span className="font-medium text-red-600">-{currencySymbol}{salaryBreakdown.esi.toLocaleString('en-IN')}</span></div>
                         )}
-                        <div><span className="text-red-600">TDS:</span> <span className="font-medium text-red-600">-₹{salaryBreakdown.tds.toLocaleString('en-IN')}</span></div>
+                        <div><span className="text-red-600">TDS:</span> <span className="font-medium text-red-600">-{currencySymbol}{salaryBreakdown.tds.toLocaleString('en-IN')}</span></div>
                         <div className="col-span-2 pt-2 border-t border-green-200">
                           <span className="text-green-700 font-semibold">Net Salary:</span> 
-                          <span className="font-bold text-green-700 text-lg ml-2">₹{salaryBreakdown.netSalary.toLocaleString('en-IN')}</span>
+                          <span className="font-bold text-green-700 text-lg ml-2">{currencySymbol}{salaryBreakdown.netSalary.toLocaleString('en-IN')}</span>
                         </div>
                       </div>
                     </div>

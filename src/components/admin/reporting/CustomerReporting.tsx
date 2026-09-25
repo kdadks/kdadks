@@ -14,6 +14,7 @@ import ReportingCard from './ReportingCard';
 import SimpleBarChart from './SimpleBarChart';
 import DateRangeFilter, { DateRange, getDefaultDateRange } from './DateRangeFilter';
 import ExportButton from './ExportButton';
+import { formatCompactCurrency } from '../../../utils/currencyConverter';
 
 interface CustomerRow {
   id: string;
@@ -49,6 +50,7 @@ const CustomerReporting: React.FC = () => {
   const [refreshKey, setRefreshKey] = useState(0);
 
   const companyId = selectedCompany?.id ?? null;
+  const entityCurrencyCode = selectedCompany?.country?.currency_code || 'INR';
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const applyCompany = (q: any) =>
@@ -104,7 +106,7 @@ const CustomerReporting: React.FC = () => {
 
       const revMap = new Map<string, number>();
       (invData || []).forEach((inv) => {
-        const amt = inv.inr_total_amount || inv.total_amount || 0;
+        const amt = entityCurrencyCode === 'INR' ? (inv.inr_total_amount || inv.total_amount || 0) : (inv.total_amount || 0);
         revMap.set(inv.customer_id, (revMap.get(inv.customer_id) || 0) + amt);
       });
 
@@ -174,18 +176,13 @@ const CustomerReporting: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [companyId, dateRange, refreshKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [companyId, dateRange, refreshKey, entityCurrencyCode]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     fetchData();
   }, [fetchData]);
 
-  const formatCurrency = (v: number) => {
-    if (v >= 10000000) return `₹${(v / 10000000).toFixed(1)}Cr`;
-    if (v >= 100000) return `₹${(v / 100000).toFixed(1)}L`;
-    if (v >= 1000) return `₹${(v / 1000).toFixed(1)}K`;
-    return `₹${Math.round(v)}`;
-  };
+  const formatCurrency = (v: number) => formatCompactCurrency(v, entityCurrencyCode);
 
   const exportData = stats
     ? stats.customers.map((c) => ({

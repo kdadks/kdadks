@@ -162,7 +162,9 @@ const PerformanceFeedback: React.FC = () => {
         }),
         employeeService.getEmployees(selectedCompany?.id)
       ]);
-      setFeedbacks(feedbackData);
+      // getFeedback isn't entity-scoped server-side, so restrict to employees in the selected entity
+      const entityEmployeeIds = new Set(employeeData.map(e => e.id));
+      setFeedbacks(feedbackData.filter(f => entityEmployeeIds.has(f.employee_id)));
       setEmployees(employeeData);
     } catch (error) {
       console.error('Error loading data:', error);

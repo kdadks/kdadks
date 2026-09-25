@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import {
   LifeBuoy,
   CheckCircle2,
@@ -43,6 +44,9 @@ export const AgentTriageDesk: React.FC = () => {
   const { selectedCompany, companies, selectCompany } = useCompanyContext();
   const { can, hasAny } = useRolePermissions();
   const { showSuccess, showError } = useToast();
+  const location = useLocation();
+  // Embedded under /admin/itsm/tickets: already gated by Admin login/logout, so hide the standalone ITSM agent sign-out control
+  const isEmbeddedInAdmin = location.pathname.startsWith('/admin');
 
   const [activeQueueTab, setActiveQueueTab] = useState<QueueTab>('unassigned');
   const [tickets, setTickets] = useState<ITSMTicket[]>([]);
@@ -204,17 +208,19 @@ export const AgentTriageDesk: React.FC = () => {
             <span>Refresh Queue</span>
           </button>
 
-          <button
-            onClick={() => {
-              sessionStorage.removeItem('itsm_agent_session');
-              window.location.reload();
-            }}
-            title="Sign Out of ITSM Agent Portal"
-            className="px-3.5 py-2 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 text-xs font-semibold rounded-xl hover:bg-red-100 transition flex items-center space-x-1.5 shadow-sm"
-          >
-            <LogOut className="h-3.5 w-3.5" />
-            <span>Agent Sign Out</span>
-          </button>
+          {!isEmbeddedInAdmin && (
+            <button
+              onClick={() => {
+                sessionStorage.removeItem('itsm_agent_session');
+                window.location.reload();
+              }}
+              title="Sign Out of ITSM Agent Portal"
+              className="px-3.5 py-2 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 text-xs font-semibold rounded-xl hover:bg-red-100 transition flex items-center space-x-1.5 shadow-sm"
+            >
+              <LogOut className="h-3.5 w-3.5" />
+              <span>Agent Sign Out</span>
+            </button>
+          )}
         </div>
       </div>
 

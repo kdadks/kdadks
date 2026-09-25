@@ -12,6 +12,7 @@ import { supabase } from '../../../config/supabase';
 import { useCompanyContext } from '../../../contexts/CompanyContext';
 import ReportingCard from './ReportingCard';
 import SimpleBarChart from './SimpleBarChart';
+import { formatCompactCurrency } from '../../../utils/currencyConverter';
 
 interface Compensation {
   id: string;
@@ -47,9 +48,11 @@ const HRCompensationReporting: React.FC = () => {
   } | null>(null);
 
   const companyId = selectedCompany?.id ?? null;
+  const entityCurrencyCode = selectedCompany?.country?.currency_code || 'INR';
 
   useEffect(() => {
     fetchData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [companyId]);
 
   const fetchData = async () => {
@@ -62,7 +65,7 @@ const HRCompensationReporting: React.FC = () => {
         const { data: empData, error: empErr } = await supabase
           .from('employees')
           .select('id')
-          .or(`company_settings_id.eq.${companyId},company_settings_id.is.null`);
+          .eq('company_settings_id', companyId);
         if (empErr) throw empErr;
         validEmpIds = (empData || []).map((e) => e.id);
       }
@@ -167,11 +170,7 @@ const HRCompensationReporting: React.FC = () => {
     }
   };
 
-  const formatCurrency = (value: number) => {
-    if (value >= 100000) return `₹${(value / 100000).toFixed(1)}L`;
-    if (value >= 1000) return `₹${(value / 1000).toFixed(1)}K`;
-    return `₹${value}`;
-  };
+  const formatCurrency = (value: number) => formatCompactCurrency(value, entityCurrencyCode);
 
   const tabs = [
     { label: 'Attendance', route: '/admin/reporting/hr/attendance' },
