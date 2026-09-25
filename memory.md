@@ -1,6 +1,6 @@
 # Project Memory — KDADKS Website
 
-> Auto-updated by AI agent after every implementation. Last updated: 2026-09-25 (later, later) BST
+> Auto-updated by AI agent after every implementation. Last updated: 2026-09-25 (later, later, later) BST
 
 A comprehensive knowledge base for the KDADKS website codebase. This file serves as a single source of truth for project architecture, conventions, patterns, menu structures, and key implementation details.
 
@@ -678,6 +678,21 @@ The complete sales pipeline with status/stage transitions:
 - Implemented entity-aware multi-currency display & conversion across Opportunity Management (`OpportunityManagement.tsx` & `opportunityService.ts`):
   - `opportunityService.getOpportunityStats`: Converts opportunity estimated values to active entity base currency (`INR` for IND entity, `EUR` for IRL entity) before calculating total and open pipeline values.
   - `OpportunityManagement.tsx`: Open Pipeline dashboard tile renders total converted pipeline value in the entity base currency (`INR` for IND, `EUR` for IRL). Recent Opportunities (Dashboard tab) and All Opportunities tab list view render `<CurrencyDisplay>` showing opportunity currency & estimated value alongside converted base currency values (`$1,000.00 (~₹83,150.00)` for IND, `$1,000.00 (~€915.00)` for IRL).
+
+### Record Payment — Non-Indian Entity Paid Amount Wrongly INR-Scaled
+
+**Bug:** In `InvoiceManagement.tsx` → `submitMarkAsPaid()`, the entered payment amount was multiplied by `markAsPaidInvoice.exchange_rate` whenever the invoice's billed currency matched the entity's own settlement currency (`!isForeign`, e.g. an Ireland-entity invoice billed in EUR). `exchange_rate` on the `invoices` table always stores the *original currency → INR* rate (set in `invoiceService.createInvoice` for any `currency_code !== 'INR'`, regardless of entity), so for IRL/EUR invoices this silently inflated the stored `paid_amount` to an INR-scaled number while `paid_currency` still said `EUR` — the Invoices grid's `Paid:` badge (driven by `getInvoicePaidInfo()`, which prioritizes the raw `paid_amount`/`paid_currency` columns) then displayed a converted value labeled as EUR.
+
+**Fix:** `entityAmount` in `submitMarkAsPaid()` is now simply the amount the admin typed (`const entityAmount = amount;`) — no exchange-rate multiplication in either branch. This is correct because: (a) when `isForeign`, the admin already manually enters the actual settlement-currency amount received; (b) when `!isForeign`, the invoice's currency already equals the entity's settlement currency, so no conversion is ever needed regardless of what `exchange_rate` (an unrelated original→INR rate) holds.
+
+### Invoice Management — Per-Tab Routes
+
+`InvoiceManagement.tsx` (`/admin/invoices`) has 3 tabs — Dashboard, Invoices, Create Invoice — previously tracked only via local `activeTab` state with no URL reflection. Each tab now has its own dedicated route for direct linking, bookmarking, and browser back/forward support:
+- `/admin/invoices` → Dashboard tab
+- `/admin/invoices/list` → Invoices tab
+- `/admin/invoices/new` → Create Invoice tab
+
+Implementation: `Router.tsx` registers all 3 paths to `<SimpleAdminDashboard />` (consistent with the rest of the admin shell pattern); `SimpleAdminDashboard.tsx`'s `pathToView` maps all 3 to the `'invoices'` `ActiveView` so `<InvoiceManagement />` still renders for any of them. Inside `InvoiceManagement.tsx`, a `tabFromPath(pathname)` helper derives the active tab from `location.pathname` (synced via a `useEffect` on `location.pathname` for back/forward navigation), and a `goToTab(tab)` helper replaces direct `setActiveTab(...)` calls at tab-switch sites (nav tab clicks, `openCreateInvoiceTab`, post-create redirect, `onCloseInvoice`) so switching tabs also calls `navigate(TAB_PATHS[tab])` to keep the URL in sync.
 
 ### Invoice Management (`src/components/invoice/InvoiceManagement.tsx`)
 

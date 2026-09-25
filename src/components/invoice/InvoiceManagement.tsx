@@ -20,7 +20,7 @@ import {
   CreditCard,
   CheckCircle
 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '../../config/supabase';
 import { invoiceService } from '../../services/invoiceService';
 import { paymentService } from '../../services/paymentService';
@@ -87,7 +87,17 @@ const getBankingCodeField = (company: CompanySettings | undefined | null): keyof
   const [totalPages, setTotalPages] = useState(1);
   const [searchTerm, setSearchTerm] = useState('');
   const [filters, setFilters] = useState<InvoiceFilters>({});
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'invoices' | 'create-invoice'>('dashboard');
+  type InvoiceTab = 'dashboard' | 'invoices' | 'create-invoice';
+  const TAB_PATHS: Record<InvoiceTab, string> = {
+    dashboard: '/admin/invoices',
+    invoices: '/admin/invoices/list',
+    'create-invoice': '/admin/invoices/new',
+  };
+  const tabFromPath = (pathname: string): InvoiceTab =>
+    pathname === '/admin/invoices/list' ? 'invoices' :
+    pathname === '/admin/invoices/new' ? 'create-invoice' :
+    'dashboard';
+  const [activeTab, setActiveTab] = useState<InvoiceTab>(tabFromPath(window.location.pathname));
   
   // Product modal states
   const [showProductModal, setShowProductModal] = useState(false);
@@ -198,9 +208,25 @@ const getBankingCodeField = (company: CompanySettings | undefined | null): keyof
   }, [invoiceFormData.customer_id, customers]);
 
   const navigate = useNavigate();
+  const location = useLocation();
   const { showSuccess, showError, showWarning, showInfo } = useToast();
   const { confirm, dialogProps } = useConfirmDialog();
   const { startAction, endAction } = useActionProgress();
+
+  // Keep the tab in sync with dedicated per-tab routes so each tab is
+  // directly linkable/bookmarkable and browser back/forward works as expected.
+  useEffect(() => {
+    const tabForPath = tabFromPath(location.pathname);
+    setActiveTab(prev => (prev === tabForPath ? prev : tabForPath));
+  }, [location.pathname]);
+
+  // Switches tabs and updates the URL to the tab's dedicated route.
+  const goToTab = (tab: InvoiceTab) => {
+    setActiveTab(tab);
+    if (location.pathname !== TAB_PATHS[tab]) {
+      navigate(TAB_PATHS[tab]);
+    }
+  };
 
   useEffect(() => {
     loadData();
@@ -504,7 +530,7 @@ const getBankingCodeField = (company: CompanySettings | undefined | null): keyof
 
   // Invoice Modal Functions
   const openCreateInvoiceTab = async () => {
-    setActiveTab('create-invoice');
+    goToTab('create-invoice');
     
     // Ensure all required data is loaded
     await loadData();
@@ -1192,7 +1218,7 @@ const getBankingCodeField = (company: CompanySettings | undefined | null): keyof
         await invoiceService.createInvoice(finalInvoiceData, finalInvoiceNumber!, selectedCompany?.id);
         console.log('💾 Invoice saved successfully with final number:', finalInvoiceNumber!);
         showSuccess(`Invoice ${finalInvoiceNumber!} created successfully!`);
-        setActiveTab('invoices'); // Switch to invoices tab after creation
+        goToTab('invoices'); // Switch to invoices tab after creation
       } else if (invoiceModalMode === 'edit' && selectedInvoice) {
         // For edit mode, check invoice status to determine action
         if (selectedInvoice.status === 'draft') {
@@ -3864,7 +3890,15 @@ const getBankingCodeField = (company: CompanySettings | undefined | null): keyof
     setMarkAsPaidLoading(true);
     try {
       const { entityCurrency, isForeign, symbol } = getMarkAsPaidEntityInfo(markAsPaidInvoice);
-      const entityAmount = isForeign ? amount : (markAsPaidInvoice.exchange_rate ? amount * markAsPaidInvoice.exchange_rate : amount);
+      // The entered amount is always already denominated in the settlement
+      // currency being captured here — the invoice's own currency when it
+      // matches the entity's currency, or the entity currency the admin
+      // manually typed when isForeign. Never multiply by invoice.exchange_rate:
+      // that field only stores the original-currency→INR rate (e.g. an Irish
+      // EUR invoice still carries a EUR→INR rate), so multiplying by it here
+      // silently inflated paid_amount for any non-Indian entity billed in its
+      // own currency (e.g. IRL/EUR invoices).
+      const entityAmount = amount;
 
       // Delete any previous payment records for this invoice to prevent duplicate payment rows
       await supabase.from('payments').delete().eq('invoice_id', markAsPaidInvoice.id);
@@ -5676,7 +5710,7 @@ const getBankingCodeField = (company: CompanySettings | undefined | null): keyof
             ].map(({ key, label, icon: Icon }) => (
               <button
                 key={key}
-                onClick={() => key === 'create-invoice' ? openCreateInvoiceTab() : setActiveTab(key as typeof activeTab)}
+                onClick={() => key === 'create-invoice' ? openCreateInvoiceTab() : goToTab(key as InvoiceTab)}
                 className={`flex items-center py-4 px-1 border-b-2 font-medium text-sm ${
                   activeTab === key
                     ? 'border-blue-500 text-blue-600'
@@ -5706,7 +5740,7 @@ const getBankingCodeField = (company: CompanySettings | undefined | null): keyof
             onTermsTemplateSelect={handleTermsTemplateSelect}
             onDefaultProductChange={handleDefaultProductChange}
             onSaveInvoice={handleSaveInvoice}
-            onCloseInvoice={() => setActiveTab('dashboard')}
+            onCloseInvoice={() => goToTab('dashboard')}
             onShowPreview={handleShowPreview}
             customers={customers}
             products={products}

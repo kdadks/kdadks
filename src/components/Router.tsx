@@ -214,6 +214,8 @@ const Router = () => {
               <Route path="/admin/login" element={<AdminLogin />} />
               <Route path="/admin" element={<SimpleAdminDashboard />} />
               <Route path="/admin/invoices" element={<SimpleAdminDashboard />} />
+              <Route path="/admin/invoices/list" element={<SimpleAdminDashboard />} />
+              <Route path="/admin/invoices/new" element={<SimpleAdminDashboard />} />
               <Route path="/admin/payments" element={<SimpleAdminDashboard />} />
               <Route path="/admin/quotes" element={<SimpleAdminDashboard />} />
               <Route path="/admin/contracts" element={<SimpleAdminDashboard />} />

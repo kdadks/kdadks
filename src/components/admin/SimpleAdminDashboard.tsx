@@ -170,6 +170,8 @@ const SimpleAdminDashboard: React.FC = () => {
   const pathToView: Record<string, ActiveView> = {
     '/admin': 'dashboard',
     '/admin/invoices': 'invoices',
+    '/admin/invoices/list': 'invoices',
+    '/admin/invoices/new': 'invoices',
     '/admin/payments': 'payments',
     '/admin/quotes': 'quotes',
     '/admin/contracts': 'contracts',
